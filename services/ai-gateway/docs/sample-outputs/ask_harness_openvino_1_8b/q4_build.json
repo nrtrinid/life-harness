@@ -1,0 +1,35 @@
+﻿{
+  "answer": "Based on the provided cards, EV Tracker and Life Harness are hot with active progress, while Career / Networking is cold and parked. The move is to focus on the stalled outside-world thread \u2014 open the resume doc and add one bullet to reignite the career thread.",
+  "confidence_notes": [
+    "Inferred \u2014 pattern read from provided logs and card state only."
+  ],
+  "grounding": [
+    {
+      "label": "Career / Networking",
+      "source_type": "card",
+      "summary": "Parked; cold warmth and low progress"
+    },
+    {
+      "label": "Career / Networking",
+      "source_type": "log",
+      "summary": "Note: still avoiding resume update and job follow-up"
+    }
+  ],
+  "patterns_detected": [
+    "career avoidance",
+    "build-heavy focus"
+  ],
+  "proposed_card_updates": [
+    {
+      "card_title": "Career / Networking",
+      "proposed_change": "Unpark and add one bullet to resume",
+      "requires_approval": true
+    }
+  ],
+  "safety_notes": [
+    "No state mutation claims; user approves all changes."
+  ],
+  "suggested_next_actions": [
+    "Open resume doc and add one bullet"
+  ]
+}

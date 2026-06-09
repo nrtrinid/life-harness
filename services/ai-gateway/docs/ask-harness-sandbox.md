@@ -120,6 +120,10 @@ http://127.0.0.1:8111/playground
 - Renders answer, grounding, patterns, next actions, proposed updates, confidence/safety notes
 - No persistence; not the Life Harness app UI
 
+OpenVINO smoke results: [ask-harness-openvino-smoke.md](./ask-harness-openvino-smoke.md).
+
+Prompt expects a substantive `answer` (2–6 sentences, not the voice template alone) and JSON-only output with all list fields as arrays.
+
 ## Future path
 
 - Read-only chat over real Life Harness board state (app integration ticket)

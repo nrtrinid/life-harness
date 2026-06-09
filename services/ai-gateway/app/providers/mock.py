@@ -8,6 +8,8 @@ from app.models import (
     AskHarnessRequest,
     AskHarnessResponse,
     CardState,
+    ChatHarnessRequest,
+    ChatHarnessResponse,
     GroundingItem,
     GroundingSourceType,
     HarnessContextCard,
@@ -387,6 +389,137 @@ class MockProvider:
             patterns_detected=list(dict.fromkeys(patterns)) or ["context scan"],
             suggested_next_actions=next_actions[:4],
             proposed_card_updates=proposed,
+            confidence_notes=confidence_notes,
+            safety_notes=safety_notes,
+        )
+
+    def chat_harness(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
+        ctx = request.context
+        message_lower = request.message.lower()
+        cards = ctx.cards
+        logs = ctx.logs
+
+        cold_cards = _cold_career_body_cards(cards)
+        build_wins = _build_win_logs(logs)
+        avoid_logs = _avoidance_logs(logs)
+        tooling_logs = _tooling_logs(logs)
+        body_logs = _body_logs(logs)
+        hot_build = _hot_build_cards(cards)
+
+        safety_notes: list[str] = []
+        if _HIGH_STAKES_RE.search(request.message):
+            safety_notes.append(
+                "Question may touch high-stakes topics — staying in scout lane only."
+            )
+
+        used_context = False
+        answer = ""
+
+        if "avoid" in message_lower:
+            parts: list[str] = []
+            if cold_cards:
+                titles = ", ".join(c.title for c in cold_cards[:3])
+                parts.append(
+                    f"Looking at your board, a few career/body threads look cold or cooling — "
+                    f"especially {titles}."
+                )
+                used_context = True
+            if avoid_logs:
+                parts.append(
+                    f"One log flags this: \"{avoid_logs[0].summary}\" — "
+                    "that often means deferred follow-up rather than forgetting."
+                )
+                used_context = True
+            if len(build_wins) >= 2 and len(body_logs) == 0:
+                parts.append(
+                    f"You have {len(build_wins)} recent build wins/logs but no recent body logs, "
+                    "so build may be winning over body upkeep."
+                )
+                used_context = True
+            if cold_cards:
+                career = next(
+                    (c for c in cold_cards if c.area == LifeArea.social_career),
+                    None,
+                )
+                if career:
+                    parts.append(f"Tiny next move: {career.next_tiny_action}")
+                body_card = next((c for c in cards if c.area == LifeArea.body), None)
+                if body_card and len(body_logs) == 0:
+                    parts.append(f"Body nudge: {body_card.next_tiny_action}")
+            if not parts:
+                parts.append(
+                    "I do not see a strong avoidance signal in this context — "
+                    "check your active cards manually."
+                )
+            answer = " ".join(parts)
+        elif "over-optim" in message_lower or request.mode == AskHarnessMode.reflection:
+            parts = []
+            if tooling_logs:
+                parts.append(
+                    f"There is a tooling/setup thread in your logs: "
+                    f"\"{tooling_logs[0].summary}\" — worth treating as a rabbit-hole risk."
+                )
+                used_context = True
+            parked_tool = next(
+                (
+                    c
+                    for c in cards
+                    if c.state == CardState.parked
+                    and c.area == LifeArea.money_independence
+                ),
+                None,
+            )
+            if parked_tool:
+                parts.append(
+                    f"Parked card \"{parked_tool.title}\" may be an optimization loop "
+                    "rather than the next real deliverable."
+                )
+                used_context = True
+            if parts:
+                parts.append(
+                    "If this resonates, park the tooling idea and do one small shipping step."
+                )
+                answer = " ".join(parts)
+            else:
+                answer = (
+                    "I do not see a strong over-optimization signal in the provided context. "
+                    "If you still feel stuck in setup, name one concrete deliverable and timebox it."
+                )
+        elif "build next" in message_lower or request.mode == AskHarnessMode.builder:
+            targets = hot_build[:2] or [c for c in cards if c.state == CardState.active][:2]
+            if targets:
+                names = " and ".join(c.title for c in targets)
+                answer = (
+                    f"Your hot build threads look like {names}. "
+                    f"I would start with: {targets[0].next_tiny_action}"
+                )
+                used_context = True
+            else:
+                answer = (
+                    "No active build cards in context — add or activate one before picking a slice."
+                )
+        else:
+            active = [c for c in cards if c.state == CardState.active]
+            if active:
+                answer = (
+                    f"Active threads right now: {', '.join(c.title for c in active[:3])}. "
+                    f"If you want one move: {active[0].next_tiny_action}"
+                )
+                used_context = True
+            else:
+                answer = (
+                    "There are no active cards in this context — "
+                    "pick one inbox item and write a 2-minute first step."
+                )
+
+        confidence_notes = [
+            "Inferred — answer derived from provided context bundle only.",
+            "Inferred — patterns are heuristic, not verified facts.",
+        ]
+
+        return ChatHarnessResponse(
+            answer=answer,
+            used_context=used_context,
             confidence_notes=confidence_notes,
             safety_notes=safety_notes,
         )

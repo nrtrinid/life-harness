@@ -1,0 +1,35 @@
+﻿{
+  "answer": "Based on the provided logs, you're avoiding updating your resume and following up on job opportunities. The 'Career / Networking' card is parked, and there's a note about still avoiding these tasks. This suggests a stall in the outside-world thread.",
+  "confidence_notes": [
+    "Inferred \u2014 pattern read from provided logs and card state only."
+  ],
+  "grounding": [
+    {
+      "label": "Career / Networking",
+      "source_type": "log",
+      "summary": "Note: still avoiding resume update and job follow-up"
+    },
+    {
+      "label": "Career / Networking",
+      "source_type": "card",
+      "summary": "State: Parked; progress: 5%"
+    }
+  ],
+  "patterns_detected": [
+    "career avoidance",
+    "stalled outside-world thread"
+  ],
+  "proposed_card_updates": [
+    {
+      "card_title": "Career / Networking",
+      "proposed_change": "Confirm parked; note one future use case only",
+      "requires_approval": true
+    }
+  ],
+  "safety_notes": [
+    "No state mutation claims; user approves all changes."
+  ],
+  "suggested_next_actions": [
+    "Open resume doc and add one bullet to restart the thread."
+  ]
+}

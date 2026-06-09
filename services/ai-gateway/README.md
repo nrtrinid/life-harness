@@ -2,7 +2,7 @@
 
 Minimal local AI gateway prototype for analyzing messy transcripts and speech-to-text notes. This is **not** the Life Harness app.
 
-**Phase 0:** mock provider + OpenVINO integration path. **Phase 0.5:** evaluation harness. **Phase 1:** real OpenVINO GenAI provider. **Phase 1.5:** OpenVINO smoke script + manual report. **Phase 1.8:** Ask Harness read-only chat sandbox.
+**Phase 0:** mock provider + OpenVINO integration path. **Phase 0.5:** evaluation harness. **Phase 1:** real OpenVINO GenAI provider. **Phase 1.5:** OpenVINO smoke script + manual report. **Phase 1.8:** Ask Harness read-only chat sandbox. **Phase 1.8b:** conversational Chat Harness endpoint.
 
 See [docs/local-a770-plan.md](../../docs/local-a770-plan.md) for the full roadmap.
 
@@ -127,6 +127,17 @@ Open [http://127.0.0.1:8111/playground](http://127.0.0.1:8111/playground) (alias
 
 Quick-question buttons match the CLI vibe tests. Response renders in readable sections. Works with OpenVINO if that gateway is already running.
 
+### Phase 1.8b — Conversational Chat Harness
+
+Simpler chat endpoint for vibe-testing a normal chatbot feel (no structured grounding arrays). Defaults to **Conversational Chat** in the playground.
+
+```powershell
+python scripts/chat_harness.py
+python scripts/chat_harness.py --message "Am I over-optimizing again?" --mode reflection
+```
+
+`POST /chat-harness` returns `{ answer, used_context, confidence_notes, safety_notes }`. OpenVINO parse failures return a safe fallback with HTTP 200 (not 502). `/ask-harness` remains unchanged.
+
 ## Evaluation harness (Phase 0.5)
 
 1. Start the service (mock or OpenVINO).
@@ -160,6 +171,14 @@ Read-only scout chat over caller-provided context. See [docs/ask-harness-sandbox
 **Sensitivity:** `S3` rejected with HTTP 422 before provider.
 
 **Errors:** same as analyze-transcript (422 / 502 / 503). OpenVINO checks full serialized prompt length against `SCOUT_MAX_INPUT_CHARS`.
+
+### `POST /chat-harness`
+
+Conversational scout chat with simpler response shape. See Phase 1.8b above.
+
+**Sensitivity:** `S3` rejected with HTTP 422 before provider.
+
+**Errors:** 422 / 503 only (no 502 for parse failure — OpenVINO returns a safe fallback body with HTTP 200).
 
 ## Configuration
 
@@ -205,11 +224,13 @@ app/
   prompts/
     transcript_analysis.md
     ask_harness.md
+    chat_harness.md
 playground/
   ask_harness.html
 scripts/
   analyze_file.py
   ask_harness.py
+  chat_harness.py
   check_output_consistency.py
   smoke_openvino.py
 tests/
@@ -218,6 +239,8 @@ tests/
   test_contracts.py
   test_ask_harness_contract.py
   test_ask_harness_cli.py
+  test_chat_harness_contract.py
+  test_chat_harness_cli.py
   test_playground.py
   test_openvino_provider.py
   test_smoke_openvino_cli.py

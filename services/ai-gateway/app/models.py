@@ -207,3 +207,18 @@ class AskHarnessResponse(StrictModel):
     proposed_card_updates: list[ProposedCardUpdate]
     confidence_notes: list[str]
     safety_notes: list[str]
+
+
+class ChatHarnessRequest(StrictModel):
+    message: str = Field(..., min_length=1)
+    mode: AskHarnessMode = AskHarnessMode.general
+    sensitivity: SensitivityLevel = SensitivityLevel.S1
+    context: HarnessContext
+    conversation_history: list[ConversationTurn] = Field(default_factory=list)
+
+
+class ChatHarnessResponse(StrictModel):
+    answer: str
+    used_context: bool
+    confidence_notes: list[str]
+    safety_notes: list[str]

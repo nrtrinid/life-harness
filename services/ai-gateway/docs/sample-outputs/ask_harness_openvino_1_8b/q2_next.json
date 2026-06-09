@@ -1,0 +1,35 @@
+﻿{
+  "answer": "Based on the provided cards and logs, the build threads are hot with EV Tracker, Life Harness, and Text RPG active. The move is to pounce on the stalled Career / Networking thread \u2014 open the resume doc and add one bullet. This keeps the outside-world thread moving while build work continues.",
+  "confidence_notes": [
+    "Inferred \u2014 pattern read from provided logs and card state only."
+  ],
+  "grounding": [
+    {
+      "label": "Career / Networking",
+      "source_type": "card",
+      "summary": "Stalled thread with next action to open resume and add one bullet"
+    },
+    {
+      "label": "Career / Networking",
+      "source_type": "log",
+      "summary": "Note: still avoiding resume update and job follow-up"
+    }
+  ],
+  "patterns_detected": [
+    "career avoidance",
+    "build-heavy focus"
+  ],
+  "proposed_card_updates": [
+    {
+      "card_title": "Career / Networking",
+      "proposed_change": "Confirm action: resume doc opened and one bullet added",
+      "requires_approval": true
+    }
+  ],
+  "safety_notes": [
+    "No state mutation claims; user approves all changes."
+  ],
+  "suggested_next_actions": [
+    "Open resume doc and add one bullet"
+  ]
+}

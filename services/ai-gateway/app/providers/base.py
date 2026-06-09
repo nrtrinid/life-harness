@@ -9,7 +9,19 @@ from app.models import (
     AnalyzeTranscriptResponse,
     AskHarnessRequest,
     AskHarnessResponse,
+    ChatHarnessRequest,
+    ChatHarnessResponse,
     ProviderHealth,
+)
+
+CHAT_HARNESS_PARSE_FALLBACK = ChatHarnessResponse(
+    answer=(
+        "I had trouble formatting the model response, but the likely next step is to "
+        "ask again more narrowly or switch to structured Ask Harness."
+    ),
+    used_context=False,
+    confidence_notes=["Formatting failed after repair."],
+    safety_notes=[],
 )
 
 T = TypeVar("T", bound=BaseModel)
@@ -48,6 +60,8 @@ class TranscriptProvider(Protocol):
     def analyze(self, request: AnalyzeTranscriptRequest) -> AnalyzeTranscriptResponse: ...
 
     def ask_harness(self, request: AskHarnessRequest) -> AskHarnessResponse: ...
+
+    def chat_harness(self, request: ChatHarnessRequest) -> ChatHarnessResponse: ...
 
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)

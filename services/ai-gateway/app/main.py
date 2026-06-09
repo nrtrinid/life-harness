@@ -12,6 +12,8 @@ from app.models import (
     AnalyzeTranscriptResponse,
     AskHarnessRequest,
     AskHarnessResponse,
+    ChatHarnessRequest,
+    ChatHarnessResponse,
     HealthResponse,
     ProviderKind,
     SensitivityLevel,
@@ -124,6 +126,34 @@ def ask_harness_endpoint(request: AskHarnessRequest) -> AskHarnessResponse:
     except ProviderParseError as exc:
         logger.warning("provider parse error: %s", exc.message)
         raise HTTPException(status_code=502, detail=exc.message) from exc
+
+
+@app.post("/chat-harness", response_model=ChatHarnessResponse)
+def chat_harness_endpoint(request: ChatHarnessRequest) -> ChatHarnessResponse:
+    if request.sensitivity == SensitivityLevel.S3:
+        raise HTTPException(
+            status_code=422,
+            detail="S3: rules-only, not sent to model",
+        )
+
+    provider = get_provider()
+    logger.info(
+        "chat_harness provider=%s mode=%s sensitivity=%s message_len=%d "
+        "context_cards=%d history_turns=%d",
+        provider.name,
+        request.mode.value,
+        request.sensitivity.value,
+        len(request.message),
+        len(request.context.cards),
+        len(request.conversation_history),
+    )
+
+    try:
+        return provider.chat_harness(request)
+    except ProviderInputError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except ProviderNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
 
 
 @app.get("/playground")

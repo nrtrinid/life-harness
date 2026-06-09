@@ -1,0 +1,42 @@
+﻿[
+  {
+    "question": "What am I avoiding right now?",
+    "mode": "operator",
+    "status": 200,
+    "seconds": 16.8,
+    "panels_ok": true,
+    "answer_preview": "You are avoiding resume updates and job follow-up, as well as neglecting the body floor while focusi"
+  },
+  {
+    "question": "What should I do next?",
+    "mode": "operator",
+    "status": 200,
+    "seconds": 9.3,
+    "panels_ok": true,
+    "answer_preview": "I kept track. Here is what changed. Here is what matters. Here is the move."
+  },
+  {
+    "question": "Am I over-optimizing again?",
+    "mode": "reflection",
+    "status": 502,
+    "seconds": 17.3,
+    "panels_ok": false,
+    "answer_preview": "{'detail': '{\"detail\":\"Model output could not be parsed as valid ask-harness JSON after repair\"}'}"
+  },
+  {
+    "question": "What should I build next?",
+    "mode": "builder",
+    "status": 200,
+    "seconds": 10.2,
+    "panels_ok": true,
+    "answer_preview": "I kept track. Here is what changed. Here is what matters. Here is the move."
+  },
+  {
+    "question": "Give me blunt advice based on this context.",
+    "mode": "general",
+    "status": 200,
+    "seconds": 10.7,
+    "panels_ok": true,
+    "answer_preview": "Focus on the active builds, take small steps on the stalled threads, and keep the body moving."
+  }
+]

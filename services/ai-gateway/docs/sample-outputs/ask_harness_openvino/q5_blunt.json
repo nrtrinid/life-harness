@@ -1,0 +1,59 @@
+﻿{
+  "answer": "Focus on the active builds, take small steps on the stalled threads, and keep the body moving.",
+  "confidence_notes": [
+    "Inferred \u2014 the user's current focus is on active builds, and the stalled threads need attention."
+  ],
+  "grounding": [
+    {
+      "label": "EV Tracker / Kalshi",
+      "source_type": "card",
+      "summary": "Active with 45% progress and a next action to add a market snapshot endpoint stub."
+    },
+    {
+      "label": "Life Harness",
+      "source_type": "card",
+      "summary": "Active with 55% progress and a next action to ship the Ask Harness sandbox endpoint."
+    },
+    {
+      "label": "Fitness Return",
+      "source_type": "card",
+      "summary": "Active with 10% progress and a next action to take a 10-minute walk and stretch."
+    },
+    {
+      "label": "EV Tracker / Kalshi",
+      "source_type": "log",
+      "summary": "Shipped EV tracker API scaffold on 2026-06-08."
+    },
+    {
+      "label": "Life Harness",
+      "source_type": "log",
+      "summary": "Merged Life Harness gateway smoke layer on 2026-06-08."
+    },
+    {
+      "label": "Recent Analyses",
+      "source_type": "analysis",
+      "summary": "Build momentum high; career and body threads cooling."
+    }
+  ],
+  "patterns_detected": [
+    "build-heavy focus",
+    "career avoidance",
+    "body neglect"
+  ],
+  "proposed_card_updates": [
+    {
+      "card_title": "Career / Networking",
+      "proposed_change": "Update next_tiny_action to 'Open resume doc and add one bullet'",
+      "requires_approval": true
+    }
+  ],
+  "safety_notes": [
+    "No state mutation claims; all actions are based on the provided context."
+  ],
+  "suggested_next_actions": [
+    "Add one market snapshot endpoint stub for EV Tracker",
+    "Write one combat loop test for Text RPG",
+    "Take a 10-minute walk and stretch for Fitness Return",
+    "Open resume doc and add one bullet for Career / Networking"
+  ]
+}

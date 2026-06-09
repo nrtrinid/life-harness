@@ -42,6 +42,8 @@
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
     .field { margin-bottom: 1rem; }
+    .endpoint-toggle { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+    .endpoint-toggle label { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; cursor: pointer; color: var(--text); }
     .quick-btns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
     .quick-btns button, #submit {
       background: var(--surface);
@@ -76,17 +78,32 @@
     .panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .panel.answer h2 { color: var(--accent); text-transform: none; letter-spacing: 0; font-size: 1rem; }
     #answer-text { font-size: 1.05rem; white-space: pre-wrap; }
+    #used-context-text { font-size: 0.95rem; }
+    #used-context-text.degraded { color: var(--error); font-weight: 600; }
     ul { margin: 0; padding-left: 1.25rem; }
     li { margin-bottom: 0.35rem; }
     .empty { color: var(--muted); font-style: italic; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
   <h1>Ask Harness Playground</h1>
   <p class="subtitle">Dev sandbox · synthetic/default context · no persistence</p>
 
+  <div class="field endpoint-toggle">
+    <span style="color: var(--muted); font-size: 0.85rem; width: 100%; margin-bottom: 0.25rem;">Endpoint</span>
+    <label>
+      <input type="radio" name="endpoint" id="endpoint-chat" value="chat" checked>
+      Conversational Chat (/chat-harness)
+    </label>
+    <label>
+      <input type="radio" name="endpoint" id="endpoint-structured" value="structured">
+      Structured Scout (/ask-harness)
+    </label>
+  </div>
+
   <div class="field">
-    <label for="question">Question</label>
+    <label for="question" id="question-label">Message</label>
     <textarea id="question" rows="2">What am I avoiding right now?</textarea>
   </div>
 
@@ -94,10 +111,10 @@
     <div class="field">
       <label for="mode">Mode</label>
       <select id="mode">
-        <option value="operator" selected>operator</option>
+        <option value="general" selected>general</option>
+        <option value="operator">operator</option>
         <option value="reflection">reflection</option>
         <option value="builder">builder</option>
-        <option value="general">general</option>
       </select>
     </div>
     <div class="field">
@@ -118,7 +135,7 @@
 
   <div class="quick-btns" id="quick-btns"></div>
 
-  <button type="button" id="submit">Ask scout</button>
+  <button type="button" id="submit">Send</button>
   <p id="status" aria-live="polite"></p>
 
   <div id="response">
@@ -126,10 +143,14 @@
       <h2>Answer</h2>
       <div id="answer-text"></div>
     </div>
-    <div class="panel"><h2>Grounding</h2><ul id="grounding"></ul></div>
-    <div class="panel"><h2>Patterns detected</h2><ul id="patterns"></ul></div>
-    <div class="panel"><h2>Suggested next actions</h2><ul id="next-actions"></ul></div>
-    <div class="panel"><h2>Proposed card updates</h2><ul id="card-updates"></ul></div>
+    <div class="panel chat-only" id="used-context-panel">
+      <h2>Used context</h2>
+      <div id="used-context-text"></div>
+    </div>
+    <div class="panel structured-only"><h2>Grounding</h2><ul id="grounding"></ul></div>
+    <div class="panel structured-only"><h2>Patterns detected</h2><ul id="patterns"></ul></div>
+    <div class="panel structured-only"><h2>Suggested next actions</h2><ul id="next-actions"></ul></div>
+    <div class="panel structured-only"><h2>Proposed card updates</h2><ul id="card-updates"></ul></div>
     <div class="panel"><h2>Confidence notes</h2><ul id="confidence"></ul></div>
     <div class="panel"><h2>Safety notes</h2><ul id="safety"></ul></div>
   </div>
@@ -143,20 +164,33 @@
       decisions: []
     };
 
+    const MAX_HISTORY_TURNS = 8;
+    const PARSE_FALLBACK_NOTE = "Formatting failed after repair.";
+
     const QUICK_QUESTIONS = [
       { label: "What am I avoiding right now?", mode: "operator" },
       { label: "What should I do next?", mode: "operator" },
       { label: "Am I over-optimizing again?", mode: "reflection" },
       { label: "What should I build next?", mode: "builder" },
-      { label: "Give me blunt advice based on this context.", mode: "general" }
+      { label: "Give me blunt advice based on this context.", mode: "general" },
+      { label: "Can you just talk to me normally about this?", mode: "general" }
     ];
 
     const questionEl = document.getElementById("question");
+    const questionLabelEl = document.getElementById("question-label");
     const modeEl = document.getElementById("mode");
     const sensitivityEl = document.getElementById("sensitivity");
     const contextEl = document.getElementById("context");
     const statusEl = document.getElementById("status");
     const responseEl = document.getElementById("response");
+    const endpointChatEl = document.getElementById("endpoint-chat");
+    const endpointStructuredEl = document.getElementById("endpoint-structured");
+
+    let conversationHistory = [];
+
+    function isChatMode() {
+      return endpointChatEl.checked;
+    }
 
     function setStatus(message, kind) {
       statusEl.textContent = message;
@@ -183,7 +217,19 @@
       }
     }
 
-    function renderResponse(data) {
+    function updatePanelVisibility() {
+      const chat = isChatMode();
+      for (const el of document.querySelectorAll(".chat-only")) {
+        el.classList.toggle("hidden", !chat);
+      }
+      for (const el of document.querySelectorAll(".structured-only")) {
+        el.classList.toggle("hidden", chat);
+      }
+      questionLabelEl.textContent = chat ? "Message" : "Question";
+      document.getElementById("submit").textContent = chat ? "Send" : "Ask scout";
+    }
+
+    function renderStructuredResponse(data) {
       document.getElementById("answer-text").textContent = data.answer || "";
       renderList(
         document.getElementById("grounding"),
@@ -202,12 +248,43 @@
       responseEl.classList.add("visible");
     }
 
+    function renderChatResponse(data) {
+      document.getElementById("answer-text").textContent = data.answer || "";
+      const usedEl = document.getElementById("used-context-text");
+      if (data.used_context) {
+        usedEl.textContent = "Yes — answer grounded in provided context";
+        usedEl.classList.remove("degraded");
+      } else {
+        usedEl.textContent = "No — response may not be grounded in your context";
+        usedEl.classList.add("degraded");
+      }
+      renderList(document.getElementById("confidence"), data.confidence_notes);
+      renderList(document.getElementById("safety"), data.safety_notes);
+      responseEl.classList.add("visible");
+
+      const isParseFallback = (data.confidence_notes || []).some(
+        (note) => String(note).indexOf(PARSE_FALLBACK_NOTE) >= 0
+      );
+      if (isParseFallback) {
+        setStatus("Degraded response (parse fallback)", "error");
+      } else if (!data.used_context) {
+        setStatus("OK — limited context use", "ok");
+      } else {
+        setStatus("OK", "ok");
+      }
+    }
+
     function formatErrorBody(body) {
       if (typeof body === "string") return body;
       if (body && body.detail) {
         return typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
       }
       return JSON.stringify(body);
+    }
+
+    function trimHistory(history) {
+      if (history.length <= MAX_HISTORY_TURNS) return history;
+      return history.slice(history.length - MAX_HISTORY_TURNS);
     }
 
     async function loadDefaultContext() {
@@ -234,21 +311,31 @@
         return;
       }
 
-      const payload = {
-        question: questionEl.value.trim(),
-        mode: modeEl.value,
-        sensitivity: sensitivityEl.value,
-        context: context,
-        conversation_history: []
-      };
-
-      if (!payload.question) {
-        setStatus("Question must not be empty.", "error");
+      const text = questionEl.value.trim();
+      if (!text) {
+        setStatus(isChatMode() ? "Message must not be empty." : "Question must not be empty.", "error");
         return;
       }
 
+      const endpoint = isChatMode() ? "/chat-harness" : "/ask-harness";
+      const payload = isChatMode()
+        ? {
+            message: text,
+            mode: modeEl.value,
+            sensitivity: sensitivityEl.value,
+            context: context,
+            conversation_history: trimHistory(conversationHistory)
+          }
+        : {
+            question: text,
+            mode: modeEl.value,
+            sensitivity: sensitivityEl.value,
+            context: context,
+            conversation_history: []
+          };
+
       try {
-        const res = await fetch("/ask-harness", {
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -258,11 +345,28 @@
           setStatus(`Error ${res.status}: ${formatErrorBody(body)}`, "error");
           return;
         }
-        renderResponse(body);
-        setStatus("OK", "ok");
+        if (isChatMode()) {
+          renderChatResponse(body);
+          conversationHistory = trimHistory(
+            conversationHistory.concat(
+              { role: "user", content: text },
+              { role: "assistant", content: body.answer || "" }
+            )
+          );
+        } else {
+          renderStructuredResponse(body);
+          setStatus("OK", "ok");
+        }
       } catch (err) {
         setStatus("Request failed: " + err.message, "error");
       }
+    }
+
+    function onEndpointChange() {
+      if (!isChatMode()) {
+        conversationHistory = [];
+      }
+      updatePanelVisibility();
     }
 
     const quickContainer = document.getElementById("quick-btns");
@@ -277,7 +381,10 @@
       quickContainer.appendChild(btn);
     }
 
+    endpointChatEl.addEventListener("change", onEndpointChange);
+    endpointStructuredEl.addEventListener("change", onEndpointChange);
     document.getElementById("submit").addEventListener("click", submitAsk);
+    updatePanelVisibility();
     loadDefaultContext();
   </script>
 </body>

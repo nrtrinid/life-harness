@@ -31,6 +31,11 @@ def test_playground_returns_html(client):
     assert "Ask Harness Playground" in body
     assert "Dev sandbox" in body
     assert "no persistence" in body
+    assert "Conversational Chat (/chat-harness)" in body
+    assert 'id="endpoint-chat"' in body
+    assert "checked" in body
+    assert 'value="general" selected' in body
+    assert "MAX_HISTORY_TURNS = 8" in body
     assert "localStorage" not in body
     assert "sessionStorage" not in body
     assert "innerHTML" not in body

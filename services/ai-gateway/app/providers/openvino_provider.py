@@ -11,11 +11,18 @@ from app.models import (
     AnalyzeTranscriptResponse,
     AskHarnessRequest,
     AskHarnessResponse,
+    ChatHarnessRequest,
+    ChatHarnessResponse,
     HealthStatus,
     ProviderHealth,
 )
-from app.prompt_loader import build_analysis_prompt, build_ask_harness_prompt
+from app.prompt_loader import (
+    build_analysis_prompt,
+    build_ask_harness_prompt,
+    build_chat_harness_prompt,
+)
 from app.providers.base import (
+    CHAT_HARNESS_PARSE_FALLBACK,
     ProviderInputError,
     ProviderNotReadyError,
     ProviderParseError,
@@ -36,6 +43,39 @@ except ImportError:
 _REPAIR_PROMPT = """\
 The previous answer was not valid JSON for the required schema.
 Return ONLY a corrected JSON object matching the schema. No markdown fences, no commentary.
+
+Broken output:
+{broken}
+"""
+
+_ASK_HARNESS_REPAIR_PROMPT = """\
+The previous answer was not valid JSON for the Ask Harness schema.
+Return ONLY a corrected JSON object. No markdown fences, no commentary, no thinking tags.
+
+Required top-level fields (all must be present):
+- answer (string, 2-6 substantive sentences)
+- grounding (array of objects with source_type, label, summary)
+- patterns_detected (array of strings)
+- suggested_next_actions (array of strings)
+- proposed_card_updates (array of objects; each must have requires_approval: true)
+- confidence_notes (array of strings — NOT a single string)
+- safety_notes (array of strings — NOT a single string)
+
+source_type must be one of: card, log, proof, analysis, decision, conversation, none
+
+Broken output:
+{broken}
+"""
+
+_CHAT_HARNESS_REPAIR_PROMPT = """\
+The previous answer was not valid JSON for the Chat Harness schema.
+Return ONLY a corrected JSON object. No markdown fences, no commentary, no thinking tags.
+
+Required top-level fields (all must be present):
+- answer (string, 2-8 substantive sentences)
+- used_context (boolean true or false)
+- confidence_notes (array of strings — NOT a single string)
+- safety_notes (array of strings — NOT a single string)
 
 Broken output:
 {broken}
@@ -164,13 +204,34 @@ class OpenVinoProvider:
             return parse_strict_json(raw, AskHarnessResponse)
         except ProviderParseError:
             logger.warning("openvino ask_harness parse failed; attempting one JSON repair pass")
-            repaired = self._generate(_REPAIR_PROMPT.format(broken=raw[:4000]))
+            repaired = self._generate(_ASK_HARNESS_REPAIR_PROMPT.format(broken=raw[:4000]))
             try:
                 return parse_strict_json(repaired, AskHarnessResponse)
             except ProviderParseError as exc:
                 raise ProviderParseError(
                     "Model output could not be parsed as valid ask-harness JSON after repair"
                 ) from exc
+
+    def chat_harness(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
+        self._ensure_pipeline()
+        prompt = build_chat_harness_prompt(request=request)
+        if len(prompt) > self._settings.max_input_chars:
+            raise ProviderInputError(
+                f"Serialized prompt length {len(prompt)} exceeds SCOUT_MAX_INPUT_CHARS="
+                f"{self._settings.max_input_chars}"
+            )
+
+        raw = self._generate(prompt)
+        try:
+            return parse_strict_json(raw, ChatHarnessResponse)
+        except ProviderParseError:
+            logger.warning("openvino chat_harness parse failed; attempting one JSON repair pass")
+            repaired = self._generate(_CHAT_HARNESS_REPAIR_PROMPT.format(broken=raw[:4000]))
+            try:
+                return parse_strict_json(repaired, ChatHarnessResponse)
+            except ProviderParseError:
+                logger.warning("openvino chat_harness parse failed after repair; returning fallback")
+                return CHAT_HARNESS_PARSE_FALLBACK
 
     def _ensure_pipeline(self) -> None:
         if self._pipeline is not None:
