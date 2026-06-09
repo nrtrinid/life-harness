@@ -4,6 +4,9 @@ from typing import Literal
 
 ProviderName = Literal["mock", "openvino"]
 
+DEFAULT_MODEL_PATH = "models/qwen3-8b-int4-ov"
+DEFAULT_MODEL_ID = "OpenVINO/Qwen3-8B-int4-ov"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -11,8 +14,12 @@ class Settings:
     host: str
     port: int
     model_path: str
+    model_id: str
     device: str
     max_new_tokens: int
+    timeout_seconds: float
+    max_input_chars: int
+    temperature: float
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -22,9 +29,13 @@ class Settings:
             provider=provider,
             host=os.getenv("SCOUT_HOST", "127.0.0.1"),
             port=int(os.getenv("SCOUT_PORT", "8111")),
-            model_path=os.getenv("SCOUT_MODEL_PATH", "./models/qwen3-8b-int4-ov"),
+            model_path=os.getenv("SCOUT_MODEL_PATH", DEFAULT_MODEL_PATH),
+            model_id=DEFAULT_MODEL_ID,
             device=os.getenv("SCOUT_DEVICE", "GPU"),
             max_new_tokens=int(os.getenv("SCOUT_MAX_NEW_TOKENS", "1024")),
+            timeout_seconds=float(os.getenv("SCOUT_TIMEOUT_SECONDS", "120")),
+            max_input_chars=int(os.getenv("SCOUT_MAX_INPUT_CHARS", "12000")),
+            temperature=float(os.getenv("SCOUT_TEMPERATURE", "0.2")),
         )
 
 

@@ -1,116 +1,176 @@
-# Life Harness AI Gateway (Phase 0)
+# Life Harness AI Gateway
 
-Minimal local AI gateway prototype for analyzing messy transcripts and speech-to-text notes. This is **not** the Life Harness app — it tests whether structured scout output can be produced locally before wiring into the main product.
+Minimal local AI gateway prototype for analyzing messy transcripts and speech-to-text notes. This is **not** the Life Harness app.
 
-**Phase 0:** mock provider (default) + OpenVINO stub. **Phase 0.5:** local evaluation harness (synthetic fixture + CLI script). Real A770 inference is Phase 1 — see [docs/local-a770-plan.md](../../docs/local-a770-plan.md).
+**Phase 0:** mock provider + OpenVINO integration path. **Phase 0.5:** evaluation harness. **Phase 1:** real OpenVINO GenAI provider. **Phase 1.5:** OpenVINO smoke script + manual report.
+
+See [docs/local-a770-plan.md](../../docs/local-a770-plan.md) for the full roadmap.
 
 ## Quickstart (mock mode)
 
-```bash
+```powershell
 cd services/ai-gateway
 python -m venv .venv
-.venv\Scripts\activate          # Windows
+.venv\Scripts\activate
 pip install -e ".[dev]"
-$env:SCOUT_PROVIDER="mock"      # PowerShell
+$env:SCOUT_PROVIDER="mock"
 pytest
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8111
 ```
 
-## Evaluation harness (Phase 0.5)
+## OpenVINO mode (Phase 1)
 
-Manual check that scout output is worth iterating on before OpenVINO.
+### 1. Install dependencies
 
-1. Start the service (see Quickstart above).
-2. Analyze the synthetic fixture:
-
-   ```powershell
-   python scripts/analyze_file.py tests/fixtures/synthetic_transcript.txt
-   ```
-
-3. Compare stdout to [docs/sample-outputs/mock_synthetic_analysis.json](docs/sample-outputs/mock_synthetic_analysis.json).
-4. Score usefulness with [docs/evaluation-rubric.md](docs/evaluation-rubric.md).
-
-The script prints **result JSON only** on stdout. On stderr it may show file path, character length, and HTTP status — never the transcript text.
+Requires Intel GPU drivers and a Python 3.11+ venv:
 
 ```powershell
-# Optional flags
-python scripts/analyze_file.py tests/fixtures/synthetic_transcript.txt --mode operator --sensitivity S1 --timeout 30
-# Phase 1 OpenVINO (slow): --timeout 180
+pip install -e ".[dev,openvino]"
 ```
 
-**Transcript safety:** Do not commit real transcripts. Use `*.transcript.txt` for local-only files (gitignored). The only committed sample is `tests/fixtures/synthetic_transcript.txt` (clearly fake).
+This installs `openvino-genai` and `huggingface_hub`. GPU inference targets Intel Arc A770 via `SCOUT_DEVICE=GPU`.
 
-Golden sync in CI: `tests/test_synthetic_golden.py` asserts mock output matches the committed sample.
+### 2. Download the model (do not commit weights)
+
+```powershell
+mkdir models
+huggingface-cli download OpenVINO/Qwen3-8B-int4-ov --local-dir models/qwen3-8b-int4-ov
+```
+
+Or download to any local directory and set `SCOUT_MODEL_PATH`.
+
+### 3. Run the gateway
+
+```powershell
+$env:SCOUT_PROVIDER="openvino"
+$env:SCOUT_MODEL_PATH="models/qwen3-8b-int4-ov"
+$env:SCOUT_DEVICE="GPU"
+$env:SCOUT_TIMEOUT_SECONDS="120"
+$env:SCOUT_MAX_INPUT_CHARS="12000"
+$env:SCOUT_TEMPERATURE="0.2"
+uvicorn app.main:app --host 127.0.0.1 --port 8111
+```
+
+`GET /health` returns `ok` when OpenVINO is installed and the model path is present. The pipeline lazy-loads on the first `POST /analyze-transcript`.
+
+If dependencies or the model path are missing, `/health` is `degraded` and analyze returns HTTP 503 with setup instructions.
+
+### 4. Quick analyze (optional)
+
+```powershell
+python scripts/analyze_file.py tests/fixtures/synthetic_transcript.txt --timeout 180
+```
+
+## Phase 1.5 — OpenVINO smoke test
+
+Structured smoke run against the synthetic fixture. **Stdout** prints only `smoke: pass` or `smoke: fail`; metrics go to **stderr** for pasting into the report.
+
+1. Start the OpenVINO gateway (step 3 above).
+2. From `services/ai-gateway`:
+
+   ```powershell
+   python scripts/smoke_openvino.py
+   ```
+
+3. Optionally save validated JSON (synthetic example path only):
+
+   ```powershell
+   python scripts/smoke_openvino.py --write-output
+   python scripts/smoke_openvino.py --write-output custom.json
+   ```
+
+4. Paste stderr `Smoke metrics:` block into [docs/openvino-smoke-report.md](docs/openvino-smoke-report.md).
+5. Score with [docs/evaluation-rubric.md](docs/evaluation-rubric.md).
+
+**Mock vs OpenVINO evaluation:**
+- Mock: golden equality in `test_synthetic_golden.py` vs `mock_synthetic_analysis.json`
+- OpenVINO: **schema + rubric only** — no golden JSON comparison
+
+**Exit codes:** 2 = cannot reach service; 3 = health not ready / wrong provider; 4 = analyze or schema failure.
+
+**Do not commit:** real transcript outputs, ad-hoc `openvino_*.json` (gitignored). `models/` stays gitignored. Only `openvino_synthetic_analysis.example.json` is safe to commit if generated from the synthetic fixture.
+
+## Evaluation harness (Phase 0.5)
+
+1. Start the service (mock or OpenVINO).
+2. `python scripts/analyze_file.py tests/fixtures/synthetic_transcript.txt`
+3. Compare mock output to [docs/sample-outputs/mock_synthetic_analysis.json](docs/sample-outputs/mock_synthetic_analysis.json).
+4. Review with [docs/evaluation-rubric.md](docs/evaluation-rubric.md).
+
+The script prints **result JSON only** on stdout. stderr may show file path, length, and HTTP status — never transcript text.
+
+**Transcript safety:** Do not commit real transcripts. Use `*.transcript.txt` for local-only files (gitignored). Only `tests/fixtures/synthetic_transcript.txt` is committed (clearly fake).
 
 ## Endpoints
 
 ### `GET /health`
 
-Returns provider name, readiness, and optional setup message.
+Returns provider name, readiness, model, device, and optional setup message.
 
 ### `POST /analyze-transcript`
 
-```bash
-curl -s http://127.0.0.1:8111/health
+**Sensitivity:** `S3` is rejected with HTTP 422 before any provider runs.
 
-curl -s -X POST http://127.0.0.1:8111/analyze-transcript ^
-  -H "Content-Type: application/json" ^
-  -d "{\"text\": \"um I keep putting off my resume and researching notion instead\", \"mode\": \"operator\", \"sensitivity\": \"S1\"}"
-```
-
-**Sensitivity:** `S3` is rejected with HTTP 422 before any provider runs (rules-only).
-
-**OpenVINO (`SCOUT_PROVIDER=openvino`):** Phase 0 stub returns degraded `/health` and HTTP 503 on analyze with setup instructions. No model download in this pass.
+**Errors:**
+- 422 — validation or input exceeds `SCOUT_MAX_INPUT_CHARS`
+- 502 — model output could not be parsed as valid JSON
+- 503 — provider not ready (missing deps, model, load failure, or inference timeout)
 
 ## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCOUT_PROVIDER` | `mock` | `mock` or `openvino` (stub) |
+| `SCOUT_PROVIDER` | `mock` | `mock` or `openvino` |
 | `SCOUT_HOST` | `127.0.0.1` | Bind host (localhost only) |
 | `SCOUT_PORT` | `8111` | Bind port |
-| `SCOUT_MODEL_PATH` | `./models/qwen3-8b-int4-ov` | Reserved for Phase 1 |
-| `SCOUT_DEVICE` | `GPU` | Reserved for Phase 1 (A770) |
-| `SCOUT_MAX_NEW_TOKENS` | `1024` | Reserved for Phase 1 |
+| `SCOUT_MODEL_PATH` | `models/qwen3-8b-int4-ov` | Local OpenVINO model directory |
+| `SCOUT_DEVICE` | `GPU` | OpenVINO device (`GPU`, `CPU`, `NPU`) |
+| `SCOUT_MAX_NEW_TOKENS` | `1024` | Max tokens generated |
+| `SCOUT_TIMEOUT_SECONDS` | `120` | Inference timeout per request |
+| `SCOUT_MAX_INPUT_CHARS` | `12000` | Max transcript length for OpenVINO |
+| `SCOUT_TEMPERATURE` | `0.2` | Sampling temperature |
 
 ## Privacy
 
 - Bind to `127.0.0.1` only
-- No auth in Phase 0
-- Full transcripts are not logged (length only)
+- No auth
+- Transcript content is not logged (length only)
 - Do not commit `models/` or `*.transcript.txt`
-- No cloud AI — local/mock only
+- No cloud AI
 
-## Non-goals (Phase 0)
+## Non-goals
 
 - Life Harness frontend integration
 - Database, authentication
-- Real OpenVINO inference or GPU debugging
+- Speech-to-text, RAG, background agents
 - Autonomous actions (send, spend, trade, commit)
 
 ## Layout
 
 ```text
 app/
-  main.py              # FastAPI app
-  models.py            # Strict Pydantic contracts
-  config.py            # Environment settings
-  prompt_loader.py     # Prompt template loader (Phase 1)
+  main.py
+  models.py
+  config.py
+  prompt_loader.py
   providers/
-    base.py            # Provider protocol + JSON parser
-    mock.py            # Default provider
-    openvino_provider.py  # Phase 0 stub
+    base.py
+    mock.py
+    openvino_provider.py
   prompts/
     transcript_analysis.md
 scripts/
-  analyze_file.py      # POST local file to running gateway
+  analyze_file.py
+  smoke_openvino.py
 tests/
-  fixtures/
-    synthetic_transcript.txt
+  fixtures/synthetic_transcript.txt
   test_contracts.py
+  test_openvino_provider.py
+  test_smoke_openvino_cli.py
   test_synthetic_golden.py
 docs/
   evaluation-rubric.md
-  sample-outputs/
-    mock_synthetic_analysis.json
+  openvino-smoke-report.md
+  sample-outputs/mock_synthetic_analysis.json
+  sample-outputs/openvino_synthetic_analysis.example.json
 ```

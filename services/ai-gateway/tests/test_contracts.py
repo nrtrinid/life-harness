@@ -107,8 +107,9 @@ def test_response_rejects_unknown_fields():
         AnalyzeTranscriptResponse.model_validate(data)
 
 
-def test_openvino_stub_degraded_health(client):
+def test_openvino_degraded_health_when_model_missing(client):
     os.environ["SCOUT_PROVIDER"] = "openvino"
+    os.environ["SCOUT_MODEL_PATH"] = "/nonexistent/scout-model-path-phase1"
     get_provider.cache_clear()
     response = client.get("/health")
     assert response.status_code == 200
@@ -119,8 +120,9 @@ def test_openvino_stub_degraded_health(client):
     assert body["message"]
 
 
-def test_openvino_stub_analyze_returns_503(client):
+def test_openvino_analyze_returns_503_when_model_missing(client):
     os.environ["SCOUT_PROVIDER"] = "openvino"
+    os.environ["SCOUT_MODEL_PATH"] = "/nonexistent/scout-model-path-phase1"
     get_provider.cache_clear()
     response = client.post(
         "/analyze-transcript",

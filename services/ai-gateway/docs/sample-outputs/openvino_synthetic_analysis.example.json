@@ -1,0 +1,61 @@
+{
+  "confidence_notes": [
+    "Inferred \u2014 'I haven't eaten since noon' indicates neglect of basic needs",
+    "Inferred \u2014 'I keep putting off the fake resume' suggests career avoidance",
+    "Inferred \u2014 'I have this open loop about comparing three todo apps' indicates a parked rabbit hole"
+  ],
+  "next_actions": [
+    "Eat a small snack",
+    "Take a 10-minute walk and stretch",
+    "Open resume doc and add one bullet point about ShelfTracker"
+  ],
+  "patterns_detected": [
+    "Procrastination on career-related tasks",
+    "Neglect of body needs",
+    "Open loops about tools and workflows"
+  ],
+  "possible_cards": [
+    {
+      "area": "Social / Career",
+      "next_tiny_action": "Open resume doc and add one bullet point about ShelfTracker",
+      "state": "Inbox",
+      "title": "Fake Resume for ShelfTracker",
+      "why_it_matters": "Starts the process of making the project visible to potential collaborators or employers."
+    },
+    {
+      "area": "Body",
+      "next_tiny_action": "Take a 10-minute walk and stretch",
+      "state": "Inbox",
+      "title": "Gym Session",
+      "why_it_matters": "Reconnects with physical health and resets mental focus."
+    },
+    {
+      "area": "Body",
+      "next_tiny_action": "Eat a small snack (e.g., a banana or handful of nuts)",
+      "state": "Inbox",
+      "title": "Snack Break",
+      "why_it_matters": "Replenishes energy and prevents further neglect of basic needs."
+    },
+    {
+      "area": "Build",
+      "next_tiny_action": "Write one line in inbox about this",
+      "state": "Parked",
+      "title": "Todo App Comparison",
+      "why_it_matters": "Avoids getting stuck in research mode and keeps the mind focused on actionable steps."
+    }
+  ],
+  "pounce_mission": "Open resume doc and add one bullet point about ShelfTracker",
+  "summary": "A day of procrastination and self-sabotage, with multiple open loops and neglect of basic needs.",
+  "themes": [
+    "Procrastination",
+    "Self-sabotage",
+    "Neglect of body",
+    "Career avoidance",
+    "Open loops"
+  ],
+  "things_to_park": [
+    "Compare three todo apps",
+    "Research job board apps",
+    "Compare todo apps"
+  ]
+}

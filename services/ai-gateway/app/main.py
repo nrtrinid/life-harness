@@ -11,7 +11,12 @@ from app.models import (
     ProviderKind,
     SensitivityLevel,
 )
-from app.providers.base import ProviderNotReadyError, TranscriptProvider
+from app.providers.base import (
+    ProviderInputError,
+    ProviderNotReadyError,
+    ProviderParseError,
+    TranscriptProvider,
+)
 from app.providers.mock import MockProvider
 from app.providers.openvino_provider import OpenVinoProvider
 
@@ -19,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Life Harness AI Gateway",
-    description="Phase 0 local scout prototype — mock provider default, OpenVINO stub.",
-    version="0.1.0",
+    description="Local scout gateway — mock default, OpenVINO optional.",
+    version="0.2.0",
 )
 
 
@@ -70,5 +75,10 @@ def analyze_transcript(request: AnalyzeTranscriptRequest) -> AnalyzeTranscriptRe
 
     try:
         return provider.analyze(request)
+    except ProviderInputError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
     except ProviderNotReadyError as exc:
         raise HTTPException(status_code=503, detail=exc.message) from exc
+    except ProviderParseError as exc:
+        logger.warning("provider parse error: %s", exc.message)
+        raise HTTPException(status_code=502, detail=exc.message) from exc

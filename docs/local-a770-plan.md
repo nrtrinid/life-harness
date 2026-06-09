@@ -4,65 +4,79 @@ Companion to [08_ai_provider_and_a770_plan.md](./08_ai_provider_and_a770_plan.md
 
 This document tracks the **standalone gateway prototype** at `services/ai-gateway/`. The main Life Harness Expo app remains rules-only in v0.1.
 
-## Phase 0 — mock gateway (current)
+## Phase 0 — mock gateway (done)
 
 **Goal:** Prove API contracts, sensitivity gate, and mock scout output without GPU setup.
 
-Delivered:
+Delivered: mock provider, OpenVINO stub path, strict schema, S3 gate, `SCOUT_PROVIDER=mock pytest`.
 
-```text
-GET  /health
-POST /analyze-transcript
-MockProvider (default)
-OpenVINO stub (degraded / 503)
-Strict Pydantic response schema
-SCOUT_PROVIDER=mock pytest
-S3 rejected before provider execution
-```
+## Phase 0.5 — evaluation harness (done)
 
-**Not in Phase 0:** real inference, model download, GPU debugging, UI, auth, database.
+Synthetic fixture, `scripts/analyze_file.py`, evaluation rubric, golden mock sample, `test_synthetic_golden.py`.
 
-Acceptance:
-
-```bash
-cd services/ai-gateway
-pip install -e ".[dev]"
-SCOUT_PROVIDER=mock pytest
-uvicorn app.main:app --host 127.0.0.1 --port 8111
-```
-
-## Phase 1 — OpenVINO GenAI on A770
+## Phase 1 — OpenVINO GenAI on A770 (done)
 
 **Goal:** Run [OpenVINO/Qwen3-8B-int4-ov](https://huggingface.co/OpenVINO/Qwen3-8B-int4-ov) locally on Intel Arc A770 GPU.
 
-Steps:
+**Implemented in `services/ai-gateway`:**
 
-1. Install Intel GPU drivers and OpenVINO GenAI:
+```text
+OpenVinoProvider with lazy LLMPipeline load
+Prompt via transcript_analysis.md
+JSON parse + one repair pass on failure
+SCOUT_MAX_INPUT_CHARS / SCOUT_TIMEOUT_SECONDS / SCOUT_TEMPERATURE
+Degraded /health when deps or model path missing
+502 on parse failure, 503 on not-ready, 422 on oversize input
+```
 
-   ```bash
-   pip install openvino-genai huggingface_hub
-   ```
+**Manual setup:**
 
-2. Download model to `./models/qwen3-8b-int4-ov` (do not commit weights).
+```powershell
+cd services/ai-gateway
+pip install -e ".[dev,openvino]"
+huggingface-cli download OpenVINO/Qwen3-8B-int4-ov --local-dir models/qwen3-8b-int4-ov
 
-3. Set environment:
+$env:SCOUT_PROVIDER="openvino"
+$env:SCOUT_MODEL_PATH="models/qwen3-8b-int4-ov"
+$env:SCOUT_DEVICE="GPU"
+uvicorn app.main:app --host 127.0.0.1 --port 8111
 
-   ```text
-   SCOUT_PROVIDER=openvino
-   SCOUT_MODEL_PATH=./models/qwen3-8b-int4-ov
-   SCOUT_DEVICE=GPU
-   ```
+python scripts/analyze_file.py tests/fixtures/synthetic_transcript.txt --timeout 180
+```
 
-4. Implement real `OpenVinoProvider.analyze()`:
-
-   - `LLMPipeline(model_path, device)`
-   - Prompt via `app/prompts/transcript_analysis.md` + `prompt_loader.py`
-   - `parse_model_json()` in `app/providers/base.py`
-   - Fallback to degraded health if load fails
-
-5. Validate on messy transcripts; tune `max_new_tokens` and JSON reliability.
+CI does not require GPU or model weights; OpenVINO tests assert degraded/503 when the model path is missing.
 
 **Hardware:** Intel Arc A770, ~5GB model download, Windows tested path first.
+
+## Phase 1.5 — OpenVINO smoke / evaluation (done)
+
+Smoke script, report template, CLI tests. OpenVINO evaluated by schema + rubric only.
+
+## Phase 1.6 — Real A770 smoke run (done)
+
+**Result:** GPU pass on Intel Arc A770 after `apply_chat_template=True` fix in OpenVinoProvider.
+
+```text
+Smoke: exit 0, schema_valid true, ~29s first analyze (GPU)
+Example: docs/sample-outputs/openvino_synthetic_analysis.example.json
+Report: services/ai-gateway/docs/openvino-smoke-report.md
+Rubric: weak overall (valid JSON, mixed action quality) → Phase 1.7 prompt tuning
+```
+
+**Blocker resolved:** `apply_chat_template=False` caused JSON parse failure on Qwen3; not a GPU issue.
+
+## Phase 1.7 — Prompt tuning (done)
+
+**Result:** Parking/action consistency fixed on synthetic fixture; rubric overall mixed/usable (up from weak).
+
+```text
+Prompt: transcript_analysis.md — derivation order, parking rules, single pounce, body/career split
+Helper: scripts/check_output_consistency.py (manual reviewer, not CI)
+Provider: enable_thinking=False via ChatHistory (Qwen3 JSON reliability with longer prompt)
+Smoke: exit 0, ~19s, consistency helper all pass
+Example: docs/sample-outputs/openvino_synthetic_analysis.example.json
+Report: services/ai-gateway/docs/openvino-smoke-report.md (Phase 1.7 section)
+```
 
 ## Phase 2 — Model Server + Life Harness integration
 

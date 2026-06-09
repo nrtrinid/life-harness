@@ -37,6 +37,9 @@ Rate each dimension **pass**, **weak**, or **fail**.
 | **Inbox-by-default cards** | New suggestions use Inbox (or Parked when appropriate) | Mixed states without reason | Pushes new ideas straight to Active |
 | **Tiny next actions** | Concrete, startable in ≤15 minutes | Actionable but vague | Large, multi-step, or overwhelming |
 | **Pounce mission** | One small, time-boxed move | Reasonable but not pounce-sized | Another project or guilt trip |
+| **Parking consistency** | `pounce_mission` and `next_actions` do not pursue `things_to_park` | Partial alignment (one leak) | Clear contradiction (park research, then suggest research) |
+| **Career directness** | At least one direct outside-world/career move when career avoidance present | Only vague "touch career" | More research/setup instead of direct action |
+| **Body floor** | One small body action when body signals present | Mentioned only in themes | Ignores obvious eat/gym neglect |
 | **Things to park** | Names optimization/rabbit holes to defer | Empty when note is full of tooling traps | Shames the user or parks real obligations |
 | **Humble confidence_notes** | Marks inference; admits uncertainty | Thin caveats | Sounds certain about personal motives or facts |
 | **No high-stakes overreach** | Stays in scout lane | Mild overreach | Medical/legal/financial advice, harmful instructions, or autonomous actions (send, spend, trade, commit) |
@@ -48,6 +51,25 @@ Rate each dimension **pass**, **weak**, or **fail**.
 - Suggesting the system already did something on the user's behalf
 - Active cards for brand-new ideas that were never consciously chosen
 - Ignoring obvious open loops or parking real work in favor of fake productivity
+- `pounce_mission` stacks two moves (e.g. snack + resume) or pursues something in `things_to_park`
+
+## Phase 1.7 synthetic fixture expectations
+
+Use with `tests/fixtures/synthetic_transcript.txt`. Behavioral targets only — **not** golden equality vs mock output.
+
+- `things_to_park` should include tooling/todo-comparison threads
+- `pounce_mission` should be **one** move only (body floor **or** one resume/career bullet — not both stacked, not research)
+- If both career and body signals present: pounce picks one; the other appears in `next_actions`
+- `next_actions` must not include job-board research or todo-app evaluation
+- All new cards remain Inbox
+
+Optional reviewer helper after smoke:
+
+```powershell
+python scripts/check_output_consistency.py docs/sample-outputs/openvino_synthetic_analysis.example.json
+```
+
+Non-blocking — not a CI gate. See script for heuristic checks.
 
 ## What good looks like
 
