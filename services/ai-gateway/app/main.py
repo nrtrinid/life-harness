@@ -1,7 +1,10 @@
+import json
 import logging
 from functools import lru_cache
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from app.config import Settings, get_settings
 from app.models import (
@@ -23,6 +26,12 @@ from app.providers.mock import MockProvider
 from app.providers.openvino_provider import OpenVinoProvider
 
 logger = logging.getLogger(__name__)
+
+SERVICE_ROOT = Path(__file__).resolve().parent.parent
+PLAYGROUND_HTML = SERVICE_ROOT / "playground" / "ask_harness.html"
+DEFAULT_CONTEXT_FIXTURE = (
+    SERVICE_ROOT / "tests" / "fixtures" / "synthetic_harness_context.json"
+)
 
 app = FastAPI(
     title="Life Harness AI Gateway",
@@ -115,3 +124,23 @@ def ask_harness_endpoint(request: AskHarnessRequest) -> AskHarnessResponse:
     except ProviderParseError as exc:
         logger.warning("provider parse error: %s", exc.message)
         raise HTTPException(status_code=502, detail=exc.message) from exc
+
+
+@app.get("/playground")
+def playground_page() -> FileResponse:
+    if not PLAYGROUND_HTML.is_file():
+        raise HTTPException(status_code=404, detail="Playground page not found")
+    return FileResponse(PLAYGROUND_HTML, media_type="text/html")
+
+
+@app.get("/ask-harness-playground")
+def ask_harness_playground_redirect() -> RedirectResponse:
+    return RedirectResponse("/playground", status_code=307)
+
+
+@app.get("/playground/default-context")
+def playground_default_context() -> JSONResponse:
+    if not DEFAULT_CONTEXT_FIXTURE.is_file():
+        raise HTTPException(status_code=404, detail="Default context fixture not found")
+    data = json.loads(DEFAULT_CONTEXT_FIXTURE.read_text(encoding="utf-8"))
+    return JSONResponse(content=data, headers={"Cache-Control": "no-store"})

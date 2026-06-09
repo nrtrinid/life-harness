@@ -107,6 +107,19 @@ python scripts/ask_harness.py --question "What should I build next?" --mode buil
 
 Default context: `tests/fixtures/synthetic_harness_context.json` (fake data only).
 
+## Browser playground
+
+Dev sandbox at `GET /playground` — same localhost server, no separate frontend build.
+
+```text
+http://127.0.0.1:8111/playground
+```
+
+- Prefills context from `GET /playground/default-context` (synthetic fixture, `Cache-Control: no-store`)
+- Quick-question buttons for common vibe tests
+- Renders answer, grounding, patterns, next actions, proposed updates, confidence/safety notes
+- No persistence; not the Life Harness app UI
+
 ## Future path
 
 - Read-only chat over real Life Harness board state (app integration ticket)

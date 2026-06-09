@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ask Harness Playground</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #5b9bd5;
+      --error: #e57373;
+      --ok: #81c784;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem;
+      line-height: 1.5;
+      max-width: 960px;
+    }
+    h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    textarea, select {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.6rem;
+      font: inherit;
+    }
+    textarea { min-height: 4rem; resize: vertical; }
+    #context { font-family: ui-monospace, Consolas, monospace; font-size: 0.8rem; min-height: 12rem; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    .field { margin-bottom: 1rem; }
+    .quick-btns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+    .quick-btns button, #submit {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.45rem 0.75rem;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.85rem;
+    }
+    .quick-btns button:hover, #submit:hover { border-color: var(--accent); }
+    #submit {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0f1419;
+      font-weight: 600;
+      padding: 0.6rem 1.2rem;
+    }
+    #status { min-height: 1.25rem; font-size: 0.9rem; margin: 0.75rem 0; }
+    #status.error { color: var(--error); }
+    #status.ok { color: var(--ok); }
+    #response { display: none; margin-top: 1.5rem; }
+    #response.visible { display: block; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .panel.answer h2 { color: var(--accent); text-transform: none; letter-spacing: 0; font-size: 1rem; }
+    #answer-text { font-size: 1.05rem; white-space: pre-wrap; }
+    ul { margin: 0; padding-left: 1.25rem; }
+    li { margin-bottom: 0.35rem; }
+    .empty { color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Ask Harness Playground</h1>
+  <p class="subtitle">Dev sandbox · synthetic/default context · no persistence</p>
+
+  <div class="field">
+    <label for="question">Question</label>
+    <textarea id="question" rows="2">What am I avoiding right now?</textarea>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="operator" selected>operator</option>
+        <option value="reflection">reflection</option>
+        <option value="builder">builder</option>
+        <option value="general">general</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="sensitivity">Sensitivity</label>
+      <select id="sensitivity">
+        <option value="S0">S0</option>
+        <option value="S1" selected>S1</option>
+        <option value="S2">S2</option>
+        <option value="S3">S3</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="context">Context (JSON)</label>
+    <textarea id="context" spellcheck="false"></textarea>
+  </div>
+
+  <div class="quick-btns" id="quick-btns"></div>
+
+  <button type="button" id="submit">Ask scout</button>
+  <p id="status" aria-live="polite"></p>
+
+  <div id="response">
+    <div class="panel answer">
+      <h2>Answer</h2>
+      <div id="answer-text"></div>
+    </div>
+    <div class="panel"><h2>Grounding</h2><ul id="grounding"></ul></div>
+    <div class="panel"><h2>Patterns detected</h2><ul id="patterns"></ul></div>
+    <div class="panel"><h2>Suggested next actions</h2><ul id="next-actions"></ul></div>
+    <div class="panel"><h2>Proposed card updates</h2><ul id="card-updates"></ul></div>
+    <div class="panel"><h2>Confidence notes</h2><ul id="confidence"></ul></div>
+    <div class="panel"><h2>Safety notes</h2><ul id="safety"></ul></div>
+  </div>
+
+  <script>
+    const FALLBACK_CONTEXT = {
+      cards: [],
+      logs: [],
+      proof_items: [],
+      recent_analyses: [],
+      decisions: []
+    };
+
+    const QUICK_QUESTIONS = [
+      { label: "What am I avoiding right now?", mode: "operator" },
+      { label: "What should I do next?", mode: "operator" },
+      { label: "Am I over-optimizing again?", mode: "reflection" },
+      { label: "What should I build next?", mode: "builder" },
+      { label: "Give me blunt advice based on this context.", mode: "general" }
+    ];
+
+    const questionEl = document.getElementById("question");
+    const modeEl = document.getElementById("mode");
+    const sensitivityEl = document.getElementById("sensitivity");
+    const contextEl = document.getElementById("context");
+    const statusEl = document.getElementById("status");
+    const responseEl = document.getElementById("response");
+
+    function setStatus(message, kind) {
+      statusEl.textContent = message;
+      statusEl.className = kind || "";
+    }
+
+    function clearList(el) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function renderList(el, items, formatter) {
+      clearList(el);
+      if (!items || items.length === 0) {
+        const li = document.createElement("li");
+        li.className = "empty";
+        li.textContent = "(none)";
+        el.appendChild(li);
+        return;
+      }
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.textContent = formatter ? formatter(item) : String(item);
+        el.appendChild(li);
+      }
+    }
+
+    function renderResponse(data) {
+      document.getElementById("answer-text").textContent = data.answer || "";
+      renderList(
+        document.getElementById("grounding"),
+        data.grounding,
+        (g) => `[${g.source_type}] ${g.label}: ${g.summary}`
+      );
+      renderList(document.getElementById("patterns"), data.patterns_detected);
+      renderList(document.getElementById("next-actions"), data.suggested_next_actions);
+      renderList(
+        document.getElementById("card-updates"),
+        data.proposed_card_updates,
+        (u) => `${u.card_title} — ${u.proposed_change} (requires approval: ${u.requires_approval})`
+      );
+      renderList(document.getElementById("confidence"), data.confidence_notes);
+      renderList(document.getElementById("safety"), data.safety_notes);
+      responseEl.classList.add("visible");
+    }
+
+    function formatErrorBody(body) {
+      if (typeof body === "string") return body;
+      if (body && body.detail) {
+        return typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      }
+      return JSON.stringify(body);
+    }
+
+    async function loadDefaultContext() {
+      try {
+        const res = await fetch("/playground/default-context");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        contextEl.value = JSON.stringify(data, null, 2);
+      } catch (err) {
+        contextEl.value = JSON.stringify(FALLBACK_CONTEXT, null, 2);
+        setStatus("Could not load default context — using empty fallback.", "error");
+      }
+    }
+
+    async function submitAsk() {
+      setStatus("Loading…", "");
+      responseEl.classList.remove("visible");
+
+      let context;
+      try {
+        context = JSON.parse(contextEl.value);
+      } catch (err) {
+        setStatus("Invalid context JSON: " + err.message, "error");
+        return;
+      }
+
+      const payload = {
+        question: questionEl.value.trim(),
+        mode: modeEl.value,
+        sensitivity: sensitivityEl.value,
+        context: context,
+        conversation_history: []
+      };
+
+      if (!payload.question) {
+        setStatus("Question must not be empty.", "error");
+        return;
+      }
+
+      try {
+        const res = await fetch("/ask-harness", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(`Error ${res.status}: ${formatErrorBody(body)}`, "error");
+          return;
+        }
+        renderResponse(body);
+        setStatus("OK", "ok");
+      } catch (err) {
+        setStatus("Request failed: " + err.message, "error");
+      }
+    }
+
+    const quickContainer = document.getElementById("quick-btns");
+    for (const q of QUICK_QUESTIONS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = q.label;
+      btn.addEventListener("click", () => {
+        questionEl.value = q.label;
+        modeEl.value = q.mode;
+      });
+      quickContainer.appendChild(btn);
+    }
+
+    document.getElementById("submit").addEventListener("click", submitAsk);
+    loadDefaultContext();
+  </script>
+</body>
+</html>

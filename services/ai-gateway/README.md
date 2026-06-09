@@ -114,6 +114,19 @@ If the OpenVINO gateway is already running (see OpenVINO mode above), the same C
 
 **Exit codes:** 1 = usage/context error; 2 = connection error; 3 = non-2xx API response.
 
+### Browser playground
+
+Dev-only UI for vibe-testing Ask Harness in the browser (no persistence, synthetic default context):
+
+```powershell
+$env:SCOUT_PROVIDER="mock"
+uvicorn app.main:app --host 127.0.0.1 --port 8111
+```
+
+Open [http://127.0.0.1:8111/playground](http://127.0.0.1:8111/playground) (alias: `/ask-harness-playground`).
+
+Quick-question buttons match the CLI vibe tests. Response renders in readable sections. Works with OpenVINO if that gateway is already running.
+
 ## Evaluation harness (Phase 0.5)
 
 1. Start the service (mock or OpenVINO).
@@ -192,6 +205,8 @@ app/
   prompts/
     transcript_analysis.md
     ask_harness.md
+playground/
+  ask_harness.html
 scripts/
   analyze_file.py
   ask_harness.py
@@ -203,6 +218,7 @@ tests/
   test_contracts.py
   test_ask_harness_contract.py
   test_ask_harness_cli.py
+  test_playground.py
   test_openvino_provider.py
   test_smoke_openvino_cli.py
   test_synthetic_golden.py
