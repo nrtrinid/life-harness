@@ -1,0 +1,15 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true
+  },
+  "include": [
+    "app",
+    "src",
+    "services/job-scout-runner/src",
+    "services/job-scout-runner/tests",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts"
+  ]
+}

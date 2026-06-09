@@ -1,0 +1,63 @@
+import { Link } from "expo-router";
+import { Pressable, Text, View } from "react-native";
+
+import { buildProofShelfEntries } from "../core/proof";
+import { useLifeHarness } from "../state/LifeHarnessState";
+import { styles } from "./styles";
+
+interface ProofShelfProps {
+  compact?: boolean;
+  limit?: number;
+  rescueOnly?: boolean;
+}
+
+export function ProofShelf({ compact = false, limit, rescueOnly = false }: ProofShelfProps) {
+  const { cards, logs, proofItems } = useLifeHarness();
+  let entries = buildProofShelfEntries(proofItems, cards, logs);
+
+  if (rescueOnly) {
+    entries = entries.filter((entry) => entry.rescueKind);
+  }
+
+  if (limit !== undefined) {
+    entries = entries.slice(0, limit);
+  }
+
+  if (entries.length === 0) {
+    return <Text style={styles.emptyText}>No proof yet. Pounce, log a win, or preserve the day.</Text>;
+  }
+
+  return (
+    <View style={styles.proofShelf}>
+      {!compact ? <Text style={styles.helpText}>Evidence, not raw history.</Text> : null}
+      {entries.map((entry) => {
+        const content = (
+          <>
+            <Text style={styles.listItem}>▸ {entry.title}</Text>
+            <Text style={styles.helpText}>
+              {[entry.areaLabel, entry.cardTitle, entry.rescueKind ? `Rescue: ${entry.rescueKind}` : undefined]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          </>
+        );
+
+        if (entry.cardId) {
+          return (
+            <Link key={entry.id} href={`/card/${entry.cardId}`} asChild>
+              <Pressable style={styles.proofShelfItem} accessibilityRole="link">
+                {content}
+              </Pressable>
+            </Link>
+          );
+        }
+
+        return (
+          <View key={entry.id} style={styles.proofShelfItem}>
+            {content}
+          </View>
+        );
+      })}
+    </View>
+  );
+}

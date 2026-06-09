@@ -90,6 +90,17 @@ Tests: mock-only in CI; OpenVINO code path + 503 when model missing
 Not: UI, DB, RAG, persistent memory, app integration
 ```
 
+## Phase 1.8b — Ask Harness prompt tune (done)
+
+**Result:** Tuned `app/prompts/ask_harness.md` + ask-harness-specific OpenVINO JSON repair hint. Re-smoke: **5/5 schema-valid**, reflection 502 fixed, operator/builder answers substantive.
+
+```text
+Prompt: app/prompts/ask_harness.md (substantive answer rules, mode guidance, JSON strictness)
+Provider tweak: ask-harness repair prompt in openvino_provider.py (array-field reminder)
+Report: services/ai-gateway/docs/ask-harness-openvino-smoke.md (Phase 1.8b section)
+Next: Career-first Momentum Board context integration
+```
+
 ## Phase 2 — Model Server + Life Harness integration
 
 Optional alternate runtime:

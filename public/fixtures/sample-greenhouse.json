@@ -1,0 +1,18 @@
+{
+  "jobs": [
+    {
+      "id": 1001,
+      "title": "Software Engineer — Security",
+      "location": { "name": "Remote" },
+      "absolute_url": "https://boards.example.com/jobs/1001",
+      "content": "Seeking software engineer with Python, TypeScript, React, security, and application security experience."
+    },
+    {
+      "id": 1002,
+      "title": "Full Stack Developer",
+      "location": { "name": "San Diego, CA" },
+      "absolute_url": "https://boards.example.com/jobs/1002",
+      "content": "Build React and TypeScript web applications with API integration and testing."
+    }
+  ]
+}

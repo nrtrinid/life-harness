@@ -1,0 +1,214 @@
+export type LifeArea = "build" | "body" | "money_independence" | "social_career" | "stability_vices";
+
+export type CardState = "inbox" | "active" | "parked" | "waiting" | "done" | "killed";
+
+export type Warmth = "hot" | "warm" | "cooling" | "cold" | "dormant";
+
+export type LogType = "win" | "leak" | "idea" | "pounce" | "salvage" | "mvd" | "clarity" | "calibration";
+
+export type SensitivityLevel = "S0" | "S1" | "S2" | "S3";
+
+export type RoleType =
+  | "software"
+  | "cybersecurity"
+  | "it"
+  | "full_stack"
+  | "data_finance"
+  | "other";
+
+export type ApplicationStatus = CardState;
+
+export interface CareerApplication {
+  company: string;
+  roleTitle: string;
+  sourceUrl?: string;
+  jobDescription: string;
+  roleType: RoleType;
+  applicationStatus: ApplicationStatus;
+  resumeAngle?: string;
+  projectsToEmphasize?: string;
+  bulletsToEmphasize?: string;
+  followUpDate?: string;
+  jobCandidateId?: string;
+}
+
+export type ResumeModuleCategory =
+  | "project"
+  | "experience"
+  | "education"
+  | "skill_cluster"
+  | "certification";
+
+export interface ResumeModule {
+  id: string;
+  title: string;
+  category: ResumeModuleCategory;
+  summary: string;
+  tags: string[];
+  bullets: string[];
+  skills: string[];
+  projects?: string[];
+  bestFor: RoleType[];
+  proof?: string[];
+  isActive: boolean;
+}
+
+export type JobSourceKind =
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "jobposting_jsonld"
+  | "company_careers"
+  | "manual";
+
+export type JobSourceCadence = "manual" | "daily" | "weekly";
+
+export type JobSourceRunStatus = "idle" | "running" | "success" | "error";
+
+export interface JobSource {
+  id: string;
+  name: string;
+  url: string;
+  kind: JobSourceKind;
+  enabled: boolean;
+  cadence: JobSourceCadence;
+  lastCheckedAt?: string;
+  notes?: string;
+  runStatus?: JobSourceRunStatus;
+  lastRunAt?: string;
+  lastRunMessage?: string;
+  lastFetchedCount?: number;
+  maxResults?: number;
+  adapterNotes?: string;
+}
+
+export interface JobSourceRunResult {
+  sourceId: string;
+  fetchedAt: string;
+  createdCandidateIds: string[];
+  skippedDuplicates: number;
+  errors: string[];
+  message: string;
+}
+
+export type JobCandidateStatus = "new" | "saved" | "dismissed" | "card_created";
+
+export type JobCandidateOrigin = "manual" | "source_fetch" | "import" | "agent";
+
+export interface JobCandidate {
+  id: string;
+  sourceId?: string;
+  company: string;
+  roleTitle: string;
+  sourceUrl?: string;
+  location?: string;
+  description: string;
+  roleType: RoleType;
+  discoveredAt: string;
+  origin: JobCandidateOrigin;
+  status: JobCandidateStatus;
+  fitScore: number;
+  fitReasons: string[];
+  gaps: string[];
+  recommendedResumeAngle?: string;
+  suggestedResumeModuleIds: string[];
+  nextTinyAction: string;
+  applicationCardId?: string;
+}
+
+export interface TriggerPlan {
+  cue: string;
+  action: string;
+}
+
+export interface ObstaclePlan {
+  wish?: string;
+  outcome?: string;
+  obstacle: string;
+  plan: string;
+}
+
+export interface ResumePacket {
+  whyItMatters?: string;
+  lastState: string;
+  nextTinyAction: string;
+  openLoops: string[];
+  reentryAction: string;
+}
+
+export interface LifeCard {
+  id: string;
+  title: string;
+  area: LifeArea;
+  state: CardState;
+  progress: number;
+  warmth: Warmth;
+  whyItMatters?: string;
+  nextTinyAction: string;
+  doneForNow?: string;
+  doLane?: string;
+  improveLane?: string;
+  triggerPlan?: TriggerPlan;
+  obstaclePlan?: ObstaclePlan;
+  lastTouched?: string;
+  recentWins: string[];
+  openLoops: string[];
+  optimizationIdeas: string[];
+  resumePacket?: ResumePacket;
+  proofItemIds: string[];
+  sensitivity?: SensitivityLevel;
+  careerApplication?: CareerApplication;
+}
+
+export interface LifeLogEntry {
+  id: string;
+  timestamp: string;
+  rawText: string;
+  area: LifeArea;
+  cardId?: string;
+  type: LogType;
+  xp: number;
+  moneyDelta?: number;
+  leakType?: "vice" | "money" | "energy" | "open_loop" | "scope_creep" | "avoidance";
+  proofItemId?: string;
+  sensitivity?: SensitivityLevel;
+}
+
+export interface ProofItem {
+  id: string;
+  timestamp: string;
+  title: string;
+  area?: LifeArea;
+  cardId?: string;
+  sourceLogId?: string;
+}
+
+export interface DailyState {
+  date: string;
+  mode: "normal" | "pounce" | "hyperfocus" | "salvage" | "recovery" | "reentry";
+  mainQuestId?: string;
+  pounceMission?: string;
+  smallestStart?: string;
+  pounceWindowStart?: string;
+  pounceWindowEnd?: string;
+  pounceStarted: boolean;
+  minimumViableDayCompleted: boolean;
+  salvageCompleted: boolean;
+  lastOpenedAt?: string;
+  sessionStartedAt?: string;
+  briefingSinceAt?: string;
+}
+
+export interface Briefing {
+  id: string;
+  createdAt: string;
+  title: string;
+  updated: string[];
+  detected: string[];
+  prepared: string[];
+}
+
+export interface BriefingHighlight {
+  text: string;
+  cardId?: string;
+}

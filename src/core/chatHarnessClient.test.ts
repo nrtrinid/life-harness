@@ -1,0 +1,128 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  askChatHarness,
+  ChatHarnessError,
+  DEFAULT_CHAT_HARNESS_URL,
+  parseChatHarnessResponse
+} from "./chatHarnessClient";
+import type { HarnessContext } from "./harnessContext";
+
+const context: HarnessContext = {
+  cards: [],
+  logs: [],
+  proof_items: [],
+  recent_analyses: [],
+  decisions: []
+};
+
+describe("askChatHarness", () => {
+  it("throws on empty message without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      askChatHarness({
+        baseUrl: DEFAULT_CHAT_HARNESS_URL,
+        message: "   ",
+        mode: "general",
+        sensitivity: "S1",
+        context
+      })
+    ).rejects.toThrow(ChatHarnessError);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the expected request shape", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          answer: "Try one tiny move.",
+          used_context: true,
+          confidence_notes: ["Inferred — from cards only."],
+          safety_notes: ["No state mutation claims."]
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await askChatHarness({
+      baseUrl: DEFAULT_CHAT_HARNESS_URL,
+      message: "What should I do next?",
+      mode: "operator",
+      sensitivity: "S1",
+      context,
+      conversationHistory: [{ role: "user", content: "Earlier question" }]
+    });
+
+    expect(response.answer).toBe("Try one tiny move.");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${DEFAULT_CHAT_HARNESS_URL}/chat-harness`);
+    expect(init.method).toBe("POST");
+
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body.message).toBe("What should I do next?");
+    expect(body.mode).toBe("operator");
+    expect(body.context).toEqual(context);
+    expect(body.conversation_history).toEqual([{ role: "user", content: "Earlier question" }]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("maps connection failures to a friendly error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    await expect(
+      askChatHarness({
+        baseUrl: DEFAULT_CHAT_HARNESS_URL,
+        message: "Hello",
+        mode: "general",
+        sensitivity: "S1",
+        context
+      })
+    ).rejects.toThrow(/not reachable/);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects malformed 200 responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ answer: 123, used_context: "yes" })
+      })
+    );
+
+    await expect(
+      askChatHarness({
+        baseUrl: DEFAULT_CHAT_HARNESS_URL,
+        message: "Hello",
+        mode: "general",
+        sensitivity: "S1",
+        context
+      })
+    ).rejects.toThrow(/Unexpected response/);
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("parseChatHarnessResponse", () => {
+  it("accepts a valid chat harness payload", () => {
+    const parsed = parseChatHarnessResponse({
+      answer: "Grounded reply.",
+      used_context: false,
+      confidence_notes: ["Inferred — pattern only."],
+      safety_notes: ["Read-only."]
+    });
+
+    expect(parsed.answer).toBe("Grounded reply.");
+    expect(parsed.used_context).toBe(false);
+  });
+});

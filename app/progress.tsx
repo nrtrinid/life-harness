@@ -1,0 +1,280 @@
+import { Link } from "expo-router";
+import { useState } from "react";
+import { Alert, Platform, Pressable, Text, TextInput, View } from "react-native";
+
+import { Nav } from "../src/components/Nav";
+import { Notice, type NoticeState } from "../src/components/Notice";
+import { ProofShelf } from "../src/components/ProofShelf";
+import { ProgressBar } from "../src/components/ProgressBar";
+import { Screen } from "../src/components/Screen";
+import { Section } from "../src/components/Section";
+import { colors, styles } from "../src/components/styles";
+import { buildCareerStats } from "../src/core/career";
+import { buildJobScoutStats } from "../src/core/jobScout";
+import {
+  buildCardWarmthList,
+  buildColdDormantProjects,
+  buildMomentumWarmth,
+  buildProgressSummary,
+  checkUseBeforeImproveLocks
+} from "../src/core/progress";
+import { useLifeHarness } from "../src/state/LifeHarnessState";
+
+function formatLockLine(lock: ReturnType<typeof checkUseBeforeImproveLocks>[number]): string {
+  if ("notSupported" in lock && lock.notSupported) {
+    return "Not supported";
+  }
+  if ("enabled" in lock && lock.enabled) {
+    return "Enabled";
+  }
+  if (lock.id === "scheduled-fetching") {
+    return `${lock.current}/${lock.required} successful manual source runs`;
+  }
+  if (lock.id === "ai-matching") {
+    return `${lock.current}/${lock.required} manual career actions`;
+  }
+  if (lock.id === "resume-automation") {
+    return `${lock.current}/${lock.required} manual applications`;
+  }
+  return `${lock.current}/${lock.required}`;
+}
+
+export default function ProgressScreen() {
+  const {
+    cards,
+    logs,
+    dailyState,
+    jobCandidates,
+    jobSources,
+    jobSourceRuns,
+    resumeModules,
+    persistenceAvailable,
+    exportSnapshot,
+    importSnapshot,
+    resetToSeed
+  } = useLifeHarness();
+  const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [importDraft, setImportDraft] = useState("");
+  const now = new Date();
+
+  function showNotice(kind: NoticeState["kind"], message: string) {
+    setNotice({ kind, message });
+    setTimeout(() => setNotice(null), 4000);
+  }
+
+  function handleExport() {
+    const result = exportSnapshot();
+    showNotice(result.ok ? "success" : "error", result.message ?? "Export failed.");
+  }
+
+  function handleImport() {
+    const trimmed = importDraft.trim();
+    if (!trimmed) {
+      showNotice("warning", "Paste a JSON snapshot first.");
+      return;
+    }
+    const result = importSnapshot(trimmed);
+    if (result.ok) {
+      setImportDraft("");
+    }
+    showNotice(result.ok ? "success" : "error", result.message ?? "Import failed.");
+  }
+
+  function confirmReset() {
+    const message =
+      "This clears local persistence and restores seed demo data. Your current board state will be replaced.";
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
+      if (window.confirm(message)) {
+        const result = resetToSeed();
+        showNotice(result.ok ? "success" : "error", result.message ?? "Reset failed.");
+      }
+      return;
+    }
+    Alert.alert("Reset to Seed?", message, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reset",
+        style: "destructive",
+        onPress: () => {
+          const result = resetToSeed();
+          showNotice(result.ok ? "success" : "error", result.message ?? "Reset failed.");
+        }
+      }
+    ]);
+  }
+  const summary = buildProgressSummary(cards, logs, dailyState.sessionStartedAt);
+  const warmth = buildMomentumWarmth(cards, logs, now);
+  const cardWarmth = buildCardWarmthList(cards, logs, now);
+  const coldDormant = buildColdDormantProjects(cards, logs, now);
+  const careerStats = buildCareerStats(cards, logs, now);
+  const scoutStats = buildJobScoutStats(
+    jobCandidates,
+    resumeModules,
+    jobSources,
+    jobSourceRuns
+  );
+  const locks = checkUseBeforeImproveLocks(cards, logs, jobCandidates, jobSourceRuns);
+
+  return (
+    <Screen>
+      <Nav />
+      <Section title="Approved Source Fetching">
+        <Text style={styles.listItem}>▸ Sources configured: {scoutStats.jobSourcesConfigured}</Text>
+        <Text style={styles.listItem}>▸ Enabled sources: {scoutStats.enabledSources}</Text>
+        <Text style={styles.listItem}>▸ Sources run successfully: {scoutStats.sourcesRun}</Text>
+        <Text style={styles.listItem}>▸ Candidates fetched: {scoutStats.candidatesFetched}</Text>
+        <Text style={styles.listItem}>
+          ▸ Candidates approved from source fetch: {scoutStats.candidatesApprovedFromFetch}
+        </Text>
+        <Text style={styles.listItem}>▸ Skipped duplicates: {scoutStats.skippedDuplicatesTotal}</Text>
+        <Text style={styles.listItem}>
+          ▸ Last source run: {scoutStats.lastSourceRunAt?.slice(0, 16) ?? "never"}
+        </Text>
+        <Link href="/job-sources" asChild>
+          <Pressable style={styles.secondaryAction}>
+            <Text style={styles.secondaryActionText}>Run an approved source</Text>
+          </Pressable>
+        </Link>
+      </Section>
+
+      <Section title="Job Scout Foundation">
+        <Text style={styles.listItem}>▸ Resume modules active: {scoutStats.activeResumeModules}</Text>
+        <Text style={styles.listItem}>▸ Candidates saved: {scoutStats.candidatesSaved}</Text>
+        <Text style={styles.listItem}>
+          ▸ Candidates approved to cards: {scoutStats.candidatesApproved}
+        </Text>
+        <Text style={styles.listItem}>▸ Candidates dismissed: {scoutStats.candidatesDismissed}</Text>
+        <Text style={styles.listItem}>▸ Average fit score: {scoutStats.averageFitScore}</Text>
+      </Section>
+
+      <Section title="Career Command">
+        <Text style={styles.listItem}>▸ Applications started: {careerStats.applicationsStarted}</Text>
+        <Text style={styles.listItem}>▸ Applications submitted: {careerStats.applicationsSubmitted}</Text>
+        <Text style={styles.listItem}>▸ Follow-ups due: {careerStats.followUpsDue}</Text>
+        <Text style={styles.listItem}>▸ Career pounces completed: {careerStats.careerPounces}</Text>
+      </Section>
+
+      <Section title="Weekly XP" accent="xp">
+        <Text style={styles.bigNumber}>{summary.weeklyXp}</Text>
+        <Text style={styles.helpText}>Total XP across local logs this week.</Text>
+      </Section>
+
+      <Section title="XP Summary">
+        <Text style={styles.listItem}>▸ Pounce sessions: {summary.pounceSessions}</Text>
+        <Text style={styles.listItem}>▸ Salvage wins: {summary.salvageWins}</Text>
+      </Section>
+
+      <Section title="Card Warmth" accent="warmth">
+        {cardWarmth.length === 0 ? (
+          <Text style={styles.emptyText}>No active or parked cards to show warmth for.</Text>
+        ) : (
+          cardWarmth.map((item) => (
+            <Link key={item.id} href={`/card/${item.id}`} asChild>
+              <Pressable accessibilityRole="link">
+                <Text style={styles.listItem}>
+                  ▸ {item.title}: {item.warmthLabel}
+                </Text>
+              </Pressable>
+            </Link>
+          ))
+        )}
+      </Section>
+
+      <Section title="Momentum Warmth">
+        {warmth.map((item) => (
+          <Text key={item.warmth} style={styles.listItem}>
+            ▸ {item.label}: {item.count}
+          </Text>
+        ))}
+      </Section>
+
+      <Section title="Cold / Dormant Projects">
+        {coldDormant.length === 0 ? (
+          <Text style={styles.emptyText}>No cold or dormant active/parked projects right now.</Text>
+        ) : (
+          coldDormant.map((item) => (
+            <View key={item.id} style={styles.progressItem}>
+              <Link href={`/card/${item.id}`} asChild>
+                <Pressable accessibilityRole="link">
+                  <Text style={styles.titleText}>
+                    {item.title} ({item.warmthLabel})
+                  </Text>
+                </Pressable>
+              </Link>
+              <Text style={styles.bodyText}>{item.nextTinyAction}</Text>
+            </View>
+          ))
+        )}
+      </Section>
+
+      <Section title="Proof Shelf" accent="proof">
+        <ProofShelf />
+      </Section>
+
+      <Section title="Recent Rescue Proof">
+        <ProofShelf rescueOnly limit={5} />
+      </Section>
+
+      <Section title="Use-Before-Improve Locks">
+        {locks.length === 0 ? (
+          <Text style={styles.emptyText}>No active locks yet.</Text>
+        ) : (
+          locks.map((lock) => (
+            <Text key={lock.id} style={styles.listItem}>
+              ▸ {lock.label}: {formatLockLine(lock)}
+            </Text>
+          ))
+        )}
+      </Section>
+
+      <Section title="Quest Progress">
+        {summary.questProgress.length === 0 ? (
+          <Text style={styles.emptyText}>No active or parked quests to track.</Text>
+        ) : (
+          summary.questProgress.map((item) => (
+            <View key={item.id} style={styles.progressItem}>
+              <Link href={`/card/${item.id}`} asChild>
+                <Pressable accessibilityRole="link">
+                  <Text style={styles.titleText}>{item.title}</Text>
+                </Pressable>
+              </Link>
+              <ProgressBar value={item.progress} />
+            </View>
+          ))
+        )}
+      </Section>
+
+      <Section title="Local Data">
+        {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
+        <Text style={styles.listItem}>
+          ▸ Local persistence: {persistenceAvailable ? "available" : "unavailable on this platform"}
+        </Text>
+        <Text style={styles.helpText}>
+          v0.5 persistence is web-local only. Native persistence requires a future adapter.
+        </Text>
+        <Pressable
+          style={[styles.secondaryAction, !persistenceAvailable && { opacity: 0.6 }]}
+          onPress={handleExport}
+        >
+          <Text style={styles.secondaryActionText}>Export JSON</Text>
+        </Pressable>
+        <Text style={[styles.label, { marginTop: 12 }]}>Import JSON</Text>
+        <TextInput
+          style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
+          value={importDraft}
+          onChangeText={setImportDraft}
+          placeholder="Paste exported snapshot JSON..."
+          placeholderTextColor={colors.inputPlaceholder}
+          multiline
+          autoCapitalize="none"
+        />
+        <Pressable style={styles.secondaryAction} onPress={handleImport}>
+          <Text style={styles.secondaryActionText}>Import</Text>
+        </Pressable>
+        <Pressable style={styles.secondaryAction} onPress={confirmReset}>
+          <Text style={styles.secondaryActionText}>Reset to Seed</Text>
+        </Pressable>
+      </Section>
+    </Screen>
+  );
+}

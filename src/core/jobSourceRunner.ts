@@ -1,0 +1,229 @@
+import { createId, nowIso } from "./ids";
+import {
+  isSupportedAdapterKind,
+  normalizeWithAdapter,
+  type NormalizedJobPosting
+} from "./jobSourceAdapters";
+import { createJobCandidate } from "./jobScout";
+import type {
+  JobCandidate,
+  JobSource,
+  JobSourceRunResult,
+  JobSourceRunStatus,
+  ResumeModule
+} from "./types";
+
+const DEFAULT_MAX_RESULTS = 25;
+
+export function isValidSourceUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (trimmed.startsWith("/")) {
+    return true;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function canRunJobSource(source: JobSource): { ok: boolean; reason?: string } {
+  if (!source.enabled) {
+    return { ok: false, reason: "Source is disabled." };
+  }
+  if (source.runStatus === "running") {
+    return { ok: false, reason: "Source is already running." };
+  }
+  if (!isSupportedAdapterKind(source.kind)) {
+    return {
+      ok: false,
+      reason: `Unsupported source kind "${source.kind}". Registry only — set a supported kind before running.`
+    };
+  }
+  if (!isValidSourceUrl(source.url)) {
+    return { ok: false, reason: "Source URL must be http(s) or a web fixture path." };
+  }
+  return { ok: true };
+}
+
+export function buildCandidateDedupeKey(input: {
+  sourceUrl?: string;
+  company?: string;
+  roleTitle: string;
+}): string {
+  return [
+    (input.sourceUrl ?? "").trim().toLowerCase(),
+    (input.company ?? "").trim().toLowerCase(),
+    input.roleTitle.trim().toLowerCase()
+  ].join("|");
+}
+
+export function dedupeJobPostings(
+  postings: NormalizedJobPosting[],
+  existingCandidates: JobCandidate[]
+): { unique: NormalizedJobPosting[]; skippedDuplicates: number } {
+  const seen = new Set(
+    existingCandidates.map((candidate) =>
+      buildCandidateDedupeKey({
+        sourceUrl: candidate.sourceUrl,
+        company: candidate.company,
+        roleTitle: candidate.roleTitle
+      })
+    )
+  );
+  const unique: NormalizedJobPosting[] = [];
+  let skippedDuplicates = 0;
+
+  for (const posting of postings) {
+    const key = buildCandidateDedupeKey({
+      sourceUrl: posting.sourceUrl,
+      company: posting.company,
+      roleTitle: posting.roleTitle
+    });
+    if (seen.has(key)) {
+      skippedDuplicates += 1;
+      continue;
+    }
+    seen.add(key);
+    unique.push(posting);
+  }
+
+  return { unique, skippedDuplicates };
+}
+
+export function createCandidatesFromPostings(
+  postings: NormalizedJobPosting[],
+  source: JobSource,
+  modules: ResumeModule[]
+): JobCandidate[] {
+  return postings.map((posting) =>
+    createJobCandidate(
+      {
+        company: posting.company ?? source.name,
+        roleTitle: posting.roleTitle,
+        sourceUrl: posting.sourceUrl,
+        location: posting.location,
+        description: posting.description,
+        roleType: posting.roleType ?? "other",
+        sourceId: source.id,
+        origin: "source_fetch"
+      },
+      modules,
+      "new"
+    )
+  );
+}
+
+export interface JobSourceRunOutput {
+  result: JobSourceRunResult;
+  candidates: JobCandidate[];
+  updatedSource: Pick<
+    JobSource,
+    "runStatus" | "lastRunAt" | "lastRunMessage" | "lastFetchedCount" | "lastCheckedAt"
+  >;
+}
+
+export function runJobSourceFromRaw(
+  source: JobSource,
+  raw: unknown,
+  existingCandidates: JobCandidate[],
+  resumeModules: ResumeModule[]
+): JobSourceRunOutput {
+  const fetchedAt = nowIso();
+  const maxResults = source.maxResults ?? DEFAULT_MAX_RESULTS;
+  const { postings: normalized, errors: normalizeErrors } = normalizeWithAdapter(raw, source);
+  const capped = normalized.slice(0, maxResults);
+  const { unique, skippedDuplicates } = dedupeJobPostings(capped, existingCandidates);
+  const candidates = createCandidatesFromPostings(unique, source, resumeModules);
+  const errors = [...normalizeErrors];
+
+  if (normalized.length === 0 && errors.length === 0) {
+    errors.push("No supported public postings found at this URL.");
+  }
+
+  const runStatus: JobSourceRunStatus = errors.length > 0 ? "error" : "success";
+  const message =
+    errors.length > 0
+      ? errors[0]
+      : candidates.length > 0
+        ? `Found ${candidates.length} new candidate${candidates.length === 1 ? "" : "s"}. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.`
+        : skippedDuplicates > 0
+          ? `No new candidates. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.`
+          : "Run completed with no new candidates.";
+
+  return {
+    result: {
+      sourceId: source.id,
+      fetchedAt,
+      createdCandidateIds: candidates.map((candidate) => candidate.id),
+      skippedDuplicates,
+      errors,
+      message
+    },
+    candidates,
+    updatedSource: {
+      runStatus,
+      lastRunAt: fetchedAt,
+      lastRunMessage: message,
+      lastFetchedCount: candidates.length,
+      lastCheckedAt: fetchedAt
+    }
+  };
+}
+
+export function countSuccessfulManualSourceRuns(runs: JobSourceRunResult[]): number {
+  return runs.filter((run) => run.errors.length === 0).length;
+}
+
+export function countFetchedCandidates(candidates: JobCandidate[]): number {
+  return candidates.filter((candidate) => candidate.origin === "source_fetch").length;
+}
+
+export function countApprovedFromSourceFetch(candidates: JobCandidate[]): number {
+  return candidates.filter(
+    (candidate) => candidate.origin === "source_fetch" && candidate.status === "card_created"
+  ).length;
+}
+
+export function buildFetchErrorRunOutput(
+  source: JobSource,
+  errorMessage: string
+): JobSourceRunOutput {
+  const fetchedAt = nowIso();
+  return {
+    result: {
+      sourceId: source.id,
+      fetchedAt,
+      createdCandidateIds: [],
+      skippedDuplicates: 0,
+      errors: [errorMessage],
+      message: errorMessage
+    },
+    candidates: [],
+    updatedSource: {
+      runStatus: "error",
+      lastRunAt: fetchedAt,
+      lastRunMessage: errorMessage,
+      lastFetchedCount: 0,
+      lastCheckedAt: fetchedAt
+    }
+  };
+}
+
+export function parseFetchedRaw(source: JobSource, responseText: string): unknown {
+  if (source.kind === "jobposting_jsonld") {
+    return responseText;
+  }
+  try {
+    return JSON.parse(responseText) as unknown;
+  } catch {
+    return responseText;
+  }
+}
+
+export const CORS_FETCH_ERROR_MESSAGE =
+  "Fetch blocked — likely CORS. v0.3 has no backend proxy. Use the web fixture or a public CORS-friendly JSON URL.";
