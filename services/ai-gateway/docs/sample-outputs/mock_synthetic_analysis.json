@@ -1,0 +1,54 @@
+{
+  "confidence_notes": [
+    "Inferred from transcript \u2014 themes and cards are heuristic guesses from keyword patterns.",
+    "Inferred from transcript \u2014 not verified facts about your life or obligations.",
+    "S3 content would not reach a model; this mock still treats notes as uncertain."
+  ],
+  "next_actions": [
+    "Set a 10-minute timer and touch the avoided task.",
+    "Park the tooling idea; do one real deliverable step."
+  ],
+  "patterns_detected": [
+    "procrastination",
+    "over-optimization",
+    "career follow-ups",
+    "body / stability",
+    "open loops",
+    "research / tooling rabbit hole"
+  ],
+  "possible_cards": [
+    {
+      "area": "Build",
+      "next_tiny_action": "Set a 10-minute timer and touch the avoided task.",
+      "state": "Inbox",
+      "title": "Procrastination",
+      "why_it_matters": "Thread surfaced in your note; worth capturing without promoting to Active yet."
+    },
+    {
+      "area": "Build",
+      "next_tiny_action": "Park the tooling idea; do one real deliverable step.",
+      "state": "Inbox",
+      "title": "Over-Optimization",
+      "why_it_matters": "Thread surfaced in your note; worth capturing without promoting to Active yet."
+    },
+    {
+      "area": "Social / Career",
+      "next_tiny_action": "Open the one career item and write the next tiny step.",
+      "state": "Inbox",
+      "title": "Career Follow-Ups",
+      "why_it_matters": "Thread surfaced in your note; worth capturing without promoting to Active yet."
+    }
+  ],
+  "pounce_mission": "Set a 10-minute timer and touch the avoided task.",
+  "summary": "Scout read-through: um okay so I keep putting off the fake resume for the ShelfTracker side project I noticed 5 recurring thread(s). These are suggestions \u2014 you approve what becomes real.",
+  "themes": [
+    "procrastination",
+    "over-optimization",
+    "career follow-ups",
+    "body / stability",
+    "open loops"
+  ],
+  "things_to_park": [
+    "research / tooling rabbit hole"
+  ]
+}
