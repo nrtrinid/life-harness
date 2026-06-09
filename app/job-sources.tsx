@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { useState } from "react";
-import { Pressable, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { Nav } from "../src/components/Nav";
 import { Notice, type NoticeState } from "../src/components/Notice";
@@ -15,15 +15,12 @@ import {
   JOB_SOURCE_RUN_STATUS_LABELS
 } from "../src/core/labels";
 import {
-  buildFetchErrorRunOutput,
-  canRunJobSource
-} from "../src/core/jobSourceRunner";
-import {
-  RUNNER_UNREACHABLE_MESSAGE,
-  RunnerUnreachableError,
-  runSourceViaRunner
-} from "../src/core/jobScoutRunnerClient";
-import type { JobSourceKind } from "../src/core/types";
+  buildSourceScheduleStats,
+  getSourceDueBadge,
+  SOURCE_DUE_BADGE_LABELS
+} from "../src/core/jobSourceSchedule";
+import { canRunJobSource } from "../src/core/jobSourceRunner";
+import type { JobSourceCadence, JobSourceKind } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 const KIND_OPTIONS: JobSourceKind[] = [
@@ -35,64 +32,91 @@ const KIND_OPTIONS: JobSourceKind[] = [
   "company_careers"
 ];
 
+const CADENCE_OPTIONS: JobSourceCadence[] = ["manual", "daily", "weekly"];
+
 export default function JobSourcesScreen() {
   const {
-    jobCandidates,
     jobSources,
-    resumeModules,
+    jobSourceRuns,
     addJobSource,
     updateJobSource,
-    recordJobSourceRun
+    isBatchRunning,
+    batchRunProgress,
+    runOneJobSource,
+    runDueJobSources,
+    runAllEnabledJobSources
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState({ url: "", kind: "greenhouse" as JobSourceKind, enabled: true, maxResults: "25" });
+  const [editDraft, setEditDraft] = useState({
+    url: "",
+    kind: "greenhouse" as JobSourceKind,
+    enabled: true,
+    maxResults: "25",
+    cadence: "manual" as JobSourceCadence
+  });
   const [newSource, setNewSource] = useState<JobSourceInput>({
     name: "",
     url: "",
     kind: "greenhouse",
     enabled: true,
-    maxResults: 25
+    maxResults: 25,
+    cadence: "manual"
   });
 
+  const now = new Date();
+  const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
+
   async function handleRunSource(sourceId: string) {
-    const source = jobSources.find((item) => item.id === sourceId);
-    if (!source) {
-      return;
-    }
-
-    const guard = canRunJobSource(source);
-    if (!guard.ok) {
-      setNotice({ kind: "warning", message: guard.reason ?? "Cannot run source." });
-      return;
-    }
-
     setRunningId(sourceId);
-    updateJobSource(sourceId, { runStatus: "running", lastRunMessage: "Running..." });
+    const result = await runOneJobSource(sourceId);
+    setRunningId(null);
+    setNotice({
+      kind: result.ok ? "success" : "warning",
+      message: result.message ?? "Source run finished."
+    });
+  }
 
-    try {
-      const output = await runSourceViaRunner({
-        source,
-        existingCandidates: jobCandidates,
-        resumeModules
-      });
-      const result = recordJobSourceRun(source, output);
-      setNotice({
-        kind: result.ok ? "success" : "warning",
-        message: result.message ?? output.result.message
-      });
-    } catch (error) {
-      const message =
-        error instanceof RunnerUnreachableError
-          ? RUNNER_UNREACHABLE_MESSAGE
-          : "Local Job Scout Runner request failed.";
-      const output = buildFetchErrorRunOutput(source, message);
-      recordJobSourceRun(source, output);
-      setNotice({ kind: "warning", message });
-    } finally {
-      setRunningId(null);
+  async function handleRunDueSources() {
+    const result = await runDueJobSources();
+    setNotice({
+      kind: result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
+      message: result.message
+    });
+  }
+
+  async function runAllConfirmed() {
+    const result = await runAllEnabledJobSources();
+    setNotice({
+      kind: result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
+      message: result.message
+    });
+  }
+
+  function handleRunAllEnabled() {
+    if (scheduleStats.runnableSources === 0) {
+      setNotice({ kind: "warning", message: "No enabled runnable sources." });
+      return;
     }
+
+    if (scheduleStats.runnableSources <= 3) {
+      void runAllConfirmed();
+      return;
+    }
+
+    const message = `Run ${scheduleStats.runnableSources} enabled sources sequentially?`;
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
+      if (window.confirm(message)) {
+        void runAllConfirmed();
+      }
+      return;
+    }
+
+    Alert.alert("Run All Enabled Sources?", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Run All", onPress: () => void runAllConfirmed() }
+    ]);
   }
 
   function startEdit(sourceId: string) {
@@ -105,7 +129,8 @@ export default function JobSourcesScreen() {
       url: source.url,
       kind: source.kind,
       enabled: source.enabled,
-      maxResults: String(source.maxResults ?? 25)
+      maxResults: String(source.maxResults ?? 25),
+      cadence: source.cadence
     });
   }
 
@@ -115,6 +140,7 @@ export default function JobSourcesScreen() {
       url: editDraft.url.trim(),
       kind: editDraft.kind,
       enabled: editDraft.enabled,
+      cadence: editDraft.cadence,
       maxResults: Number.isFinite(maxResults) && maxResults > 0 ? maxResults : 25,
       runStatus: "idle"
     });
@@ -129,7 +155,14 @@ export default function JobSourcesScreen() {
     }
     const result = addJobSource(newSource);
     setNotice({ kind: result.ok ? "success" : "warning", message: result.message ?? "Source added." });
-    setNewSource({ name: "", url: "", kind: "greenhouse", enabled: true, maxResults: 25 });
+    setNewSource({
+      name: "",
+      url: "",
+      kind: "greenhouse",
+      enabled: true,
+      maxResults: 25,
+      cadence: "manual"
+    });
   }
 
   return (
@@ -147,6 +180,37 @@ export default function JobSourcesScreen() {
             <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
           </Pressable>
         </Link>
+      </Section>
+
+      <Section title="Due Sources">
+        <Text style={styles.listItem}>▸ Runnable sources: {scheduleStats.runnableSources}</Text>
+        <Text style={styles.listItem}>▸ Due sources: {scheduleStats.dueSources}</Text>
+        {batchRunProgress ? (
+          <Text style={styles.bodyText}>
+            Running {batchRunProgress.sourceName} ({batchRunProgress.current}/
+            {batchRunProgress.total})
+          </Text>
+        ) : null}
+        <Pressable
+          style={styles.primaryAction}
+          disabled={isBatchRunning || scheduleStats.dueSources === 0}
+          onPress={() => void handleRunDueSources()}
+        >
+          <Text style={styles.primaryActionText}>
+            {isBatchRunning ? "Running batch..." : "Run Due Sources"}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondaryAction}
+          disabled={isBatchRunning || scheduleStats.runnableSources === 0}
+          onPress={handleRunAllEnabled}
+        >
+          <Text style={styles.secondaryActionText}>Run All Enabled Sources</Text>
+        </Pressable>
+        <Text style={styles.helpText}>
+          Run Due uses daily/weekly cadence only. Run All includes manual cadence sources too.
+          Scheduled background fetching remains locked.
+        </Text>
       </Section>
 
       <Section title="Add Source">
@@ -187,23 +251,24 @@ export default function JobSourcesScreen() {
       <Section title="Approved Job Sources">
         {jobSources.map((source) => {
           const guard = canRunJobSource(source);
-          const isRunning = runningId === source.id || source.runStatus === "running";
+          const isRunning =
+            runningId === source.id || source.runStatus === "running" || isBatchRunning;
+          const dueBadge = getSourceDueBadge(source, now);
           return (
             <View key={source.id} style={styles.cardTile}>
               <Text style={styles.titleText}>{source.name}</Text>
               <Text style={styles.bodyText}>{source.url}</Text>
               <Text style={styles.helpText}>
                 {JOB_SOURCE_KIND_LABELS[source.kind]} · {source.enabled ? "Enabled" : "Disabled"}{" "}
-                · {JOB_SOURCE_CADENCE_LABELS[source.cadence]} · max{" "}
-                {source.maxResults ?? 25}
+                · {JOB_SOURCE_CADENCE_LABELS[source.cadence]} · max {source.maxResults ?? 25}
               </Text>
+              <Text style={styles.helpText}>Schedule: {SOURCE_DUE_BADGE_LABELS[dueBadge]}</Text>
               <Text style={styles.helpText}>
                 Run status: {JOB_SOURCE_RUN_STATUS_LABELS[source.runStatus ?? "idle"]}
               </Text>
               {source.lastRunAt ? (
                 <Text style={styles.helpText}>
-                  Last run: {source.lastRunAt.slice(0, 16)} · fetched{" "}
-                  {source.lastFetchedCount ?? 0}
+                  Last run: {source.lastRunAt.slice(0, 16)} · fetched {source.lastFetchedCount ?? 0}
                 </Text>
               ) : (
                 <Text style={styles.helpText}>Last run: never</Text>
@@ -238,6 +303,30 @@ export default function JobSourcesScreen() {
                     />
                     <Text style={styles.helpText}>Enabled</Text>
                   </View>
+                  <Text style={styles.label}>Cadence</Text>
+                  <View style={styles.cardActions}>
+                    {CADENCE_OPTIONS.map((cadence) => (
+                      <Pressable
+                        key={cadence}
+                        style={
+                          editDraft.cadence === cadence
+                            ? styles.primaryAction
+                            : styles.secondaryAction
+                        }
+                        onPress={() => setEditDraft((current) => ({ ...current, cadence }))}
+                      >
+                        <Text
+                          style={
+                            editDraft.cadence === cadence
+                              ? styles.primaryActionText
+                              : styles.secondaryActionText
+                          }
+                        >
+                          {JOB_SOURCE_CADENCE_LABELS[cadence]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
                   <View style={styles.cardActions}>
                     {KIND_OPTIONS.map((kind) => (
                       <Pressable
@@ -268,7 +357,7 @@ export default function JobSourcesScreen() {
                   <Pressable
                     style={styles.primaryAction}
                     disabled={!guard.ok || isRunning}
-                    onPress={() => handleRunSource(source.id)}
+                    onPress={() => void handleRunSource(source.id)}
                   >
                     <Text style={styles.primaryActionText}>
                       {isRunning ? "Running..." : "Run Source"}

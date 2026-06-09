@@ -240,4 +240,31 @@ describe("scout briefing signals", () => {
       true
     );
   });
+
+  it("mentions due job sources when a daily source is overdue", () => {
+    const briefing = generateWhileYouWereAway(
+      [],
+      [],
+      [],
+      baseDaily,
+      NOW,
+      [],
+      [
+        {
+          id: "source-due",
+          name: "Due Fixture",
+          url: "/fixtures/sample-greenhouse.json",
+          kind: "greenhouse",
+          enabled: true,
+          cadence: "daily",
+          maxResults: 25,
+          runStatus: "idle"
+        }
+      ],
+      []
+    );
+
+    expect(briefing.detected.some((line) => line.includes("job source"))).toBe(true);
+    expect(briefing.prepared.some((line) => line.includes("run due job sources"))).toBe(true);
+  });
 });

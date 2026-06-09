@@ -11,6 +11,7 @@ import { Section } from "../src/components/Section";
 import { colors, styles } from "../src/components/styles";
 import { buildCareerStats } from "../src/core/career";
 import { buildJobScoutStats } from "../src/core/jobScout";
+import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
 import {
   buildCardWarmthList,
   buildColdDormantProjects,
@@ -28,7 +29,7 @@ function formatLockLine(lock: ReturnType<typeof checkUseBeforeImproveLocks>[numb
     return "Enabled";
   }
   if (lock.id === "scheduled-fetching") {
-    return `${lock.current}/${lock.required} successful manual source runs`;
+    return `Locked until ${lock.required} successful manual source runs (${lock.current}/${lock.required})`;
   }
   if (lock.id === "ai-matching") {
     return `${lock.current}/${lock.required} manual career actions`;
@@ -114,6 +115,7 @@ export default function ProgressScreen() {
     jobSourceRuns
   );
   const locks = checkUseBeforeImproveLocks(cards, logs, jobCandidates, jobSourceRuns);
+  const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
 
   return (
     <Screen>
@@ -121,7 +123,10 @@ export default function ProgressScreen() {
       <Section title="Approved Source Fetching">
         <Text style={styles.listItem}>▸ Sources configured: {scoutStats.jobSourcesConfigured}</Text>
         <Text style={styles.listItem}>▸ Enabled sources: {scoutStats.enabledSources}</Text>
-        <Text style={styles.listItem}>▸ Sources run successfully: {scoutStats.sourcesRun}</Text>
+        <Text style={styles.listItem}>▸ Runnable sources: {scheduleStats.runnableSources}</Text>
+        <Text style={styles.listItem}>▸ Due sources: {scheduleStats.dueSources}</Text>
+        <Text style={styles.listItem}>▸ Sources run successfully: {scheduleStats.successfulRuns}</Text>
+        <Text style={styles.listItem}>▸ Failed source runs: {scheduleStats.failedRuns}</Text>
         <Text style={styles.listItem}>▸ Candidates fetched: {scoutStats.candidatesFetched}</Text>
         <Text style={styles.listItem}>
           ▸ Candidates approved from source fetch: {scoutStats.candidatesApprovedFromFetch}

@@ -179,6 +179,10 @@ export function countSuccessfulManualSourceRuns(runs: JobSourceRunResult[]): num
   return runs.filter((run) => run.errors.length === 0).length;
 }
 
+export function countFailedSourceRuns(runs: JobSourceRunResult[]): number {
+  return runs.filter((run) => run.errors.length > 0).length;
+}
+
 export function countFetchedCandidates(candidates: JobCandidate[]): number {
   return candidates.filter((candidate) => candidate.origin === "source_fetch").length;
 }

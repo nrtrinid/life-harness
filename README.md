@@ -1,8 +1,8 @@
 # Life Harness v0.1
 
-Life Harness is a local, low-friction executive-function board. v0.1 proves the core loop: open the app, see what matters, start one thing, log it, see progress, and recover when behind.
+Life Harness is a local, low-friction executive-function board. v0.1 proves the core loop: open the app, see what matters, start one thing, log it, and recover when behind.
 
-Everything runs in memory with seed data. No auth, cloud sync, or AI.
+State persists locally on web via JSON snapshot (v0.5). No auth, cloud sync, or AI in the core app loop.
 
 ## Start (web)
 
@@ -30,12 +30,13 @@ npx expo export --platform web
 1. Open **Today**
 2. Click **Pounce** (career pounce)
 3. Use **Paste** (Candidate Intake) or **Intake** to add a job (candidate queue or direct application card)
-4. Start **`npm run scout:runner`**, open **Sources**, and **Run Source** on Local Fixture Source
+4. Start **`npm run scout:runner`**, open **Sources**, set a source cadence to **Daily**, and click **Run Due Sources**
 5. Review fit in **Queue**, approve to Inbox when ready
-6. Log one sentence in **Quick Capture** (e.g. `applied to Acme` or `worked on Life Harness`)
-7. **Park** one card (capture: `park local llm` or use Board state buttons)
-8. Use **Minimum Viable Day** or **Salvage Mode**
-9. Check **Progress** and **Proof Shelf**
+6. **Refresh browser** — candidates, source runs, and cards should persist (v0.5)
+7. Log one sentence in **Quick Capture** (e.g. `applied to Acme` or `worked on Life Harness`)
+8. **Park** one card (capture: `park local llm` or use Board state buttons)
+9. Use **Minimum Viable Day** or **Salvage Mode**
+10. Check **Progress** (due/runnable stats, Proof Shelf) and export/import JSON under **Local Data**
 
 ## v0.1 success metric
 
@@ -53,19 +54,20 @@ Did this make me start, recover, or feel less scattered?
 - Activating a 5th card is blocked with a warning
 - Waiting card (Qualcomm Follow-up) shows soft "cooled while waiting" copy in briefing
 - Progress: warmth, cold/dormant, proof shelf distinct from Log
+- Sources: due badges, Run Due / Run All batch buttons, cadence edit
 
 ## Known limitations
 
-- In-memory only — state resets on full app reload
-- No persistence, Supabase, auth, or sync
-- No AI, notifications, or integrations
+- Web-local JSON persistence only (native requires future adapter)
+- No Supabase, auth, or cloud sync
+- No AI in core app loop, notifications, or integrations
 - Log edit is a placeholder
-- Leaks / savings on Progress is a placeholder
+- Scheduled background fetching is locked (v0.6 adds manual batch due/all only)
 
 ## Docs
 
-See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/job-scout-foundation-v0.2.md`](docs/job-scout-foundation-v0.2.md), [`docs/job-scout-approved-sources-v0.3.md`](docs/job-scout-approved-sources-v0.3.md), [`docs/job-scout-runner-v0.4.md`](docs/job-scout-runner-v0.4.md), and `docs/` for product rules and scope.
+See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/job-scout-foundation-v0.2.md`](docs/job-scout-foundation-v0.2.md), [`docs/job-scout-approved-sources-v0.3.md`](docs/job-scout-approved-sources-v0.3.md), [`docs/job-scout-runner-v0.4.md`](docs/job-scout-runner-v0.4.md), [`docs/persistence-audit-v0.5.md`](docs/persistence-audit-v0.5.md), [`docs/job-scout-run-due-v0.6.md`](docs/job-scout-run-due-v0.6.md), and `docs/` for product rules and scope.
 
 ## Dev: Ask Harness (optional)
 
-Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask Harness Dev** in the app nav. See [`docs/harness-context-export-v0.1.md`](docs/harness-context-export-v0.1.md).
+Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask Harness Dev** in the app nav. See [`docs/harness-context-export-v0.1.md`](docs/harness-context-export-v0.1.md) and [`docs/harness-context-quality-v0.1.md`](docs/harness-context-quality-v0.1.md).

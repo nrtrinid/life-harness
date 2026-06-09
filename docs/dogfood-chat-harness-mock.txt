@@ -1,0 +1,24 @@
+﻿=== Exported context summary ===
+Cards: 16
+Titles: Career / Networking | EV Tracker / Kalshi | Text RPG | Fitness Return | Local LLM Setup | Life Harness | Qualcomm ΓÇö Security Engineer | Northrop Grumman ΓÇö Software Engineer ΓÇö Security | Resume: EV Tracker / Kalshi | Resume: Text RPG | Resume: Life Harness / A770 Local Scout | Resume: Legoland Robotics / Customer-Facing | Resume: In-N-Out Operations / Teamwork | Resume: ASU Computer Science / Cybersecurity | Resume: Technical Skills: Python / TypeScript / FastAPI / React / Postgres | Resume: Security-Aware Development
+Logs: 3 | Proof: 2
+Gateway: http://127.0.0.1:8111
+
+Q: What am I avoiding right now? (operator) [200 in 0.0s]
+A: Looking at your board, a few career/body threads look cold or cooling ΓÇö especially Career / Networking, Fitness Return, Qualcomm ΓÇö Security Engineer. One log flags this: "locked career-first v0.1 scope for Life Harness" ΓÇö that often means deferred follow-up rather than forgetting. Tiny next move: Paste one job description or send one follow-up. Body nudge: Walk 10 minutes or eat something real.
+
+Q: What should I do next? (operator) [200 in 0.0s]
+A: Active threads right now: Career / Networking, EV Tracker / Kalshi, Fitness Return. If you want one move: Paste one job description or send one follow-up.
+
+Q: Am I over-optimizing again? (reflection) [200 in 0.0s]
+A: Parked card "Local LLM Setup" may be an optimization loop rather than the next real deliverable. If this resonates, park the tooling idea and do one small shipping step.
+
+Q: What should I park? (operator) [200 in 0.0s]
+A: Active threads right now: Career / Networking, EV Tracker / Kalshi, Fitness Return. If you want one move: Paste one job description or send one follow-up.
+
+Q: What career action should I take today? (operator) [200 in 0.0s]
+A: Active threads right now: Career / Networking, EV Tracker / Kalshi, Fitness Return. If you want one move: Paste one job description or send one follow-up.
+
+Q: Give me blunt advice based on my board. (general) [200 in 0.0s]
+A: Active threads right now: Career / Networking, EV Tracker / Kalshi, Fitness Return. If you want one move: Paste one job description or send one follow-up.
+

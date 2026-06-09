@@ -1,8 +1,11 @@
 import { FIT_SCORE_DISCLAIMER, AREA_LABELS, CARD_STATE_LABELS, WARMTH_LABELS } from "./labels";
+import { checkCareerUseBeforeImproveLocks } from "./career";
+import { ACTIVE_CARD_LIMIT } from "./guards";
 import type {
   CardState,
   DailyState,
   JobCandidate,
+  JobSourceRunResult,
   LifeArea,
   LifeCard,
   LifeLogEntry,
@@ -102,7 +105,16 @@ export type HarnessExportInput = {
   dailyState: DailyState;
   resumeModules?: ResumeModule[];
   jobCandidates?: JobCandidate[];
+  jobSourceRuns?: JobSourceRunResult[];
 };
+
+export interface ActiveLimitSignal {
+  count: number;
+  limit: number;
+  isAtLimit: boolean;
+  isOverLimit: boolean;
+  message: string;
+}
 
 export const HARNESS_STATIC_DECISIONS: HarnessDecision[] = [
   {
@@ -124,6 +136,8 @@ export const HARNESS_STATIC_DECISIONS: HarnessDecision[] = [
 ];
 
 const MAX_EXPORT_LOGS = 30;
+const MAX_EXPORT_PROOF = 20;
+const COLD_WARMTH: Warmth[] = ["cold", "dormant", "cooling"];
 
 export function mapLifeArea(area: LifeArea): HarnessArea {
   return AREA_LABELS[area] as HarnessArea;
@@ -133,7 +147,10 @@ export function mapCardState(state: CardState): HarnessCardState {
   return CARD_STATE_LABELS[state] as HarnessCardState;
 }
 
-export function mapWarmth(warmth: Warmth): HarnessWarmth {
+export function mapWarmth(warmth: Warmth | undefined): HarnessWarmth {
+  if (!warmth) {
+    return "Cold";
+  }
   return WARMTH_LABELS[warmth] as HarnessWarmth;
 }
 
@@ -153,25 +170,151 @@ export function mapLogType(type: LogType): HarnessLogType {
   }
 }
 
+export function getActiveLimitSignal(data: HarnessExportInput): ActiveLimitSignal {
+  const count = data.cards.filter((card) => card.state === "active").length;
+  const isAtLimit = count >= ACTIVE_CARD_LIMIT;
+  const isOverLimit = count > ACTIVE_CARD_LIMIT;
+
+  let message = `Active cards: ${count}/${ACTIVE_CARD_LIMIT}.`;
+  if (isOverLimit) {
+    message = `Active limit exceeded: ${count}/${ACTIVE_CARD_LIMIT}. Park or wait on something before adding more.`;
+  } else if (isAtLimit) {
+    message = `Active limit reached: ${count}/${ACTIVE_CARD_LIMIT}.`;
+  }
+
+  return { count, limit: ACTIVE_CARD_LIMIT, isAtLimit, isOverLimit, message };
+}
+
+export function countCardsByArea(context: HarnessContext): Record<HarnessArea, number> {
+  const counts: Record<HarnessArea, number> = {
+    Build: 0,
+    Body: 0,
+    "Money / Independence": 0,
+    "Social / Career": 0,
+    "Stability / Vices": 0
+  };
+
+  for (const card of context.cards) {
+    counts[card.area] += 1;
+  }
+
+  return counts;
+}
+
+export function countCardsByState(context: HarnessContext): Record<HarnessCardState, number> {
+  const counts: Record<HarnessCardState, number> = {
+    Inbox: 0,
+    Active: 0,
+    Parked: 0,
+    Waiting: 0,
+    Done: 0,
+    Killed: 0
+  };
+
+  for (const card of context.cards) {
+    counts[card.state] += 1;
+  }
+
+  return counts;
+}
+
+export function countCardsByWarmth(context: HarnessContext): Record<HarnessWarmth, number> {
+  const counts: Record<HarnessWarmth, number> = {
+    Hot: 0,
+    Warm: 0,
+    Cooling: 0,
+    Cold: 0,
+    Dormant: 0
+  };
+
+  for (const card of context.cards) {
+    counts[card.warmth] += 1;
+  }
+
+  return counts;
+}
+
+export function getColdOrDormantCards(context: HarnessContext): HarnessContextCard[] {
+  return context.cards.filter((card) => card.warmth === "Cold" || card.warmth === "Dormant");
+}
+
+export function buildContextQualitySummary(context: HarnessContext, activeSignal: ActiveLimitSignal): string {
+  const byState = countCardsByState(context);
+  const byArea = countCardsByArea(context);
+  const byWarmth = countCardsByWarmth(context);
+  const coldTitles = getColdOrDormantCards(context)
+    .slice(0, 6)
+    .map((card) => card.title)
+    .join(", ");
+
+  const lines = [
+    `Cards ${context.cards.length} · Logs ${context.logs.length} · Proof ${context.proof_items.length} · Analyses ${context.recent_analyses.length} · Decisions ${context.decisions.length}`,
+    `By state: Inbox ${byState.Inbox} · Active ${byState.Active} · Parked ${byState.Parked} · Waiting ${byState.Waiting}`,
+    `By area: Build ${byArea.Build} · Body ${byArea.Body} · Social/Career ${byArea["Social / Career"]} · Money ${byArea["Money / Independence"]}`,
+    `Warmth: Hot ${byWarmth.Hot} · Warm ${byWarmth.Warm} · Cooling ${byWarmth.Cooling} · Cold ${byWarmth.Cold} · Dormant ${byWarmth.Dormant}`,
+    activeSignal.message,
+    coldTitles ? `Cold/dormant signal: ${coldTitles}` : "Cold/dormant signal: none flagged"
+  ];
+
+  return lines.join("\n");
+}
+
+function summarizeLifeCardWhy(card: LifeCard): string {
+  if (card.careerApplication) {
+    const base =
+      card.whyItMatters ??
+      card.resumePacket?.whyItMatters ??
+      "Outside-world career momentum needs a concrete next move.";
+    return `${base} Application thread for ${card.careerApplication.company}.`;
+  }
+
+  return (
+    card.whyItMatters ??
+    card.resumePacket?.whyItMatters ??
+    `Tracked Life Harness card in ${mapLifeArea(card.area)}.`
+  );
+}
+
+function summarizeLifeCardNextAction(card: LifeCard): string {
+  if (card.careerApplication?.applicationStatus === "waiting") {
+    return card.nextTinyAction || "Send one follow-up on this application.";
+  }
+
+  return card.nextTinyAction?.trim() || "Choose one tiny next action.";
+}
+
+function summarizeLifeCardTitle(card: LifeCard): string {
+  if (card.careerApplication) {
+    return `${card.careerApplication.company} — ${card.careerApplication.roleTitle}`;
+  }
+
+  return card.title;
+}
+
 export function buildHarnessContextCard(card: LifeCard): HarnessContextCard {
   return {
-    title: card.title,
+    title: summarizeLifeCardTitle(card),
     area: mapLifeArea(card.area),
     state: mapCardState(card.state),
-    progress: card.progress,
+    progress: card.progress ?? 0,
     warmth: mapWarmth(card.warmth),
-    next_tiny_action: card.nextTinyAction,
-    why_it_matters: card.whyItMatters ?? card.resumePacket?.whyItMatters ?? "No rationale recorded."
+    next_tiny_action: summarizeLifeCardNextAction(card),
+    why_it_matters: summarizeLifeCardWhy(card)
   };
 }
 
-export function buildHarnessLogEntry(
-  log: LifeLogEntry,
-  cardTitle = "General"
-): HarnessLogEntry {
+function summarizeLogText(log: LifeLogEntry, cardTitle: string): string {
+  if (log.rawText?.trim()) {
+    return log.rawText.trim();
+  }
+
+  return `${mapLogType(log.type)} signal on ${cardTitle} (${mapLifeArea(log.area)}).`;
+}
+
+export function buildHarnessLogEntry(log: LifeLogEntry, cardTitle = "General"): HarnessLogEntry {
   return {
     timestamp: log.timestamp,
-    summary: log.rawText,
+    summary: summarizeLogText(log, cardTitle),
     area: mapLifeArea(log.area),
     card_title: cardTitle,
     type: mapLogType(log.type)
@@ -187,8 +330,10 @@ function buildCandidateCards(candidates: JobCandidate[]): HarnessContextCard[] {
       state: "Inbox" as const,
       progress: 0,
       warmth: "Cold" as const,
-      next_tiny_action: candidate.nextTinyAction,
-      why_it_matters: candidate.fitReasons[0] ?? FIT_SCORE_DISCLAIMER
+      next_tiny_action: "Review fit and approve or dismiss.",
+      why_it_matters: `Job candidate queue item (fit ${candidate.fitScore}/100). ${
+        candidate.fitReasons[0] ?? FIT_SCORE_DISCLAIMER
+      }`
     }));
 }
 
@@ -201,8 +346,8 @@ function buildResumeModuleCards(modules: ResumeModule[]): HarnessContextCard[] {
       state: "Parked" as const,
       progress: 0,
       warmth: "Dormant" as const,
-      next_tiny_action: module.bullets[0] ?? module.summary.slice(0, 80),
-      why_it_matters: module.summary
+      next_tiny_action: "Use this module when tailoring a matching application.",
+      why_it_matters: `Resume bank module useful for ${module.bestFor.join(", ")} roles. ${module.summary}`
     }));
 }
 
@@ -273,10 +418,197 @@ function buildCandidateEventLogs(candidates: JobCandidate[]): HarnessLogEntry[] 
   });
 }
 
+function buildCareerApplicationLogs(cards: LifeCard[]): HarnessLogEntry[] {
+  const entries: HarnessLogEntry[] = [];
+
+  for (const card of cards) {
+    if (!card.careerApplication) {
+      continue;
+    }
+
+    const timestamp = card.lastTouched ?? new Date().toISOString();
+    const company = card.careerApplication.company;
+
+    if (card.state === "done") {
+      entries.push({
+        timestamp,
+        summary: `Application submitted/applied signal: ${company} — ${card.careerApplication.roleTitle}`,
+        area: "Social / Career",
+        card_title: company,
+        type: "win"
+      });
+      continue;
+    }
+
+    if (card.state === "waiting") {
+      entries.push({
+        timestamp,
+        summary: `Application waiting for follow-up: ${company} — ${card.careerApplication.roleTitle}`,
+        area: "Social / Career",
+        card_title: company,
+        type: "note"
+      });
+    }
+  }
+
+  return entries;
+}
+
+function countLifeCardsByArea(cards: LifeCard[]): Record<LifeArea, number> {
+  return cards.reduce(
+    (counts, card) => {
+      counts[card.area] += 1;
+      return counts;
+    },
+    {
+      build: 0,
+      body: 0,
+      money_independence: 0,
+      social_career: 0,
+      stability_vices: 0
+    } satisfies Record<LifeArea, number>
+  );
+}
+
+function getColdLifeCards(cards: LifeCard[]): LifeCard[] {
+  return cards.filter((card) => COLD_WARMTH.includes(card.warmth));
+}
+
+export function buildHarnessBoardDiagnosis(data: HarnessExportInput): HarnessRecentAnalysis[] {
+  const analyses: HarnessRecentAnalysis[] = [];
+  const activeSignal = getActiveLimitSignal(data);
+  const areaCounts = countLifeCardsByArea(data.cards);
+  const coldCards = getColdLifeCards(data.cards);
+  const hotBuild = data.cards.filter((card) => card.area === "build" && card.warmth === "hot");
+  const careerCards = data.cards.filter((card) => card.area === "social_career");
+  const bodyCards = data.cards.filter((card) => card.area === "body");
+  const resumeModules = data.resumeModules ?? [];
+  const jobCandidates = data.jobCandidates ?? [];
+
+  const buildHeavy = areaCounts.build >= areaCounts.social_career + 1;
+  const careerCold = careerCards.some((card) => COLD_WARMTH.includes(card.warmth));
+  const bodyCooling = bodyCards.some((card) => COLD_WARMTH.includes(card.warmth));
+
+  analyses.push({
+    summary: `Current board diagnosis: Build cards ${areaCounts.build}, Social/Career ${areaCounts.social_career}, Body ${areaCounts.body}. ${activeSignal.message}`,
+    patterns_detected: [
+      buildHeavy ? "Build-heavy momentum" : "Mixed area balance",
+      careerCold ? "Career thread is cold or cooling" : "Career thread has warmth signal",
+      activeSignal.isOverLimit ? "Active limit exceeded" : "Active limit within range"
+    ].filter(Boolean)
+  });
+
+  if (activeSignal.isAtLimit) {
+    analyses.push({
+      summary: `Active limit diagnosis: ${activeSignal.count} active cards against limit ${activeSignal.limit}.`,
+      patterns_detected: [
+        activeSignal.isOverLimit ? "Board over active limit" : "Board at active limit"
+      ]
+    });
+  }
+
+  if (coldCards.length > 0) {
+    analyses.push({
+      summary: `Warmth diagnosis: ${coldCards.length} life card(s) read cold, cooling, or dormant (${coldCards
+        .map((card) => card.title)
+        .join(", ")}).`,
+      patterns_detected: ["Cold or dormant threads present"]
+    });
+  }
+
+  if (careerCards.length > 0 || jobCandidates.length > 0) {
+    const queueCount = jobCandidates.filter((c) => c.status !== "dismissed").length;
+    analyses.push({
+      summary: `Career momentum diagnosis: ${careerCards.length} career card(s), ${queueCount} candidate(s) in queue. Outside-world follow-up may be the highest-leverage move.`,
+      patterns_detected: [
+        careerCold ? "Career avoidance signal" : "Career thread has recent signal",
+        queueCount > 0 ? "Job scout queue has pending review" : "No pending candidates"
+      ]
+    });
+  }
+
+  if (buildHeavy || bodyCooling) {
+    analyses.push({
+      summary: `Balance diagnosis: Build ${areaCounts.build} vs Body ${areaCounts.body} vs Social/Career ${areaCounts.social_career}. ${
+        bodyCooling ? "Body floor may need a tiny move." : "Body thread looks stable enough to defer."
+      }`,
+      patterns_detected: [
+        buildHeavy ? "Build-heavy focus" : "Balanced board",
+        bodyCooling ? "Body neglect signal" : "Body floor present"
+      ]
+    });
+  }
+
+  if (resumeModules.length > 0 || jobCandidates.length > 0) {
+    analyses.push({
+      summary: `Job scout / resume bank diagnosis: ${resumeModules.filter((m) => m.isActive).length} active resume module(s), ${jobCandidates.filter((c) => c.status !== "dismissed").length} candidate(s) tracked.`,
+      patterns_detected: [
+        resumeModules.length > 0 ? "Resume bank available for tailoring" : "No resume modules exported",
+        jobCandidates.length > 0 ? "Candidate queue in play" : "Manual candidate workflow only"
+      ]
+    });
+  }
+
+  return analyses.slice(0, 5);
+}
+
+function buildDynamicDecisions(data: HarnessExportInput): HarnessDecision[] {
+  const decisions: HarnessDecision[] = [
+    {
+      summary: "AI responses are read-only and require user approval before changing board state.",
+      reason: "Chat Harness can suggest; the user applies changes on the board."
+    }
+  ];
+
+  const activeSignal = getActiveLimitSignal(data);
+  if (activeSignal.isOverLimit) {
+    decisions.push({
+      summary: "Board is currently over the active limit; activating more should require parking something.",
+      reason: activeSignal.message
+    });
+  }
+
+  const jobCandidates = data.jobCandidates ?? [];
+  const jobSourceRuns = data.jobSourceRuns ?? [];
+  const locks = checkCareerUseBeforeImproveLocks(
+    data.cards,
+    data.logs,
+    jobCandidates,
+    jobSourceRuns
+  );
+
+  for (const lock of locks) {
+    if ("enabled" in lock && lock.enabled) {
+      continue;
+    }
+
+    if (lock.current < lock.required) {
+      if (lock.id === "resume-automation") {
+        decisions.push({
+          summary: "Resume automation is locked until manual applications threshold is reached.",
+          reason: `${lock.label}: ${lock.current}/${lock.required} manual career actions recorded.`
+        });
+      } else if (lock.id === "scheduled-fetching") {
+        decisions.push({
+          summary: "Scheduled job-source fetching is locked until manual candidate workflow has been used.",
+          reason: `${lock.label}: ${lock.current}/${lock.required} successful manual source runs.`
+        });
+      } else if (lock.id === "ai-matching") {
+        decisions.push({
+          summary: "AI matching remains locked until enough manual career actions exist.",
+          reason: `${lock.label}: ${lock.current}/${lock.required} career win logs.`
+        });
+      }
+    }
+  }
+
+  return decisions;
+}
+
 export function buildHarnessContext(data: HarnessExportInput): HarnessContext {
   const resumeModules = data.resumeModules ?? [];
   const jobCandidates = data.jobCandidates ?? [];
-  const cardTitleById = new Map(data.cards.map((card) => [card.id, card.title]));
+  const cardTitleById = new Map(data.cards.map((card) => [card.id, summarizeLifeCardTitle(card)]));
 
   const cards = [
     ...data.cards.map(buildHarnessContextCard),
@@ -288,20 +620,31 @@ export function buildHarnessContext(data: HarnessExportInput): HarnessContext {
     buildHarnessLogEntry(log, log.cardId ? cardTitleById.get(log.cardId) ?? "General" : "General")
   );
 
-  const logs = [...mappedLogs, ...buildSyntheticDailyLogs(data.dailyState), ...buildCandidateEventLogs(jobCandidates)]
+  const logs = [
+    ...mappedLogs,
+    ...buildSyntheticDailyLogs(data.dailyState),
+    ...buildCandidateEventLogs(jobCandidates),
+    ...buildCareerApplicationLogs(data.cards)
+  ]
     .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
     .slice(0, MAX_EXPORT_LOGS);
 
-  const proof_items = data.proofItems.map((item) => ({
-    summary: item.title,
-    timestamp: item.timestamp
-  }));
+  const proof_items = [...data.proofItems]
+    .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+    .slice(0, MAX_EXPORT_PROOF)
+    .map((item) => ({
+      summary: item.title,
+      timestamp: item.timestamp
+    }));
+
+  const recent_analyses = buildHarnessBoardDiagnosis(data);
+  const decisions = [...HARNESS_STATIC_DECISIONS, ...buildDynamicDecisions(data)];
 
   return {
     cards,
     logs,
     proof_items,
-    recent_analyses: [],
-    decisions: [...HARNESS_STATIC_DECISIONS]
+    recent_analyses,
+    decisions
   };
 }

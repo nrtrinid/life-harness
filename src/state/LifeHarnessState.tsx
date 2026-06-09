@@ -6,7 +6,8 @@ import {
   useEffect,
   useMemo,
   useReducer,
-  useRef
+  useRef,
+  useState
 } from "react";
 import { Platform } from "react-native";
 
@@ -32,8 +33,23 @@ import {
 import { type CareerIntakeInput } from "../core/career";
 import { type JobCandidateIntakeInput } from "../core/jobScout";
 import {
+  buildRunAllSummary,
+  formatRunBatchNotice,
+  getDueJobSources,
+  getRunnableJobSources,
+  type RunBatchSummary,
+  type SourceRunOutcome
+} from "../core/jobSourceSchedule";
+import {
+  buildFetchErrorRunOutput,
+  canRunJobSource,
   type JobSourceRunOutput
 } from "../core/jobSourceRunner";
+import {
+  RUNNER_UNREACHABLE_MESSAGE,
+  RunnerUnreachableError,
+  runSourceViaRunner
+} from "../core/jobScoutRunnerClient";
 import { startSession } from "../core/briefing";
 import { nowIso } from "../core/ids";
 import { createSeedState } from "../data/createSeedState";
@@ -46,6 +62,12 @@ import {
   serializeEnvelope
 } from "../storage/persistence";
 import type { CardState, DailyState, JobSource, LifeCard, LifeLogEntry, ProofItem } from "../core/types";
+
+export interface BatchRunProgress {
+  current: number;
+  total: number;
+  sourceName: string;
+}
 
 type LifeHarnessAction =
   | { type: "app_session_started" }
@@ -85,9 +107,40 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   exportSnapshot: () => { ok: boolean; message?: string };
   importSnapshot: (json: string) => { ok: boolean; message?: string };
   resetToSeed: () => { ok: boolean; message?: string };
+  isBatchRunning: boolean;
+  batchRunProgress: BatchRunProgress | null;
+  runOneJobSource: (
+    sourceId: string
+  ) => Promise<{ ok: boolean; message?: string; outcome?: SourceRunOutcome; runnerUnreachable?: boolean }>;
+  runDueJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
+  runAllEnabledJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
 }
 
 const LifeHarnessContext = createContext<LifeHarnessContextValue | undefined>(undefined);
+
+function patchSourceRunning(state: LifeHarnessData, sourceId: string): LifeHarnessData {
+  return {
+    ...state,
+    jobSources: state.jobSources.map((source) =>
+      source.id === sourceId
+        ? { ...source, runStatus: "running" as const, lastRunMessage: "Running..." }
+        : source
+    )
+  };
+}
+
+function outcomeFromRun(source: JobSource, result: ReturnType<typeof applyRunJobSourceResult>): SourceRunOutcome {
+  const run = result.state.jobSourceRuns[0];
+  return {
+    sourceId: source.id,
+    sourceName: source.name,
+    ok: result.ok,
+    createdCandidates: run?.createdCandidateIds.length ?? 0,
+    skippedDuplicates: run?.skippedDuplicates ?? 0,
+    errors: run?.errors ?? [],
+    message: result.message ?? run?.message ?? "Source run recorded."
+  };
+}
 
 function createInitialState(): LifeHarnessData {
   const loaded = loadPersistedState();
@@ -152,8 +205,15 @@ function downloadJsonOnWeb(json: string): boolean {
 
 export function LifeHarnessProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(lifeHarnessReducer, undefined, createInitialState);
+  const stateRef = useRef(state);
   const skipInitialSaveRef = useRef(true);
   const persistenceAvailable = localStorageAdapter.isAvailable();
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [batchRunProgress, setBatchRunProgress] = useState<BatchRunProgress | null>(null);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     dispatch({ type: "app_session_started" });
@@ -340,6 +400,141 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     return { ok: true, message: "Restored seed state." };
   }, []);
 
+  const runSourceOnState = useCallback(
+    async (current: LifeHarnessData, source: JobSource): Promise<{
+      state: LifeHarnessData;
+      outcome: SourceRunOutcome;
+      runnerUnreachable: boolean;
+    }> => {
+      let next = patchSourceRunning(current, source.id);
+      dispatch({ type: "state_replaced", state: next });
+
+      try {
+        const output = await runSourceViaRunner({
+          source,
+          existingCandidates: next.jobCandidates,
+          resumeModules: next.resumeModules
+        });
+        const result = applyRunJobSourceResult(next, output);
+        next = result.state;
+        dispatch({ type: "state_replaced", state: next });
+        return {
+          state: next,
+          outcome: outcomeFromRun(source, result),
+          runnerUnreachable: false
+        };
+      } catch (error) {
+        const message =
+          error instanceof RunnerUnreachableError
+            ? RUNNER_UNREACHABLE_MESSAGE
+            : "Local Job Scout Runner request failed.";
+        const result = applyRunJobSourceResult(next, buildFetchErrorRunOutput(source, message));
+        next = result.state;
+        dispatch({ type: "state_replaced", state: next });
+        return {
+          state: next,
+          outcome: {
+            ...outcomeFromRun(source, result),
+            runnerUnreachable: error instanceof RunnerUnreachableError
+          },
+          runnerUnreachable: error instanceof RunnerUnreachableError
+        };
+      }
+    },
+    []
+  );
+
+  const runOneJobSource = useCallback(
+    async (sourceId: string) => {
+      const current = stateRef.current;
+      const source = current.jobSources.find((item) => item.id === sourceId);
+      if (!source) {
+        return { ok: false, message: "Source not found." };
+      }
+
+      const guard = canRunJobSource(source);
+      if (!guard.ok) {
+        return { ok: false, message: guard.reason ?? "Cannot run source." };
+      }
+
+      const { outcome, runnerUnreachable } = await runSourceOnState(current, source);
+      return {
+        ok: outcome.ok,
+        message: outcome.message,
+        outcome,
+        runnerUnreachable
+      };
+    },
+    [runSourceOnState]
+  );
+
+  const runSourceBatch = useCallback(
+    async (targets: JobSource[]): Promise<RunBatchSummary> => {
+      const outcomes: SourceRunOutcome[] = [];
+      setIsBatchRunning(true);
+
+      try {
+        for (let index = 0; index < targets.length; index += 1) {
+          const source = targets[index];
+          setBatchRunProgress({
+            current: index + 1,
+            total: targets.length,
+            sourceName: source.name
+          });
+
+          const { outcome, runnerUnreachable } = await runSourceOnState(stateRef.current, source);
+          outcomes.push(outcome);
+
+          if (runnerUnreachable) {
+            break;
+          }
+        }
+      } finally {
+        setBatchRunProgress(null);
+        setIsBatchRunning(false);
+      }
+
+      return buildRunAllSummary(outcomes);
+    },
+    [runSourceOnState]
+  );
+
+  const runDueJobSources = useCallback(async () => {
+    const targets = getDueJobSources(stateRef.current.jobSources, new Date());
+    if (targets.length === 0) {
+      return {
+        ok: true,
+        message: "No due sources to run.",
+        summary: buildRunAllSummary([])
+      };
+    }
+
+    const summary = await runSourceBatch(targets);
+    return {
+      ok: summary.failedSources === 0 && !summary.runnerUnreachable,
+      message: formatRunBatchNotice(summary),
+      summary
+    };
+  }, [runSourceBatch]);
+
+  const runAllEnabledJobSources = useCallback(async () => {
+    const targets = getRunnableJobSources(stateRef.current.jobSources);
+    if (targets.length === 0) {
+      return {
+        ok: true,
+        message: "No enabled runnable sources.",
+        summary: buildRunAllSummary([])
+      };
+    }
+
+    const summary = await runSourceBatch(targets);
+    return {
+      ok: summary.failedSources === 0 && !summary.runnerUnreachable,
+      message: formatRunBatchNotice(summary),
+      summary
+    };
+  }, [runSourceBatch]);
+
   const value = useMemo(
     () => ({
       ...state,
@@ -359,7 +554,12 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       setCardState,
       exportSnapshot,
       importSnapshot,
-      resetToSeed
+      resetToSeed,
+      isBatchRunning,
+      batchRunProgress,
+      runOneJobSource,
+      runDueJobSources,
+      runAllEnabledJobSources
     }),
     [
       state,
@@ -379,7 +579,12 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       setCardState,
       exportSnapshot,
       importSnapshot,
-      resetToSeed
+      resetToSeed,
+      isBatchRunning,
+      batchRunProgress,
+      runOneJobSource,
+      runDueJobSources,
+      runAllEnabledJobSources
     ]
   );
 

@@ -1,0 +1,24 @@
+﻿=== Exported context summary ===
+Cards: 16
+Titles: Career / Networking | EV Tracker / Kalshi | Text RPG | Fitness Return | Local LLM Setup | Life Harness | Qualcomm ΓÇö Security Engineer | Northrop Grumman ΓÇö Software Engineer ΓÇö Security | Resume: EV Tracker / Kalshi | Resume: Text RPG | Resume: Life Harness / A770 Local Scout | Resume: Legoland Robotics / Customer-Facing | Resume: In-N-Out Operations / Teamwork | Resume: ASU Computer Science / Cybersecurity | Resume: Technical Skills: Python / TypeScript / FastAPI / React / Postgres | Resume: Security-Aware Development
+Logs: 3 | Proof: 2
+Gateway: http://127.0.0.1:8111
+
+Q: What am I avoiding right now? (operator) [200 in 12.4s]
+A: You seem to be avoiding deep engagement with career follow-ups and external job actions, possibly due to the cold warmth of the 'Qualcomm ΓÇö Security Engineer' and 'Northrop Grumman ΓÇö Software Engineer ΓÇö Security' cards.
+
+Q: What should I do next? (operator) [200 in 2.0s]
+A: Next, send one follow-up on your Qualcomm Security Engineer application and paste a job description for follow-up. Also, walk 10 minutes or eat something real to support your fitness return.
+
+Q: Am I over-optimizing again? (reflection) [200 in 2.6s]
+A: It's possible you're over-optimizing if you're spending too much time on small details without making progress on high-impact actions. Focus on the next tiny action for each area, like sending a follow-up or testing enemy behavior.
+
+Q: What should I park? (operator) [200 in 2.3s]
+A: Park the 'Local LLM Setup' and 'Resume: EV Tracker / Kalshi' items. They are dormant and can be revisited later when needed.
+
+Q: What career action should I take today? (operator) [200 in 2.1s]
+A: Today, send one follow-up on the Qualcomm ΓÇö Security Engineer application to keep it active without spiraling into job-search mode. Also, consider pasting one job description or sending a follow-up for the Northrop Grumman ΓÇö Software Engineer ΓÇö Security role.
+
+Q: Give me blunt advice based on my board. (general) [200 in 2.6s]
+A: Focus on the 'Career / Networking' card by sending a follow-up on the Qualcomm application. Also, take a 10-minute walk to support your fitness return. Keep the 'EV Tracker / Kalshi' build active but hold off until the Career Pounce is complete.
+

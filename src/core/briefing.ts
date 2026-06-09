@@ -1,6 +1,7 @@
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "./guards";
 import { getFollowUpsDue } from "./career";
 import { buildCandidateBriefingSignals, formatFitScore } from "./jobScout";
+import { buildSourceScheduleStats } from "./jobSourceSchedule";
 import { WARMTH_LABELS } from "./labels";
 import {
   computeCardWarmth,
@@ -149,6 +150,12 @@ export function generateWhileYouWereAway(
   }
 
   const scoutSignals = buildCandidateBriefingSignals(jobCandidates, jobSources, jobSourceRuns);
+  const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
+  if (scheduleStats.dueSources > 0) {
+    detected.push(
+      `${scheduleStats.dueSources} job source${scheduleStats.dueSources === 1 ? "" : "s"} ${scheduleStats.dueSources === 1 ? "is" : "are"} due.`
+    );
+  }
   if (scoutSignals.savedWaiting > 0) {
     detected.push(`${scoutSignals.savedWaiting} saved job candidates waiting for review.`);
   }
@@ -190,6 +197,8 @@ export function generateWhileYouWereAway(
 
   if (careerCold || followUpsDue.length > 0) {
     prepared.push("Suggested pounce: paste one job description or send one follow-up.");
+  } else if (scheduleStats.dueSources > 0) {
+    prepared.push("Suggested pounce: run due job sources.");
   } else if (fetchedCandidates.length > 0) {
     prepared.push("Suggested pounce: review one fetched candidate.");
   } else if (savedCandidates.length > 0) {

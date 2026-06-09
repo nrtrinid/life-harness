@@ -17,6 +17,7 @@ import { styles } from "../src/components/styles";
 import { generateWhileYouWereAway, getBriefingHighlightItems } from "../src/core/briefing";
 import { getFollowUpsDue } from "../src/core/career";
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "../src/core/guards";
+import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
 import { computeCardProgress } from "../src/core/progress";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
@@ -41,6 +42,7 @@ export default function TodayScreen() {
   const highlights = getBriefingHighlightItems(briefing, cards, dailyState, logs, now, 5);
   const activeLimit = getActiveLimitStatus(cards);
   const followUpsDue = getFollowUpsDue(cards, now);
+  const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
   const pounceLogged = dailyState.pounceStarted;
 
   useEffect(() => {
@@ -138,7 +140,11 @@ export default function TodayScreen() {
         </Link>
         <Link href="/job-sources" asChild>
           <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Run an Approved Job Source</Text>
+            <Text style={styles.secondaryActionText}>
+              {scheduleStats.dueSources > 0
+                ? `Run Due Job Sources (${scheduleStats.dueSources})`
+                : "Run an Approved Job Source"}
+            </Text>
           </Pressable>
         </Link>
         <Pressable

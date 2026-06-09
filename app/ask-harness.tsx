@@ -14,7 +14,9 @@ import {
   PHYSICAL_DEVICE_URL_HINT
 } from "../src/core/chatHarnessClient";
 import {
+  buildContextQualitySummary,
   buildHarnessContext,
+  getActiveLimitSignal,
   type ChatHarnessMode,
   type ChatHarnessResponse,
   type HarnessExportInput
@@ -58,6 +60,9 @@ function buildExportInput(state: ReturnType<typeof useLifeHarness>): HarnessExpo
   if (state.jobCandidates) {
     input.jobCandidates = state.jobCandidates;
   }
+  if (state.jobSourceRuns) {
+    input.jobSourceRuns = state.jobSourceRuns;
+  }
 
   return input;
 }
@@ -75,6 +80,12 @@ export default function AskHarnessDevScreen() {
 
   const exportInput = useMemo(() => buildExportInput(harnessState), [harnessState]);
   const exportedContext = useMemo(() => buildHarnessContext(exportInput), [exportInput]);
+  const activeLimitSignal = useMemo(() => getActiveLimitSignal(exportInput), [exportInput]);
+  const qualitySummary = useMemo(
+    () => buildContextQualitySummary(exportedContext, activeLimitSignal),
+    [exportedContext, activeLimitSignal]
+  );
+  const [qualityOpen, setQualityOpen] = useState(false);
 
   const previewText = useMemo(() => {
     if (!previewOpen) {
@@ -200,10 +211,15 @@ export default function AskHarnessDevScreen() {
       </Section>
 
       <Section title="Exported context">
-        <Text style={styles.bodyText}>
-          Cards: {exportedContext.cards.length} · Logs: {exportedContext.logs.length} · Proof:{" "}
-          {exportedContext.proof_items.length} · Decisions: {exportedContext.decisions.length}
-        </Text>
+        <Text style={styles.bodyText}>{qualitySummary.split("\n")[0]}</Text>
+        <Pressable style={styles.smallButton} onPress={() => setQualityOpen((open) => !open)}>
+          <Text style={styles.smallButtonText}>
+            {qualityOpen ? "Hide context quality summary" : "Show context quality summary"}
+          </Text>
+        </Pressable>
+        {qualityOpen ? (
+          <Text style={styles.bodyText}>{qualitySummary}</Text>
+        ) : null}
         <Pressable style={styles.smallButton} onPress={() => setPreviewOpen((open) => !open)}>
           <Text style={styles.smallButtonText}>{previewOpen ? "Hide JSON preview" : "Show JSON preview"}</Text>
         </Pressable>
