@@ -2,7 +2,7 @@
 
 Minimal local AI gateway prototype for analyzing messy transcripts and speech-to-text notes. This is **not** the Life Harness app.
 
-**Phase 0:** mock provider + OpenVINO integration path. **Phase 0.5:** evaluation harness. **Phase 1:** real OpenVINO GenAI provider. **Phase 1.5:** OpenVINO smoke script + manual report.
+**Phase 0:** mock provider + OpenVINO integration path. **Phase 0.5:** evaluation harness. **Phase 1:** real OpenVINO GenAI provider. **Phase 1.5:** OpenVINO smoke script + manual report. **Phase 1.8:** Ask Harness read-only chat sandbox.
 
 See [docs/local-a770-plan.md](../../docs/local-a770-plan.md) for the full roadmap.
 
@@ -90,6 +90,30 @@ Structured smoke run against the synthetic fixture. **Stdout** prints only `smok
 
 **Do not commit:** real transcript outputs, ad-hoc `openvino_*.json` (gitignored). `models/` stays gitignored. Only `openvino_synthetic_analysis.example.json` is safe to commit if generated from the synthetic fixture.
 
+## Phase 1.8 — Ask Harness Sandbox
+
+Read-only scout chat over a **caller-provided context bundle** (cards, logs, proof, analyses, decisions). Not persistent memory, not RAG, not app integration.
+
+See [docs/ask-harness-sandbox.md](docs/ask-harness-sandbox.md).
+
+### Mock quickstart
+
+```powershell
+$env:SCOUT_PROVIDER="mock"
+uvicorn app.main:app --host 127.0.0.1 --port 8111
+
+python scripts/ask_harness.py
+python scripts/ask_harness.py --question "What should I build next?" --mode builder
+```
+
+Default context: `tests/fixtures/synthetic_harness_context.json` (fake data only).
+
+### Optional OpenVINO
+
+If the OpenVINO gateway is already running (see OpenVINO mode above), the same CLI works unchanged — no extra setup.
+
+**Exit codes:** 1 = usage/context error; 2 = connection error; 3 = non-2xx API response.
+
 ## Evaluation harness (Phase 0.5)
 
 1. Start the service (mock or OpenVINO).
@@ -115,6 +139,14 @@ Returns provider name, readiness, model, device, and optional setup message.
 - 422 — validation or input exceeds `SCOUT_MAX_INPUT_CHARS`
 - 502 — model output could not be parsed as valid JSON
 - 503 — provider not ready (missing deps, model, load failure, or inference timeout)
+
+### `POST /ask-harness`
+
+Read-only scout chat over caller-provided context. See [docs/ask-harness-sandbox.md](docs/ask-harness-sandbox.md).
+
+**Sensitivity:** `S3` rejected with HTTP 422 before provider.
+
+**Errors:** same as analyze-transcript (422 / 502 / 503). OpenVINO checks full serialized prompt length against `SCOUT_MAX_INPUT_CHARS`.
 
 ## Configuration
 
@@ -159,16 +191,23 @@ app/
     openvino_provider.py
   prompts/
     transcript_analysis.md
+    ask_harness.md
 scripts/
   analyze_file.py
+  ask_harness.py
+  check_output_consistency.py
   smoke_openvino.py
 tests/
   fixtures/synthetic_transcript.txt
+  fixtures/synthetic_harness_context.json
   test_contracts.py
+  test_ask_harness_contract.py
+  test_ask_harness_cli.py
   test_openvino_provider.py
   test_smoke_openvino_cli.py
   test_synthetic_golden.py
 docs/
+  ask-harness-sandbox.md
   evaluation-rubric.md
   openvino-smoke-report.md
   sample-outputs/mock_synthetic_analysis.json

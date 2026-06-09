@@ -4,11 +4,20 @@ from app.models import (
     AnalysisMode,
     AnalyzeTranscriptRequest,
     AnalyzeTranscriptResponse,
+    AskHarnessMode,
+    AskHarnessRequest,
+    AskHarnessResponse,
     CardState,
+    GroundingItem,
+    GroundingSourceType,
+    HarnessContextCard,
+    HarnessLogEntry,
     HealthStatus,
     LifeArea,
     PossibleCard,
+    ProposedCardUpdate,
     ProviderHealth,
+    WarmthLevel,
 )
 
 INFERRED_PREFIX = "Inferred from transcript — "
@@ -102,6 +111,78 @@ def _build_cards(themes: list[str], text: str) -> list[PossibleCard]:
     return cards
 
 
+_COLD_WARMTH = {WarmthLevel.cold, WarmthLevel.cooling, WarmthLevel.dormant}
+_AVOIDANCE_RE = re.compile(
+    r"\b(avoid|resume|job|network|career|apply|follow.?up)\b",
+    re.IGNORECASE,
+)
+_TOOLING_RE = re.compile(
+    r"\b(over.?optim|tool|workflow|setup|llm|compare)\b",
+    re.IGNORECASE,
+)
+_BODY_RE = re.compile(r"\b(gym|fitness|body|eat|walk|workout)\b", re.IGNORECASE)
+_HIGH_STAKES_RE = re.compile(
+    r"\b(diagnos|prescri|legal|invest|trade|suicid)\b",
+    re.IGNORECASE,
+)
+
+
+def _card_grounding(card: HarnessContextCard) -> GroundingItem:
+    return GroundingItem(
+        source_type=GroundingSourceType.card,
+        label=card.title,
+        summary=f"{card.area.value} · {card.state.value} · {card.warmth.value}",
+    )
+
+
+def _log_grounding(entry: HarnessLogEntry) -> GroundingItem:
+    return GroundingItem(
+        source_type=GroundingSourceType.log,
+        label=entry.card_title or entry.summary[:40],
+        summary=entry.summary,
+    )
+
+
+def _cold_career_body_cards(cards: list[HarnessContextCard]) -> list[HarnessContextCard]:
+    result: list[HarnessContextCard] = []
+    for card in cards:
+        if card.area not in (LifeArea.social_career, LifeArea.body):
+            continue
+        if card.warmth in _COLD_WARMTH or card.state == CardState.parked:
+            result.append(card)
+    return result
+
+
+def _build_win_logs(logs: list[HarnessLogEntry]) -> list[HarnessLogEntry]:
+    return [
+        log
+        for log in logs
+        if log.type.value == "win" or log.area.lower() == "build"
+    ]
+
+
+def _avoidance_logs(logs: list[HarnessLogEntry]) -> list[HarnessLogEntry]:
+    return [log for log in logs if _AVOIDANCE_RE.search(log.summary)]
+
+
+def _tooling_logs(logs: list[HarnessLogEntry]) -> list[HarnessLogEntry]:
+    return [log for log in logs if _TOOLING_RE.search(log.summary)]
+
+
+def _body_logs(logs: list[HarnessLogEntry]) -> list[HarnessLogEntry]:
+    return [log for log in logs if _BODY_RE.search(log.summary + log.area)]
+
+
+def _hot_build_cards(cards: list[HarnessContextCard]) -> list[HarnessContextCard]:
+    return [
+        card
+        for card in cards
+        if card.area == LifeArea.build
+        and card.state == CardState.active
+        and card.warmth in (WarmthLevel.hot, WarmthLevel.warm)
+    ]
+
+
 class MockProvider:
     name = "mock"
 
@@ -156,4 +237,156 @@ class MockProvider:
             things_to_park=park_items,
             patterns_detected=patterns,
             confidence_notes=confidence_notes,
+        )
+
+    def ask_harness(self, request: AskHarnessRequest) -> AskHarnessResponse:
+        ctx = request.context
+        question_lower = request.question.lower()
+        cards = ctx.cards
+        logs = ctx.logs
+
+        cold_cards = _cold_career_body_cards(cards)
+        build_wins = _build_win_logs(logs)
+        avoid_logs = _avoidance_logs(logs)
+        tooling_logs = _tooling_logs(logs)
+        body_logs = _body_logs(logs)
+        hot_build = _hot_build_cards(cards)
+
+        grounding: list[GroundingItem] = []
+        patterns: list[str] = []
+        next_actions: list[str] = []
+        proposed: list[ProposedCardUpdate] = []
+        safety_notes: list[str] = []
+
+        if _HIGH_STAKES_RE.search(request.question):
+            safety_notes.append(
+                "Question may touch high-stakes topics — staying in scout lane only."
+            )
+
+        if "avoid" in question_lower:
+            parts: list[str] = []
+            if cold_cards:
+                titles = ", ".join(c.title for c in cold_cards[:3])
+                parts.append(
+                    f"Based on the provided cards, cold or cooling areas include: {titles}."
+                )
+                grounding.extend(_card_grounding(c) for c in cold_cards[:3])
+            if avoid_logs:
+                parts.append(
+                    f"A log notes: \"{avoid_logs[0].summary}\" — career follow-up may be deferred."
+                )
+                grounding.append(_log_grounding(avoid_logs[0]))
+            if len(build_wins) >= 2 and len(body_logs) == 0:
+                parts.append(
+                    f"Build activity is high ({len(build_wins)} recent wins/logs) "
+                    "with no recent body logs in context."
+                )
+            if not parts:
+                parts.append(
+                    "Context does not show a clear avoidance pattern — review active cards manually."
+                )
+            answer = " ".join(parts)
+            if cold_cards:
+                patterns.append("cold or cooling career/body cards")
+            if avoid_logs:
+                patterns.append("career avoidance in logs")
+            if len(build_wins) >= 2 and len(body_logs) == 0:
+                patterns.append("build-heavy focus vs body neglect")
+            if cold_cards:
+                career = next(
+                    (c for c in cold_cards if c.area == LifeArea.social_career),
+                    None,
+                )
+                if career:
+                    next_actions.append(career.next_tiny_action)
+                    proposed.append(
+                        ProposedCardUpdate(
+                            card_title=career.title,
+                            proposed_change="Unpark and write one tiny career step.",
+                            requires_approval=True,
+                        )
+                    )
+            body_card = next(
+                (c for c in cards if c.area == LifeArea.body),
+                None,
+            )
+            if body_card and len(body_logs) == 0:
+                next_actions.append(body_card.next_tiny_action)
+        elif "over-optim" in question_lower or request.mode == AskHarnessMode.reflection:
+            answer_parts: list[str] = []
+            if tooling_logs:
+                answer_parts.append(
+                    f"Based on the provided logs, tooling/thread risk: \"{tooling_logs[0].summary}\"."
+                )
+                grounding.append(_log_grounding(tooling_logs[0]))
+            parked_tool = next(
+                (
+                    c
+                    for c in cards
+                    if c.state == CardState.parked
+                    and c.area == LifeArea.money_independence
+                ),
+                None,
+            )
+            if parked_tool:
+                answer_parts.append(
+                    f"Parked card \"{parked_tool.title}\" may be an optimization rabbit hole."
+                )
+                grounding.append(_card_grounding(parked_tool))
+            answer = (
+                " ".join(answer_parts)
+                if answer_parts
+                else "No strong over-optimization signal in the provided context."
+            )
+            patterns.append("over-optimization risk")
+            next_actions.append("Park the tooling idea; do one real deliverable step.")
+        elif "build next" in question_lower or request.mode == AskHarnessMode.builder:
+            targets = hot_build[:2] or [c for c in cards if c.state == CardState.active][:2]
+            if targets:
+                names = " and ".join(c.title for c in targets)
+                answer = (
+                    f"Based on the provided cards, hot active build threads include {names}. "
+                    f"Next slice: {targets[0].next_tiny_action}"
+                )
+                grounding.extend(_card_grounding(c) for c in targets[:2])
+                next_actions.append(targets[0].next_tiny_action)
+            else:
+                answer = "No active build cards in context — add or activate one first."
+            patterns.append("build focus")
+        else:
+            active = [c for c in cards if c.state == CardState.active]
+            if active:
+                answer = (
+                    f"Based on the provided cards, active threads include "
+                    f"{', '.join(c.title for c in active[:3])}. "
+                    f"Suggested move: {active[0].next_tiny_action}"
+                )
+                grounding.append(_card_grounding(active[0]))
+                next_actions.append(active[0].next_tiny_action)
+            else:
+                answer = "Context has no active cards — pick one inbox item to touch."
+            patterns.append("general scout read")
+
+        if not next_actions:
+            next_actions = ["Pick one card and write a 2-minute first step."]
+
+        confidence_notes = [
+            f"{INFERRED_PREFIX}answer derived from provided context bundle only.",
+            f"{INFERRED_PREFIX}patterns are heuristic, not verified facts.",
+        ]
+
+        return AskHarnessResponse(
+            answer=answer,
+            grounding=grounding or [
+                GroundingItem(
+                    source_type=GroundingSourceType.none,
+                    label="context",
+                    summary="Limited grounding available from provided bundle.",
+                )
+            ],
+            patterns_detected=list(dict.fromkeys(patterns)) or ["context scan"],
+            suggested_next_actions=next_actions[:4],
+            proposed_card_updates=proposed,
+            confidence_notes=confidence_notes,
+            safety_notes=safety_notes,
         )

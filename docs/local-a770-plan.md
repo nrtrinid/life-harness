@@ -78,6 +78,18 @@ Example: docs/sample-outputs/openvino_synthetic_analysis.example.json
 Report: services/ai-gateway/docs/openvino-smoke-report.md (Phase 1.7 section)
 ```
 
+## Phase 1.8 — Ask Harness Sandbox (done)
+
+**Result:** Read-only `POST /ask-harness` over caller-provided context bundle; mock heuristics + OpenVINO prompt path.
+
+```text
+Endpoint: POST /ask-harness
+CLI: scripts/ask_harness.py (default synthetic context fixture)
+Docs: services/ai-gateway/docs/ask-harness-sandbox.md
+Tests: mock-only in CI; OpenVINO code path + 503 when model missing
+Not: UI, DB, RAG, persistent memory, app integration
+```
+
 ## Phase 2 — Model Server + Life Harness integration
 
 Optional alternate runtime:

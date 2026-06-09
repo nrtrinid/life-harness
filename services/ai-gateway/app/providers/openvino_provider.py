@@ -9,15 +9,18 @@ from app.config import Settings
 from app.models import (
     AnalyzeTranscriptRequest,
     AnalyzeTranscriptResponse,
+    AskHarnessRequest,
+    AskHarnessResponse,
     HealthStatus,
     ProviderHealth,
 )
-from app.prompt_loader import build_analysis_prompt
+from app.prompt_loader import build_analysis_prompt, build_ask_harness_prompt
 from app.providers.base import (
     ProviderInputError,
     ProviderNotReadyError,
     ProviderParseError,
     parse_model_json,
+    parse_strict_json,
 )
 
 logger = logging.getLogger(__name__)
@@ -145,6 +148,28 @@ class OpenVinoProvider:
             except ProviderParseError as exc:
                 raise ProviderParseError(
                     "Model output could not be parsed as valid scout JSON after repair"
+                ) from exc
+
+    def ask_harness(self, request: AskHarnessRequest) -> AskHarnessResponse:
+        self._ensure_pipeline()
+        prompt = build_ask_harness_prompt(request=request)
+        if len(prompt) > self._settings.max_input_chars:
+            raise ProviderInputError(
+                f"Serialized prompt length {len(prompt)} exceeds SCOUT_MAX_INPUT_CHARS="
+                f"{self._settings.max_input_chars}"
+            )
+
+        raw = self._generate(prompt)
+        try:
+            return parse_strict_json(raw, AskHarnessResponse)
+        except ProviderParseError:
+            logger.warning("openvino ask_harness parse failed; attempting one JSON repair pass")
+            repaired = self._generate(_REPAIR_PROMPT.format(broken=raw[:4000]))
+            try:
+                return parse_strict_json(repaired, AskHarnessResponse)
+            except ProviderParseError as exc:
+                raise ProviderParseError(
+                    "Model output could not be parsed as valid ask-harness JSON after repair"
                 ) from exc
 
     def _ensure_pipeline(self) -> None:

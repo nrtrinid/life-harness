@@ -7,6 +7,8 @@ from app.config import Settings, get_settings
 from app.models import (
     AnalyzeTranscriptRequest,
     AnalyzeTranscriptResponse,
+    AskHarnessRequest,
+    AskHarnessResponse,
     HealthResponse,
     ProviderKind,
     SensitivityLevel,
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Life Harness AI Gateway",
     description="Local scout gateway — mock default, OpenVINO optional.",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 
@@ -75,6 +77,37 @@ def analyze_transcript(request: AnalyzeTranscriptRequest) -> AnalyzeTranscriptRe
 
     try:
         return provider.analyze(request)
+    except ProviderInputError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except ProviderNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
+    except ProviderParseError as exc:
+        logger.warning("provider parse error: %s", exc.message)
+        raise HTTPException(status_code=502, detail=exc.message) from exc
+
+
+@app.post("/ask-harness", response_model=AskHarnessResponse)
+def ask_harness_endpoint(request: AskHarnessRequest) -> AskHarnessResponse:
+    if request.sensitivity == SensitivityLevel.S3:
+        raise HTTPException(
+            status_code=422,
+            detail="S3: rules-only, not sent to model",
+        )
+
+    provider = get_provider()
+    logger.info(
+        "ask_harness provider=%s mode=%s sensitivity=%s question_len=%d "
+        "context_cards=%d history_turns=%d",
+        provider.name,
+        request.mode.value,
+        request.sensitivity.value,
+        len(request.question),
+        len(request.context.cards),
+        len(request.conversation_history),
+    )
+
+    try:
+        return provider.ask_harness(request)
     except ProviderInputError as exc:
         raise HTTPException(status_code=422, detail=exc.message) from exc
     except ProviderNotReadyError as exc:

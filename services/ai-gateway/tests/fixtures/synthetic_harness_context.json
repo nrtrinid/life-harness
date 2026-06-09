@@ -1,0 +1,125 @@
+{
+  "cards": [
+    {
+      "title": "EV Tracker / Kalshi",
+      "area": "Build",
+      "state": "Active",
+      "progress": 45,
+      "warmth": "Hot",
+      "next_tiny_action": "Add one market snapshot endpoint stub",
+      "why_it_matters": "Keeps the side project moving with a concrete slice."
+    },
+    {
+      "title": "Text RPG",
+      "area": "Build",
+      "state": "Active",
+      "progress": 30,
+      "warmth": "Warm",
+      "next_tiny_action": "Write one combat loop test",
+      "why_it_matters": "Small win on a fun build thread."
+    },
+    {
+      "title": "Career / Networking",
+      "area": "Social / Career",
+      "state": "Parked",
+      "progress": 5,
+      "warmth": "Cold",
+      "next_tiny_action": "Open resume doc and add one bullet",
+      "why_it_matters": "Outside-world career thread is stalled."
+    },
+    {
+      "title": "Fitness Return",
+      "area": "Body",
+      "state": "Active",
+      "progress": 10,
+      "warmth": "Cooling",
+      "next_tiny_action": "10-minute walk and stretch",
+      "why_it_matters": "Body floor has slipped while build work ran hot."
+    },
+    {
+      "title": "Local LLM Setup",
+      "area": "Money / Independence",
+      "state": "Parked",
+      "progress": 0,
+      "warmth": "Dormant",
+      "next_tiny_action": "Park cleanly; note one future use case",
+      "why_it_matters": "Tooling rabbit hole — not the active product move."
+    },
+    {
+      "title": "Life Harness",
+      "area": "Build",
+      "state": "Active",
+      "progress": 55,
+      "warmth": "Hot",
+      "next_tiny_action": "Ship Ask Harness sandbox endpoint",
+      "why_it_matters": "Career-first board direction needs the scout loop."
+    }
+  ],
+  "logs": [
+    {
+      "timestamp": "2026-06-08T14:00:00Z",
+      "summary": "Shipped EV tracker API scaffold",
+      "area": "Build",
+      "card_title": "EV Tracker / Kalshi",
+      "type": "win"
+    },
+    {
+      "timestamp": "2026-06-08T16:30:00Z",
+      "summary": "Merged Life Harness gateway smoke layer",
+      "area": "Build",
+      "card_title": "Life Harness",
+      "type": "win"
+    },
+    {
+      "timestamp": "2026-06-08T18:00:00Z",
+      "summary": "Fixed Text RPG inventory bug",
+      "area": "Build",
+      "card_title": "Text RPG",
+      "type": "win"
+    },
+    {
+      "timestamp": "2026-06-07T11:00:00Z",
+      "summary": "Note: still avoiding resume update and job follow-up",
+      "area": "Social / Career",
+      "card_title": "Career / Networking",
+      "type": "note"
+    },
+    {
+      "timestamp": "2026-06-07T15:00:00Z",
+      "summary": "Fell into comparing local LLM tooling instead of shipping",
+      "area": "Build",
+      "card_title": "Local LLM Setup",
+      "type": "note"
+    }
+  ],
+  "proof_items": [
+    {
+      "summary": "A770 OpenVINO smoke passed",
+      "timestamp": "2026-06-09T12:00:00Z"
+    },
+    {
+      "summary": "Phase 1.7 prompt tuning completed",
+      "timestamp": "2026-06-09T18:00:00Z"
+    },
+    {
+      "summary": "Project scaffolding shipped",
+      "timestamp": "2026-06-01T10:00:00Z"
+    }
+  ],
+  "recent_analyses": [
+    {
+      "summary": "Build momentum high; career and body threads cooling",
+      "patterns_detected": ["build-heavy focus", "career avoidance", "body neglect"]
+    }
+  ],
+  "decisions": [
+    {
+      "summary": "Local AI is optional, not a v0.1 blocker",
+      "reason": "Board must work rules-only first"
+    },
+    {
+      "summary": "Career-first board is the practical next product direction",
+      "reason": "Build wins are real but outside-world threads are cold"
+    }
+  ]
+}

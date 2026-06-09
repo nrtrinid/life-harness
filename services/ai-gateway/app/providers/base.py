@@ -1,8 +1,18 @@
 import json
 import re
-from typing import Iterator, Protocol, runtime_checkable
+from typing import Iterator, Protocol, TypeVar, runtime_checkable
 
-from app.models import AnalyzeTranscriptRequest, AnalyzeTranscriptResponse, ProviderHealth
+from pydantic import BaseModel
+
+from app.models import (
+    AnalyzeTranscriptRequest,
+    AnalyzeTranscriptResponse,
+    AskHarnessRequest,
+    AskHarnessResponse,
+    ProviderHealth,
+)
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class ProviderParseError(Exception):
@@ -37,6 +47,8 @@ class TranscriptProvider(Protocol):
 
     def analyze(self, request: AnalyzeTranscriptRequest) -> AnalyzeTranscriptResponse: ...
 
+    def ask_harness(self, request: AskHarnessRequest) -> AskHarnessResponse: ...
+
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
@@ -51,7 +63,7 @@ def _json_candidates(raw: str) -> Iterator[str]:
         yield cleaned[start : end + 1]
 
 
-def parse_model_json(raw: str) -> AnalyzeTranscriptResponse:
+def parse_strict_json(raw: str, model: type[T]) -> T:
     """Strip markdown fences, extract JSON object, validate against strict schema."""
     last_error: Exception | None = None
     for candidate in _json_candidates(raw):
@@ -61,10 +73,14 @@ def parse_model_json(raw: str) -> AnalyzeTranscriptResponse:
             last_error = exc
             continue
         try:
-            return AnalyzeTranscriptResponse.model_validate(data)
+            return model.model_validate(data)
         except Exception as exc:
             last_error = exc
             continue
     if last_error is not None:
         raise ProviderParseError(f"Response failed schema validation: {last_error}") from last_error
     raise ProviderParseError("No valid JSON object found in model output")
+
+
+def parse_model_json(raw: str) -> AnalyzeTranscriptResponse:
+    return parse_strict_json(raw, AnalyzeTranscriptResponse)
