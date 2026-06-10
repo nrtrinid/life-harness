@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   askChatHarness,
+  chatHarnessFetchFailureMessage,
   ChatHarnessError,
   DEFAULT_CHAT_HARNESS_URL,
   parseChatHarnessResponse
@@ -73,8 +74,8 @@ describe("askChatHarness", () => {
     vi.unstubAllGlobals();
   });
 
-  it("maps connection failures to a friendly error", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+  it("maps browser fetch failures to a CORS-aware error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
     await expect(
       askChatHarness({
@@ -84,7 +85,33 @@ describe("askChatHarness", () => {
         sensitivity: "S1",
         context
       })
-    ).rejects.toThrow(/not reachable/);
+    ).rejects.toThrow(/SCOUT_DEV_CORS/);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("surfaces HTTP errors without calling them unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => JSON.stringify({ detail: "OpenVINO model not loaded." })
+      })
+    );
+
+    await expect(
+      askChatHarness({
+        baseUrl: DEFAULT_CHAT_HARNESS_URL,
+        message: "Hello",
+        mode: "general",
+        sensitivity: "S1",
+        context
+      })
+    ).rejects.toMatchObject({
+      message: "OpenVINO model not loaded.",
+      status: 503
+    });
 
     vi.unstubAllGlobals();
   });
@@ -110,6 +137,25 @@ describe("askChatHarness", () => {
     ).rejects.toThrow(/Unexpected response/);
 
     vi.unstubAllGlobals();
+  });
+});
+
+describe("chatHarnessFetchFailureMessage", () => {
+  it("mentions CORS for browser Failed to fetch errors", () => {
+    const message = chatHarnessFetchFailureMessage(
+      DEFAULT_CHAT_HARNESS_URL,
+      new TypeError("Failed to fetch")
+    );
+    expect(message).toContain("SCOUT_DEV_CORS");
+    expect(message).not.toMatch(/not reachable/i);
+  });
+
+  it("preserves other error messages", () => {
+    const message = chatHarnessFetchFailureMessage(
+      DEFAULT_CHAT_HARNESS_URL,
+      new Error("getaddrinfo ENOTFOUND")
+    );
+    expect(message).toContain("ENOTFOUND");
   });
 });
 

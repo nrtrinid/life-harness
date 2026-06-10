@@ -8,6 +8,13 @@ DEFAULT_MODEL_PATH = "models/qwen3-8b-int4-ov"
 DEFAULT_MODEL_ID = "OpenVINO/Qwen3-8B-int4-ov"
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.lower() in ("1", "true", "yes")
+
+
 @dataclass(frozen=True)
 class Settings:
     provider: ProviderName
@@ -20,6 +27,7 @@ class Settings:
     timeout_seconds: float
     max_input_chars: int
     temperature: float
+    dev_cors: bool
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -36,6 +44,7 @@ class Settings:
             timeout_seconds=float(os.getenv("SCOUT_TIMEOUT_SECONDS", "120")),
             max_input_chars=int(os.getenv("SCOUT_MAX_INPUT_CHARS", "12000")),
             temperature=float(os.getenv("SCOUT_TEMPERATURE", "0.2")),
+            dev_cors=_env_flag("SCOUT_DEV_CORS", True),
         )
 
 

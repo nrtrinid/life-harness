@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.middleware.cors import CORSMiddleware
 
 from app.config import Settings, get_settings
 from app.models import (
@@ -40,6 +41,23 @@ app = FastAPI(
     description="Local scout gateway — mock default, OpenVINO optional.",
     version="0.3.0",
 )
+
+# Expo web (localhost / 127.0.0.1) needs CORS for browser fetch; off when SCOUT_DEV_CORS=false.
+_EXPO_WEB_ORIGIN_RE = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
+def _configure_dev_cors(settings: Settings) -> None:
+    if not settings.dev_cors:
+        return
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=_EXPO_WEB_ORIGIN_RE,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
+    )
+
+
+_configure_dev_cors(get_settings())
 
 
 def create_provider(settings: Settings) -> TranscriptProvider:

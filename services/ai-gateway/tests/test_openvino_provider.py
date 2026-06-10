@@ -60,6 +60,7 @@ def test_openvino_rejects_overlong_input(openvino_settings):
         timeout_seconds=openvino_settings.timeout_seconds,
         max_input_chars=50,
         temperature=openvino_settings.temperature,
+        dev_cors=openvino_settings.dev_cors,
     )
     provider = OpenVinoProvider(openvino_settings)
     request = AnalyzeTranscriptRequest(

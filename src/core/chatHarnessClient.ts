@@ -12,6 +12,9 @@ export const ANDROID_EMULATOR_CHAT_HARNESS_URL = "http://10.0.2.2:8111";
 export const PHYSICAL_DEVICE_URL_HINT =
   "On a physical phone, use your computer's LAN IP (e.g. http://192.168.1.10:8111).";
 
+export const CHAT_HARNESS_CORS_HINT =
+  "If GET /health works in PowerShell but Expo web fails, enable dev CORS on ai-gateway (SCOUT_DEV_CORS, default on).";
+
 export class ChatHarnessError extends Error {
   status?: number;
 
@@ -48,6 +51,29 @@ function parseErrorDetail(body: string): string | undefined {
     return undefined;
   }
   return undefined;
+}
+
+function isBrowserFetchFailure(error: unknown): boolean {
+  if (!(error instanceof TypeError)) {
+    return false;
+  }
+  const lowered = error.message.toLowerCase();
+  return (
+    lowered.includes("failed to fetch") ||
+    lowered.includes("networkerror") ||
+    lowered.includes("load failed") ||
+    lowered.includes("network request failed")
+  );
+}
+
+export function chatHarnessFetchFailureMessage(baseUrl: string, error: unknown): string {
+  if (isBrowserFetchFailure(error)) {
+    return `Browser could not complete the request to ${baseUrl}. ${CHAT_HARNESS_CORS_HINT} Otherwise confirm the gateway is running on that host and port.`;
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return `Could not reach Chat Harness at ${baseUrl}: ${error.message}`;
+  }
+  return `Local ai-gateway is not reachable at ${baseUrl}.`;
 }
 
 export function parseChatHarnessResponse(payload: unknown): ChatHarnessResponse {
@@ -101,8 +127,8 @@ export async function askChatHarness(input: AskChatHarnessInput): Promise<ChatHa
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-  } catch {
-    throw new ChatHarnessError(`Local ai-gateway is not reachable at ${baseUrl}.`);
+  } catch (error) {
+    throw new ChatHarnessError(chatHarnessFetchFailureMessage(baseUrl, error));
   }
 
   const responseText = await response.text();
