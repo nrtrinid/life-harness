@@ -13,7 +13,9 @@ import { Platform } from "react-native";
 
 import {
   applyAddJobSource,
+  applyClearCareerSourcePack,
   applyApproveJobCandidate,
+  applyImportCareerSourcePack,
   applyCardStateChange,
   applyCareerIntake,
   applyDismissJobCandidate,
@@ -114,6 +116,8 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   approveJobCandidate: (
     candidateId: string
   ) => { ok: boolean; message?: string; cardId?: string; candidateId?: string };
+  importCareerSourcePack: (json: string) => { ok: boolean; message?: string };
+  clearCareerSourcePack: () => { ok: boolean; message?: string };
   addJobSource: (input: JobSourceInput) => { ok: boolean; message?: string };
   saveJobSourceFromSetup: (
     input: JobSourceInput,
@@ -362,6 +366,28 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
         };
       }
       return { ok: false, message: result.message };
+    },
+    [state]
+  );
+
+  const importCareerSourcePack = useCallback(
+    (json: string) => {
+      const result = applyImportCareerSourcePack(state, json);
+      if (result.ok) {
+        dispatch({ type: "state_replaced", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
+  const clearCareerSourcePack = useCallback(
+    () => {
+      const result = applyClearCareerSourcePack(state);
+      if (result.ok) {
+        dispatch({ type: "state_replaced", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
     },
     [state]
   );
@@ -659,6 +685,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       saveJobCandidate: saveJobCandidateAction,
       dismissJobCandidate: dismissJobCandidateAction,
       approveJobCandidate: approveJobCandidateAction,
+      importCareerSourcePack,
+      clearCareerSourcePack,
       addJobSource: addJobSourceAction,
       saveJobSourceFromSetup,
       updateJobSource: updateJobSourceAction,
@@ -692,6 +720,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       saveJobCandidateAction,
       dismissJobCandidateAction,
       approveJobCandidateAction,
+      importCareerSourcePack,
+      clearCareerSourcePack,
       addJobSourceAction,
       saveJobSourceFromSetup,
       updateJobSourceAction,

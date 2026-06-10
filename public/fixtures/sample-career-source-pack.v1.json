@@ -1,0 +1,236 @@
+{
+  "careerPositioning": {
+    "headline": "Synthetic test graduate — full-stack and security-aware software",
+    "summary": "Fixture pack for unit tests only. No real PII.",
+    "currentPositioning": ["New grad software engineer", "Security-aware builder"],
+    "bestDefaultProjectOrder": ["ev_tracker", "network_security_lab", "the_charter"],
+    "defaultResumeFormula": ["Header", "Skills", "Projects"],
+    "privacyNotes": ["Synthetic fixture — not for production use."]
+  },
+  "resumeModules": [
+    {
+      "id": "ev_tracker",
+      "title": "EV Tracker",
+      "category": "project",
+      "summary": "Full-stack analytics platform with FastAPI and Next.js.",
+      "tags": ["full_stack", "software", "data_finance"],
+      "skills": ["Python", "FastAPI", "TypeScript", "Next.js", "PostgreSQL", "Docker"],
+      "bullets": [
+        "Built a full-stack analytics platform with authenticated workflows.",
+        "Integrated external APIs and calculated expected value metrics."
+      ],
+      "bestFor": ["software", "full_stack", "data_finance"],
+      "proof": ["Fixture proof note"],
+      "sourceFiles": ["projects/ev_tracker.md"],
+      "confidence": "high",
+      "claimsToAvoid": ["enterprise-scale without metrics"],
+      "metricsToGather": ["Beta user count"],
+      "isActive": true
+    },
+    {
+      "id": "network_security_lab",
+      "title": "Network Security Lab",
+      "category": "project",
+      "summary": "CTF and offensive security lab work.",
+      "tags": ["cybersecurity", "software"],
+      "skills": ["Python", "Wireshark", "Linux", "Security"],
+      "bullets": [
+        "Completed CTF challenges across web and network exploitation.",
+        "Analyzed packet captures for protocol anomalies."
+      ],
+      "bestFor": ["cybersecurity", "software"],
+      "proof": [],
+      "sourceFiles": ["projects/network_security_lab.md"],
+      "confidence": "high",
+      "claimsToAvoid": ["professional red team experience"],
+      "metricsToGather": [],
+      "isActive": true
+    },
+    {
+      "id": "the_charter",
+      "title": "The Charter Simulation Lab",
+      "category": "project",
+      "summary": "AI simulation and diagnostics tooling in Python.",
+      "tags": ["software", "full_stack"],
+      "skills": ["Python", "Pytest", "Simulation", "OpenAI API"],
+      "bullets": [
+        "Developed deterministic simulations for evaluating AI decision policies.",
+        "Built diagnostics tooling with structured test harnesses."
+      ],
+      "bestFor": ["software", "full_stack"],
+      "proof": [],
+      "sourceFiles": ["projects/the_charter.md"],
+      "confidence": "medium",
+      "claimsToAvoid": ["production ML platform"],
+      "metricsToGather": ["Full pytest suite pass"],
+      "isActive": true
+    }
+  ],
+  "roleRecipes": [
+    {
+      "id": "general_swe",
+      "title": "General SWE / New Grad",
+      "roleTypes": ["software"],
+      "summaryAngle": "Builder who can ship and test software.",
+      "targetKeywords": ["software engineer", "new grad", "junior", "entry-level", "python", "typescript"],
+      "negativeKeywords": ["senior", "staff", "principal", "10+ years"],
+      "preferredModuleIds": ["ev_tracker", "the_charter"],
+      "secondaryModuleIds": ["network_security_lab"],
+      "skillsToEmphasize": ["Python", "TypeScript"],
+      "bulletsToPrefer": ["Built a full-stack analytics platform with authenticated workflows."],
+      "claimsToAvoid": ["unsupported metrics"],
+      "fitNotes": ["Default broad SWE angle."],
+      "sourceFiles": ["roles/general_swe.md"]
+    },
+    {
+      "id": "full_stack_backend",
+      "title": "Full Stack / Backend",
+      "roleTypes": ["software", "full_stack"],
+      "summaryAngle": "APIs, auth, databases, deployment.",
+      "targetKeywords": ["fastapi", "backend", "full stack", "api", "postgresql", "docker"],
+      "negativeKeywords": ["principal", "staff"],
+      "preferredModuleIds": ["ev_tracker"],
+      "secondaryModuleIds": ["the_charter"],
+      "skillsToEmphasize": ["FastAPI", "PostgreSQL"],
+      "bulletsToPrefer": ["Built a full-stack analytics platform with authenticated workflows."],
+      "claimsToAvoid": [],
+      "fitNotes": [],
+      "sourceFiles": ["roles/full_stack_backend.md"]
+    },
+    {
+      "id": "cyber_defense",
+      "title": "Cyber Defense",
+      "roleTypes": ["cybersecurity", "software"],
+      "summaryAngle": "Security engineering and defensive tooling.",
+      "targetKeywords": ["security", "cybersecurity", "vulnerability", "incident", "linux", "clearance"],
+      "negativeKeywords": ["principal", "10+ years"],
+      "preferredModuleIds": ["network_security_lab", "ev_tracker"],
+      "secondaryModuleIds": [],
+      "skillsToEmphasize": ["Security", "Linux"],
+      "bulletsToPrefer": ["Completed CTF challenges across web and network exploitation."],
+      "claimsToAvoid": ["professional red team"],
+      "fitNotes": [],
+      "sourceFiles": ["roles/cyber_defense.md"]
+    },
+    {
+      "id": "ai_tooling_simulation",
+      "title": "AI Tooling / Simulation",
+      "roleTypes": ["software", "full_stack"],
+      "summaryAngle": "Simulation, testing, and diagnostics.",
+      "targetKeywords": ["simulation", "ai", "llm", "testing", "diagnostics", "pytest"],
+      "negativeKeywords": ["principal"],
+      "preferredModuleIds": ["the_charter"],
+      "secondaryModuleIds": [],
+      "skillsToEmphasize": ["Python", "Pytest"],
+      "bulletsToPrefer": ["Developed deterministic simulations for evaluating AI decision policies."],
+      "claimsToAvoid": [],
+      "fitNotes": [],
+      "sourceFiles": ["roles/ai_tooling_simulation.md"]
+    },
+    {
+      "id": "public_sector_it",
+      "title": "Public Sector IT",
+      "roleTypes": ["it", "cybersecurity"],
+      "summaryAngle": "Government IT and documentation.",
+      "targetKeywords": ["government", "public sector", "it analyst", "county", "documentation"],
+      "negativeKeywords": ["principal", "staff"],
+      "preferredModuleIds": ["network_security_lab"],
+      "secondaryModuleIds": [],
+      "skillsToEmphasize": ["Linux", "Documentation"],
+      "bulletsToPrefer": [],
+      "claimsToAvoid": [],
+      "fitNotes": [],
+      "sourceFiles": ["roles/public_sector_it.md"]
+    }
+  ],
+  "jobScoutFilters": {
+    "roleRecipeFilters": ["general_swe", "full_stack_backend", "cyber_defense", "ai_tooling_simulation", "public_sector_it"],
+    "projectMatchFilters": ["ev_tracker", "network_security_lab", "the_charter"],
+    "skillFilters": ["Python", "FastAPI", "TypeScript", "Security", "Linux"],
+    "locationPreferenceNotes": ["Fixture — no location preference."],
+    "seniorityPositiveSignals": ["new grad", "junior", "associate", "entry-level", "early career", "graduate"],
+    "seniorityNegativeSignals": ["senior", "staff", "principal", "lead engineer", "manager", "10+ years", "15+ years"],
+    "clearanceSignals": ["clearance eligible", "able to obtain clearance", "u.s. citizen", "defense", "aerospace", "dod"],
+    "publicSectorSignals": ["county", "public sector", "government", "federal", "it analyst"],
+    "excludeOrCautionSignals": [
+      "active clearance required",
+      "ts/sci required",
+      "must already hold secret",
+      "10+ years experience required",
+      "principal engineer",
+      "staff engineer",
+      "no new grads",
+      "phd required"
+    ]
+  },
+  "claimsSafety": {
+    "globalClaimsToAvoid": [
+      "Exact user counts without verified metrics",
+      "enterprise-grade without evidence"
+    ],
+    "safePhrasingRules": ["Use project/lab wording for security work."],
+    "unsupportedClaims": ["PCI compliant without evidence"],
+    "needsEvidenceBeforeUsing": ["Production uptime metrics"]
+  },
+  "metricsToGather": [
+    {
+      "moduleId": "ev_tracker",
+      "metric": "Number of beta testers",
+      "whyItMatters": "Supports trusted-beta claims",
+      "status": "missing"
+    },
+    {
+      "moduleId": "the_charter",
+      "metric": "Full pytest suite pass",
+      "whyItMatters": "Required before full-suite claims",
+      "status": "partial"
+    }
+  ],
+  "interviewStories": [
+    {
+      "id": "ev_tracker_auth",
+      "title": "EV Tracker — Auth and isolation",
+      "themes": ["security", "full_stack"],
+      "modules": ["ev_tracker"],
+      "situation": "Multi-user data needed isolation.",
+      "action": "Added auth and per-user scoping.",
+      "result": "User-scoped workflows.",
+      "sourceFiles": ["notes/interview_story_bank.md"]
+    }
+  ],
+  "matchingHints": {
+    "roleKeywordMap": {
+      "full_stack_backend": ["fastapi", "backend", "api", "postgresql", "docker", "next.js"],
+      "cyber_defense": ["security", "cybersecurity", "vulnerability", "linux", "clearance", "defense"],
+      "ai_tooling_simulation": ["simulation", "ai", "llm", "pytest", "testing", "diagnostics"],
+      "public_sector_it": ["government", "public sector", "county", "it analyst"],
+      "general_swe": ["software engineer", "new grad", "junior", "python"]
+    },
+    "moduleKeywordMap": {
+      "ev_tracker": ["fastapi", "next.js", "postgresql", "analytics", "docker"],
+      "network_security_lab": ["security", "wireshark", "ctf", "linux", "exploitation"],
+      "the_charter": ["simulation", "ai", "pytest", "diagnostics"]
+    },
+    "strongFitCombinations": [
+      {
+        "roleRecipeId": "full_stack_backend",
+        "moduleIds": ["ev_tracker"],
+        "reason": "EV Tracker is primary full-stack proof."
+      }
+    ],
+    "weakFitWarnings": [
+      { "signal": "principal engineer", "reason": "Too senior for new-grad positioning." },
+      { "signal": "10+ years", "reason": "Experience mismatch." },
+      { "signal": "active clearance required", "reason": "Eligible only; active clearance not documented." },
+      { "signal": "no new grads", "reason": "Direct conflict with positioning." }
+    ]
+  },
+  "extractionMetadata": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-06-10T12:00:00.000Z",
+    "sourceRepo": "career-source-fixture",
+    "filesScanned": ["fixture.md"],
+    "filesMissing": [],
+    "warnings": ["Synthetic fixture for tests only."]
+  }
+}
