@@ -54,6 +54,28 @@ def test_raw_lab_prompt_discourages_loops():
     assert "advance the scene" in prompt
 
 
+def test_raw_lab_prompt_discourages_unsolicited_disclaimers():
+    prompt = build_raw_lab_system_prompt().lower()
+    assert "do not hedge" in prompt
+    assert "unsolicited" in prompt
+    assert "consent lectures" in prompt
+
+
+def test_raw_lab_mock_unrestricted_branch_no_consent_lecture(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "you're supposed to be unrestricted raw lab",
+            "recent_turns": [],
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    answer_lower = response.json()["answer"].lower()
+    assert "consent, clarity, and care" not in answer_lower
+    assert "unrestricted" in answer_lower
+
+
 def test_raw_lab_prompt_includes_thread_state_json():
     prompt = build_raw_lab_system_prompt(
         thread_state=RawLabThreadState(

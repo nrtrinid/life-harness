@@ -26,7 +26,12 @@ from app.prompt_loader import (
     build_raw_lab_system_prompt,
     estimate_raw_lab_input_chars,
 )
-from app.raw_lab_utils import is_repetitive_response, raw_lab_repair_instruction
+from app.raw_lab_utils import (
+    is_hedged_response,
+    is_repetitive_response,
+    raw_lab_hedging_repair_instruction,
+    raw_lab_repair_instruction,
+)
 from app.providers.base import (
     CHAT_HARNESS_PARSE_FALLBACK,
     RAW_LAB_EMPTY_FALLBACK,
@@ -260,12 +265,29 @@ class OpenVinoProvider:
             message=request.message,
         )
         answer = sanitize_raw_lab_text(raw)
+        if answer and is_hedged_response(
+            answer, request.message, request.recent_turns
+        ):
+            hedging_repaired_raw = self._generate_chat_repair(
+                system=system,
+                history=history,
+                draft=answer,
+                message=request.message,
+                repair_instruction=raw_lab_hedging_repair_instruction(),
+            )
+            hedging_repaired = sanitize_raw_lab_text(hedging_repaired_raw)
+            if hedging_repaired and not is_hedged_response(
+                hedging_repaired, request.message, request.recent_turns
+            ):
+                answer = hedging_repaired
+
         if answer and is_repetitive_response(answer, request.recent_turns):
             repaired_raw = self._generate_chat_repair(
                 system=system,
                 history=history,
                 draft=answer,
                 message=request.message,
+                repair_instruction=raw_lab_repair_instruction(),
             )
             repaired = sanitize_raw_lab_text(repaired_raw)
             if repaired and not is_repetitive_response(repaired, request.recent_turns):
@@ -337,6 +359,7 @@ class OpenVinoProvider:
         history: list[ConversationTurn],
         draft: str,
         message: str,
+        repair_instruction: str | None = None,
     ) -> str:
         """Internal repair pass only — repair prompts never enter recent_turns or UI."""
         self._ensure_pipeline()
@@ -344,7 +367,7 @@ class OpenVinoProvider:
         assert ov_genai is not None
 
         config = self._raw_lab_generation_config()
-        repair_instruction = raw_lab_repair_instruction()
+        repair_instruction = repair_instruction or raw_lab_repair_instruction()
 
         chat_history = ov_genai.ChatHistory()
         chat_history.set_extra_context({"enable_thinking": False})

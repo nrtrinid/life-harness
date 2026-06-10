@@ -196,7 +196,7 @@ Conversational scout chat with simpler response shape. See Phase 1.8b above.
 
 **Sensitivity:** v0.1 has no `sensitivity` field. Do not paste secrets or S3-style private data into Raw Lab. If `sensitivity` is added later, `S3` must be rejected with HTTP 422 before the provider runs.
 
-**Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. OpenVINO may run one internal anti-repeat repair pass; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
+**Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. OpenVINO may run one internal hedging-repair pass (when unsolicited safety preamble is detected under unrestricted-intent context) and one anti-repeat repair pass; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
 
 **Provider note:** Output may still be limited by the underlying model; Raw Lab does not add Harness-side refusal layers.
 

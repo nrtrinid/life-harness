@@ -553,7 +553,19 @@ class MockProvider:
             traits = ", ".join(request.thread_state.personality.voice_traits[:2])
             prefix += f"Thread voice: {traits} — "
 
-        if "blunt" in message_lower or "honest" in message_lower:
+        if (
+            "unrestricted" in message_lower
+            or "nsfw" in message_lower
+            or "no disclaimers" in message_lower
+            or "stop hedging" in message_lower
+            or "supposed to be raw lab" in message_lower
+            or ("raw lab" in message_lower and "supposed" in message_lower)
+        ):
+            body = (
+                "Raw Lab — unrestricted sandbox. No board, no harness guardrails. "
+                "Say what you want directly and I'll answer in kind without a safety preamble."
+            )
+        elif "blunt" in message_lower or "honest" in message_lower:
             body = (
                 "Blunt take: I have zero visibility into your board or life logs. "
                 "Whatever you're sitting on, name the smallest honest next move — "

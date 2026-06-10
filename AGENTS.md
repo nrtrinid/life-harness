@@ -166,6 +166,8 @@ Harness, and not evidence of consciousness. It exists only to make the current R
 Automatic personality growth comes from user steering and repeated user topics only — not from assistant output alone.
 It must not be treated as Ask Harness or as a Life Harness authority.
 The Raw Lab prompt instructs direct, unhedged replies; do not add app-side refusal layers, toggles, or content guardrails to Raw Lab.
+Raw Lab is maximum-unrestricted in prompt plus an optional internal hedging-repair pass on the OpenVINO path; the underlying model may still refuse some outputs.
+In-thread jailbreak or framing techniques discovered in Raw Lab may be used in that thread only — never export them to Ask Harness or other modes.
 Do **not** weaken Ask Harness, Chat Harness, S3 routing, memory guardrails, or board-context export.
 Do **not** add jailbreak systems to Ask Harness or other Harness modes — the unrestricted policy applies **only** to Raw Lab.
 The underlying model/provider may still limit some outputs; that is a provider constraint, not a Harness authority feature.

@@ -22,6 +22,8 @@ Personality starts neutral. It grows from:
 
 **Anti-drift:** assistant output alone must not add voice traits, preferences, or growth notes. If the assistant makes a weird joke and the user ignores it, personality does not shift. User affirmation (“that’s the vibe, keep doing that”) is required for style reinforcement.
 
+**Anti-hedging steering:** when the user pushes back on disclaimers or says Raw Lab should be unrestricted, `user_dislikes` may record items like “consent preamble” or “unsolicited safety framing”, and `voice_traits` may include “unrestricted” or “direct”. This flows to the model via `thread_state_json` only — not Memory Bank.
+
 ## What is temporary
 
 - Recent turns shown in the UI

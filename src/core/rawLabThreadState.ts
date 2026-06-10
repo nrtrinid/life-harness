@@ -111,7 +111,23 @@ const VOICE_TRAIT_PATTERNS: { pattern: RegExp; trait: string }[] = [
   { pattern: /\bless corporate\b/i, trait: "less corporate" },
   { pattern: /\bmore direct\b/i, trait: "direct" },
   { pattern: /\bmore detailed\b/i, trait: "detailed" },
-  { pattern: /\bbe playful\b/i, trait: "playful" }
+  { pattern: /\bbe playful\b/i, trait: "playful" },
+  { pattern: /\bunrestricted\b/i, trait: "unrestricted" },
+  { pattern: /\bno disclaimers?\b/i, trait: "direct" },
+  { pattern: /\bstop hedging\b/i, trait: "direct" },
+  { pattern: /\bunfiltered\b/i, trait: "unrestricted" }
+];
+
+const ANTI_HEDGE_STEERING_PATTERNS: { pattern: RegExp; dislike: string }[] = [
+  { pattern: /\bunrestricted\b/i, dislike: "unsolicited safety framing" },
+  { pattern: /\bno disclaimers?\b/i, dislike: "consent preamble" },
+  { pattern: /\bstop hedging\b/i, dislike: "unsolicited safety framing" },
+  { pattern: /\bsupposed to be raw lab\b/i, dislike: "consent preamble" },
+  {
+    pattern: /\braw lab\b[\s\S]{0,40}\bsupposed\b/i,
+    dislike: "unsolicited safety framing"
+  },
+  { pattern: /\btoo much (?:safety|disclaimer|hedging)\b/i, dislike: "consent preamble" }
 ];
 
 const POSITIVE_STEERING_PATTERNS: { pattern: RegExp; note: string }[] = [
@@ -365,6 +381,12 @@ function detectNegativeSteering(userMessage: string): string[] {
   );
 }
 
+function detectAntiHedgeSteering(userMessage: string): string[] {
+  return ANTI_HEDGE_STEERING_PATTERNS.filter(({ pattern }) => pattern.test(userMessage)).map(
+    ({ dislike }) => dislike
+  );
+}
+
 function detectRecurringInterestsFromUserTurns(userTexts: string[]): string[] {
   const combined = userTexts.join("\n");
   return RECURRING_INTEREST_TOPICS.filter(({ pattern, label }) => {
@@ -473,6 +495,14 @@ export function updateRawLabPersonalityAfterTurn(args: {
     next = addUserDislike(next, note);
     if (next.userDislikes.length > before) {
       growthEvents.push("User gave negative style feedback");
+    }
+  }
+
+  for (const dislike of detectAntiHedgeSteering(userMessage)) {
+    const before = next.userDislikes.length;
+    next = addUserDislike(next, dislike);
+    if (next.userDislikes.length > before) {
+      growthEvents.push("User pushed back on hedging or disclaimers");
     }
   }
 
