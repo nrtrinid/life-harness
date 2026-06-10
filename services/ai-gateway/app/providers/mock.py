@@ -556,8 +556,11 @@ class MockProvider:
                 ),
             )
 
+        from app.chat_harness_thinking_trace import emit_thinking_trace, new_thinking_trace
+
         settings = get_settings()
         prompt = build_chat_harness_prompt(request=request)
+        trace = new_thinking_trace(request) if settings.debug_thinking_trace else None
         stored_draft: ChatHarnessResponse | None = None
         last_verdict: list[ChatHarnessCriticVerdict] = []
 
@@ -589,7 +592,7 @@ class MockProvider:
             return stored_draft.model_dump_json()
 
         critic = _CapturingCritic(
-            get_critic_backend(settings, lambda _prompt: "{}")
+            get_critic_backend(settings, lambda _prompt: "{}", routing=trace)
         )
         raw, revised = run_chat_harness_deep(
             request=request,
@@ -597,7 +600,9 @@ class MockProvider:
             draft_generate=draft_generate,
             critic=critic,
             max_extra_passes=settings.deep_max_extra_passes,
+            trace=trace,
         )
+        emit_thinking_trace(settings, trace)
         response = append_deep_critic_note(
             ChatHarnessResponse.model_validate_json(raw),
             revised=revised,

@@ -22,6 +22,7 @@ Local scout gateway for Life Harness: transcript analysis, grounded chat (Ask/Ch
 - `conversation_history` — prior turns; assistant content = answer text only
 - `thread_state` — temporary working memory (no personality)
 - `reasoning_depth` — `fast` (default), `deliberate`, or `deep`
+- `SCOUT_DEBUG_THINKING_TRACE` — default `false`; when `true`, logs structured deep-mode pass metadata only (no chain-of-thought, no response schema change)
 - `SCOUT_CRITIC_SLOT=secondary` — deep critic via `critic_fast` (`critic_small` in yaml v2) + `LlamaCppCriticBackend` (HTTP to external `llama-server`); disabled slot falls back to same/mock; see [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md)
 - Frozen model roles / load policy: [docs/plans/model-stack-freeze-v3.md](../../docs/plans/model-stack-freeze-v3.md)
 

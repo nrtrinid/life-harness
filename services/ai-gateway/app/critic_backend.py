@@ -5,6 +5,10 @@ import re
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+class CriticRoutingObserver(Protocol):
+    fallback_used: bool
+    fail_soft_reason: str | None
+
 from app.backends.llamacpp_backend import LlamaCppBackend, LlamaCppError
 from app.chat_harness_critic import parse_critic_verdict, pass_verdict
 from app.config import Settings, get_slot_registry
@@ -220,7 +224,11 @@ def _same_path_critic(settings: Settings, generate: GenerateFn) -> CriticBackend
     return SameBackendCritic(generate=generate)
 
 
-def get_critic_backend(settings: Settings, generate: GenerateFn) -> CriticBackend:
+def get_critic_backend(
+    settings: Settings,
+    generate: GenerateFn,
+    routing: CriticRoutingObserver | None = None,
+) -> CriticBackend:
     if settings.critic_slot != "secondary":
         return _same_path_critic(settings, generate)
 
@@ -231,6 +239,9 @@ def get_critic_backend(settings: Settings, generate: GenerateFn) -> CriticBacken
             "SCOUT_CRITIC_SLOT=secondary but critic_small is disabled; "
             "falling back to same-path critic"
         )
+        if routing is not None:
+            routing.fallback_used = True
+            routing.fail_soft_reason = "secondary_slot_disabled"
         return _same_path_critic(settings, generate)
 
     try:
@@ -240,6 +251,9 @@ def get_critic_backend(settings: Settings, generate: GenerateFn) -> CriticBacken
             "SCOUT_CRITIC_SLOT=secondary but critic_small acquire failed; "
             "falling back to same-path critic"
         )
+        if routing is not None:
+            routing.fallback_used = True
+            routing.fail_soft_reason = "secondary_acquire_failed"
         return _same_path_critic(settings, generate)
 
     backend = acquired.backend
@@ -248,6 +262,9 @@ def get_critic_backend(settings: Settings, generate: GenerateFn) -> CriticBacken
             "SCOUT_CRITIC_SLOT=secondary but critic_small backend unavailable; "
             "falling back to same-path critic"
         )
+        if routing is not None:
+            routing.fallback_used = True
+            routing.fail_soft_reason = "secondary_backend_unavailable"
         return _same_path_critic(settings, generate)
 
     return LlamaCppCriticBackend(backend=backend)

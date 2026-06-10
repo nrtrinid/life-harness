@@ -45,6 +45,7 @@ def _settings(
         critic_model="phi-4-reasoning-plus",
         critic_timeout_seconds=30.0,
         critic_heavy=False,
+        debug_thinking_trace=False,
     )
 
 

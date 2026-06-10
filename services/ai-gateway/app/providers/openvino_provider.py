@@ -259,13 +259,24 @@ class OpenVinoProvider:
                 f"{self._settings.max_input_chars}"
             )
 
+        from app.chat_harness_thinking_trace import emit_thinking_trace, new_thinking_trace
+
+        trace = (
+            new_thinking_trace(request) if self._settings.debug_thinking_trace else None
+        )
         raw, revised = run_chat_harness_deep(
             request=request,
             prompt=prompt,
             draft_generate=self._generate,
-            critic=get_critic_backend(self._settings, self._generate),
+            critic=get_critic_backend(
+                self._settings,
+                self._generate,
+                routing=trace,
+            ),
             max_extra_passes=self._settings.deep_max_extra_passes,
+            trace=trace,
         )
+        emit_thinking_trace(self._settings, trace)
         response = append_deep_critic_note(
             self._parse_chat_harness_raw(raw),
             revised=revised,

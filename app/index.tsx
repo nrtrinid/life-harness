@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { Link, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -104,7 +104,7 @@ export default function TodayScreen() {
             </Text>
           </Pressable>
         ) : primaryAction.targetRoute ? (
-          <Link href={primaryAction.targetRoute} asChild>
+          <Link href={primaryAction.targetRoute as Href} asChild>
             <Pressable style={styles.primaryAction}>
               <Text style={styles.primaryActionText}>{primaryAction.ctaLabel ?? "Go"}</Text>
             </Pressable>

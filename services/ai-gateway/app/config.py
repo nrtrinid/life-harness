@@ -135,6 +135,8 @@ class Settings:
 
     critic_heavy: bool
 
+    debug_thinking_trace: bool
+
     @classmethod
 
     def from_env(cls) -> "Settings":
@@ -238,6 +240,8 @@ class Settings:
             ),
 
             critic_heavy=_env_flag("SCOUT_CRITIC_HEAVY", False),
+
+            debug_thinking_trace=_env_flag("SCOUT_DEBUG_THINKING_TRACE", False),
 
         )
 

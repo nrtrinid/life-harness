@@ -296,6 +296,10 @@ Success: job `completed`, `critique` present, verifier-valid body, no mock-fallb
 
 Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from synthesis `SCOUT_CRITIC_RUNTIME`.
 
+**Deep mode debug trace** (dev only): `SCOUT_DEBUG_THINKING_TRACE=true` logs structured pass metadata (`draft` / `critic` / `revision` latencies, critic backend, check ids, parse/fail-soft reasons) to gateway logs. Default **off**. Does not change `ChatHarnessResponse` or expose chain-of-thought.
+
+**Manual Chat Harness deep + secondary critic smoke:** [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) and [`scripts/smoke_deep_critic.py`](scripts/smoke_deep_critic.py). Record results in [docs/phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md). `critic_small.enabled` must be set manually in `models.yaml`; llama-server is started externally. No CI GPU requirement.
+
 ### `POST /raw-lab`
 
 **Unrestricted** isolated sandbox chat. **Not** Ask Harness or Chat Harness. App-side prompt policy is direct and unhedged; only Life Harness isolation constraints apply (no board, no tools, no mutations).
@@ -377,6 +381,7 @@ Parse/validate in Python: `from app.config import get_slot_registry`.
 | `SCOUT_RAW_LAB_REPETITION_PENALTY` | `1.12` | Repetition penalty for Raw Lab (when supported by OpenVINO) |
 | `SCOUT_DEEP_ENABLED` | `true` | Enable structured deep critic pass for Chat Harness |
 | `SCOUT_DEEP_MAX_EXTRA_PASSES` | `2` | Max extra provider passes after draft (1 = critic only, 2 = critic + final revision) |
+| `SCOUT_DEBUG_THINKING_TRACE` | `false` | Log structured deep-mode pass metadata to gateway logs (`chat_harness_thinking_trace`); does not change HTTP response |
 | `SCOUT_CRITIC_SLOT` | `same` | Critic backend: `same` (shared `companion_fast` / mock rules). `secondary` → `critic_small` via llama.cpp HTTP when slot enabled — see [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) (manual A770 smoke: [phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md)) |
 | `SCOUT_CRITIC_MODEL_PATH` | *(unset)* | Optional path hint for `critic_small` in `models.yaml` (server loads weights; gateway does not) |
 | `SCOUT_CRITIC_RUNTIME` | `mock` | Deep Synthesis critic: `mock` (rules) or `llamacpp` (HTTP critic with mock fallback on failure) |

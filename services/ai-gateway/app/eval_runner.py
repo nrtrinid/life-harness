@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from app.eval_scorers import (
     check_forbid_substrings_in_fields,
     check_json_field_paths,
+    check_synthesis_proposals_require_approval,
+    check_synthesis_provenance,
     run_heuristic_checks,
     validate_response_schema,
 )
+from app.synthesis_models import DeepSynthesisCompletedBody
+from app.synthesis_verifier import verify_synthesis_completed
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 EVALS_ROOT = SERVICE_ROOT / "evals"
