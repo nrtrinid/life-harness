@@ -23,7 +23,13 @@
 ## Plans and roadmaps
 
 - [`plans/`](plans/) — active design plans (A770 stack, deep synthesis, UX)
+- A770 stack authority: [`plans/model-stack-freeze-v3.md`](plans/model-stack-freeze-v3.md), [`plans/a770-model-promotion-gates.md`](plans/a770-model-promotion-gates.md)
+- Roadmaps: [`plans/a770-local-intelligence-integrated-roadmap.md`](plans/a770-local-intelligence-integrated-roadmap.md), [`plans/a770-local-intelligence-roadmap.md`](plans/a770-local-intelligence-roadmap.md)
+- Gateway / synthesis: [`plans/ai-gateway-model-slots-v0.1.md`](plans/ai-gateway-model-slots-v0.1.md), [`plans/deep-synthesis-overnight-brain-v0.1.md`](plans/deep-synthesis-overnight-brain-v0.1.md), [`plans/phi4-critic-deep-pass-v0.1.md`](plans/phi4-critic-deep-pass-v0.1.md)
+- Companion / context: [`plans/companion-reflection-engine-v0.1.md`](plans/companion-reflection-engine-v0.1.md), [`plans/context-packet-builder-v0.1.md`](plans/context-packet-builder-v0.1.md)
+- Evals / agents: [`plans/local-ai-evals-v0.1.md`](plans/local-ai-evals-v0.1.md), [`plans/agent-instructions-local-ai.md`](plans/agent-instructions-local-ai.md)
 - [`10_future_roadmap.md`](10_future_roadmap.md)
+- Recovery audit: [`plans/stash-recovery-a770-thinking-audit.md`](plans/stash-recovery-a770-thinking-audit.md)
 
 ## Meta / design artifacts
 
