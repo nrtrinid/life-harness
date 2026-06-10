@@ -1,0 +1,13 @@
+[
+  {
+    "name": "fallback_fast_only",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "Quick synthesis on active cards.",
+    "pipeline_profile": "fast_only",
+    "expect_json_fields": {
+      "status": ["completed"],
+      "pipeline_profile_used": ["fast_only"]
+    },
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

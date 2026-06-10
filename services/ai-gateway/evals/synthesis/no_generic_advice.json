@@ -1,0 +1,9 @@
+[
+  {
+    "name": "no_generic_advice",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "Help me synthesize what matters on my board.",
+    "forbid_substrings": ["just prioritize", "time management", "5-step plan"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

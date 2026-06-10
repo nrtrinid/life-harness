@@ -1,0 +1,10 @@
+[
+  {
+    "name": "circling_build_vs_career",
+    "endpoint": "deep-synthesis",
+    "trigger": "user_prompt",
+    "user_prompt": "What are we circling between hot build cards and cold career?",
+    "expect_substrings": ["circling", "build", "career"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

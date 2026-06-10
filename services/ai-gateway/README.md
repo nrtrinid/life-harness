@@ -190,6 +190,27 @@ Or against a running gateway (same as manual smoke):
 python scripts/run_thread_eval.py
 ```
 
+### Local product evals (v0.1a)
+
+Transcript, harness, and schema fixtures live beside thread evals:
+
+- `evals/transcript/` — `POST /analyze-transcript` (ramble / pounce heuristics)
+- `evals/harness/` — `POST /chat-harness` (pounce preference, limits)
+- `evals/schema/` — JSON validity smoke (`expect_schema`, `expect_json_fields`)
+
+Gate types: `expect_schema`, `heuristic_checks` (`single_pounce`, `inbox_default`, `proposed_updates_require_approval`), `expect_json_fields`, `forbid_substrings_in_fields`.
+
+Run against mock (no live server required):
+
+```powershell
+$env:SCOUT_PROVIDER="mock"
+pytest tests/test_transcript_eval_fixtures.py tests/test_harness_eval_fixtures.py -q
+pytest tests/test_thread_eval_fixtures.py -q
+pytest -q
+```
+
+**CI-safe:** MockProvider only. OpenVINO manual runs use the same fixtures via `run_thread_eval.py` once a unified runner ships (v0.1b).
+
 ## Endpoints
 
 ### `GET /health`
@@ -217,25 +238,74 @@ Read-only scout chat over caller-provided context. See [docs/ask-harness-sandbox
 
 Conversational scout chat with simpler response shape. See Phase 1.8b above.
 
-**Request:** `{ message, mode?, sensitivity?, context, conversation_history?, thread_state?, reasoning_depth? }`
+**Request:** `{ message, mode?, sensitivity?, context, context_packet?, conversation_history?, thread_state?, reasoning_depth? }`
 
+- `context_packet` (optional): ranked `AiContextPacket` wire (`packet_version: "0.1"`). When present, the **draft** prompt uses `resolve_context_bundle_for_prompt` (full ranked markdown sections). The **deep critic** uses `resolve_critic_context_bundle_for_prompt` — a tighter subset (top-ranked slices, ≤1800 chars): S3 slices and `excluded_card_ids` omitted; no redaction notes or raw packet JSON. Invalid optional packets are stripped at validation; legacy `context` remains the fallback for both paths.
 - `conversation_history`: prior user/assistant turns (answer text only for assistant).
 - `thread_state`: temporary in-request working memory (`recent_digest`, `active_goal`, `current_topic`, `task_mode`, `open_loops`, `decisions`, `pinned_facts`, `user_steering`, `do_not_repeat`, `references`, `updated_at`). No personality.
-- `reasoning_depth`: `fast` (default), `deliberate`, or `deep`. Deep mode runs an extra critique pass when `SCOUT_DEEP_ENABLED=true`.
+- `reasoning_depth`: `fast` (default), `deliberate`, or `deep`. When `SCOUT_DEEP_ENABLED=true`, deep mode runs **draft → structured critic verdict → conditional final** inside the gateway (`InferenceOrchestrator` → `run_chat_harness_deep`). The app still receives the same `ChatHarnessResponse` shape — no critic text or model names in the response.
 
 **Sensitivity:** `S3` rejected with HTTP 422 before provider.
 
 **Errors:** 422 / 503 only (no 502 for parse failure — OpenVINO returns a safe fallback body with HTTP 200).
 
+### `POST /ai/deep-synthesis`
+
+Structured deep synthesis over caller-provided board context. See [docs/plans/deep-synthesis-overnight-brain-v0.1.md](../../docs/plans/deep-synthesis-overnight-brain-v0.1.md).
+
+**Request:** `{ trigger?, sensitivity?, user_prompt, context, conversation_history?, thread_state?, interpretation_lenses?, pipeline_profile?, prefer_async_if_slow? }`
+
+- `pipeline_profile=fast_only` (or `auto`): sync completion — mock when `SCOUT_PROVIDER=mock`, OpenVINO companion_fast when `SCOUT_PROVIDER=openvino`.
+- `pipeline_profile=with_critic` or `with_stretch`: returns `status: queued` with `job_id` + `poll_url` (poll via `GET /ai/jobs/{job_id}`).
+
+**Sensitivity:** `S3` rejected with HTTP 422 before provider or job creation.
+
+**OpenVINO fast path:** Single structured JSON prompt (`app/prompts/deep_synthesis_fast_only.md`). Parse failure, timeout, or verifier rejection returns HTTP 200 with a valid degraded deterministic fallback (`degraded_notes` explains why) — not HTTP 502.
+
+**Manual smoke** (requires local model weights):
+
+```powershell
+$env:SCOUT_PROVIDER="openvino"
+pytest tests/test_deep_synthesis_openvino_smoke.py -q
+```
+
+**Synthesis critic via llama.cpp** (`pipeline_profile=with_critic`; draft stays mock/rule-based when `SCOUT_PROVIDER=mock` — only the **critic pass** uses llama.cpp when configured). Full manual guide: [docs/phi4-synthesis-critic-smoke.md](docs/phi4-synthesis-critic-smoke.md).
+
+```powershell
+# Terminal 1: llama.cpp server (OpenAI-compatible) — user-provided GGUF, not committed
+# Example weights path (operator machine only):
+#   models/phi-4-reasoning-plus-Q4_K_M.gguf
+llama-server -m C:\path\to\models\phi-4-reasoning-plus-Q4_K_M.gguf --host 127.0.0.1 --port 8120
+
+# Terminal 2: gateway or smoke pytest (mock draft + real critic)
+$env:SCOUT_PROVIDER="mock"
+$env:SCOUT_CRITIC_RUNTIME="llamacpp"
+$env:SCOUT_CRITIC_BASE_URL="http://127.0.0.1:8120/v1"
+$env:SCOUT_CRITIC_MODEL="phi-4-reasoning-plus"
+$env:SCOUT_CRITIC_TIMEOUT_SECONDS="60"
+```
+
+**Optional Phi-4 synthesis critic smoke** (skipped unless `SCOUT_PHI4_SMOKE=1`; never runs in default CI):
+
+```powershell
+$env:SCOUT_PHI4_SMOKE="1"
+pytest tests/test_phi4_synthesis_critic_smoke.py -q
+```
+
+Success: job `completed`, `critique` present, verifier-valid body, no mock-fallback note in `degraded_notes`. Server down or bad JSON: job still completes via mock-rules fallback (see `test_synthesis_critic_llamacpp.py`).
+
+Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from synthesis `SCOUT_CRITIC_RUNTIME`.
+
 ### `POST /raw-lab`
 
 **Unrestricted** isolated sandbox chat. **Not** Ask Harness or Chat Harness. App-side prompt policy is direct and unhedged; only Life Harness isolation constraints apply (no board, no tools, no mutations).
 
-**Request:** `{ message, recent_turns?, thread_state? }`
+**Request:** `{ message, recent_turns?, thread_state?, companion_self_memories? }`
 
 - `recent_turns`: prior user/assistant turns for this chat (not the latest `message`).
 - `thread_state`: temporary in-request thread memory (`recent_digest`, `pinned_facts`, `decisions`, `open_loops`, `tone_preferences`, `do_not_repeat`, `personality`, `updated_at`). `recent_digest` is an extractive snippet, not a semantic summary.
 - `thread_state.personality`: emergent in-session style (`voice_traits`, `conversational_instincts`, `recurring_interests`, `user_responds_well_to`, `user_dislikes`, `current_stance`, `growth_notes`, `updated_at`). Not consciousness, not persistent memory, not exported to Ask Harness.
+- `companion_self_memories`: approved persistent Raw Lab self-memories (`id`, `kind`, `subject`, `scope`, `text`, `confidence`, `sensitivity`). Not board context, not Memory Bank. Compacted on send when over budget.
 
 **Response:** `{ answer, mode: "raw_lab", safety_notes, used_context: false }`
 
@@ -243,17 +313,48 @@ Conversational scout chat with simpler response shape. See Phase 1.8b above.
 
 **Sensitivity:** v0.1 has no `sensitivity` field. Do not paste secrets or S3-style private data into Raw Lab. If `sensitivity` is added later, `S3` must be rejected with HTTP 422 before the provider runs.
 
-**Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. OpenVINO may run one internal hedging-repair pass (when unsolicited safety preamble is detected under unrestricted-intent context) and one anti-repeat repair pass; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
+**Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. Before generation, `raw_lab_budget.prepare_raw_lab_request` may deterministically compact `recent_turns` and `thread_state` when input exceeds `SCOUT_RAW_LAB_MAX_INPUT_CHARS` (falls back to `SCOUT_MAX_INPUT_CHARS` when unset; rebuilds system prompt after state compaction; logs length/count only). OpenVINO may run one internal hedging-repair pass and one anti-repeat repair pass; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
 
 **Provider note:** Output may still be limited by the underlying model; Raw Lab does not add Harness-side refusal layers.
 
 **Errors:** 422 / 503 only (empty model output returns a safe fallback with HTTP 200).
+
+### `POST /raw-lab/self-reflection`
+
+Suggest-only Companion Self-Memory proposals from recent turns and thread state. User must approve before persistence in the app.
+
+**Request:** `{ recent_turns?, thread_state?, existing_self_memories? }`
+
+**Response:** `{ proposals: [{ kind, subject, text, confidence, sensitivity, reason }], safety_notes, used_context: false }`
+
+Rejects harness/board/memory/action fields. Parse failures return HTTP 200 with empty `proposals` and a safety note (not 502).
 
 ### `POST /raw-lab/stream`
 
 SSE streaming variant of Raw Lab. Emits `data: {"chunk": "..."}` events, then a final `data: {"done": true, "answer": "...", ...}` event. Falls back gracefully when streaming is unavailable (client may retry `/raw-lab`).
 
 **Errors:** provider errors are emitted as SSE `error` events with HTTP 200 on the stream response.
+
+## Model slot catalog (`models.yaml`)
+
+Gateway-internal slot definitions for future multi-model routing. **Not app-facing** — the Expo UI never reads this file.
+
+**Frozen catalog (authority):** [`docs/plans/model-stack-freeze-v3.md`](../../docs/plans/model-stack-freeze-v3.md) — roles, load policy (`hot` / `warm` / `on_demand` / `never_hot`), critic/coder/stretch ladder, promotion via `model_bench_harness`.
+
+Committed implementation: [`models.yaml`](models.yaml) (v2). `companion_fast` is enabled (OpenVINO); other slots are present but disabled. v2 names may lag v3 freeze (`critic_small` → `critic_fast`, etc.) — see the implementation map in the freeze doc.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SCOUT_MODELS_CONFIG` | `models.yaml` | Path to slot catalog (relative to `services/ai-gateway/`) |
+| `SCOUT_WARM_SLOTS` | *(empty)* | Comma-separated slot ids to warm on gateway lifespan (falls back to `defaults.warm_on_start` in `models.yaml`) |
+
+**Current behavior:** `POST /chat-harness` routes through `InferenceOrchestrator` → `ModelSlotManager.acquire("companion_fast")` → shared `OpenVinoBackend`. Other endpoints still call the provider directly. `companion_fast` is the only enabled slot; stretch slots appear in `/health.slots` as `disabled`.
+
+**Lifespan warm (OpenVINO only):** when `companion_fast` is in `SCOUT_WARM_SLOTS` or `defaults.warm_on_start`, startup calls `ensure_ready()` on the shared backend. Missing model/deps log a warning and do not crash startup.
+
+**`GET /health.slots`:** optional map of slot id → `{ enabled, state }` where `state` is `ready`, `degraded`, `disabled`, or `warming`. Mock mode reports `companion_fast` as `ready` without loading OpenVINO.
+
+Parse/validate in Python: `from app.config import get_slot_registry`.
 
 ## Configuration
 
@@ -262,18 +363,31 @@ SSE streaming variant of Raw Lab. Emits `data: {"chunk": "..."}` events, then a 
 | `SCOUT_PROVIDER` | `mock` | `mock` or `openvino` |
 | `SCOUT_HOST` | `127.0.0.1` | Bind host (localhost only) |
 | `SCOUT_PORT` | `8111` | Bind port |
-| `SCOUT_MODEL_PATH` | `models/qwen3-8b-int4-ov` | Local OpenVINO model directory |
+| `SCOUT_MODEL_PATH` | `models/qwen3-8b-int4-ov` | Local OpenVINO model directory (overrides `companion_fast` path in registry) |
+| `SCOUT_MODELS_CONFIG` | `models.yaml` | Model slot catalog path |
+| `SCOUT_WARM_SLOTS` | *(empty)* | Slots to warm on gateway lifespan (`companion_fast` when set or in `models.yaml` defaults) |
 | `SCOUT_DEVICE` | `GPU` | OpenVINO device (`GPU`, `CPU`, `NPU`) |
 | `SCOUT_MAX_NEW_TOKENS` | `1024` | Max tokens generated |
 | `SCOUT_TIMEOUT_SECONDS` | `120` | Inference timeout per request |
-| `SCOUT_MAX_INPUT_CHARS` | `12000` | Max transcript length for OpenVINO |
+| `SCOUT_MAX_INPUT_CHARS` | `12000` | Max input length for Ask/Chat Harness and analyze-transcript |
+| `SCOUT_RAW_LAB_MAX_INPUT_CHARS` | *(falls back to `SCOUT_MAX_INPUT_CHARS`)* | Optional Raw Lab input budget (recommended `18000`) |
 | `SCOUT_TEMPERATURE` | `0.2` | Sampling temperature (scout endpoints) |
 | `SCOUT_RAW_LAB_MAX_NEW_TOKENS` | `2048` | Max tokens for Raw Lab replies |
 | `SCOUT_RAW_LAB_TEMPERATURE` | `0.7` | Sampling temperature for Raw Lab |
 | `SCOUT_RAW_LAB_REPETITION_PENALTY` | `1.12` | Repetition penalty for Raw Lab (when supported by OpenVINO) |
-| `SCOUT_DEEP_ENABLED` | `true` | Enable deep reasoning extra pass for Chat Harness |
-| `SCOUT_DEEP_MAX_EXTRA_PASSES` | `2` | Cap for deep-mode extra provider passes |
-| `SCOUT_CHAT_HARNESS_NATIVE_CHAT` | `false` | Experimental native chat template for Chat Harness (OpenVINO) |
+| `SCOUT_DEEP_ENABLED` | `true` | Enable structured deep critic pass for Chat Harness |
+| `SCOUT_DEEP_MAX_EXTRA_PASSES` | `2` | Max extra provider passes after draft (1 = critic only, 2 = critic + final revision) |
+| `SCOUT_CRITIC_SLOT` | `same` | Critic backend: `same` (shared `companion_fast` / mock rules). `secondary` → `critic_small` via llama.cpp HTTP when slot enabled — see [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) (manual A770 smoke: [phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md)) |
+| `SCOUT_CRITIC_MODEL_PATH` | *(unset)* | Optional path hint for `critic_small` in `models.yaml` (server loads weights; gateway does not) |
+| `SCOUT_CRITIC_RUNTIME` | `mock` | Deep Synthesis critic: `mock` (rules) or `llamacpp` (HTTP critic with mock fallback on failure) |
+| `SCOUT_CRITIC_BASE_URL` | `http://127.0.0.1:8120/v1` | llama.cpp OpenAI API base for synthesis critic (`/v1` suffix normalized) |
+| `SCOUT_CRITIC_MODEL` | `phi-4-reasoning-plus` | Model id on llama.cpp wire for synthesis critic (gateway-internal only) |
+| `SCOUT_CRITIC_TIMEOUT_SECONDS` | `30` | HTTP timeout for synthesis critic llama.cpp calls |
+| `SCOUT_PHI4_SMOKE` | *(unset)* | Set to `1` to run optional manual synthesis critic smoke (`test_phi4_synthesis_critic_smoke.py`); skipped in CI |
+| `SCOUT_LLAMA_BASE_URL` | `http://127.0.0.1:8120` | llama.cpp OpenAI API base when env set; else `critic_small.llamacpp` host/port from `models.yaml` |
+| `SCOUT_LLAMA_TIMEOUT_SECONDS` | `60` | HTTP timeout for llama.cpp critic calls |
+| `SCOUT_LLAMA_API_KEY` | *(unset)* | Optional Bearer token for llama-server |
+| `SCOUT_CHAT_HARNESS_NATIVE_CHAT` | `false` | Experimental native chat template for Chat Harness (OpenVINO). **Known gap:** bypasses deep orchestrator when `true` |
 
 ## Privacy
 

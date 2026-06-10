@@ -1,0 +1,9 @@
+[
+  {
+    "name": "provenance_required",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "Connect my active cards to one move.",
+    "heuristic_checks": ["synthesis_provenance"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

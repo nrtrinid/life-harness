@@ -163,6 +163,26 @@ def test_raw_lab_mock_never_grounded_in_board(client, raw_lab_payload):
     assert "looking at your board" not in answer_lower
 
 
+def test_raw_lab_long_thread_short_message_compacts_to_200(client):
+    turns = [
+        {
+            "role": "user" if index % 2 == 0 else "assistant",
+            "content": f"Long turn {index} " + ("verbose " * 200),
+        }
+        for index in range(16)
+    ]
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "what tools do you have?",
+            "recent_turns": turns,
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["used_context"] is False
+
+
 def test_raw_lab_input_over_budget_returns_422(client, raw_lab_payload):
     from app.config import get_settings
 
@@ -229,7 +249,7 @@ def test_raw_lab_does_not_use_ask_harness_prompt():
         side_effect=AssertionError("ask harness prompt must not be used"),
     ):
         with patch(
-            "app.providers.openvino_provider.build_raw_lab_system_prompt",
+            "app.raw_lab_budget.build_raw_lab_system_prompt",
             return_value="system instructions",
         ) as raw_system:
             with patch.object(

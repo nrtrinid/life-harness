@@ -1,5 +1,6 @@
 import json
 import logging
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
@@ -7,7 +8,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 
-from app.config import Settings, get_settings
+from app.config import Settings, get_settings, get_slot_registry
+from app.slots.manager import get_slot_manager
 from app.models import (
     AnalyzeTranscriptRequest,
     AnalyzeTranscriptResponse,
@@ -19,6 +21,8 @@ from app.models import (
     ProviderKind,
     RawLabRequest,
     RawLabResponse,
+    RawLabSelfReflectionRequest,
+    RawLabSelfReflectionResponse,
     SensitivityLevel,
 )
 from app.providers.base import (
@@ -27,8 +31,17 @@ from app.providers.base import (
     ProviderParseError,
     TranscriptProvider,
 )
+from app.deep_synthesis import run_deep_synthesis
 from app.providers.mock import MockProvider
 from app.providers.openvino_provider import OpenVinoProvider
+from app.synthesis_jobs import create_deep_synthesis_job, get_ai_job
+from app.synthesis_models import (
+    AiJobStatusResponse,
+    DeepSynthesisCompletedBody,
+    DeepSynthesisJobEnqueueResponse,
+    DeepSynthesisQueuedBody,
+    DeepSynthesisRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +51,24 @@ DEFAULT_CONTEXT_FIXTURE = (
     SERVICE_ROOT / "tests" / "fixtures" / "synthetic_harness_context.json"
 )
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    settings = get_settings()
+    if settings.provider == "openvino":
+        warm_slots = settings.warm_slots or get_slot_registry().config.defaults.warm_on_start
+        if "companion_fast" in warm_slots:
+            try:
+                get_slot_manager().warm("companion_fast")
+            except ProviderNotReadyError as exc:
+                logger.warning("companion_fast warm skipped: %s", exc.message)
+    yield
+
+
 app = FastAPI(
     title="Life Harness AI Gateway",
     description="Local scout gateway — mock default, OpenVINO optional.",
     version="0.3.0",
+    lifespan=lifespan,
 )
 
 # Expo web (localhost / 127.0.0.1) needs CORS for browser fetch; off when SCOUT_DEV_CORS=false.
@@ -85,6 +112,7 @@ def health() -> HealthResponse:
         model=ph.model,
         device=ph.device,
         message=ph.message,
+        slots=get_slot_manager().slot_health(),
     )
 
 
@@ -148,6 +176,61 @@ def ask_harness_endpoint(request: AskHarnessRequest) -> AskHarnessResponse:
         raise HTTPException(status_code=502, detail=exc.message) from exc
 
 
+@app.post(
+    "/ai/deep-synthesis",
+    response_model=DeepSynthesisCompletedBody | DeepSynthesisQueuedBody,
+)
+def deep_synthesis_endpoint(
+    request: DeepSynthesisRequest,
+) -> DeepSynthesisCompletedBody | DeepSynthesisQueuedBody:
+    if request.sensitivity == SensitivityLevel.S3:
+        raise HTTPException(
+            status_code=422,
+            detail="S3: excluded from synthesis",
+        )
+
+    logger.info(
+        "deep_synthesis trigger=%s sensitivity=%s prompt_len=%d context_cards=%d",
+        request.trigger.value,
+        request.sensitivity.value,
+        len(request.user_prompt),
+        len(request.context.cards),
+    )
+    return run_deep_synthesis(request, provider=get_provider())
+
+
+@app.post(
+    "/ai/deep-synthesis-jobs",
+    response_model=DeepSynthesisJobEnqueueResponse,
+)
+def deep_synthesis_jobs_endpoint(
+    request: DeepSynthesisRequest,
+) -> DeepSynthesisJobEnqueueResponse:
+    if request.sensitivity == SensitivityLevel.S3:
+        raise HTTPException(
+            status_code=422,
+            detail="S3: excluded from synthesis",
+        )
+
+    logger.info(
+        "deep_synthesis_job trigger=%s sensitivity=%s prompt_len=%d context_cards=%d profile=%s",
+        request.trigger.value,
+        request.sensitivity.value,
+        len(request.user_prompt),
+        len(request.context.cards),
+        request.pipeline_profile.value,
+    )
+    return create_deep_synthesis_job(request)
+
+
+@app.get("/ai/jobs/{job_id}", response_model=AiJobStatusResponse)
+def get_ai_job_endpoint(job_id: str) -> AiJobStatusResponse:
+    job = get_ai_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
 @app.post("/chat-harness", response_model=ChatHarnessResponse)
 def chat_harness_endpoint(request: ChatHarnessRequest) -> ChatHarnessResponse:
     if request.sensitivity == SensitivityLevel.S3:
@@ -184,10 +267,11 @@ def raw_lab_endpoint(request: RawLabRequest) -> RawLabResponse:
 
     provider = get_provider()
     logger.info(
-        "raw_lab provider=%s message_len=%d history_turns=%d",
+        "raw_lab provider=%s message_len=%d history_turns=%d self_memories=%d",
         provider.name,
         len(request.message),
         len(request.recent_turns),
+        len(request.companion_self_memories),
     )
 
     try:
@@ -202,6 +286,24 @@ def _chunk_text(text: str, chunk_size: int = 48) -> list[str]:
     if not text:
         return []
     return [text[index : index + chunk_size] for index in range(0, len(text), chunk_size)]
+
+
+@app.post("/raw-lab/self-reflection", response_model=RawLabSelfReflectionResponse)
+def raw_lab_self_reflection_endpoint(
+    request: RawLabSelfReflectionRequest,
+) -> RawLabSelfReflectionResponse:
+    provider = get_provider()
+    logger.info(
+        "raw_lab_self_reflection provider=%s history_turns=%d existing_memories=%d",
+        provider.name,
+        len(request.recent_turns),
+        len(request.existing_self_memories),
+    )
+
+    try:
+        return provider.raw_lab_self_reflection(request)
+    except ProviderNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
 
 
 @app.post("/raw-lab/stream")

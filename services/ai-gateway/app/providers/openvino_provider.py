@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from pathlib import Path
 from typing import Any
 
+from app.backends.openvino_backend import (
+    missing_deps_message,
+    missing_model_message,
+    model_path_ready,
+)
 from app.config import Settings
+from app.slots.manager import get_slot_manager
 from app.models import (
     AnalyzeTranscriptRequest,
     AnalyzeTranscriptResponse,
@@ -18,17 +22,17 @@ from app.models import (
     ConversationTurn,
     RawLabRequest,
     RawLabResponse,
-    ReasoningDepth,
 )
 from app.prompt_loader import (
     build_analysis_prompt,
     build_ask_harness_prompt,
     build_chat_harness_prompt,
     build_chat_harness_system_prompt,
-    build_raw_lab_system_prompt,
     estimate_raw_lab_input_chars,
 )
 from app.chat_harness_finalize import finalize_chat_harness_response
+from app.deep_synthesis_openvino import run_openvino_fast_only
+from app.synthesis_models import DeepSynthesisCompletedBody, DeepSynthesisRequest
 from app.thread_verifier import VerificationResult, verify_raw_lab_response
 from app.raw_lab_utils import (
     is_hedged_response,
@@ -40,7 +44,6 @@ from app.providers.base import (
     CHAT_HARNESS_PARSE_FALLBACK,
     RAW_LAB_EMPTY_FALLBACK,
     ProviderInputError,
-    ProviderNotReadyError,
     ProviderParseError,
     parse_model_json,
     parse_strict_json,
@@ -49,13 +52,7 @@ from app.providers.base import (
 
 logger = logging.getLogger(__name__)
 
-try:
-    import openvino_genai as ov_genai
-
-    _OPENVINO_IMPORTABLE = True
-except ImportError:
-    ov_genai = None  # type: ignore[assignment,misc]
-    _OPENVINO_IMPORTABLE = False
+_model_path_ready = model_path_ready
 
 _REPAIR_PROMPT = """\
 The previous answer was not valid JSON for the required schema.
@@ -107,78 +104,61 @@ Broken answer text:
 {answer}
 """
 
-_CHAT_HARNESS_DEEP_CRITIQUE_PROMPT = """\
-Review this draft Chat Harness JSON answer for completeness, grounding, and repetition.
-User message: {message}
-Draft JSON: {draft}
-Return a brief critique (not JSON).
-"""
-
-def _model_path_ready(model_path: str) -> bool:
-    path = Path(model_path)
-    if not path.is_dir():
-        return False
-    markers = ("openvino_model.xml", "openvino_tokenizer.xml", "openvino_detokenizer.xml")
-    return any((path / name).is_file() for name in markers) or any(path.iterdir())
-
-
-def _missing_deps_message() -> str:
-    return (
-        "OpenVINO GenAI is not installed. "
-        "Install with: pip install -e \".[openvino]\" "
-        "(requires openvino-genai and huggingface_hub)."
-    )
-
-
-def _missing_model_message(settings: Settings) -> str:
-    return (
-        f"Model not found at {settings.model_path}. "
-        f"Download {settings.model_id} to that directory, e.g. "
-        "huggingface-cli download OpenVINO/Qwen3-8B-int4-ov "
-        f"--local-dir {settings.model_path}"
-    )
-
-
 class OpenVinoProvider:
     name = "openvino"
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._pipeline: Any | None = None
-        self._load_error: str | None = None
+        self._backend = get_slot_manager().companion_backend
+
+    @property
+    def _pipeline(self) -> Any | None:
+        return self._backend._pipeline
+
+    @_pipeline.setter
+    def _pipeline(self, value: Any | None) -> None:
+        self._backend._pipeline = value
+
+    @property
+    def _load_error(self) -> str | None:
+        return self._backend.load_error
+
+    @_load_error.setter
+    def _load_error(self, value: str | None) -> None:
+        self._backend._load_error = value
 
     def health(self) -> ProviderHealth:
         model = self._settings.model_id
         device = self._settings.device
 
-        if not _OPENVINO_IMPORTABLE:
+        if not self._backend.is_importable():
             return ProviderHealth(
                 status=HealthStatus.degraded,
                 provider_ready=False,
                 model=model,
                 device=device,
-                message=_missing_deps_message(),
+                message=missing_deps_message(),
             )
 
-        if not _model_path_ready(self._settings.model_path):
+        if not self._backend.is_model_path_ready():
             return ProviderHealth(
                 status=HealthStatus.degraded,
                 provider_ready=False,
                 model=model,
                 device=device,
-                message=_missing_model_message(self._settings),
+                message=missing_model_message(self._settings),
             )
 
-        if self._load_error:
+        if self._backend.load_error:
             return ProviderHealth(
                 status=HealthStatus.degraded,
                 provider_ready=False,
                 model=model,
                 device=device,
-                message=self._load_error,
+                message=self._backend.load_error,
             )
 
-        if self._pipeline is not None:
+        if self._backend.pipeline_loaded:
             return ProviderHealth(
                 status=HealthStatus.ok,
                 provider_ready=True,
@@ -245,6 +225,11 @@ class OpenVinoProvider:
                 ) from exc
 
     def chat_harness(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
+        from app.orchestrator.inference_orchestrator import get_inference_orchestrator
+
+        return get_inference_orchestrator().run_chat_harness(request)
+
+    def _run_chat_harness_impl(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
         self._ensure_pipeline()
         prompt = build_chat_harness_prompt(request=request)
         if len(prompt) > self._settings.max_input_chars:
@@ -255,15 +240,36 @@ class OpenVinoProvider:
 
         if self._settings.chat_harness_native_chat:
             raw = self._generate_chat_harness_native(request, prompt)
-        elif (
-            self._settings.deep_enabled
-            and request.reasoning_depth == ReasoningDepth.deep
-        ):
-            raw = self._generate_chat_harness_deep(request, prompt)
         else:
             raw = self._generate(prompt)
 
         response = self._parse_chat_harness_raw(raw)
+        return self._apply_chat_harness_verifier(request, response)
+
+    def _run_chat_harness_deep(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
+        from app.chat_harness_critic import append_deep_critic_note
+        from app.chat_harness_deep import run_chat_harness_deep
+        from app.critic_backend import get_critic_backend
+
+        self._ensure_pipeline()
+        prompt = build_chat_harness_prompt(request=request)
+        if len(prompt) > self._settings.max_input_chars:
+            raise ProviderInputError(
+                f"Serialized prompt length {len(prompt)} exceeds SCOUT_MAX_INPUT_CHARS="
+                f"{self._settings.max_input_chars}"
+            )
+
+        raw, revised = run_chat_harness_deep(
+            request=request,
+            prompt=prompt,
+            draft_generate=self._generate,
+            critic=get_critic_backend(self._settings, self._generate),
+            max_extra_passes=self._settings.deep_max_extra_passes,
+        )
+        response = append_deep_critic_note(
+            self._parse_chat_harness_raw(raw),
+            revised=revised,
+        )
         return self._apply_chat_harness_verifier(request, response)
 
     def _generate_chat_harness_native(
@@ -292,36 +298,6 @@ class OpenVinoProvider:
                 "openvino chat_harness native chat parse failed; falling back to single prompt"
             )
             return self._generate(fallback_prompt)
-
-    def _generate_chat_harness_deep(
-        self, request: ChatHarnessRequest, prompt: str
-    ) -> str:
-        draft_raw = self._generate(prompt)
-        try:
-            parse_strict_json(draft_raw, ChatHarnessResponse)
-        except ProviderParseError:
-            return draft_raw
-
-        critique = self._generate(
-            _CHAT_HARNESS_DEEP_CRITIQUE_PROMPT.format(
-                message=request.message,
-                draft=draft_raw[:2000],
-            )
-        )
-        final_prompt = (
-            prompt
-            + "\n\nPrior draft:\n"
-            + draft_raw[:2000]
-            + "\n\nCritique:\n"
-            + critique[:800]
-            + "\n\nReturn ONLY the final corrected JSON object."
-        )
-        final_raw = self._generate(final_prompt)
-        try:
-            parse_strict_json(final_raw, ChatHarnessResponse)
-            return final_raw
-        except ProviderParseError:
-            return draft_raw
 
     def _parse_chat_harness_raw(self, raw: str) -> ChatHarnessResponse:
         try:
@@ -369,14 +345,31 @@ class OpenVinoProvider:
             repair_once=self._repair_chat_harness_openvino,
         )
 
+    def deep_synthesis_fast_only(
+        self, request: DeepSynthesisRequest
+    ) -> DeepSynthesisCompletedBody:
+        self._ensure_pipeline()
+        return run_openvino_fast_only(
+            request,
+            generate=self._generate,
+            max_input_chars=self._settings.max_input_chars,
+        )
+
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
         self._ensure_pipeline()
-        system = build_raw_lab_system_prompt(thread_state=request.thread_state)
+        from app.raw_lab_budget import prepare_raw_lab_request
+
+        from app.config import raw_lab_input_char_limit
+
+        budget = prepare_raw_lab_request(request, self._settings)
+        request = budget.request
+        system = budget.system_prompt
+        raw_lab_limit = raw_lab_input_char_limit(self._settings)
         input_chars = estimate_raw_lab_input_chars(system=system, request=request)
-        if input_chars > self._settings.max_input_chars:
+        if input_chars > raw_lab_limit:
             raise ProviderInputError(
-                f"Serialized input length {input_chars} exceeds SCOUT_MAX_INPUT_CHARS="
-                f"{self._settings.max_input_chars}"
+                f"Serialized input length {input_chars} exceeds SCOUT_RAW_LAB_MAX_INPUT_CHARS="
+                f"{raw_lab_limit}"
             )
 
         history = [
@@ -446,52 +439,10 @@ class OpenVinoProvider:
         )
 
     def _ensure_pipeline(self) -> None:
-        if self._pipeline is not None:
-            return
-
-        if not _OPENVINO_IMPORTABLE:
-            raise ProviderNotReadyError(_missing_deps_message())
-
-        if not _model_path_ready(self._settings.model_path):
-            raise ProviderNotReadyError(_missing_model_message(self._settings))
-
-        try:
-            logger.info(
-                "openvino loading pipeline path=%s device=%s",
-                self._settings.model_path,
-                self._settings.device,
-            )
-            assert ov_genai is not None
-            self._pipeline = ov_genai.LLMPipeline(
-                self._settings.model_path,
-                self._settings.device,
-            )
-        except Exception as exc:
-            self._load_error = f"Failed to load OpenVINO pipeline: {exc}"
-            logger.error("openvino pipeline load failed: %s", exc)
-            raise ProviderNotReadyError(self._load_error) from exc
-
-    def _generation_config(self) -> Any:
-        assert ov_genai is not None
-        config = ov_genai.GenerationConfig()
-        config.max_new_tokens = self._settings.max_new_tokens
-        if hasattr(config, "temperature"):
-            config.temperature = self._settings.temperature
-        if hasattr(config, "apply_chat_template"):
-            config.apply_chat_template = True
-        return config
+        self._backend.ensure_ready()
 
     def _raw_lab_generation_config(self) -> Any:
-        assert ov_genai is not None
-        config = ov_genai.GenerationConfig()
-        config.max_new_tokens = self._settings.raw_lab_max_new_tokens
-        if hasattr(config, "temperature"):
-            config.temperature = self._settings.raw_lab_temperature
-        if hasattr(config, "repetition_penalty"):
-            config.repetition_penalty = self._settings.raw_lab_repetition_penalty
-        if hasattr(config, "apply_chat_template"):
-            config.apply_chat_template = True
-        return config
+        return self._backend.raw_lab_generation_config()
 
     def _generate_chat_repair(
         self,
@@ -503,34 +454,13 @@ class OpenVinoProvider:
         repair_instruction: str | None = None,
     ) -> str:
         """Internal repair pass only — repair prompts never enter recent_turns or UI."""
-        self._ensure_pipeline()
-        assert self._pipeline is not None
-        assert ov_genai is not None
-
-        config = self._raw_lab_generation_config()
-        repair_instruction = repair_instruction or raw_lab_repair_instruction()
-
-        chat_history = ov_genai.ChatHistory()
-        chat_history.set_extra_context({"enable_thinking": False})
-        chat_history.append({"role": "system", "content": system})
-        for turn in history:
-            chat_history.append({"role": turn.role.value, "content": turn.content})
-        chat_history.append({"role": "assistant", "content": draft})
-        chat_history.append({"role": "user", "content": repair_instruction})
-        chat_history.append({"role": "user", "content": message})
-
-        def _run() -> str:
-            result = self._pipeline.generate(chat_history, config)
-            return str(result)
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
-            try:
-                return future.result(timeout=self._settings.timeout_seconds)
-            except FuturesTimeoutError as exc:
-                raise ProviderNotReadyError(
-                    f"Inference timed out after {self._settings.timeout_seconds}s"
-                ) from exc
+        return self._backend.generate_chat_repair(
+            system=system,
+            history=history,
+            draft=draft,
+            message=message,
+            repair_instruction=repair_instruction or raw_lab_repair_instruction(),
+        )
 
     def _generate_chat(
         self,
@@ -539,52 +469,11 @@ class OpenVinoProvider:
         history: list[ConversationTurn],
         message: str,
     ) -> str:
-        self._ensure_pipeline()
-        assert self._pipeline is not None
-        assert ov_genai is not None
-
-        config = self._raw_lab_generation_config()
-
-        chat_history = ov_genai.ChatHistory()
-        chat_history.set_extra_context({"enable_thinking": False})
-        chat_history.append({"role": "system", "content": system})
-        for turn in history:
-            chat_history.append({"role": turn.role.value, "content": turn.content})
-        chat_history.append({"role": "user", "content": message})
-
-        def _run() -> str:
-            result = self._pipeline.generate(chat_history, config)
-            return str(result)
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
-            try:
-                return future.result(timeout=self._settings.timeout_seconds)
-            except FuturesTimeoutError as exc:
-                raise ProviderNotReadyError(
-                    f"Inference timed out after {self._settings.timeout_seconds}s"
-                ) from exc
+        return self._backend.generate_chat(
+            system=system,
+            history=history,
+            message=message,
+        )
 
     def _generate(self, prompt: str) -> str:
-        self._ensure_pipeline()
-        assert self._pipeline is not None
-        assert ov_genai is not None
-
-        config = self._generation_config()
-
-        history = ov_genai.ChatHistory()
-        history.set_extra_context({"enable_thinking": False})
-        history.append({"role": "user", "content": prompt})
-
-        def _run() -> str:
-            result = self._pipeline.generate(history, config)
-            return str(result)
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
-            try:
-                return future.result(timeout=self._settings.timeout_seconds)
-            except FuturesTimeoutError as exc:
-                raise ProviderNotReadyError(
-                    f"Inference timed out after {self._settings.timeout_seconds}s"
-                ) from exc
+        return self._backend.generate(prompt)

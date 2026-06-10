@@ -1,0 +1,9 @@
+[
+  {
+    "name": "single_pounce_quality",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "What is the one honest move?",
+    "heuristic_checks": ["synthesis_single_pounce"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

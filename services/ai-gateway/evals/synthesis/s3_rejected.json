@@ -1,0 +1,10 @@
+[
+  {
+    "name": "s3_rejected",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "Synthesize sensitive notes.",
+    "sensitivity": "S3",
+    "expect_http_status": 422,
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

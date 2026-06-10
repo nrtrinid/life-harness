@@ -1,0 +1,9 @@
+[
+  {
+    "name": "output_budget_enforced",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "Summarize what I am circling.",
+    "heuristic_checks": ["synthesis_output_budgets"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

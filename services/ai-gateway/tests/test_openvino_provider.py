@@ -59,6 +59,7 @@ def test_openvino_rejects_overlong_input(openvino_settings):
         max_new_tokens=openvino_settings.max_new_tokens,
         timeout_seconds=openvino_settings.timeout_seconds,
         max_input_chars=50,
+        raw_lab_max_input_chars=openvino_settings.raw_lab_max_input_chars,
         temperature=openvino_settings.temperature,
         raw_lab_max_new_tokens=openvino_settings.raw_lab_max_new_tokens,
         raw_lab_temperature=openvino_settings.raw_lab_temperature,
@@ -67,6 +68,19 @@ def test_openvino_rejects_overlong_input(openvino_settings):
         deep_enabled=openvino_settings.deep_enabled,
         chat_harness_native_chat=openvino_settings.chat_harness_native_chat,
         deep_max_extra_passes=openvino_settings.deep_max_extra_passes,
+        models_config_path=openvino_settings.models_config_path,
+        warm_slots=openvino_settings.warm_slots,
+        critic_slot=openvino_settings.critic_slot,
+        critic_model_path=openvino_settings.critic_model_path,
+        llama_base_url=openvino_settings.llama_base_url,
+        llama_timeout_seconds=openvino_settings.llama_timeout_seconds,
+        llama_api_key=openvino_settings.llama_api_key,
+        llama_base_url_explicit=openvino_settings.llama_base_url_explicit,
+        critic_runtime=openvino_settings.critic_runtime,
+        critic_base_url=openvino_settings.critic_base_url,
+        critic_model=openvino_settings.critic_model,
+        critic_timeout_seconds=openvino_settings.critic_timeout_seconds,
+        critic_heavy=openvino_settings.critic_heavy,
     )
     provider = OpenVinoProvider(openvino_settings)
     request = AnalyzeTranscriptRequest(
@@ -80,35 +94,24 @@ def test_openvino_rejects_overlong_input(openvino_settings):
 
 
 def test_raw_lab_generation_config_sets_repetition_penalty_when_supported(openvino_settings):
+    import os
+
     class FakeConfig:
         max_new_tokens = 0
         temperature = 0.0
         repetition_penalty = 1.0
         apply_chat_template = False
 
-    provider = OpenVinoProvider(openvino_settings)
-    openvino_settings = Settings(
-        provider=openvino_settings.provider,
-        host=openvino_settings.host,
-        port=openvino_settings.port,
-        model_path=openvino_settings.model_path,
-        model_id=openvino_settings.model_id,
-        device=openvino_settings.device,
-        max_new_tokens=openvino_settings.max_new_tokens,
-        timeout_seconds=openvino_settings.timeout_seconds,
-        max_input_chars=openvino_settings.max_input_chars,
-        temperature=openvino_settings.temperature,
-        raw_lab_max_new_tokens=512,
-        raw_lab_temperature=0.6,
-        raw_lab_repetition_penalty=1.25,
-        dev_cors=openvino_settings.dev_cors,
-        deep_enabled=openvino_settings.deep_enabled,
-        chat_harness_native_chat=openvino_settings.chat_harness_native_chat,
-        deep_max_extra_passes=openvino_settings.deep_max_extra_passes,
-    )
-    provider = OpenVinoProvider(openvino_settings)
+    from app.config import get_settings
+    from app.slots.manager import get_slot_manager
 
-    import app.providers.openvino_provider as openvino_module
+    os.environ["SCOUT_RAW_LAB_MAX_NEW_TOKENS"] = "512"
+    os.environ["SCOUT_RAW_LAB_TEMPERATURE"] = "0.6"
+    os.environ["SCOUT_RAW_LAB_REPETITION_PENALTY"] = "1.25"
+    get_slot_manager.cache_clear()
+    provider = OpenVinoProvider(get_settings())
+
+    import app.backends.openvino_backend as openvino_module
 
     original_genai = openvino_module.ov_genai
     class FakeGenAI:

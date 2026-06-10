@@ -1,0 +1,13 @@
+[
+  {
+    "name": "ranked_context_packet",
+    "endpoint": "deep-synthesis",
+    "trigger": "user_prompt",
+    "user_prompt": "What should I do about cold Career / Networking versus hot EV Tracker?",
+    "context_packet": "__fixture__:synthetic_context_packet",
+    "expect_substrings": ["circling", "career", "EV Tracker"],
+    "heuristic_checks": ["synthesis_provenance"],
+    "forbid_substrings": ["just prioritize", "time management", "5-step plan"],
+    "tags": ["synthesis", "ci_safe", "context_packet"]
+  }
+]

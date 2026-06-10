@@ -1,0 +1,97 @@
+{
+  "circling": "You are circling between hot build cards and a cold career thread on the board.",
+  "strongest_idea": "Re-enter career with one tiny resume bullet before another build slice.",
+  "hidden_risk": "Another build-only week deepens the cooling career pattern.",
+  "connections": [
+    "EV Tracker is hot while Career / Networking is cold.",
+    "One outside-world minute would rebalance momentum."
+  ],
+  "circling_grounding": [
+    {
+      "kind": "active_card",
+      "ref": "Career / Networking",
+      "label": "Career / Networking"
+    }
+  ],
+  "strongest_idea_grounding": [
+    {
+      "kind": "active_card",
+      "ref": "Career / Networking",
+      "label": "Career / Networking"
+    }
+  ],
+  "hidden_risk_grounding": [
+    {
+      "kind": "proof_log",
+      "ref": "2026-06-01T10:00:00Z",
+      "label": "Deferred career follow-up"
+    }
+  ],
+  "next_pounce": {
+    "title": "Re-heat Career / Networking",
+    "smallest_action": "Open resume doc and add one bullet",
+    "card_hint": "Career / Networking",
+    "grounding": {
+      "kind": "active_card",
+      "ref": "Career / Networking",
+      "label": "Career / Networking"
+    }
+  },
+  "interpretations": [
+    {
+      "lens": "practical",
+      "summary": "Pick one outside-world move before another build slice.",
+      "confidence": "medium",
+      "grounding": [
+        {
+          "kind": "active_card",
+          "ref": "Career / Networking",
+          "label": "Career / Networking"
+        }
+      ]
+    },
+    {
+      "lens": "emotional",
+      "summary": "Deferral is a cooling pattern, not failure.",
+      "confidence": "medium",
+      "grounding": [
+        {
+          "kind": "thread_excerpt",
+          "ref": "thread_excerpt",
+          "label": "Current prompt"
+        }
+      ]
+    },
+    {
+      "lens": "product",
+      "summary": "Build heat is real; career needs a re-entry point.",
+      "confidence": "medium",
+      "grounding": [
+        {
+          "kind": "active_card",
+          "ref": "EV Tracker / Kalshi",
+          "label": "EV Tracker / Kalshi"
+        }
+      ]
+    }
+  ],
+  "critique": {
+    "shallow_flags": [],
+    "missing": [],
+    "avoidance": [],
+    "contradictions": [],
+    "overall": "pass"
+  },
+  "memory_proposals": [
+    {
+      "kind": "pattern",
+      "text": "Build heat can mask cooling career threads.",
+      "requires_approval": true
+    }
+  ],
+  "personality_proposals": [],
+  "confidence_notes": [
+    "Scout read only — I am a local AI, not human, not conscious."
+  ],
+  "safety_notes": []
+}
