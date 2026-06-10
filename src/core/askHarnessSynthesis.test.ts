@@ -6,10 +6,13 @@ import {
   buildAskDeepSynthesisRequest,
   buildAskSynthesisUserPrompt,
   buildAskThreadFingerprint,
+  buildSynthesisReportPlainText,
   fingerprintToKey,
   isAskThreadEligibleForSynthesis,
-  isSynthesisResultStale
+  isSynthesisResultStale,
 } from "./askHarnessSynthesis";
+import { parseDeepSynthesisCompletedResult } from "./deepSynthesisTypes";
+import { sampleCompletedWireBody } from "./deepSynthesisTypes.test";
 import { createEmptySharedChatThreadState, type SharedChatThreadState } from "./chatThreadState";
 import type { HarnessExportInput } from "./harnessContext";
 import { toWireDeepSynthesisRequest } from "./deepSynthesisClient";
@@ -147,6 +150,34 @@ describe("buildAskDeepSynthesisRequest", () => {
     expect(wire.conversation_history).toBeDefined();
     expect(wire.thread_state).toBeDefined();
     expect(JSON.stringify(wire)).not.toContain("personality");
+  });
+
+  it("forwards reasoningDepth into send bundle when provided", () => {
+    const baseArgs = {
+      thread: eligibleThread(),
+      threadState: createEmptySharedChatThreadState(),
+      exportInput: baseExportInput(),
+      contextMode: "full" as const,
+      sensitivity: "S1" as const,
+    };
+    const fast = buildAskDeepSynthesisRequest({ ...baseArgs, reasoningDepth: "fast" });
+    const deep = buildAskDeepSynthesisRequest({ ...baseArgs, reasoningDepth: "deep" });
+
+    expect(fast.conversationHistory?.length).toBeGreaterThan(0);
+    expect(deep.conversationHistory?.length).toBeGreaterThan(0);
+    expect(deep.userPrompt).toContain("structured report");
+  });
+});
+
+describe("buildSynthesisReportPlainText", () => {
+  it("includes primary report sections for clipboard copy", () => {
+    const result = parseDeepSynthesisCompletedResult(sampleCompletedWireBody());
+    const text = buildSynthesisReportPlainText(result);
+    expect(text).toContain("What we're circling");
+    expect(text).toContain(result.circling);
+    expect(text).toContain(result.strongestIdea);
+    expect(text).toContain(result.hiddenRisk);
+    expect(text).toContain(result.nextPounce.smallestAction);
   });
 });
 

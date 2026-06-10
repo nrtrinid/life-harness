@@ -38,7 +38,7 @@ describe("ask-harness thread context containment", () => {
   });
 
   it("uses grounded conversation context copy", () => {
-    expect(panelSource).toContain("Conversation context");
+    expect(panelSource).toContain("Context snapshot");
     expect(panelSource).toContain("Board context is still source of truth");
     expect(panelSource).not.toMatch(/Personality forming/i);
     expect(panelSource).not.toMatch(/Lean into this/i);
@@ -53,7 +53,8 @@ describe("ask-harness thread context containment", () => {
 
   it("ask harness sends thread_state without personality fields", () => {
     expect(screenSource).toContain("threadState");
-    expect(screenSource).toContain("toWireChatHarnessThreadState");
+    expect(screenSource).toContain("buildChatHarnessSendBundle");
+    expect(screenSource).toContain("wireThreadState");
     expect(screenSource).not.toMatch(/personality/i);
   });
 });
@@ -89,12 +90,17 @@ describe("ask-harness deep synthesis containment", () => {
   const panelSource = readSource(SYNTHESIS_PANEL_PATH);
   const synthesisCoreSource = `${hookSource}\n${jobSource}\n${panelSource}`;
 
-  it("exposes Deep synthesis action wiring", () => {
-    expect(screenSource).toContain("Deep synthesis");
+  it("exposes synthesis action wiring", () => {
+    expect(screenSource).toContain("Synthesize this thread");
     expect(screenSource).toContain("useDeepSynthesisJob");
     expect(screenSource).toContain("SynthesisJobPanel");
     expect(hookSource).toContain("buildAskDeepSynthesisRequest");
     expect(hookSource).toContain("runAskDeepSynthesisJob");
+  });
+
+  it("does not alter Ask reasoning depth from synthesis path", () => {
+    expect(synthesisCoreSource).not.toMatch(/setReasoningDepth\s*\(/);
+    expect(hookSource).toContain("reasoningDepth");
   });
 
   it("does not append synthesis results to chat thread items", () => {

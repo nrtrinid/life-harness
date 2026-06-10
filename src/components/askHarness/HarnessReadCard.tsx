@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 
+import { ChatModeNote } from "../chat/ChatModeNote";
 import { styles } from "../styles";
 import type { ActiveLimitSignal, HarnessContext } from "../../core/harnessContext";
 import type { ContextExportMode } from "./types";
@@ -39,27 +40,21 @@ export function HarnessReadCard({
   const showLimitPill = activeLimitSignal.isAtLimit || activeLimitSignal.isOverLimit;
 
   return (
-    <View style={styles.chatReadCard}>
-      <Text style={styles.bodyText}>
-        Harness is reading your current board context. It can suggest, but it will not change the board.
-      </Text>
-      <View style={styles.chatStatusRow}>
-        <StatusPill label={isCompact ? "Compact context" : "Full context"} accent={isCompact} />
-        <StatusPill label={`Cards ${context.cards.length}`} />
-        <StatusPill label={`Analyses ${context.recent_analyses.length}`} />
-        <StatusPill label={`Memory ${activeMemoryCount}/${memoryItemCount}`} />
-        {chatSummaryCount > 0 ? <StatusPill label={`Chat ${chatSummaryCount}`} /> : null}
-        {showLimitPill ? (
-          <StatusPill
-            label={
-              activeLimitSignal.isOverLimit
-                ? "Over active limit"
-                : "At active limit"
-            }
-            accent
-          />
-        ) : null}
-      </View>
-    </View>
+    <ChatModeNote
+      variant="companion"
+      message="Companion is reading your current board context. It can suggest, but it will not change the board."
+    >
+      <StatusPill label={isCompact ? "Compact context" : "Full context"} accent={isCompact} />
+      <StatusPill label={`Cards ${context.cards.length}`} />
+      <StatusPill label={`Analyses ${context.recent_analyses.length}`} />
+      <StatusPill label={`Memory ${activeMemoryCount}/${memoryItemCount}`} />
+      {chatSummaryCount > 0 ? <StatusPill label={`Chat ${chatSummaryCount}`} /> : null}
+      {showLimitPill ? (
+        <StatusPill
+          label={activeLimitSignal.isOverLimit ? "Over active limit" : "At active limit"}
+          accent
+        />
+      ) : null}
+    </ChatModeNote>
   );
 }

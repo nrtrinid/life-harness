@@ -269,7 +269,7 @@ export function ChatThread({
         if (item.kind === "error") {
           return (
             <View key={item.id} style={styles.chatBubbleError}>
-              <Text style={styles.chatSpeakerLabel}>Couldn&apos;t reach Harness</Text>
+              <Text style={styles.chatSpeakerLabel}>Couldn&apos;t reach Companion</Text>
               <Text style={styles.bodyText}>
                 Your message is still here — check the gateway and try again.
               </Text>

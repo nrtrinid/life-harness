@@ -4,13 +4,10 @@ import type { ScrollView } from "react-native";
 export function getChatSurfaceHeight(
   windowHeight: number,
   variant: "harness" | "rawLab",
-  isWideLayout = false
+  _isWideLayout = false
 ): number {
-  if (variant === "rawLab") {
-    return Math.round(windowHeight * 0.45);
-  }
-
-  return Math.round(windowHeight * (isWideLayout ? 0.55 : 0.5));
+  const ratio = variant === "rawLab" ? 0.62 : 0.62;
+  return Math.max(420, Math.round(windowHeight * ratio));
 }
 
 export function scrollChatThreadToEnd(

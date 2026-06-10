@@ -65,4 +65,12 @@ describe("SynthesisReportCard", () => {
     expect(source).toContain("onDismiss");
     expect(source).toContain("Dismiss");
   });
+
+  it("wires web-only copy report without persistence helpers", () => {
+    expect(source).toContain("Copy report");
+    expect(source).toContain("copyTextToClipboard");
+    expect(source).toContain("buildSynthesisReportPlainText");
+    expect(source).toContain("canCopyTextToClipboard");
+    expect(source).not.toMatch(/\bsaveMemoryItem\s*\(/);
+  });
 });

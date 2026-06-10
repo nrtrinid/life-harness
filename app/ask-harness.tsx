@@ -18,6 +18,8 @@ import { HarnessReadCard } from "../src/components/askHarness/HarnessReadCard";
 import { SynthesisJobPanel } from "../src/components/askHarness/SynthesisJobPanel";
 import { useDeepSynthesisJob } from "../src/components/askHarness/useDeepSynthesisJob";
 import type { ChatThreadItem, ContextExportMode } from "../src/components/askHarness/types";
+import { ChatAdvancedPanel } from "../src/components/chat/ChatAdvancedPanel";
+import { ChatSurfaceFrame } from "../src/components/chat/ChatSurfaceFrame";
 import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
@@ -30,26 +32,26 @@ import {
   type ReasoningDepth
 } from "../src/core/chatHarnessClient";
 import { buildConversationHistoryFromThread } from "../src/core/askHarnessThreadAdapter";
+import { buildChatHarnessSendBundle } from "../src/core/chatHarnessSendBudget";
 import {
-  applyLikelyReferenceForSend,
   applyVariantPromptToThreadState,
-  CHAT_HARNESS_MAX_HISTORY_CHARS,
   createEmptySharedChatThreadState,
-  packConversationHistoryForGateway,
-  toWireChatHarnessThreadState,
   updateSharedChatThreadStateAfterTurn,
   type ChatTurn,
   type SharedChatThreadState
 } from "../src/core/chatThreadState";
 import { buildAiContextPacket } from "../src/core/contextPacketBuilder";
-import { formatPacketSliceSummary, resolveSendBundleFromPacket } from "../src/core/contextPacketShim";
+import { formatPacketSliceSummary } from "../src/core/contextPacketShim";
 import { toWireContextPacket } from "../src/core/contextPacketWire";
+import {
+  fallbackGatewayHealthBudget,
+  fetchGatewayHealthBudget,
+  type GatewayHealthBudget
+} from "../src/core/gatewayHealthClient";
 import {
   buildCompactHarnessContext,
   buildContextQualitySummary,
   buildHarnessContext,
-  DEFAULT_GATEWAY_MAX_INPUT_CHARS,
-  estimateChatHarnessPromptChars,
   estimateHarnessContextChars,
   getActiveLimitSignal,
   shouldAutoSelectCompactExport,
@@ -66,24 +68,13 @@ import type { HarnessChatSummary, HarnessMemoryItem, SensitivityLevel } from "..
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 const QUICK_QUESTIONS: { label: string; message: string; mode: ChatHarnessMode }[] = [
-  { label: "Avoiding?", message: "What am I avoiding right now?", mode: "operator" },
   { label: "Next?", message: "What should I do next?", mode: "operator" },
-  { label: "Over-opt?", message: "Am I over-optimizing again?", mode: "reflection" },
-  { label: "Build?", message: "What should I build next?", mode: "builder" },
-  {
-    label: "Blunt",
-    message: "Give me blunt advice based on this context.",
-    mode: "general"
-  },
-  {
-    label: "Talk normally",
-    message: "Can you just talk to me normally about this?",
-    mode: "general"
-  }
+  { label: "Avoiding?", message: "What am I avoiding?", mode: "operator" },
+  { label: "Smaller", message: "Make this smaller.", mode: "reflection" },
+  { label: "Pattern?", message: "What pattern are you noticing?", mode: "general" }
 ];
 
 const JSON_PREVIEW_LIMIT = 4000;
-const WIDE_LAYOUT_BREAKPOINT = 900;
 
 function buildExportInput(state: ReturnType<typeof useLifeHarness>): HarnessExportInput {
   const input: HarnessExportInput = {
@@ -118,7 +109,7 @@ function formatSendError(error: unknown): { text: string; status?: number } {
   }
 
   return {
-    text: "Unexpected error while contacting Chat Harness. Check the gateway URL and try again."
+    text: "Unexpected error while contacting Companion. Check the gateway URL and try again."
   };
 }
 
@@ -132,9 +123,8 @@ export default function AskHarnessDevScreen() {
     deleteMemoryItem,
     toggleMemoryItemActive
   } = harnessState;
-  const { width, height } = useWindowDimensions();
-  const isWideLayout = width >= WIDE_LAYOUT_BREAKPOINT;
-  const chatSurfaceHeight = getChatSurfaceHeight(height, "harness", isWideLayout);
+  const { height } = useWindowDimensions();
+  const chatSurfaceHeight = getChatSurfaceHeight(height, "harness");
   const threadScrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
 
@@ -151,8 +141,10 @@ export default function AskHarnessDevScreen() {
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [lastSentPacketSummary, setLastSentPacketSummary] = useState<string | null>(null);
+  const [gatewayBudget, setGatewayBudget] = useState<GatewayHealthBudget>(() =>
+    fallbackGatewayHealthBudget()
+  );
 
   function buildInspectorPacket(
     userMessage: string,
@@ -176,10 +168,6 @@ export default function AskHarnessDevScreen() {
   }
 
   useEffect(() => {
-    setAdvancedOpen(isWideLayout);
-  }, [isWideLayout]);
-
-  useEffect(() => {
     const digest = typeof digestParam === "string" ? digestParam.trim() : "";
     if (!digest) {
       return;
@@ -189,19 +177,53 @@ export default function AskHarnessDevScreen() {
     setThreadState(createEmptySharedChatThreadState());
   }, [digestParam]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGatewayHealthBudget(baseUrl).then((budget) => {
+      if (!cancelled) {
+        setGatewayBudget(budget);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl]);
+
   const exportInput = useMemo(() => buildExportInput(harnessState), [harnessState]);
   const fullContext = useMemo(() => buildHarnessContext(exportInput), [exportInput]);
   const compactContext = useMemo(() => buildCompactHarnessContext(exportInput), [exportInput]);
   const fullChars = useMemo(() => estimateHarnessContextChars(fullContext), [fullContext]);
   const compactChars = useMemo(() => estimateHarnessContextChars(compactContext), [compactContext]);
-  const fullPromptChars = useMemo(
-    () => estimateChatHarnessPromptChars(fullContext, { message }),
-    [fullContext, message]
+  const fullSendBundle = useMemo(
+    () =>
+      buildChatHarnessSendBundle({
+        exportInput,
+        message,
+        priorThread: thread,
+        threadState,
+        preferredContextMode: "full",
+        reasoningDepth,
+        maxPromptChars: gatewayBudget.maxInputChars,
+        buildPacket: () => buildInspectorPacket(message, threadState, "full")
+      }),
+    [exportInput, message, thread, threadState, reasoningDepth, gatewayBudget.maxInputChars]
   );
-  const compactPromptChars = useMemo(
-    () => estimateChatHarnessPromptChars(compactContext, { message }),
-    [compactContext, message]
+  const compactSendBundle = useMemo(
+    () =>
+      buildChatHarnessSendBundle({
+        exportInput,
+        message,
+        priorThread: thread,
+        threadState,
+        preferredContextMode: "compact",
+        reasoningDepth,
+        maxPromptChars: gatewayBudget.maxInputChars,
+        buildPacket: () => buildInspectorPacket(message, threadState, "compact")
+      }),
+    [exportInput, message, thread, threadState, reasoningDepth, gatewayBudget.maxInputChars]
   );
+  const fullPromptChars = fullSendBundle.estimatedChars;
+  const compactPromptChars = compactSendBundle.estimatedChars;
   const autoContextMode: ContextExportMode = shouldAutoSelectCompactExport(fullContext, message)
     ? "compact"
     : "full";
@@ -210,7 +232,8 @@ export default function AskHarnessDevScreen() {
   const selectedContext = contextMode === "compact" ? compactContext : fullContext;
   const selectedJsonChars = contextMode === "compact" ? compactChars : fullChars;
   const selectedPromptChars = contextMode === "compact" ? compactPromptChars : fullPromptChars;
-  const promptOverBudget = selectedPromptChars > DEFAULT_GATEWAY_MAX_INPUT_CHARS;
+  const selectedSendBundle = contextMode === "compact" ? compactSendBundle : fullSendBundle;
+  const promptOverBudget = !selectedSendBundle.fits;
   const activeLimitSignal = useMemo(() => getActiveLimitSignal(exportInput), [exportInput]);
   const activeMemoryCount = useMemo(
     () => harnessState.memoryItems.filter((item) => item.isActive).length,
@@ -232,7 +255,9 @@ export default function AskHarnessDevScreen() {
     exportInput,
     contextMode,
     sensitivity,
-    mode
+    mode,
+    maxPromptChars: gatewayBudget.maxInputChars,
+    reasoningDepth
   });
   const showSynthesisAction = thread.length > 0;
   const synthesisDisabled =
@@ -320,15 +345,6 @@ export default function AskHarnessDevScreen() {
     setLoading(true);
 
     const priorThread = thread;
-    const threadStateForSend = applyLikelyReferenceForSend(threadState, trimmed);
-    const conversationHistory = packConversationHistoryForGateway({
-      turns: buildConversationHistoryFromThread(priorThread),
-      state: threadStateForSend,
-      latestMessage: trimmed,
-      maxChars: CHAT_HARNESS_MAX_HISTORY_CHARS
-    });
-    const wireThreadState = toWireChatHarnessThreadState(threadStateForSend);
-    const threadStateJsonChars = JSON.stringify(wireThreadState, null, 2).length;
 
     setThread((previous) => [
       ...previous,
@@ -336,23 +352,25 @@ export default function AskHarnessDevScreen() {
     ]);
 
     try {
-      const sendPacket = buildInspectorPacket(trimmed, threadStateForSend, contextMode);
+      const sendPacket = buildInspectorPacket(trimmed, threadState, contextMode);
       setLastSentPacketSummary(formatPacketSliceSummary(sendPacket));
-      const { context: contextForSend, conversationHistory: historyForSend } =
-        resolveSendBundleFromPacket(sendPacket, {
-          message: trimmed,
-          conversationHistory,
-          threadStateJsonChars
-        });
-      const sendPromptChars = estimateChatHarnessPromptChars(contextForSend, {
+      const sendBundle = buildChatHarnessSendBundle({
+        exportInput,
         message: trimmed,
-        conversationHistory: historyForSend,
-        threadStateJsonChars
+        priorThread,
+        threadState,
+        preferredContextMode: contextMode,
+        reasoningDepth,
+        maxPromptChars: gatewayBudget.maxInputChars,
+        buildPacket: () => sendPacket
       });
-      if (sendPromptChars > DEFAULT_GATEWAY_MAX_INPUT_CHARS) {
+      if (!sendBundle.fits) {
         throw new ChatHarnessError(
-          `Serialized prompt would be ~${sendPromptChars} chars; gateway limit is ${DEFAULT_GATEWAY_MAX_INPUT_CHARS}. Try Compact context, a shorter message, or raise SCOUT_MAX_INPUT_CHARS on ai-gateway.`
+          `Serialized prompt would be ~${sendBundle.estimatedChars} chars; gateway limit is ${gatewayBudget.maxInputChars}. Try Compact context, a shorter message, or raise SCOUT_MAX_INPUT_CHARS on ai-gateway.`
         );
+      }
+      if (sendBundle.notice) {
+        setNotice({ kind: "info", message: sendBundle.notice.message });
       }
 
       const result = await askChatHarness({
@@ -360,10 +378,10 @@ export default function AskHarnessDevScreen() {
         message: trimmed,
         mode,
         sensitivity,
-        context: contextForSend,
+        context: sendBundle.context,
         contextPacket: toWireContextPacket(sendPacket),
-        conversationHistory: historyForSend,
-        threadState: wireThreadState,
+        conversationHistory: sendBundle.conversationHistory,
+        threadState: sendBundle.wireThreadState,
         reasoningDepth
       });
 
@@ -456,6 +474,7 @@ export default function AskHarnessDevScreen() {
 
   const inspectorPanel = (
     <AskHarnessAdvancedPanel
+      embedded
       baseUrl={baseUrl}
       onBaseUrlChange={setBaseUrl}
       mode={mode}
@@ -473,6 +492,7 @@ export default function AskHarnessDevScreen() {
       fullPromptChars={fullPromptChars}
       compactPromptChars={compactPromptChars}
       promptOverBudget={promptOverBudget}
+      gatewayMaxInputChars={gatewayBudget.maxInputChars}
       packetSliceSummary={packetSliceSummary}
       qualitySummary={qualitySummary}
       qualityOpen={qualityOpen}
@@ -496,20 +516,22 @@ export default function AskHarnessDevScreen() {
         subtitle="Reads your board and can suggest changes. You approve what changes."
       />
 
-      <View style={isWideLayout ? styles.chatLayoutRow : undefined}>
-        <View style={styles.chatPrimaryColumn}>
-          <HarnessReadCard
-            contextMode={contextMode}
-            context={selectedContext}
-            chatSummaryCount={harnessState.chatSummaries.length}
-            memoryItemCount={harnessState.memoryItems.length}
-            activeMemoryCount={activeMemoryCount}
-            activeLimitSignal={activeLimitSignal}
-          />
+      <View style={styles.chatPrimaryColumn}>
+        <HarnessReadCard
+          contextMode={contextMode}
+          context={selectedContext}
+          chatSummaryCount={harnessState.chatSummaries.length}
+          memoryItemCount={harnessState.memoryItems.length}
+          activeMemoryCount={activeMemoryCount}
+          activeLimitSignal={activeLimitSignal}
+        />
 
-          <View style={[styles.chatSurface, { height: chatSurfaceHeight }]}>
-            {thread.length > 0 ? (
-              <View style={styles.chatThreadToolbar}>
+        <ChatSurfaceFrame
+          variant="companion"
+          height={chatSurfaceHeight}
+          toolbar={
+            thread.length > 0 ? (
+              <>
                 <Pressable style={styles.smallButton} onPress={handleClearConversation}>
                   <Text style={styles.smallButtonText}>Clear conversation</Text>
                 </Pressable>
@@ -519,32 +541,42 @@ export default function AskHarnessDevScreen() {
                     disabled={synthesisDisabled}
                     onPress={() => void synthesis.startSynthesis()}
                   >
-                    <Text style={styles.smallButtonText}>Deep synthesis</Text>
+                    <Text style={styles.smallButtonText}>Synthesize this thread</Text>
                   </Pressable>
                 ) : null}
-              </View>
-            ) : null}
-            {!synthesis.eligible && showSynthesisAction && sensitivity !== "S3" ? (
-              <Text style={styles.helpText}>
-                Need a bit more conversation first — send another message.
-              </Text>
-            ) : null}
-            <SynthesisJobPanel
-              jobState={synthesis.jobState}
-              onDismiss={synthesis.dismissSynthesis}
-              onRetry={() => void synthesis.retrySynthesis()}
-            />
-            <ChatThreadContextPanel
-              threadState={threadState}
-              onThreadStateChange={setThreadState}
-            />
-            <ChatThread
-              thread={thread}
-              threadScrollRef={threadScrollRef}
+              </>
+            ) : null
+          }
+          composer={
+            <ChatComposer
+              message={message}
               loading={loading}
-              memoryItems={harnessState.memoryItems}
-              onSelectPrompt={handleQuickQuestion}
-              onToggleConfidence={(turnId) =>
+              quickQuestions={QUICK_QUESTIONS}
+              placeholder="Ask your companion…"
+              inputRef={inputRef}
+              onMessageChange={setMessage}
+              onQuickQuestion={handleQuickQuestion}
+              onSend={() => void handleSend()}
+            />
+          }
+        >
+          {!synthesis.eligible && showSynthesisAction && sensitivity !== "S3" ? (
+            <Text style={styles.helpText}>
+              Need a bit more conversation first — send another message.
+            </Text>
+          ) : null}
+          <SynthesisJobPanel
+            jobState={synthesis.jobState}
+            onDismiss={synthesis.dismissSynthesis}
+            onRetry={() => void synthesis.retrySynthesis()}
+          />
+          <ChatThread
+            thread={thread}
+            threadScrollRef={threadScrollRef}
+            loading={loading}
+            memoryItems={harnessState.memoryItems}
+            onSelectPrompt={handleQuickQuestion}
+            onToggleConfidence={(turnId) =>
               setThread((previous) =>
                 previous.map((item) =>
                   item.id === turnId && item.kind === "assistant"
@@ -571,35 +603,19 @@ export default function AskHarnessDevScreen() {
                 )
               )
             }
-              onSaveChatSummary={handleSaveChatSummary}
-              onSaveMemoryBankCandidate={handleSaveMemoryBankCandidate}
-              onVariantPrompt={(prompt) => void handleVariantPrompt(prompt)}
-            />
+            onSaveChatSummary={handleSaveChatSummary}
+            onSaveMemoryBankCandidate={handleSaveMemoryBankCandidate}
+            onVariantPrompt={(prompt) => void handleVariantPrompt(prompt)}
+          />
+        </ChatSurfaceFrame>
 
-            <ChatComposer
-              message={message}
-              loading={loading}
-              quickQuestions={QUICK_QUESTIONS}
-              inputRef={inputRef}
-              onMessageChange={setMessage}
-              onQuickQuestion={handleQuickQuestion}
-              onSend={() => void handleSend()}
-            />
-          </View>
-        </View>
-
-        {isWideLayout ? (
-          inspectorPanel
-        ) : (
-          <View style={styles.chatSecondaryColumn}>
-            <Pressable style={styles.smallButton} onPress={() => setAdvancedOpen((open) => !open)}>
-              <Text style={styles.smallButtonText}>
-                {advancedOpen ? "Hide inspector" : "Show inspector"}
-              </Text>
-            </Pressable>
-            {advancedOpen ? inspectorPanel : null}
-          </View>
-        )}
+        <ChatAdvancedPanel title="Backroom">
+          {inspectorPanel}
+          <ChatThreadContextPanel
+            threadState={threadState}
+            onThreadStateChange={setThreadState}
+          />
+        </ChatAdvancedPanel>
       </View>
     </Screen>
   );

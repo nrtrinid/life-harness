@@ -61,7 +61,7 @@ export function ChatThreadContextPanel({
   threadState,
   onThreadStateChange
 }: ChatThreadContextPanelProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const hasContent =
     Boolean(threadState.recentDigest) ||
@@ -96,13 +96,13 @@ export function ChatThreadContextPanel({
     <View style={styles.checklist}>
       <Pressable style={styles.smallButton} onPress={() => setCollapsed((open) => !open)}>
         <Text style={styles.smallButtonText}>
-          {collapsed ? "Show conversation context" : "Hide conversation context"}
+          {collapsed ? "Show context snapshot" : "Hide context snapshot"}
         </Text>
       </Pressable>
 
       {!collapsed ? (
         <View style={styles.checklist}>
-          <Text style={styles.helpText}>Conversation context</Text>
+          <Text style={styles.helpText}>Context snapshot</Text>
           <Text style={styles.bodyText}>
             Temporary to this chat. Board context is still source of truth.
           </Text>
@@ -183,7 +183,7 @@ export function ChatThreadContextPanel({
               </Pressable>
             ) : null}
             <Pressable style={styles.smallButton} onPress={handleClearContext}>
-              <Text style={styles.smallButtonText}>Clear conversation context</Text>
+              <Text style={styles.smallButtonText}>Clear context snapshot</Text>
             </Pressable>
           </View>
         </View>

@@ -35,4 +35,14 @@ describe("useDeepSynthesisJob wiring", () => {
   it("shows helper copy when thread is not eligible", () => {
     expect(screenSource).toContain("Need a bit more conversation first");
   });
+
+  it("resets job state to idle on dismiss", () => {
+    expect(hookSource).toContain('setJobState({ status: "idle" })');
+    expect(hookSource).toContain("dismissSynthesis");
+  });
+
+  it("includes reasoning depth in start synthesis dependencies", () => {
+    expect(hookSource).toContain("args.reasoningDepth");
+    expect(hookSource).toContain("args.maxPromptChars");
+  });
 });

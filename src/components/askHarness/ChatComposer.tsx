@@ -23,6 +23,7 @@ interface ChatComposerProps {
   message: string;
   loading: boolean;
   quickQuestions: QuickQuestion[];
+  placeholder?: string;
   inputRef?: RefObject<TextInput | null>;
   onMessageChange: (value: string) => void;
   onQuickQuestion: (item: QuickQuestion) => void;
@@ -33,6 +34,7 @@ export function ChatComposer({
   message,
   loading,
   quickQuestions,
+  placeholder = "Ask the scout…",
   inputRef,
   onMessageChange,
   onQuickQuestion,
@@ -94,7 +96,7 @@ export function ChatComposer({
           onKeyPress={handleKeyPress}
           multiline
           editable={!loading}
-          placeholder="Ask the scout…"
+          placeholder={placeholder}
           placeholderTextColor="rgba(212,216,200,0.3)"
           style={styles.chatComposerInput}
         />

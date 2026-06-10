@@ -10,6 +10,7 @@ import {
   runAskDeepSynthesisJob,
   type DeepSynthesisJobState
 } from "../../core/askDeepSynthesisJob";
+import type { ReasoningDepth } from "../../core/chatHarnessClient";
 import type { ChatHarnessMode, HarnessExportInput } from "../../core/harnessContext";
 import type { SensitivityLevel } from "../../core/types";
 
@@ -21,6 +22,8 @@ export type UseDeepSynthesisJobArgs = {
   contextMode: ContextExportMode;
   sensitivity: SensitivityLevel;
   mode: ChatHarnessMode;
+  maxPromptChars: number;
+  reasoningDepth?: ReasoningDepth;
 };
 
 export function useDeepSynthesisJob(args: UseDeepSynthesisJobArgs) {
@@ -63,6 +66,8 @@ export function useDeepSynthesisJob(args: UseDeepSynthesisJobArgs) {
       contextMode: args.contextMode,
       sensitivity: args.sensitivity,
       mode: args.mode,
+      maxPromptChars: args.maxPromptChars,
+      reasoningDepth: args.reasoningDepth,
       pipelineProfile: "with_critic"
     });
 
@@ -83,7 +88,9 @@ export function useDeepSynthesisJob(args: UseDeepSynthesisJobArgs) {
     args.baseUrl,
     args.contextMode,
     args.exportInput,
+    args.maxPromptChars,
     args.mode,
+    args.reasoningDepth,
     args.sensitivity,
     eligible,
     synthesisBusy

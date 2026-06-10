@@ -7,10 +7,7 @@ import {
   DEFAULT_CHAT_HARNESS_URL,
   PHYSICAL_DEVICE_URL_HINT
 } from "../../core/chatHarnessClient";
-import {
-  DEFAULT_GATEWAY_MAX_INPUT_CHARS,
-  type ChatHarnessMode
-} from "../../core/harnessContext";
+import type { ChatHarnessMode } from "../../core/harnessContext";
 import type { HarnessChatSummary, HarnessMemoryItem, SensitivityLevel } from "../../core/types";
 import type { ReasoningDepth } from "../../core/chatHarnessClient";
 import { formatCompactChars, formatGatewayHost } from "./askHarnessInspectorFormat";
@@ -23,6 +20,7 @@ const SENSITIVITIES: SensitivityLevel[] = ["S0", "S1", "S2", "S3"];
 const REASONING_DEPTHS: ReasoningDepth[] = ["fast", "deliberate", "deep"];
 
 interface AskHarnessAdvancedPanelProps {
+  embedded?: boolean;
   baseUrl: string;
   onBaseUrlChange: (value: string) => void;
   mode: ChatHarnessMode;
@@ -40,6 +38,7 @@ interface AskHarnessAdvancedPanelProps {
   fullPromptChars: number;
   compactPromptChars: number;
   promptOverBudget: boolean;
+  gatewayMaxInputChars: number;
   packetSliceSummary?: string;
   qualitySummary: string;
   qualityOpen: boolean;
@@ -55,6 +54,7 @@ interface AskHarnessAdvancedPanelProps {
 }
 
 export function AskHarnessAdvancedPanel({
+  embedded = false,
   baseUrl,
   onBaseUrlChange,
   mode,
@@ -72,6 +72,7 @@ export function AskHarnessAdvancedPanel({
   fullPromptChars,
   compactPromptChars,
   promptOverBudget,
+  gatewayMaxInputChars,
   packetSliceSummary,
   qualitySummary,
   qualityOpen,
@@ -89,11 +90,15 @@ export function AskHarnessAdvancedPanel({
   const statusLine = `${formatGatewayHost(baseUrl)} · ${contextMode === "compact" ? "Compact" : "Full"} · ${formatCompactChars(selectedJsonChars)} context`;
 
   return (
-    <View style={styles.chatInspectorColumn}>
-      <Text style={styles.chatInspectorHeader}>Inspector</Text>
-      <Text style={styles.chatInspectorStatusLine}>{statusLine}</Text>
+    <View style={embedded ? styles.chatAdvancedPanelBody : styles.chatInspectorColumn}>
+      {embedded ? null : (
+        <>
+          <Text style={styles.chatInspectorHeader}>Backroom inspector</Text>
+          <Text style={styles.chatInspectorStatusLine}>{statusLine}</Text>
+        </>
+      )}
 
-      <InspectorSection title="Gateway" defaultOpen>
+      <InspectorSection title="Gateway" defaultOpen={false}>
         <TextInput
           value={baseUrl}
           onChangeText={onBaseUrlChange}
@@ -109,7 +114,7 @@ export function AskHarnessAdvancedPanel({
         </Text>
       </InspectorSection>
 
-      <InspectorSection title="Mode and sensitivity" defaultOpen>
+      <InspectorSection title="Mode and sensitivity" defaultOpen={false}>
         <Text style={styles.chatInspectorSectionTitle}>Mode</Text>
         <View style={styles.splitRow}>
           {MODES.map((option) => (
@@ -163,7 +168,7 @@ export function AskHarnessAdvancedPanel({
         ) : null}
       </InspectorSection>
 
-      <InspectorSection title="Context export" defaultOpen>
+      <InspectorSection title="Context snapshot" defaultOpen={false}>
         <Text style={styles.helpText}>
           ~{selectedJsonChars} json · ~{selectedPromptChars} prompt (Full ~{fullChars}/{fullPromptChars} ·
           Compact ~{compactChars}/{compactPromptChars})
@@ -174,7 +179,7 @@ export function AskHarnessAdvancedPanel({
         {promptOverBudget ? (
           <Notice
             kind="error"
-            message={`Selected export exceeds gateway prompt budget (${DEFAULT_GATEWAY_MAX_INPUT_CHARS}). Switch to Compact context or shorten your message.`}
+            message={`Full send (board + history + thread state) exceeds gateway prompt budget (${gatewayMaxInputChars}). Switch to Compact context, shorten your message, or clear older turns.`}
           />
         ) : null}
         <View style={styles.splitRow}>
@@ -192,7 +197,8 @@ export function AskHarnessAdvancedPanel({
         </View>
         {compactChars < fullChars ? (
           <Text style={styles.helpText}>
-            Compact strips resume bank cards first for OpenVINO prompt headroom.
+            Compact shrinks board export for prompt headroom. At send time, older history or thread
+            state may also trim automatically — board and Memory Bank data are not changed.
           </Text>
         ) : null}
       </InspectorSection>

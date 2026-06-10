@@ -4,10 +4,10 @@ import { styles } from "../styles";
 import type { QuickQuestion } from "./ChatComposer";
 
 export const EMPTY_STATE_PROMPTS: QuickQuestion[] = [
-  { label: "Avoiding?", message: "What am I avoiding right now?", mode: "operator" },
   { label: "Next?", message: "What should I do next?", mode: "operator" },
-  { label: "Over-opt?", message: "Am I over-optimizing again?", mode: "reflection" },
-  { label: "Pattern?", message: "What pattern are you watching?", mode: "general" }
+  { label: "Avoiding?", message: "What am I avoiding?", mode: "operator" },
+  { label: "Smaller", message: "Make this smaller.", mode: "reflection" },
+  { label: "Pattern?", message: "What pattern are you noticing?", mode: "general" }
 ];
 
 interface ChatEmptyStateProps {
@@ -17,7 +17,7 @@ interface ChatEmptyStateProps {
 export function ChatEmptyState({ onSelectPrompt }: ChatEmptyStateProps) {
   return (
     <View style={styles.chatEmptyState}>
-      <Text style={styles.chatEmptyStateTitle}>Harness is ready</Text>
+      <Text style={styles.chatEmptyStateTitle}>Companion is ready</Text>
       <Text style={styles.chatEmptyStateCopy}>
         Ask about your board, career momentum, projects, or patterns.
       </Text>

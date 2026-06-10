@@ -1,16 +1,16 @@
 import type { ChatThreadItem, ContextExportMode } from "../components/askHarness/types";
 import { buildConversationHistoryFromThread } from "./askHarnessThreadAdapter";
-import {
-  applyLikelyReferenceForSend,
-  CHAT_HARNESS_MAX_HISTORY_CHARS,
-  packConversationHistoryForGateway,
-  toWireChatHarnessThreadState,
-  type SharedChatThreadState
-} from "./chatThreadState";
+import { buildChatHarnessSendBundle } from "./chatHarnessSendBudget";
+import type { ReasoningDepth } from "./chatHarnessClient";
+import { type SharedChatThreadState } from "./chatThreadState";
 import { buildAiContextPacket } from "./contextPacketBuilder";
-import { resolveSendBundleFromPacket } from "./contextPacketShim";
 import { toWireContextPacket } from "./contextPacketWire";
-import type { DeepSynthesisRequestInput, SynthesisLens } from "./deepSynthesisTypes";
+import { DEFAULT_GATEWAY_MAX_INPUT_CHARS } from "./gatewayBudget";
+import type {
+  DeepSynthesisCompletedResult,
+  DeepSynthesisRequestInput,
+  SynthesisLens,
+} from "./deepSynthesisTypes";
 import type { ChatHarnessMode, HarnessExportInput } from "./harnessContext";
 import type { SensitivityLevel } from "./types";
 
@@ -35,6 +35,8 @@ export type BuildAskDeepSynthesisRequestArgs = {
   contextMode: ContextExportMode;
   sensitivity: SensitivityLevel;
   mode?: ChatHarnessMode;
+  reasoningDepth?: ReasoningDepth;
+  maxPromptChars?: number;
   pipelineProfile?: DeepSynthesisRequestInput["pipelineProfile"];
 };
 
@@ -136,16 +138,6 @@ export function buildAskDeepSynthesisRequest(
 ): DeepSynthesisRequestInput {
   const lastUserMessage = findLastUserMessage(args.thread);
   const mode = resolveMode(args.thread, args.mode);
-  const threadStateForSend = applyLikelyReferenceForSend(args.threadState, lastUserMessage);
-  const baseTurns = buildConversationHistoryFromThread(args.thread);
-  const packedTurns = packConversationHistoryForGateway({
-    turns: baseTurns,
-    state: threadStateForSend,
-    latestMessage: lastUserMessage,
-    maxChars: CHAT_HARNESS_MAX_HISTORY_CHARS
-  });
-  const wireThreadState = toWireChatHarnessThreadState(threadStateForSend);
-  const threadStateJsonChars = JSON.stringify(wireThreadState).length;
   const sendPacket = buildAiContextPacket({
     data: args.exportInput,
     userIntent: {
@@ -153,26 +145,28 @@ export function buildAskDeepSynthesisRequest(
       mode,
       sensitivity: args.sensitivity
     },
-    threadState: threadStateForSend,
+    threadState: args.threadState,
     preferredExport: args.contextMode
   });
-  const { context, conversationHistory: historyForSend } = resolveSendBundleFromPacket(
-    sendPacket,
-    {
-      message: lastUserMessage,
-      conversationHistory: packedTurns,
-      threadStateJsonChars
-    }
-  );
+  const sendBundle = buildChatHarnessSendBundle({
+    exportInput: args.exportInput,
+    message: lastUserMessage,
+    priorThread: args.thread,
+    threadState: args.threadState,
+    preferredContextMode: args.contextMode,
+    reasoningDepth: args.reasoningDepth,
+    maxPromptChars: args.maxPromptChars ?? DEFAULT_GATEWAY_MAX_INPUT_CHARS,
+    buildPacket: () => sendPacket
+  });
 
   return {
     trigger: "thread_excerpt",
     sensitivity: args.sensitivity,
     userPrompt: buildAskSynthesisUserPrompt(args.thread, args.threadState),
-    context,
+    context: sendBundle.context,
     contextPacket: toWireContextPacket(sendPacket),
-    conversationHistory: historyForSend,
-    threadState: wireThreadState,
+    conversationHistory: sendBundle.conversationHistory,
+    threadState: sendBundle.wireThreadState,
     pipelineProfile: args.pipelineProfile ?? "with_critic",
     interpretationLenses: DEFAULT_INTERPRETATION_LENSES
   };
@@ -205,4 +199,54 @@ export function isSynthesisResultStale(
   request: AskThreadFingerprint
 ): boolean {
   return fingerprintToKey(current) !== fingerprintToKey(request);
+}
+
+export function buildSynthesisReportPlainText(result: DeepSynthesisCompletedResult): string {
+  const lines: string[] = [
+    "Deep synthesis",
+    "",
+    "What we're circling",
+    result.circling,
+    "",
+    "Strongest idea",
+    result.strongestIdea,
+    "",
+    "Hidden risk",
+    result.hiddenRisk,
+  ];
+
+  if (result.connections.length > 0) {
+    lines.push("", "Connections", ...result.connections.map((item) => `- ${item}`));
+  }
+
+  lines.push(
+    "",
+    result.nextPounce.title,
+    result.nextPounce.smallestAction
+  );
+  if (result.nextPounce.cardHint?.trim()) {
+    lines.push(result.nextPounce.cardHint.trim());
+  }
+
+  return lines.join("\n");
+}
+
+export function canCopyTextToClipboard(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    Boolean(navigator.clipboard) &&
+    typeof navigator.clipboard.writeText === "function"
+  );
+}
+
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (!canCopyTextToClipboard()) {
+    return false;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }

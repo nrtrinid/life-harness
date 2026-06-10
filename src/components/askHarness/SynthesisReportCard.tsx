@@ -1,5 +1,10 @@
 import { Pressable, Text, View } from "react-native";
 
+import {
+  buildSynthesisReportPlainText,
+  canCopyTextToClipboard,
+  copyTextToClipboard,
+} from "../../core/askHarnessSynthesis";
 import { CollapsibleSection } from "../CollapsibleSection";
 import { Notice } from "../Notice";
 import { styles } from "../styles";
@@ -153,9 +158,21 @@ export function SynthesisReportCard({
           <Text style={styles.sectionTitle}>Deep synthesis</Text>
           <Text style={styles.helpText}>A structured report for this Ask thread.</Text>
         </View>
-        <Pressable style={styles.smallButton} onPress={onDismiss}>
-          <Text style={styles.smallButtonText}>Dismiss</Text>
-        </Pressable>
+        <View style={styles.chatThreadToolbar}>
+          {canCopyTextToClipboard() ? (
+            <Pressable
+              style={styles.smallButton}
+              onPress={() => {
+                void copyTextToClipboard(buildSynthesisReportPlainText(result));
+              }}
+            >
+              <Text style={styles.smallButtonText}>Copy report</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={styles.smallButton} onPress={onDismiss}>
+            <Text style={styles.smallButtonText}>Dismiss</Text>
+          </Pressable>
+        </View>
       </View>
 
       {stale ? (
