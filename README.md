@@ -16,7 +16,7 @@ Other targets: `npm run android`, `npm run ios`.
 
 Job Scout approved-source fetching uses the local runner in v0.4. Without `npm run scout:runner`, **Sources → Run Source** shows a start-runner message (no browser fetch fallback).
 
-Use **Setup** (`/source-setup`) to paste a careers URL, detect the adapter shape, dry-run test, and save — see [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md). GovernmentJobs / NEOGOV `/careers/{agency}` URLs are supported in v0.8 — see [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md).
+Use **Setup** (`/source-setup`) to paste a careers URL, detect the adapter shape, dry-run test, and save — see [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md). GovernmentJobs / NEOGOV `/careers/{agency}` URLs are supported in v0.8 — see [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md). Workday / MyWorkdayJobs is supported in v0.9 (fixture-first; live URLs may weak-pass) — see [`docs/job-scout-workday-v0.9.md`](docs/job-scout-workday-v0.9.md).
 
 ## Verify
 
@@ -70,7 +70,7 @@ Did this make me start, recover, or feel less scattered?
 
 ## Docs
 
-See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/job-scout-foundation-v0.2.md`](docs/job-scout-foundation-v0.2.md), [`docs/job-scout-approved-sources-v0.3.md`](docs/job-scout-approved-sources-v0.3.md), [`docs/job-scout-runner-v0.4.md`](docs/job-scout-runner-v0.4.md), [`docs/persistence-audit-v0.5.md`](docs/persistence-audit-v0.5.md), [`docs/job-scout-run-due-v0.6.md`](docs/job-scout-run-due-v0.6.md), [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md), [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md), and `docs/` for product rules and scope.
+See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/job-scout-foundation-v0.2.md`](docs/job-scout-foundation-v0.2.md), [`docs/job-scout-approved-sources-v0.3.md`](docs/job-scout-approved-sources-v0.3.md), [`docs/job-scout-runner-v0.4.md`](docs/job-scout-runner-v0.4.md), [`docs/persistence-audit-v0.5.md`](docs/persistence-audit-v0.5.md), [`docs/job-scout-run-due-v0.6.md`](docs/job-scout-run-due-v0.6.md), [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md), [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md), [`docs/job-scout-workday-v0.9.md`](docs/job-scout-workday-v0.9.md), and `docs/` for product rules and scope.
 
 ## Dev: Ask Harness (optional)
 

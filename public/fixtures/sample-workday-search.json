@@ -1,0 +1,23 @@
+{
+  "total": 2,
+  "jobPostings": [
+    {
+      "title": "Software Engineer — Platform",
+      "externalPath": "/en-US/External/job/San-Diego-CA/Software-Engineer_R123456",
+      "locationsText": "San Diego, CA",
+      "postedOn": "2026-05-01",
+      "jobFamily": "Engineering",
+      "workerSubType": "Regular",
+      "timeType": "Full time",
+      "jobReqId": "R123456",
+      "bulletFields": ["Build TypeScript services...", "Collaborate on security reviews."]
+    },
+    {
+      "title": "Cybersecurity Analyst",
+      "externalPath": "/en-US/External/job/Remote-CA/Cybersecurity-Analyst_R123457",
+      "locationsText": "Remote, CA",
+      "postedOn": "2026-05-02",
+      "department": "Information Security"
+    }
+  ]
+}

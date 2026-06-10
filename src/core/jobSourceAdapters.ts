@@ -20,6 +20,7 @@ const SUPPORTED_ADAPTER_KINDS = new Set<JobSourceKind>([
   "lever",
   "ashby",
   "governmentjobs",
+  "workday",
   "jobposting_jsonld",
   "manual"
 ]);
@@ -513,8 +514,199 @@ function normalizeGovernmentJobs(raw: unknown, source: JobSource): NormalizedJob
   return parseGovernmentJobsListingHtml(html, source);
 }
 
+export const WORKDAY_ZERO_LISTINGS_MESSAGE =
+  "No supported Workday postings found at this URL/payload. This source may need endpoint discovery or a different Workday site path.";
+
+function resolveWorkdayHref(href: string, sourceUrl: string): string {
+  const base = sourceUrl.startsWith("http")
+    ? sourceUrl
+    : sourceUrl.startsWith("/")
+      ? `https://example.myworkdayjobs.com${sourceUrl}`
+      : `https://example.myworkdayjobs.com/${sourceUrl}`;
+  try {
+    return new URL(href, base).href;
+  } catch {
+    return href;
+  }
+}
+
+function firstWorkdayString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = asString(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function extractWorkdayJobArray(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  const record = asRecord(raw);
+  if (!record) {
+    return [];
+  }
+  for (const key of ["jobPostings", "jobs", "data", "children", "results"]) {
+    const value = record[key];
+    if (Array.isArray(value) && value.length > 0) {
+      return value;
+    }
+  }
+  for (const key of ["jobPostings", "jobs", "data", "children", "results"]) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return [];
+}
+
+function composeWorkdayDescription(input: {
+  roleTitle: string;
+  location?: string;
+  department?: string;
+  jobFamily?: string;
+  jobType?: string;
+  postedOn?: string;
+  jobReqId?: string;
+  summary?: string;
+}): string {
+  const lines = [`Title: ${input.roleTitle}`];
+  if (input.location) {
+    lines.push(`Location: ${input.location}`);
+  }
+  if (input.department) {
+    lines.push(`Department: ${input.department}`);
+  } else if (input.jobFamily) {
+    lines.push(`Department: ${input.jobFamily}`);
+  }
+  if (input.jobType) {
+    lines.push(`Job Type: ${input.jobType}`);
+  }
+  if (input.postedOn) {
+    lines.push(`Posted: ${input.postedOn}`);
+  }
+  if (input.jobReqId) {
+    lines.push(`Req ID: ${input.jobReqId}`);
+  }
+  if (input.summary) {
+    lines.push(`Summary: ${input.summary}`);
+  }
+  return truncateDescription(lines.join("\n"));
+}
+
+function normalizeWorkdayJob(
+  job: unknown,
+  source: JobSource,
+  company: string
+): NormalizedJobPosting | undefined {
+  const record = asRecord(job);
+  if (!record) {
+    return undefined;
+  }
+
+  const roleTitle = firstWorkdayString(record, ["title", "jobTitle", "name", "externalTitle"]);
+  if (!roleTitle) {
+    return undefined;
+  }
+
+  const href = firstWorkdayString(record, [
+    "externalPath",
+    "externalUrl",
+    "jobPostingUrl",
+    "href",
+    "path"
+  ]);
+  const sourceUrl = href ? resolveWorkdayHref(href, source.url) : undefined;
+
+  const location = firstWorkdayString(record, [
+    "locationsText",
+    "location",
+    "locations",
+    "primaryLocation",
+    "jobLocation"
+  ]);
+
+  const department =
+    firstWorkdayString(record, ["department", "jobFamily"]) ??
+    firstWorkdayString(record, ["jobFamily"]);
+
+  const jobType =
+    firstWorkdayString(record, ["timeType", "jobType", "workerSubType"]) ??
+    firstWorkdayString(record, ["workerSubType"]);
+
+  const postedOn = firstWorkdayString(record, ["postedOn", "postedDate"]);
+  const jobReqId = firstWorkdayString(record, ["jobReqId", "requisitionId"]);
+
+  let summary = firstWorkdayString(record, ["description", "summary"]);
+  const bullets = record.bulletFields;
+  if (Array.isArray(bullets)) {
+    const bulletText = bullets
+      .map((item) => asString(item))
+      .filter((item): item is string => Boolean(item))
+      .join(" ");
+    if (bulletText) {
+      summary = summary ? `${summary} ${bulletText}` : bulletText;
+    }
+  }
+
+  const description = composeWorkdayDescription({
+    roleTitle,
+    location,
+    department,
+    jobType,
+    postedOn,
+    jobReqId,
+    summary
+  });
+
+  return {
+    company,
+    roleTitle,
+    sourceUrl,
+    location,
+    description,
+    roleType: inferRoleType(roleTitle, description)
+  };
+}
+
+export function parseWorkdaySearchPayload(raw: unknown, source: JobSource): NormalizedJobPosting[] {
+  const company = source.name.replace(/\s+(Careers|Jobs|External Site)$/i, "").trim();
+  const deduped = new Map<string, NormalizedJobPosting>();
+
+  for (const job of extractWorkdayJobArray(raw)) {
+    const posting = normalizeWorkdayJob(job, source, company);
+    if (!posting) {
+      continue;
+    }
+    const key = `${(posting.sourceUrl ?? "").toLowerCase()}|${posting.roleTitle.toLowerCase()}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, posting);
+    }
+  }
+
+  return [...deduped.values()];
+}
+
+function normalizeWorkday(raw: unknown, source: JobSource): NormalizedJobPosting[] {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith("<")) {
+      return [];
+    }
+    try {
+      return parseWorkdaySearchPayload(JSON.parse(trimmed) as unknown, source);
+    } catch {
+      return [];
+    }
+  }
+  return parseWorkdaySearchPayload(raw, source);
+}
+
 const ADAPTERS: Record<
-  "greenhouse" | "lever" | "ashby" | "governmentjobs" | "jobposting_jsonld" | "manual",
+  "greenhouse" | "lever" | "ashby" | "governmentjobs" | "workday" | "jobposting_jsonld" | "manual",
   JobSourceAdapter
 > = {
   greenhouse: {
@@ -536,6 +728,11 @@ const ADAPTERS: Record<
     kind: "governmentjobs",
     label: "GovernmentJobs / NEOGOV",
     normalize: normalizeGovernmentJobs
+  },
+  workday: {
+    kind: "workday",
+    label: "Workday / MyWorkdayJobs",
+    normalize: normalizeWorkday
   },
   jobposting_jsonld: {
     kind: "jobposting_jsonld",

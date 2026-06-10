@@ -2,6 +2,7 @@ import { createId, nowIso } from "./ids";
 import {
   isSupportedAdapterKind,
   GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
+  WORKDAY_ZERO_LISTINGS_MESSAGE,
   normalizeWithAdapter,
   type NormalizedJobPosting
 } from "./jobSourceAdapters";
@@ -187,15 +188,19 @@ export function runJobSourceFromRaw(
   const errors = [...normalizeErrors];
   const isGovernmentJobsWeakPass =
     source.kind === "governmentjobs" && normalized.length === 0 && normalizeErrors.length === 0;
+  const isWorkdayWeakPass =
+    source.kind === "workday" && normalized.length === 0 && normalizeErrors.length === 0;
 
-  if (normalized.length === 0 && errors.length === 0 && !isGovernmentJobsWeakPass) {
+  if (normalized.length === 0 && errors.length === 0 && !isGovernmentJobsWeakPass && !isWorkdayWeakPass) {
     errors.push("No supported public postings found at this URL.");
   }
 
   const runStatus: JobSourceRunStatus = errors.length > 0 ? "error" : "success";
   const message = isGovernmentJobsWeakPass
     ? GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE
-    : errors.length > 0
+    : isWorkdayWeakPass
+      ? WORKDAY_ZERO_LISTINGS_MESSAGE
+      : errors.length > 0
       ? errors[0]
       : candidates.length > 0
         ? `Found ${candidates.length} new candidate${candidates.length === 1 ? "" : "s"}. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.`
@@ -269,6 +274,13 @@ export function buildFetchErrorRunOutput(
 export function parseFetchedRaw(source: JobSource, responseText: string): unknown {
   if (source.kind === "jobposting_jsonld" || source.kind === "governmentjobs") {
     return responseText;
+  }
+  if (source.kind === "workday") {
+    try {
+      return JSON.parse(responseText) as unknown;
+    } catch {
+      return responseText;
+    }
   }
   try {
     return JSON.parse(responseText) as unknown;

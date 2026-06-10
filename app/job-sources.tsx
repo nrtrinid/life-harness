@@ -28,6 +28,7 @@ const KIND_OPTIONS: JobSourceKind[] = [
   "lever",
   "ashby",
   "governmentjobs",
+  "workday",
   "jobposting_jsonld",
   "manual",
   "company_careers"

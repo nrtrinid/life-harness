@@ -9,13 +9,17 @@ import {
   GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
   normalizeWithAdapter,
   parseGovernmentJobsListingHtml,
-  stripHtml
+  parseWorkdaySearchPayload,
+  stripHtml,
+  WORKDAY_ZERO_LISTINGS_MESSAGE
 } from "./jobSourceAdapters";
 import type { JobSource } from "./types";
 
 const fixtureDir = join(process.cwd(), "public/fixtures");
 const listingHtml = readFileSync(join(fixtureDir, "sample-governmentjobs-listing.html"), "utf8");
 const emptyHtml = readFileSync(join(fixtureDir, "sample-governmentjobs-empty.html"), "utf8");
+const workdaySearchJson = readFileSync(join(fixtureDir, "sample-workday-search.json"), "utf8");
+const workdayEmptyJson = readFileSync(join(fixtureDir, "sample-workday-empty.json"), "utf8");
 
 const greenhouseSource: JobSource = {
   id: "source-test",
@@ -174,5 +178,57 @@ describe("jobSourceAdapters", () => {
     expect(result.postings.length).toBeGreaterThanOrEqual(2);
     expect(getAdapterForKind("governmentjobs")).toBeDefined();
     expect(GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE).toContain("No static GovernmentJobs listings found");
+  });
+
+  it("parses workday fixture with at least two postings", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "workday",
+      name: "Qualcomm",
+      url: "https://qualcomm.wd12.myworkdayjobs.com/en-US/External"
+    };
+    const postings = parseWorkdaySearchPayload(JSON.parse(workdaySearchJson), source);
+    expect(postings.length).toBeGreaterThanOrEqual(2);
+    expect(postings[0]?.roleTitle).toContain("Software Engineer");
+    expect(postings[0]?.sourceUrl).toContain("qualcomm.wd12.myworkdayjobs.com");
+    expect(postings[0]?.location).toBeTruthy();
+    expect(postings[0]?.description).toContain("Title:");
+    expect(postings.some((posting) => posting.roleType === "cybersecurity")).toBe(true);
+  });
+
+  it("returns empty list for empty workday fixture", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "workday",
+      name: "Qualcomm",
+      url: "https://qualcomm.wd12.myworkdayjobs.com/en-US/External"
+    };
+    expect(parseWorkdaySearchPayload(JSON.parse(workdayEmptyJson), source)).toEqual([]);
+  });
+
+  it("returns empty list for workday HTML string", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "workday",
+      name: "Qualcomm",
+      url: "https://qualcomm.wd12.myworkdayjobs.com/en-US/External"
+    };
+    const result = normalizeWithAdapter("<html><body>Loading...</body></html>", source);
+    expect(result.postings).toEqual([]);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("normalizes workday via adapter registry", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "workday",
+      name: "Qualcomm",
+      url: "/fixtures/sample-workday-search.json"
+    };
+    const result = normalizeWithAdapter(JSON.parse(workdaySearchJson), source);
+    expect(result.errors).toEqual([]);
+    expect(result.postings.length).toBeGreaterThanOrEqual(2);
+    expect(getAdapterForKind("workday")).toBeDefined();
+    expect(WORKDAY_ZERO_LISTINGS_MESSAGE).toContain("No supported Workday postings found");
   });
 });

@@ -18,7 +18,7 @@ import {
   rebindJobSourceRunOutput,
   runJobSourceFromRaw
 } from "./jobSourceRunner";
-import { GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE } from "./jobSourceAdapters";
+import { GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE, WORKDAY_ZERO_LISTINGS_MESSAGE } from "./jobSourceAdapters";
 import type { JobSource } from "./types";
 
 const greenhouseFixture = {
@@ -51,6 +51,25 @@ const governmentJobsSource: JobSource = {
   name: "County of San Diego",
   url: "/fixtures/sample-governmentjobs-listing.html",
   kind: "governmentjobs",
+  enabled: true,
+  cadence: "manual",
+  maxResults: 25
+};
+
+const workdaySearchJson = readFileSync(
+  join(process.cwd(), "public/fixtures/sample-workday-search.json"),
+  "utf8"
+);
+const workdayEmptyJson = readFileSync(
+  join(process.cwd(), "public/fixtures/sample-workday-empty.json"),
+  "utf8"
+);
+
+const workdaySource: JobSource = {
+  id: "source-fixture-workday",
+  name: "Qualcomm",
+  url: "/fixtures/sample-workday-search.json",
+  kind: "workday",
   enabled: true,
   cadence: "manual",
   maxResults: 25
@@ -218,6 +237,84 @@ describe("jobSourceRunner", () => {
     const output = runJobSourceFromRaw(
       governmentJobsSource,
       governmentJobsFixtureHtml,
+      [],
+      seedResumeModules
+    );
+    const state = createState();
+    const result = applyRunJobSourceResult(state, output);
+    expect(result.state.cards).toHaveLength(state.cards.length);
+  });
+
+  it("creates source_fetch candidates from workday fixture JSON", () => {
+    const output = runJobSourceFromRaw(
+      workdaySource,
+      JSON.parse(workdaySearchJson),
+      [],
+      seedResumeModules
+    );
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(output.candidates.every((candidate) => candidate.origin === "source_fetch")).toBe(true);
+    expect(output.updatedSource.runStatus).toBe("success");
+  });
+
+  it("dedupes repeated workday postings on second run", () => {
+    const first = runJobSourceFromRaw(
+      workdaySource,
+      JSON.parse(workdaySearchJson),
+      [],
+      seedResumeModules
+    );
+    const second = runJobSourceFromRaw(
+      workdaySource,
+      JSON.parse(workdaySearchJson),
+      first.candidates,
+      seedResumeModules
+    );
+    expect(second.result.createdCandidateIds).toHaveLength(0);
+    expect(second.result.skippedDuplicates).toBeGreaterThan(0);
+  });
+
+  it("caps workday output with maxResults", () => {
+    const output = runJobSourceFromRaw(
+      { ...workdaySource, maxResults: 1 },
+      JSON.parse(workdaySearchJson),
+      [],
+      seedResumeModules
+    );
+    expect(output.candidates).toHaveLength(1);
+  });
+
+  it("treats workday HTML shell as weak pass with informative message", () => {
+    const output = runJobSourceFromRaw(
+      workdaySource,
+      "<html><body>Loading Workday...</body></html>",
+      [],
+      seedResumeModules
+    );
+    expect(output.candidates).toHaveLength(0);
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.result.message).toBe(WORKDAY_ZERO_LISTINGS_MESSAGE);
+    expect(output.updatedSource.runStatus).toBe("success");
+  });
+
+  it("treats empty workday JSON payload as weak pass", () => {
+    const output = runJobSourceFromRaw(
+      workdaySource,
+      JSON.parse(workdayEmptyJson),
+      [],
+      seedResumeModules
+    );
+    expect(output.candidates).toHaveLength(0);
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.result.message).toBe(WORKDAY_ZERO_LISTINGS_MESSAGE);
+    expect(output.updatedSource.runStatus).toBe("success");
+  });
+
+  it("workday source run does not create application cards", () => {
+    const output = runJobSourceFromRaw(
+      workdaySource,
+      JSON.parse(workdaySearchJson),
       [],
       seedResumeModules
     );

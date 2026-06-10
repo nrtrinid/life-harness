@@ -123,5 +123,29 @@ export const SOURCE_CANDIDATE_EXAMPLES: SourceCandidateExample[] = [
     kind: "governmentjobs",
     url: "https://www.governmentjobs.com/careers/oc",
     notes: "GovernmentJobs / NEOGOV public-sector careers page."
+  },
+  {
+    name: "Workday Fixture (local)",
+    kind: "workday",
+    url: "/fixtures/sample-workday-search.json",
+    notes: "Use this example → Test Source. No live network. Kind is set automatically."
+  },
+  {
+    name: "Qualcomm",
+    kind: "workday",
+    url: "https://qualcomm.wd12.myworkdayjobs.com/en-US/External",
+    notes: "Workday / MyWorkdayJobs — testable but adapter-limited. Default cadence: manual."
+  },
+  {
+    name: "Northrop Grumman",
+    kind: "workday",
+    url: "https://ngc.wd1.myworkdayjobs.com/Northrop_Grumman_External_Site",
+    notes: "Workday external site — live fetch may return HTML shell until endpoint discovery."
+  },
+  {
+    name: "Workday (corporate)",
+    kind: "workday",
+    url: "https://workday.wd5.myworkdayjobs.com/Workday",
+    notes: "Workday corporate careers — test before saving."
   }
 ];

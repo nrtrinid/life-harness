@@ -25,6 +25,7 @@ import {
   runSourceViaRunner
 } from "../src/core/jobScoutRunnerClient";
 import { buildTemporaryJobSource, isValidSourceUrl, type JobSourceRunOutput } from "../src/core/jobSourceRunner";
+import { WORKDAY_ZERO_LISTINGS_MESSAGE } from "../src/core/jobSourceAdapters";
 import type { JobSourceCadence, JobSourceKind } from "../src/core/types";
 import { SOURCE_CANDIDATE_EXAMPLES, type SourceCandidateExample } from "../src/data/sourceCandidates";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
@@ -34,6 +35,7 @@ const KIND_OPTIONS: JobSourceKind[] = [
   "lever",
   "ashby",
   "governmentjobs",
+  "workday",
   "jobposting_jsonld",
   "manual",
   "company_careers"
@@ -73,10 +75,19 @@ export default function SourceSetupScreen() {
   const canTest =
     form.name.trim().length > 0 &&
     isValidSourceUrl(form.url) &&
-    (detection?.isRunnable === true || form.kind === "governmentjobs");
+    (detection?.isRunnable === true || form.kind === "governmentjobs" || form.kind === "workday");
 
   const previewSucceeded =
     previewOutput !== null && previewOutput.result.errors.length === 0;
+
+  const isWorkdayWeakPassPreview =
+    form.kind === "workday" &&
+    previewOutput !== null &&
+    previewOutput.candidates.length === 0 &&
+    previewOutput.result.errors.length === 0 &&
+    previewOutput.result.message === WORKDAY_ZERO_LISTINGS_MESSAGE;
+
+  const showWorkdayHelp = form.kind === "workday" || detection?.detectedKind === "workday";
 
   function applyDetection(result: SourceDetectionResult) {
     setDetection(result);
@@ -203,9 +214,9 @@ export default function SourceSetupScreen() {
       <Text style={styles.screenIntro}>
         Paste a careers or job-board URL, detect the adapter shape, test through the local runner,
         then save. Test is preview-only — candidates enter the queue only if you opt in on save.
-        For fixture dogfood: use the GovernmentJobs Fixture example, or paste
-        /fixtures/sample-governmentjobs-listing.html and set kind to GovernmentJobs / NEOGOV, then Test
-        Source.
+        For fixture dogfood: use the GovernmentJobs or Workday Fixture example, or paste
+        /fixtures/sample-governmentjobs-listing.html or /fixtures/sample-workday-search.json,
+        set the matching kind, then Test Source.
       </Text>
       <ScrollView contentContainerStyle={styles.captureWrap}>
         <Section title="Paste URL">
@@ -323,6 +334,14 @@ export default function SourceSetupScreen() {
             placeholderTextColor={colors.inputPlaceholder}
           />
           <Text style={[styles.label, { marginTop: 12 }]}>Adapter notes</Text>
+          {showWorkdayHelp ? (
+            <Text style={styles.helpText}>
+              Workday pages often load jobs from a JSON endpoint behind the page. v0.9 supports Workday
+              payload parsing, but some live URLs may need endpoint discovery before they return
+              candidates. Default cadence: manual — change to daily/weekly only after a successful
+              candidate-producing run.
+            </Text>
+          ) : null}
           <TextInput
             style={[styles.captureInput, { minHeight: 64 }]}
             value={form.adapterNotes ?? ""}
@@ -357,8 +376,9 @@ export default function SourceSetupScreen() {
         <Section title="Test Source">
           <Text style={styles.helpText}>
             Dry-run through the local Job Scout Runner. No candidates are saved until you choose
-            import on save. Fixture dogfood: paste /fixtures/sample-governmentjobs-listing.html,
-            set kind to GovernmentJobs / NEOGOV, then Test Source (or use the fixture example above).
+            import on save. Fixture dogfood: paste /fixtures/sample-governmentjobs-listing.html or
+            /fixtures/sample-workday-search.json, set the matching kind, then Test Source (or use a
+            fixture example above).
           </Text>
           <Pressable
             style={styles.primaryAction}
@@ -388,6 +408,13 @@ export default function SourceSetupScreen() {
                   Error: {error}
                 </Text>
               ))
+            ) : null}
+            {isWorkdayWeakPassPreview ? (
+              <Text style={styles.bodyText}>
+                This Workday URL was recognized, but no job payload was found. It may need a future
+                endpoint-discovery adapter before it can return candidates. Save as registry-only or
+                keep as a manual source for now.
+              </Text>
             ) : null}
             {sampleCandidates.map((candidate) => {
               const suggested = getSuggestedResumeModules(candidate, resumeModules);

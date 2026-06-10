@@ -58,6 +58,7 @@ export type JobSourceKind =
   | "lever"
   | "ashby"
   | "governmentjobs"
+  | "workday"
   | "jobposting_jsonld"
   | "company_careers"
   | "manual";

@@ -87,13 +87,35 @@ describe("detectJobSourceFromUrl", () => {
     expect(result.isRunnable).toBe(true);
   });
 
-  it("returns company_careers non-runnable for Workday URLs before generic fallback", () => {
+  it("detects Qualcomm External as runnable workday before generic fallback", () => {
     const result = detectJobSourceFromUrl(
-      "https://northropgrumman.wd1.myworkdayjobs.com/en-US/Careers"
+      "https://qualcomm.wd12.myworkdayjobs.com/en-US/External"
     );
-    expect(result.detectedKind).toBe("company_careers");
-    expect(result.isRunnable).toBe(false);
+    expect(result.detectedKind).toBe("workday");
+    expect(result.detectedKind).not.toBe("company_careers");
     expect(result.detectedKind).not.toBe("jobposting_jsonld");
+    expect(result.isRunnable).toBe(true);
+    expect(result.sourceName).toBe("Qualcomm");
+    expect(result.runnableUrl).toBe("https://qualcomm.wd12.myworkdayjobs.com/en-US/External");
+  });
+
+  it("detects Qualcomm job detail URL as workday with detail warning", () => {
+    const result = detectJobSourceFromUrl(
+      "https://qualcomm.wd12.myworkdayjobs.com/en-US/External/job/San-Diego-CA/Software-Engineer_R123456"
+    );
+    expect(result.detectedKind).toBe("workday");
+    expect(result.isRunnable).toBe(true);
+    expect(result.runnableUrl).toBe("https://qualcomm.wd12.myworkdayjobs.com/en-US/External");
+    expect(result.warnings.some((warning) => warning.includes("job detail URL"))).toBe(true);
+  });
+
+  it("detects Northrop Grumman site as workday", () => {
+    const result = detectJobSourceFromUrl(
+      "https://ngc.wd1.myworkdayjobs.com/Northrop_Grumman_External_Site"
+    );
+    expect(result.detectedKind).toBe("workday");
+    expect(result.sourceName).toBe("Northrop Grumman");
+    expect(result.isRunnable).toBe(true);
   });
 
   it("detects GovernmentJobs careers URL as runnable governmentjobs", () => {
@@ -167,5 +189,14 @@ describe("buildSuggestedSourceFromDetection", () => {
     expect(suggested.enabled).toBe(true);
     expect(suggested.cadence).toBe("manual");
     expect(suggested.maxResults).toBe(25);
+  });
+
+  it("builds workday source with manual cadence", () => {
+    const detection = detectJobSourceFromUrl(
+      "https://qualcomm.wd12.myworkdayjobs.com/en-US/External"
+    );
+    const suggested = buildSuggestedSourceFromDetection(detection);
+    expect(suggested.kind).toBe("workday");
+    expect(suggested.cadence).toBe("manual");
   });
 });

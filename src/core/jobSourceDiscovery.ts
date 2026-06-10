@@ -22,6 +22,11 @@ export const GOVERNMENTJOBS_AGENCY_NAMES: Record<string, string> = {
   oc: "Orange County"
 };
 
+export const WORKDAY_KNOWN_NAMES: Record<string, string> = {
+  qualcomm: "Qualcomm",
+  ngc: "Northrop Grumman"
+};
+
 function resolveGovernmentJobsAgencyName(agency: string): string {
   return GOVERNMENTJOBS_AGENCY_NAMES[agency.toLowerCase()] ?? titleCaseSlug(agency);
 }
@@ -76,7 +81,6 @@ function detectUnsupportedDomain(parsed: URL): SourceDetectionResult | null {
   const haystack = `${host}${path}`;
 
   const checks: { match: boolean; label: string }[] = [
-    { match: host.includes("myworkdayjobs") || haystack.includes("workday"), label: "Workday" },
     { match: host.includes("icims") || haystack.includes("icims"), label: "iCIMS" },
     {
       match:
@@ -271,6 +275,61 @@ function detectGovernmentJobs(parsed: URL, inputUrl: string): SourceDetectionRes
   };
 }
 
+function resolveWorkdaySiteName(parsed: URL): string {
+  const subdomain = parsed.hostname.split(".")[0]?.toLowerCase() ?? "";
+  if (WORKDAY_KNOWN_NAMES[subdomain]) {
+    return WORKDAY_KNOWN_NAMES[subdomain];
+  }
+
+  const jobIndex = parsed.pathname.toLowerCase().indexOf("/job/");
+  const sitePath =
+    jobIndex >= 0 ? parsed.pathname.slice(0, jobIndex) : parsed.pathname.replace(/\/$/, "");
+  const segments = sitePath.split("/").filter(Boolean);
+  const siteSegment = segments[segments.length - 1];
+  if (siteSegment) {
+    return titleCaseSlug(siteSegment);
+  }
+
+  return titleCaseSlug(subdomain || "Workday");
+}
+
+function canonicalWorkdaySiteUrl(parsed: URL): string {
+  const jobIndex = parsed.pathname.toLowerCase().indexOf("/job/");
+  const pathname = jobIndex >= 0 ? parsed.pathname.slice(0, jobIndex) : parsed.pathname;
+  const normalizedPath = pathname.replace(/\/$/, "") || "/";
+  return `${parsed.protocol}//${parsed.host}${normalizedPath}`;
+}
+
+function detectWorkday(parsed: URL, inputUrl: string): SourceDetectionResult | null {
+  const host = parsed.hostname.toLowerCase();
+  if (!host.includes("myworkdayjobs.com")) {
+    return null;
+  }
+
+  const isJobDetail = parsed.pathname.toLowerCase().includes("/job/");
+  const warnings = [
+    "Workday sites often require a JSON job-search endpoint; test before saving.",
+    "If this URL returns an HTML shell, a future endpoint-discovery ticket may be needed."
+  ];
+  if (isJobDetail) {
+    warnings.push("This looks like a job detail URL. Prefer the main external site/search URL.");
+  }
+
+  return {
+    inputUrl,
+    detectedKind: "workday",
+    runnableUrl: canonicalWorkdaySiteUrl(parsed),
+    sourceName: resolveWorkdaySiteName(parsed),
+    confidence: "medium",
+    notes: [
+      "Workday / MyWorkdayJobs source detected.",
+      "Workday sources are testable but adapter-limited. Default cadence: manual. Change to daily/weekly only after a successful candidate-producing run."
+    ],
+    warnings,
+    isRunnable: true
+  };
+}
+
 function detectGenericJsonLd(parsed: URL, inputUrl: string): SourceDetectionResult {
   const hostLabel = parsed.hostname.replace(/^www\./, "");
   const segment = firstPathSegment(parsed.pathname);
@@ -332,6 +391,11 @@ export function detectJobSourceFromUrl(inputUrl: string): SourceDetectionResult 
     return governmentJobs;
   }
 
+  const workday = detectWorkday(parsed, normalized);
+  if (workday) {
+    return workday;
+  }
+
   const unsupported = detectUnsupportedDomain(parsed);
   if (unsupported) {
     return unsupported;
@@ -346,7 +410,7 @@ export function buildSuggestedSourceFromDetection(result: SourceDetectionResult)
     url: result.runnableUrl || result.inputUrl,
     kind: result.detectedKind,
     enabled: true,
-    cadence: "manual",
+    cadence: result.detectedKind === "workday" ? "manual" : "manual",
     maxResults: 25,
     adapterNotes: result.notes.length > 0 ? result.notes.join(" ") : undefined,
     notes: result.warnings.length > 0 ? result.warnings.join(" ") : undefined
