@@ -42,7 +42,7 @@ describe("raw-lab screen containment", () => {
   });
 
   it("does not clear thread on unmount", () => {
-    expect(screenSource).not.toMatch(/useEffect[\s\S]*return \(\) =>[\s\S]*setTurns\(\[\]\)/);
+    expect(screenSource).not.toMatch(/return \(\) => \{[^}]*setTurns\(\[\]\)/);
   });
 
   it("includes containment and temporary memory copy", () => {

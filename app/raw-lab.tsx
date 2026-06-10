@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import {
   Platform,
@@ -15,18 +15,38 @@ import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { formatGatewayHost } from "../src/components/askHarness/askHarnessInspectorFormat";
 import { Nav } from "../src/components/Nav";
 import { Notice, type NoticeState } from "../src/components/Notice";
+import {
+  CompanionSelfMemoryPanel,
+  countActiveSelfMemories
+} from "../src/components/rawLab/CompanionSelfMemoryPanel";
+import { RawLabBudgetInspector } from "../src/components/rawLab/RawLabBudgetInspector";
 import { RawLabThread, type RawLabThreadError, type RawLabTurnDisplay } from "../src/components/rawLab/RawLabThread";
 import { RawLabThreadMemoryPanel } from "../src/components/rawLab/RawLabThreadMemoryPanel";
 import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
 import { createId } from "../src/core/ids";
 import {
-  askRawLab,
+  activeCompanionSelfMemoriesForSend,
+  applyBatchedLastUsedAt,
+  createCompanionSelfMemory,
+  type CompanionSelfMemory
+} from "../src/core/companionSelfMemory";
+import {
+  flushPendingCompanionLastUsedAt,
+  loadCompanionSelfMemories,
+  saveCompanionSelfMemories
+} from "../src/core/companionSelfMemoryStore";
+import {
   DEFAULT_RAW_LAB_URL,
   RawLabError,
   streamRawLab,
   type RawLabResponse
 } from "../src/core/rawLabClient";
+import type { RawLabBudgetLevel, RawLabCompactionNotice } from "../src/core/rawLabContextBudget";
+import {
+  reflectOnRawLab,
+  type RawLabSelfMemoryProposal
+} from "../src/core/rawLabSelfReflectionClient";
 import { buildGroundedHandoffDigest, shouldSuggestGroundedHandoff } from "../src/core/chatThreadState";
 import {
   addConversationalInstinct,
@@ -84,7 +104,56 @@ export default function RawLabScreen() {
   const [loading, setLoading] = useState(false);
   const [streamingAnswer, setStreamingAnswer] = useState("");
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [lastSendStats, setLastSendStats] = useState<{
+    estimatedChars: number;
+    level: RawLabBudgetLevel;
+    turnsSent: number;
+    memoriesSent: number;
+    budgetCapChars: number;
+    notice?: RawLabCompactionNotice;
+  } | null>(null);
   const [handoffDismissed, setHandoffDismissed] = useState(false);
+  const [companionMemories, setCompanionMemories] = useState<CompanionSelfMemory[]>([]);
+  const [chatOnlyMemories, setChatOnlyMemories] = useState<CompanionSelfMemory[]>([]);
+  const [reflectionProposals, setReflectionProposals] = useState<RawLabSelfMemoryProposal[]>([]);
+  const [reflecting, setReflecting] = useState(false);
+  const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCompanionMemories(loadCompanionSelfMemories());
+  }, []);
+
+  useEffect(() => {
+    const pendingIds = pendingUsedMemoryIdsRef;
+    return () => {
+      flushPendingCompanionLastUsedAt(pendingIds.current);
+      pendingIds.current.clear();
+    };
+  }, []);
+
+  function persistCompanionMemories(next: CompanionSelfMemory[]) {
+    setCompanionMemories(next);
+    saveCompanionSelfMemories(next);
+  }
+
+  function flushLastUsedAt(usedIds: string[]) {
+    if (usedIds.length === 0) {
+      return;
+    }
+    for (const id of usedIds) {
+      pendingUsedMemoryIdsRef.current.add(id);
+    }
+    const flushed = applyBatchedLastUsedAt({
+      memories: loadCompanionSelfMemories(),
+      usedIds: pendingUsedMemoryIdsRef.current
+    });
+    pendingUsedMemoryIdsRef.current.clear();
+    persistCompanionMemories(flushed);
+  }
+
+  function memoriesForSend(): CompanionSelfMemory[] {
+    return activeCompanionSelfMemoriesForSend(companionMemories, chatOnlyMemories);
+  }
   const showHandoffBanner =
     !handoffDismissed &&
     (shouldSuggestGroundedHandoff(message) ||
@@ -127,16 +196,33 @@ export default function RawLabScreen() {
     setErrors([]);
 
     try {
-      const response = await streamRawLab({
+      const sendResult = await streamRawLab({
         baseUrl,
         message: trimmed,
         turns: priorTurns,
         threadState,
+        companionSelfMemories: memoriesForSend(),
         signal: abortController.signal,
         onChunk: (chunk) => {
           setStreamingAnswer((previous) => previous + chunk);
         }
       });
+      const response = sendResult.response;
+
+      if (sendResult.notice) {
+        setNotice({ kind: "info", message: sendResult.notice.message });
+      }
+      if (sendResult.sendStats) {
+        setLastSendStats({
+          estimatedChars: sendResult.sendStats.estimatedChars,
+          level: sendResult.sendStats.level,
+          turnsSent: sendResult.sendStats.turnsSent,
+          memoriesSent: sendResult.sendStats.memoriesSent,
+          budgetCapChars: sendResult.sendStats.budgetCapChars,
+          notice: sendResult.notice
+        });
+        flushLastUsedAt(sendResult.sendStats.injectedMemoryIds);
+      }
 
       const assistantTurn: RawLabTurn = {
         id: createId("raw-assistant"),
@@ -194,9 +280,54 @@ export default function RawLabScreen() {
     setResponses({});
     setErrors([]);
     setThreadState(clearThreadState());
+    setChatOnlyMemories([]);
+    setReflectionProposals([]);
     setMessage("");
     setStreamingAnswer("");
     setNotice(null);
+    setLastSendStats(null);
+  }
+
+  async function handleReflect() {
+    if (reflecting || turns.length === 0) {
+      return;
+    }
+    setReflecting(true);
+    setNotice(null);
+    try {
+      const result = await reflectOnRawLab({
+        baseUrl,
+        turns,
+        threadState,
+        existingSelfMemories: companionMemories
+      });
+      setReflectionProposals(result.proposals);
+      if (result.safety_notes.length > 0) {
+        setNotice({ kind: "info", message: result.safety_notes.join(" ") });
+      }
+    } catch (error) {
+      const formatted = formatSendError(error);
+      setNotice({ kind: "error", message: formatted.text });
+    } finally {
+      setReflecting(false);
+    }
+  }
+
+  function handleSessionOnlyProposal(proposal: RawLabSelfMemoryProposal, index: number) {
+    const created = createCompanionSelfMemory({
+      kind: proposal.kind as CompanionSelfMemory["kind"],
+      subject: proposal.subject,
+      text: proposal.text,
+      source: "user_approved_proposal",
+      confidence: proposal.confidence,
+      sensitivity: proposal.sensitivity
+    });
+    if (!created.ok) {
+      setNotice({ kind: "error", message: created.reason });
+      return;
+    }
+    setChatOnlyMemories((previous) => [...previous, created.memory]);
+    setReflectionProposals((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
   }
 
   function handlePin(content: string) {
@@ -253,6 +384,8 @@ export default function RawLabScreen() {
   }
 
   const statusLine = `${formatGatewayHost(baseUrl)} · Ungrounded · ephemeral`;
+  const budgetForceExpanded = Boolean(lastSendStats?.notice);
+  const selfMemoryCount = countActiveSelfMemories(companionMemories);
 
   return (
     <Screen>
@@ -278,7 +411,36 @@ export default function RawLabScreen() {
           </Text>
         </View>
 
+        <CompanionSelfMemoryPanel
+          memories={companionMemories}
+          proposals={reflectionProposals}
+          reflecting={reflecting}
+          onMemoriesChange={persistCompanionMemories}
+          onSessionOnly={handleSessionOnlyProposal}
+          onReflect={() => void handleReflect()}
+          onDismissProposal={(index) =>
+            setReflectionProposals((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
+          }
+        />
+        {selfMemoryCount > 0 || reflectionProposals.length > 0 ? (
+          <Text style={styles.helpText}>
+            {selfMemoryCount} persistent self-memor{selfMemoryCount === 1 ? "y" : "ies"}
+            {reflectionProposals.length > 0
+              ? ` · ${reflectionProposals.length} reflection proposal(s)`
+              : ""}
+          </Text>
+        ) : null}
+
         <RawLabThreadMemoryPanel threadState={threadState} onThreadStateChange={setThreadState} />
+
+        <RawLabBudgetInspector
+          turns={turns}
+          threadState={threadState}
+          message={message}
+          companionSelfMemories={memoriesForSend()}
+          forceExpanded={budgetForceExpanded}
+          lastSend={lastSendStats ?? undefined}
+        />
 
         {showHandoffBanner ? (
           <View style={styles.bannerInfo}>

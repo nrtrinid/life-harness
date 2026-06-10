@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createCompanionSelfMemory } from "./companionSelfMemory";
 import { createEmptyRawLabThreadState, type RawLabTurn } from "./rawLabThreadState";
+import { isRawLabInputBudgetError } from "./rawLabContextBudget";
 import {
   askRawLab,
   buildRawLabRequestBody,
@@ -40,6 +42,28 @@ describe("buildRawLabRequestBody", () => {
     expect(body).not.toHaveProperty("proposed_card_updates");
     expect(body).not.toHaveProperty("conversation_history");
     expect(body).not.toHaveProperty("allow_adult_topics");
+    expect(body.companion_self_memories).toEqual([]);
+  });
+
+  it("includes companion self-memories when provided", () => {
+    const created = createCompanionSelfMemory({
+      kind: "self_observation",
+      subject: "companion_self",
+      text: "Initiative pattern",
+      source: "manual_user_teaching"
+    });
+    if (!created.ok) {
+      throw new Error("expected memory");
+    }
+    const body = buildRawLabRequestBody({
+      message: "Hi",
+      turns: [],
+      threadState: createEmptyRawLabThreadState(),
+      companionSelfMemories: [created.memory]
+    });
+    expect(body.companion_self_memories).toHaveLength(1);
+    expect(body.companion_self_memories[0]?.text).toBe("Initiative pattern");
+    expect(body.companion_self_memories[0]?.subject).toBe("companion_self");
   });
 
   it("maps personality fields to snake_case and compacts long notes", () => {
@@ -112,7 +136,7 @@ describe("askRawLab", () => {
       threadState: createEmptyRawLabThreadState()
     });
 
-    expect(response.answer).toBe("Sandbox reply.");
+    expect(response.response.answer).toBe("Sandbox reply.");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`${DEFAULT_RAW_LAB_URL}/raw-lab`);
@@ -160,6 +184,77 @@ describe("askRawLab", () => {
     ).rejects.toThrow(RawLabError);
 
     vi.unstubAllGlobals();
+  });
+});
+
+describe("budget retry", () => {
+  it("retries once on budget 422 only", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        text: async () =>
+          JSON.stringify({
+            detail: "Serialized input length 13000 exceeds SCOUT_MAX_INPUT_CHARS=12000"
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            answer: "After compact.",
+            mode: "raw_lab",
+            safety_notes: [],
+            used_context: false
+          })
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await askRawLab({
+      baseUrl: DEFAULT_RAW_LAB_URL,
+      message: "hello"
+    });
+
+    expect(result.response.answer).toBe("After compact.");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
+  });
+
+  it("does not retry schema validation 422", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () =>
+        JSON.stringify({
+          detail: [
+            {
+              msg: "Field required"
+            }
+          ]
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      askRawLab({
+        baseUrl: DEFAULT_RAW_LAB_URL,
+        message: "hello"
+      })
+    ).rejects.toThrow(RawLabError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("isRawLabInputBudgetError", () => {
+  it("detects gateway budget messages", () => {
+    expect(
+      isRawLabInputBudgetError("Serialized input length 12795 exceeds SCOUT_MAX_INPUT_CHARS=12000")
+    ).toBe(true);
+    expect(isRawLabInputBudgetError("Field required")).toBe(false);
   });
 });
 
