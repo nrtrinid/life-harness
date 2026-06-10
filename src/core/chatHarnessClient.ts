@@ -5,6 +5,7 @@ import type {
   HarnessContext
 } from "./harnessContext";
 import type { WireChatHarnessThreadState } from "./chatThreadState";
+import type { WireContextPacket } from "./contextPacketWire";
 import type { SensitivityLevel } from "./types";
 
 export const DEFAULT_CHAT_HARNESS_URL = "http://127.0.0.1:8111";
@@ -34,6 +35,7 @@ export interface AskChatHarnessInput {
   mode: ChatHarnessMode;
   sensitivity: SensitivityLevel;
   context: HarnessContext;
+  contextPacket?: WireContextPacket;
   conversationHistory?: ConversationTurn[];
   threadState?: WireChatHarnessThreadState;
   reasoningDepth?: ReasoningDepth;
@@ -124,6 +126,9 @@ export async function askChatHarness(input: AskChatHarnessInput): Promise<ChatHa
     context: input.context,
     conversation_history: input.conversationHistory ?? []
   };
+  if (input.contextPacket) {
+    body.context_packet = input.contextPacket;
+  }
   if (input.threadState) {
     body.thread_state = input.threadState;
   }

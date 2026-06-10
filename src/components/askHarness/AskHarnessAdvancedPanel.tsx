@@ -40,6 +40,7 @@ interface AskHarnessAdvancedPanelProps {
   fullPromptChars: number;
   compactPromptChars: number;
   promptOverBudget: boolean;
+  packetSliceSummary?: string;
   qualitySummary: string;
   qualityOpen: boolean;
   onQualityOpenToggle: () => void;
@@ -71,6 +72,7 @@ export function AskHarnessAdvancedPanel({
   fullPromptChars,
   compactPromptChars,
   promptOverBudget,
+  packetSliceSummary,
   qualitySummary,
   qualityOpen,
   onQualityOpenToggle,
@@ -166,6 +168,9 @@ export function AskHarnessAdvancedPanel({
           ~{selectedJsonChars} json · ~{selectedPromptChars} prompt (Full ~{fullChars}/{fullPromptChars} ·
           Compact ~{compactChars}/{compactPromptChars})
         </Text>
+        {packetSliceSummary ? (
+          <Text style={styles.helpText}>Context slices: {packetSliceSummary}</Text>
+        ) : null}
         {promptOverBudget ? (
           <Notice
             kind="error"

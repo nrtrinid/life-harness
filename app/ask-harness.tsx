@@ -40,6 +40,9 @@ import {
   type ChatTurn,
   type SharedChatThreadState
 } from "../src/core/chatThreadState";
+import { buildAiContextPacket } from "../src/core/contextPacketBuilder";
+import { formatPacketSliceSummary, resolveSendBundleFromPacket } from "../src/core/contextPacketShim";
+import { toWireContextPacket } from "../src/core/contextPacketWire";
 import {
   buildCompactHarnessContext,
   buildContextQualitySummary,
@@ -48,7 +51,6 @@ import {
   estimateChatHarnessPromptChars,
   estimateHarnessContextChars,
   getActiveLimitSignal,
-  resolveChatHarnessSendBundle,
   shouldAutoSelectCompactExport,
   type ChatHarnessMode,
   type HarnessExportInput
@@ -149,6 +151,20 @@ export default function AskHarnessDevScreen() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(isWideLayout);
+  const [lastSentPacketSummary, setLastSentPacketSummary] = useState<string | null>(null);
+
+  function buildInspectorPacket(
+    userMessage: string,
+    state: SharedChatThreadState,
+    exportMode: ContextExportMode
+  ) {
+    return buildAiContextPacket({
+      data: exportInput,
+      userIntent: { message: userMessage, mode, sensitivity },
+      threadState: state,
+      preferredExport: exportMode
+    });
+  }
 
   function handleQuickQuestion(item: QuickQuestion) {
     setMessage(item.message);
@@ -199,6 +215,15 @@ export default function AskHarnessDevScreen() {
     () => harnessState.memoryItems.filter((item) => item.isActive).length,
     [harnessState.memoryItems]
   );
+  const previewPacket = useMemo(
+    () => buildInspectorPacket(message, threadState, contextMode),
+    [exportInput, message, mode, sensitivity, threadState, contextMode]
+  );
+  const previewPacketSummary = useMemo(
+    () => formatPacketSliceSummary(previewPacket),
+    [previewPacket]
+  );
+  const packetSliceSummary = lastSentPacketSummary ?? previewPacketSummary;
   const qualitySummary = useMemo(
     () =>
       buildContextQualitySummary(
@@ -255,6 +280,7 @@ export default function AskHarnessDevScreen() {
     setThreadState(createEmptySharedChatThreadState());
     setMessage("");
     setNotice(null);
+    setLastSentPacketSummary(null);
   }
 
   function buildCompletedChatTurns(
@@ -296,9 +322,10 @@ export default function AskHarnessDevScreen() {
     ]);
 
     try {
+      const sendPacket = buildInspectorPacket(trimmed, threadStateForSend, contextMode);
+      setLastSentPacketSummary(formatPacketSliceSummary(sendPacket));
       const { context: contextForSend, conversationHistory: historyForSend } =
-        resolveChatHarnessSendBundle(exportInput, {
-          preferredMode: contextMode,
+        resolveSendBundleFromPacket(sendPacket, {
           message: trimmed,
           conversationHistory,
           threadStateJsonChars
@@ -320,6 +347,7 @@ export default function AskHarnessDevScreen() {
         mode,
         sensitivity,
         context: contextForSend,
+        contextPacket: toWireContextPacket(sendPacket),
         conversationHistory: historyForSend,
         threadState: wireThreadState,
         reasoningDepth
@@ -431,6 +459,7 @@ export default function AskHarnessDevScreen() {
       fullPromptChars={fullPromptChars}
       compactPromptChars={compactPromptChars}
       promptOverBudget={promptOverBudget}
+      packetSliceSummary={packetSliceSummary}
       qualitySummary={qualitySummary}
       qualityOpen={qualityOpen}
       onQualityOpenToggle={() => setQualityOpen((open) => !open)}

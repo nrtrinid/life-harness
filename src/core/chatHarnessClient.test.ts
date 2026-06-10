@@ -8,6 +8,7 @@ import {
   parseChatHarnessResponse
 } from "./chatHarnessClient";
 import type { HarnessContext } from "./harnessContext";
+import type { WireContextPacket } from "./contextPacketWire";
 
 const context: HarnessContext = {
   cards: [],
@@ -70,6 +71,143 @@ describe("askChatHarness", () => {
     expect(body.mode).toBe("operator");
     expect(body.context).toEqual(context);
     expect(body.conversation_history).toEqual([{ role: "user", content: "Earlier question" }]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("posts context_packet when provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          answer: "Try one tiny move.",
+          used_context: true,
+          confidence_notes: [],
+          safety_notes: []
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const contextPacket: WireContextPacket = {
+      packet_version: "0.1" as const,
+      generated_at: "2026-06-09T12:00:00.000Z",
+      user_intent: {
+        message: "Hello",
+        mode: "general",
+        sensitivity: "S1"
+      },
+      board: {
+        harness: context,
+        active_limit: {
+          count: 0,
+          limit: 3,
+          is_at_limit: false,
+          is_over_limit: false,
+          message: "ok"
+        },
+        diagnoses: [],
+        product_decisions: []
+      },
+      active_cards: [],
+      stale_cards: [],
+      recent_proof: [],
+      recovery_signals: [],
+      memories: [],
+      companion: {
+        briefing_prepared: [],
+        briefing_detected: [],
+        recovery: {
+          show_salvage: false,
+          show_mvd: false,
+          should_promote: false
+        },
+        while_you_were_away_highlights: []
+      },
+      open_thread: {
+        recent_digest: "",
+        active_goal: "",
+        current_topic: "",
+        open_loops: [],
+        pinned_facts: [],
+        user_steering: [],
+        do_not_repeat: [],
+        wire: {
+          recent_digest: "",
+          active_goal: "",
+          current_topic: "",
+          task_mode: "plan" as const,
+          open_loops: [],
+          decisions: [],
+          pinned_facts: [],
+          user_steering: [],
+          do_not_repeat: [],
+          references: { last_options: [] },
+          updated_at: "2026-01-01T00:00:00.000Z"
+        }
+      },
+      project_docs: [],
+      output_schema: {
+        name: "chat_harness_answer",
+        version: "0.1" as const,
+        schema_ref: "chat_harness_answer_v0.1",
+        requires_approval: false
+      },
+      tools: { allowed: [], denied: [], notes: [] },
+      budget: {
+        estimated_chars: 100,
+        max_chars: 12000,
+        compaction_level: "none",
+        dropped_sources: []
+      },
+      redaction: {
+        request_sensitivity: "S1",
+        excluded_card_ids: [],
+        excluded_log_ids: [],
+        notes: []
+      }
+    };
+
+    await askChatHarness({
+      baseUrl: DEFAULT_CHAT_HARNESS_URL,
+      message: "Hello",
+      mode: "general",
+      sensitivity: "S1",
+      context,
+      contextPacket
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as Record<string, unknown>;
+    expect(body.context_packet).toEqual(contextPacket);
+    expect(body.context).toEqual(context);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("omits context_packet when not provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          answer: "Try one tiny move.",
+          used_context: true,
+          confidence_notes: [],
+          safety_notes: []
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await askChatHarness({
+      baseUrl: DEFAULT_CHAT_HARNESS_URL,
+      message: "Hello",
+      mode: "general",
+      sensitivity: "S1",
+      context
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as Record<string, unknown>;
+    expect(body.context_packet).toBeUndefined();
 
     vi.unstubAllGlobals();
   });

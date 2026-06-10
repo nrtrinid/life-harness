@@ -219,6 +219,10 @@ function containsSensitiveInference(text: string): boolean {
   return SENSITIVE_INFERENCE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+export function isSensitiveThreadLine(text: string): boolean {
+  return containsSensitiveInference(text);
+}
+
 export function classifyTurnIntent(userMessage: string): ThreadTaskMode {
   const text = userMessage.toLowerCase();
   if (/\bteach me\b|\bexplain\b|\bhow do i\b|\bwalk me through\b/.test(text)) {
