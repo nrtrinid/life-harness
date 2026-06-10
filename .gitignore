@@ -19,3 +19,6 @@ services/ai-gateway/models/
 
 expo-env.d.ts
 # @end expo-cli
+
+resume_pack/
+exports/life_harness_career_pack*.json

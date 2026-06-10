@@ -51,6 +51,7 @@ export interface ResumeModule {
   bestFor: RoleType[];
   proof?: string[];
   isActive: boolean;
+  importedFromCareerPack?: boolean;
 }
 
 export type JobSourceKind =

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Alert, Platform, Pressable, Text, TextInput, View } from "react-native";
 
 import { Nav } from "../src/components/Nav";
+import { PageHeader } from "../src/components/PageHeader";
+import { CollapsibleSection } from "../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { ProofShelf } from "../src/components/ProofShelf";
 import { ProgressBar } from "../src/components/ProgressBar";
@@ -10,6 +12,7 @@ import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { colors, styles } from "../src/components/styles";
 import { buildCareerStats } from "../src/core/career";
+import { buildCareerPackBriefingStats } from "../src/core/careerPackMatching";
 import { buildJobScoutStats } from "../src/core/jobScout";
 import { buildSourceHealthStats } from "../src/core/jobSourceHealth";
 import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
@@ -50,6 +53,7 @@ export default function ProgressScreen() {
     jobSources,
     jobSourceRuns,
     resumeModules,
+    careerSourcePack,
     persistenceAvailable,
     exportSnapshot,
     importSnapshot,
@@ -118,10 +122,70 @@ export default function ProgressScreen() {
   const locks = checkUseBeforeImproveLocks(cards, logs, jobCandidates, jobSourceRuns);
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
   const healthStats = buildSourceHealthStats(jobSources, jobSourceRuns, jobCandidates, now);
+  const packStats = buildCareerPackBriefingStats(
+    jobCandidates,
+    careerSourcePack?.pack ?? null,
+    resumeModules,
+    jobSources
+  );
 
   return (
     <Screen>
       <Nav />
+      <PageHeader
+        title="Progress"
+        subtitle="Proof, momentum, and recovery signals."
+      />
+
+      <Section title="Proof Shelf" accent="proof">
+        <ProofShelf />
+      </Section>
+
+      <Section title="Recent Rescue Proof">
+        <ProofShelf rescueOnly limit={5} />
+      </Section>
+
+      <Section title="Weekly XP" accent="xp">
+        <Text style={styles.bigNumber}>{summary.weeklyXp}</Text>
+        <Text style={styles.helpText}>Total XP across local logs this week.</Text>
+      </Section>
+
+      <Section title="Card Warmth" accent="warmth">
+        {cardWarmth.length === 0 ? (
+          <Text style={styles.emptyText}>No active or parked cards to show warmth for.</Text>
+        ) : (
+          cardWarmth.map((item) => (
+            <Link key={item.id} href={`/card/${item.id}`} asChild>
+              <Pressable accessibilityRole="link">
+                <Text style={styles.listItem}>
+                  ▸ {item.title}: {item.warmthLabel}
+                </Text>
+              </Pressable>
+            </Link>
+          ))
+        )}
+      </Section>
+
+      <Section title="Cold / Dormant Projects">
+        {coldDormant.length === 0 ? (
+          <Text style={styles.emptyText}>No cold or dormant active/parked projects right now.</Text>
+        ) : (
+          coldDormant.map((item) => (
+            <View key={item.id} style={styles.progressItem}>
+              <Link href={`/card/${item.id}`} asChild>
+                <Pressable accessibilityRole="link">
+                  <Text style={styles.titleText}>
+                    {item.title} ({item.warmthLabel})
+                  </Text>
+                </Pressable>
+              </Link>
+              <Text style={styles.bodyText}>{item.nextTinyAction}</Text>
+            </View>
+          ))
+        )}
+      </Section>
+
+      <CollapsibleSection title="Data & operator details" defaultOpen={false}>
       <Section title="Approved Source Fetching">
         <Text style={styles.listItem}>▸ Sources configured: {scoutStats.jobSourcesConfigured}</Text>
         <Text style={styles.listItem}>▸ Enabled sources: {scoutStats.enabledSources}</Text>
@@ -160,6 +224,35 @@ export default function ProgressScreen() {
         </Link>
       </Section>
 
+      <Section title="Career Source Pack">
+        <Text style={styles.listItem}>
+          ▸ Status: {packStats.imported ? "Imported" : "Not imported"}
+        </Text>
+        {careerSourcePack ? (
+          <>
+            <Text style={styles.listItem}>
+              ▸ Modules: {careerSourcePack.pack.resumeModules.length} · Recipes:{" "}
+              {careerSourcePack.pack.roleRecipes.length}
+            </Text>
+            <Text style={styles.listItem}>
+              ▸ Queue evidence gaps: {packStats.evidenceGapCount}
+            </Text>
+            <Text style={styles.listItem}>
+              ▸ Claim rules: {careerSourcePack.pack.claimsSafety.globalClaimsToAvoid.length}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.helpText}>
+            Import a Career Source Pack to rank the candidate queue by role recipes and modules.
+          </Text>
+        )}
+        <Link href="/career-pack" asChild>
+          <Pressable style={styles.secondaryAction}>
+            <Text style={styles.secondaryActionText}>Open Career Pack</Text>
+          </Pressable>
+        </Link>
+      </Section>
+
       <Section title="Job Scout Foundation">
         <Text style={styles.listItem}>▸ Resume modules active: {scoutStats.activeResumeModules}</Text>
         <Text style={styles.listItem}>▸ Candidates saved: {scoutStats.candidatesSaved}</Text>
@@ -177,30 +270,9 @@ export default function ProgressScreen() {
         <Text style={styles.listItem}>▸ Career pounces completed: {careerStats.careerPounces}</Text>
       </Section>
 
-      <Section title="Weekly XP" accent="xp">
-        <Text style={styles.bigNumber}>{summary.weeklyXp}</Text>
-        <Text style={styles.helpText}>Total XP across local logs this week.</Text>
-      </Section>
-
       <Section title="XP Summary">
         <Text style={styles.listItem}>▸ Pounce sessions: {summary.pounceSessions}</Text>
         <Text style={styles.listItem}>▸ Salvage wins: {summary.salvageWins}</Text>
-      </Section>
-
-      <Section title="Card Warmth" accent="warmth">
-        {cardWarmth.length === 0 ? (
-          <Text style={styles.emptyText}>No active or parked cards to show warmth for.</Text>
-        ) : (
-          cardWarmth.map((item) => (
-            <Link key={item.id} href={`/card/${item.id}`} asChild>
-              <Pressable accessibilityRole="link">
-                <Text style={styles.listItem}>
-                  ▸ {item.title}: {item.warmthLabel}
-                </Text>
-              </Pressable>
-            </Link>
-          ))
-        )}
       </Section>
 
       <Section title="Momentum Warmth">
@@ -209,33 +281,6 @@ export default function ProgressScreen() {
             ▸ {item.label}: {item.count}
           </Text>
         ))}
-      </Section>
-
-      <Section title="Cold / Dormant Projects">
-        {coldDormant.length === 0 ? (
-          <Text style={styles.emptyText}>No cold or dormant active/parked projects right now.</Text>
-        ) : (
-          coldDormant.map((item) => (
-            <View key={item.id} style={styles.progressItem}>
-              <Link href={`/card/${item.id}`} asChild>
-                <Pressable accessibilityRole="link">
-                  <Text style={styles.titleText}>
-                    {item.title} ({item.warmthLabel})
-                  </Text>
-                </Pressable>
-              </Link>
-              <Text style={styles.bodyText}>{item.nextTinyAction}</Text>
-            </View>
-          ))
-        )}
-      </Section>
-
-      <Section title="Proof Shelf" accent="proof">
-        <ProofShelf />
-      </Section>
-
-      <Section title="Recent Rescue Proof">
-        <ProofShelf rescueOnly limit={5} />
       </Section>
 
       <Section title="Use-Before-Improve Locks">
@@ -298,6 +343,7 @@ export default function ProgressScreen() {
           <Text style={styles.secondaryActionText}>Reset to Seed</Text>
         </Pressable>
       </Section>
+      </CollapsibleSection>
     </Screen>
   );
 }

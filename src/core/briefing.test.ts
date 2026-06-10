@@ -6,8 +6,18 @@ import {
   getBriefingHighlights,
   startSession
 } from "./briefing";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { applyImportCareerSourcePack } from "./actions";
+import { createSeedState } from "../data/createSeedState";
 import { seedJobCandidates, seedJobSources } from "../data/seedJobScout";
 import type { DailyState, LifeCard, LifeLogEntry, ProofItem } from "./types";
+
+const packFixture = readFileSync(
+  join(process.cwd(), "public/fixtures/sample-career-source-pack.v1.json"),
+  "utf8"
+);
 
 const NOW = new Date("2026-06-09T12:00:00.000Z");
 
@@ -268,6 +278,63 @@ describe("scout briefing signals", () => {
     expect(briefing.prepared.some((line) => line.includes("review one fetched candidate"))).toBe(
       true
     );
+  });
+
+  it("suggests importing career pack when fetched candidates exist without pack", () => {
+    const fetchedCandidate = {
+      ...seedJobCandidates[0],
+      id: "candidate-fetched-pack",
+      origin: "source_fetch" as const,
+      status: "new" as const
+    };
+    const briefing = generateWhileYouWereAway(
+      [],
+      [],
+      [],
+      baseDaily,
+      NOW,
+      [fetchedCandidate],
+      seedJobSources,
+      [],
+      null,
+      []
+    );
+    expect(
+      briefing.detected.some((line) => line.includes("Import Career Source Pack"))
+    ).toBe(true);
+  });
+
+  it("mentions strong pack matches when pack is imported", () => {
+    const imported = applyImportCareerSourcePack(createSeedState(), packFixture);
+    expect(imported.ok).toBe(true);
+    const candidate = {
+      ...seedJobCandidates[0],
+      id: "candidate-pack-strong",
+      origin: "source_fetch" as const,
+      status: "new" as const,
+      company: "Northrop Grumman",
+      roleTitle: "Software Engineer I",
+      description:
+        "Python C++ Linux security. Able to obtain Secret clearance. New grad friendly."
+    };
+    const briefing = generateWhileYouWereAway(
+      [],
+      [],
+      [],
+      baseDaily,
+      NOW,
+      [candidate],
+      seedJobSources,
+      [],
+      imported.state.careerSourcePack,
+      imported.state.resumeModules
+    );
+    expect(
+      briefing.detected.some(
+        (line) =>
+          line.includes("match strongly") || line.includes("Career Pack imported")
+      )
+    ).toBe(true);
   });
 
   it("mentions due job sources when a daily source is overdue", () => {

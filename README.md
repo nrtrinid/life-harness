@@ -14,11 +14,11 @@ npm run web            # terminal 2
 
 Other targets: `npm run android`, `npm run ios`.
 
-Navigation is grouped into **Primary** (Today, Board, Career, Ask, Progress), **Career Tools** (Intake, Paste, Queue, Bank, Sources, Setup), and **System** (Memory, Log, Raw Lab) surfaces.
+Navigation is grouped into **Primary** (Today, Board, Career, Ask, Progress), **Career Tools** (Intake, Paste, Queue, Career Pack, Bank, Sources, Setup), and **System** (Memory, Log, Raw Lab) surfaces.
 
 Job Scout approved-source fetching uses the local runner in v0.4. Without `npm run scout:runner`, **Sources → Run Source** shows a start-runner message (no browser fetch fallback).
 
-Use **Setup** (`/source-setup`) to paste a careers URL, detect the adapter shape, dry-run test, and save — see [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md). GovernmentJobs / NEOGOV `/careers/{agency}` URLs are supported in v0.8 — see [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md). Workday / MyWorkdayJobs is supported in v0.9 (fixture-first; live page URLs may weak-pass) — see [`docs/job-scout-workday-v0.9.md`](docs/job-scout-workday-v0.9.md). Workday endpoint capture (manual DevTools POST body) is supported in v0.10 — see [`docs/job-scout-workday-endpoint-v0.10.md`](docs/job-scout-workday-endpoint-v0.10.md). v0.11 adds bounded Workday pagination, source health, and endpoint templates — **restart `npm run scout:runner` after upgrading** — see [`docs/job-scout-workday-pagination-health-v0.11.md`](docs/job-scout-workday-pagination-health-v0.11.md).
+Use **Setup** (`/source-setup`) to paste a careers URL, detect the adapter shape, dry-run test, and save — see [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md). GovernmentJobs / NEOGOV `/careers/{agency}` URLs are supported in v0.8 — see [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md). Workday / MyWorkdayJobs is supported in v0.9 (fixture-first; live page URLs may weak-pass) — see [`docs/job-scout-workday-v0.9.md`](docs/job-scout-workday-v0.9.md). Workday endpoint capture (manual DevTools POST body) is supported in v0.10 — see [`docs/job-scout-workday-endpoint-v0.10.md`](docs/job-scout-workday-endpoint-v0.10.md). v0.11 adds bounded Workday pagination, source health, and endpoint templates — **restart `npm run scout:runner` after upgrading** — see [`docs/job-scout-workday-pagination-health-v0.11.md`](docs/job-scout-workday-pagination-health-v0.11.md). v0.12 adds Career Source Pack paste-import, queue matching, and filters — see [`docs/career-source-pack-import-v0.12.md`](docs/career-source-pack-import-v0.12.md).
 
 ## Verify
 
@@ -72,8 +72,22 @@ Did this make me start, recover, or feel less scattered?
 
 ## Docs
 
-See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/job-scout-foundation-v0.2.md`](docs/job-scout-foundation-v0.2.md), [`docs/job-scout-approved-sources-v0.3.md`](docs/job-scout-approved-sources-v0.3.md), [`docs/job-scout-runner-v0.4.md`](docs/job-scout-runner-v0.4.md), [`docs/persistence-audit-v0.5.md`](docs/persistence-audit-v0.5.md), [`docs/job-scout-run-due-v0.6.md`](docs/job-scout-run-due-v0.6.md), [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md), [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md), [`docs/job-scout-workday-v0.9.md`](docs/job-scout-workday-v0.9.md), [`docs/job-scout-workday-endpoint-v0.10.md`](docs/job-scout-workday-endpoint-v0.10.md), [`docs/job-scout-workday-pagination-health-v0.11.md`](docs/job-scout-workday-pagination-health-v0.11.md), and `docs/` for product rules and scope.
+| Doc | Purpose |
+|-----|---------|
+| [`docs/README.md`](docs/README.md) | Full documentation index |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Dev setup and verify commands |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution and agent workflow |
+| [`CHANGELOG.md`](CHANGELOG.md) | What shipped and when |
+| [`AGENTS.md`](AGENTS.md) | Agent rules and product constraints |
+
+**Product:** [`docs/02_v0_1_scope.md`](docs/02_v0_1_scope.md), [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/career-hub-v0.1.md`](docs/career-hub-v0.1.md).
+
+**Job Scout:** foundation v0.2 through Workday pagination v0.11 — linked from the docs index.
 
 ## Dev: Ask Harness (optional)
 
-Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask** in the primary nav (chat-first layout; on web, **Enter** sends and **Shift+Enter** adds a newline). See [`docs/harness-context-export-v0.1.md`](docs/harness-context-export-v0.1.md), [`docs/harness-context-quality-v0.1.md`](docs/harness-context-quality-v0.1.md), [`docs/conversation-summary-memory-v0.1.md`](docs/conversation-summary-memory-v0.1.md), and [`docs/memory-bank-v0.1.md`](docs/memory-bank-v0.1.md).
+Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask** in the primary nav. See [`docs/ask-harness-v0.1.md`](docs/ask-harness-v0.1.md).
+
+## Dev: Raw Lab (optional)
+
+Isolated unrestricted sandbox — no board context, no persistence, no mutation path. Start ai-gateway, then open **Raw Lab** in System nav. See [`docs/raw-lab-thread-state.md`](docs/raw-lab-thread-state.md) and root `AGENTS.md` Raw Lab section.

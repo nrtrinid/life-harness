@@ -5,6 +5,7 @@ import { Pressable, Text, View } from "react-native";
 import { ActiveLimitBanner } from "../src/components/ActiveLimitBanner";
 import { CardTile } from "../src/components/CardTile";
 import { MvdChecklist } from "../src/components/MvdChecklist";
+import { CollapsibleSection } from "../src/components/CollapsibleSection";
 import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
@@ -24,8 +25,18 @@ import { computeCardProgress } from "../src/core/progress";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 export default function TodayScreen() {
-  const { cards, logs, proofItems, dailyState, pounce, jobCandidates, jobSources, jobSourceRuns } =
-    useLifeHarness();
+  const {
+    cards,
+    logs,
+    proofItems,
+    dailyState,
+    pounce,
+    jobCandidates,
+    jobSources,
+    jobSourceRuns,
+    careerSourcePack,
+    resumeModules
+  } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [proofPulse, setProofPulse] = useState(false);
   const now = new Date();
@@ -39,7 +50,9 @@ export default function TodayScreen() {
     now,
     jobCandidates,
     jobSources,
-    jobSourceRuns
+    jobSourceRuns,
+    careerSourcePack,
+    resumeModules
   );
   const highlights = getBriefingHighlightItems(briefing, cards, dailyState, logs, now, 5);
   const primaryAction = computePrimaryAction(briefing, dailyState, cards, logs, now);
@@ -152,48 +165,75 @@ export default function TodayScreen() {
         )}
       </Section>
 
-      <Section title="Career Pounce">
-        <Text style={styles.label}>Pounce Mission</Text>
-        <Text style={styles.titleText}>{dailyState.pounceMission}</Text>
-        <Text style={[styles.label, { marginTop: 12 }]}>Smallest Start</Text>
-        <Text style={styles.bodyText}>{dailyState.smallestStart}</Text>
-        <Link href="/career-intake" asChild>
-          <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Open Career Intake</Text>
+      {primaryAction.kind === "pounce" ? (
+        <CollapsibleSection title="Career shortcuts" defaultOpen={false}>
+          <Link href="/career-intake" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Open Career Intake</Text>
+            </Pressable>
+          </Link>
+          <Link href="/candidate-intake" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Paste into Candidate Intake</Text>
+            </Pressable>
+          </Link>
+          <Link href="/job-candidates" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
+            </Pressable>
+          </Link>
+          <Link href="/job-sources" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>
+                {scheduleStats.dueSources > 0
+                  ? `Run Due Job Sources (${scheduleStats.dueSources})`
+                  : "Run an Approved Job Source"}
+              </Text>
+            </Pressable>
+          </Link>
+        </CollapsibleSection>
+      ) : (
+        <Section title="Career Pounce">
+          <Text style={styles.label}>Pounce Mission</Text>
+          <Text style={styles.titleText}>{dailyState.pounceMission}</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Smallest Start</Text>
+          <Text style={styles.bodyText}>{dailyState.smallestStart}</Text>
+          <Link href="/career-intake" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Open Career Intake</Text>
+            </Pressable>
+          </Link>
+          <Link href="/candidate-intake" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Paste into Candidate Intake</Text>
+            </Pressable>
+          </Link>
+          <Link href="/job-candidates" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
+            </Pressable>
+          </Link>
+          <Link href="/job-sources" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>
+                {scheduleStats.dueSources > 0
+                  ? `Run Due Job Sources (${scheduleStats.dueSources})`
+                  : "Run an Approved Job Source"}
+              </Text>
+            </Pressable>
+          </Link>
+          <Pressable
+            style={pounceLogged ? styles.secondaryAction : styles.secondaryAction}
+            onPress={handlePounce}
+            disabled={pounceLogged}
+          >
+            <Text style={styles.secondaryActionText}>Pounce</Text>
           </Pressable>
-        </Link>
-        <Link href="/candidate-intake" asChild>
-          <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Paste into Candidate Intake</Text>
-          </Pressable>
-        </Link>
-        <Link href="/job-candidates" asChild>
-          <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
-          </Pressable>
-        </Link>
-        <Link href="/job-sources" asChild>
-          <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>
-              {scheduleStats.dueSources > 0
-                ? `Run Due Job Sources (${scheduleStats.dueSources})`
-                : "Run an Approved Job Source"}
-            </Text>
-          </Pressable>
-        </Link>
-        <Pressable
-          style={pounceLogged ? styles.secondaryAction : styles.primaryAction}
-          onPress={handlePounce}
-          disabled={pounceLogged}
-        >
-          <Text style={pounceLogged ? styles.secondaryActionText : styles.primaryActionText}>
-            Pounce
-          </Text>
-        </Pressable>
-        {pounceLogged ? (
-          <Text style={styles.helpText}>Pounce logged this session.</Text>
-        ) : null}
-      </Section>
+          {pounceLogged ? (
+            <Text style={styles.helpText}>Pounce logged this session.</Text>
+          ) : null}
+        </Section>
+      )}
 
       <Section title="Follow-ups Due">
         {followUpsDue.length === 0 ? (

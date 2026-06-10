@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { LifeHarnessData } from "../core/actions";
 import { createCareerApplicationCard } from "../core/career";
+import { applyImportCareerSourcePack } from "../core/actions";
 import { createSeedState } from "../data/createSeedState";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { seedCards } from "../data/seed";
 import {
@@ -68,6 +71,29 @@ function createStateWithRun(): LifeHarnessData {
   return state;
 }
 
+describe("career source pack persistence", () => {
+  const packFixture = readFileSync(
+    join(process.cwd(), "public/fixtures/sample-career-source-pack.v1.json"),
+    "utf8"
+  );
+
+  it("round-trips imported career pack", () => {
+    const imported = applyImportCareerSourcePack(createSeedState(), packFixture);
+    expect(imported.ok).toBe(true);
+    const json = serializeEnvelope(imported.state);
+    const parsed = parseImportJson(json, new Date("2026-06-09T12:00:00.000Z"));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data?.careerSourcePack?.pack.resumeModules.length).toBeGreaterThan(0);
+  });
+
+  it("hydrates old snapshots with careerSourcePack null", () => {
+    const state = createSeedState();
+    const { careerSourcePack: _removed, ...withoutPack } = state;
+    const normalized = normalizeData(withoutPack);
+    expect(normalized.careerSourcePack).toBeNull();
+  });
+});
+
 describe("schema v1 round trip", () => {
   it("serializes and parses back to equivalent data", () => {
     const state = createStateWithRun();
@@ -105,6 +131,7 @@ describe("normalizeData", () => {
     expect(normalized.jobCandidates).toEqual([]);
     expect(normalized.jobSources).toEqual([]);
     expect(normalized.resumeModules).toEqual([]);
+    expect(normalized.careerSourcePack).toBeNull();
   });
 });
 

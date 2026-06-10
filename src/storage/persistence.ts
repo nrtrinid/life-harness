@@ -81,7 +81,8 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     jobSources: partial.jobSources ?? [],
     jobSourceRuns: partial.jobSourceRuns ?? [],
     chatSummaries: partial.chatSummaries ?? [],
-    memoryItems: partial.memoryItems ?? []
+    memoryItems: partial.memoryItems ?? [],
+    careerSourcePack: partial.careerSourcePack ?? null
   };
 }
 

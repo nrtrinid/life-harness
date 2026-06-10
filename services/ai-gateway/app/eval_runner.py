@@ -205,7 +205,7 @@ def run_eval_case(
                 f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
             )
         if expected_status != 200:
-            return body if body is not None else {}, "", None
+            return response.json(), "", None
         body = response.json()
         if body.get("status") == "queued":
             expect_queued = False

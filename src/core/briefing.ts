@@ -1,5 +1,7 @@
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "./guards";
 import { getFollowUpsDue } from "./career";
+import type { StoredCareerSourcePack } from "./careerSourcePack";
+import { buildCareerPackBriefingStats } from "./careerPackMatching";
 import { buildCandidateBriefingSignals, formatFitScore } from "./jobScout";
 import { buildSourceHealthBriefingLines } from "./jobSourceHealth";
 import { buildSourceScheduleStats } from "./jobSourceSchedule";
@@ -24,6 +26,7 @@ import type {
   LifeCard,
   LifeLogEntry,
   ProofItem,
+  ResumeModule,
   Warmth
 } from "./types";
 
@@ -77,7 +80,9 @@ export function generateWhileYouWereAway(
   now: Date,
   jobCandidates: JobCandidate[] = [],
   jobSources: JobSource[] = [],
-  jobSourceRuns: JobSourceRunResult[] = []
+  jobSourceRuns: JobSourceRunResult[] = [],
+  careerSourcePack: StoredCareerSourcePack | null = null,
+  resumeModules: ResumeModule[] = []
 ): Briefing {
   const since = getBriefingSince(dailyState);
   const activeLimit = getActiveLimitStatus(cards);
@@ -183,6 +188,29 @@ export function generateWhileYouWereAway(
   }
   if (scoutSignals.enabledSources > 0) {
     detected.push(`Approved job sources ready (${scoutSignals.enabledSources} enabled).`);
+  }
+
+  const packStats = buildCareerPackBriefingStats(
+    jobCandidates,
+    careerSourcePack?.pack ?? null,
+    resumeModules,
+    jobSources
+  );
+  const fetchedWaiting =
+    jobCandidates.filter(
+      (candidate) =>
+        candidate.origin === "source_fetch" &&
+        (candidate.status === "new" || candidate.status === "saved")
+    ).length > 0;
+  if (fetchedWaiting && !packStats.imported) {
+    detected.push("Import Career Source Pack to rank fetched candidates.");
+  }
+  if (packStats.imported && packStats.strongCount > 0) {
+    detected.push(
+      `${packStats.strongCount} queued candidate${packStats.strongCount === 1 ? "" : "s"} match strongly with your Career Pack.`
+    );
+  } else if (packStats.imported && fetchedWaiting) {
+    detected.push("Career Pack imported — use Queue filters to sort by best fit.");
   }
 
   const prepared: string[] = [];

@@ -1,7 +1,9 @@
+import { Link } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { Nav } from "../src/components/Nav";
+import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
@@ -19,9 +21,10 @@ export default function ResumeBankScreen() {
   return (
     <Screen>
       <Nav />
-      <Text style={styles.screenIntro}>
-        Structured resume bank for deterministic matching. No resume generation here.
-      </Text>
+      <PageHeader
+        title="Resume Bank"
+        subtitle="Structured resume modules for deterministic matching. No resume generation here."
+      />
       <Section title="Resume Modules">
         {resumeModules.map((module) => {
           const expanded = expandedId === module.id;
@@ -32,6 +35,7 @@ export default function ResumeBankScreen() {
                 <Text style={styles.bodyText}>
                   {RESUME_MODULE_CATEGORY_LABELS[module.category]} ·{" "}
                   {module.isActive ? "Active" : "Inactive"}
+                  {module.importedFromCareerPack ? " · Career Pack" : ""}
                 </Text>
                 <Text style={styles.helpText}>{module.summary}</Text>
               </Pressable>
@@ -57,6 +61,11 @@ export default function ResumeBankScreen() {
           );
         })}
       </Section>
+      <Link href="/career-pack" asChild>
+        <Pressable style={styles.secondaryAction}>
+          <Text style={styles.secondaryActionText}>Career Pack import</Text>
+        </Pressable>
+      </Link>
       <Text style={styles.helpText}>{FIT_SCORE_DISCLAIMER}</Text>
     </Screen>
   );

@@ -28,6 +28,12 @@ import type {
   HarnessChatSummary,
   HarnessMemoryItem
 } from "./types";
+import {
+  parseCareerSourcePackJson,
+  upsertPackResumeModules,
+  type StoredCareerSourcePack
+} from "./careerSourcePack";
+import { matchCandidateWithCareerPack } from "./careerPackMatching";
 import type { JobSourceRunOutput } from "./jobSourceRunner";
 import { rebindJobSourceRunOutput } from "./jobSourceRunner";
 
@@ -42,6 +48,7 @@ export interface LifeHarnessData {
   jobSourceRuns: JobSourceRunResult[];
   chatSummaries: HarnessChatSummary[];
   memoryItems: HarnessMemoryItem[];
+  careerSourcePack: StoredCareerSourcePack | null;
 }
 
 export interface JobSourceInput {
@@ -601,7 +608,25 @@ export function applyApproveJobCandidate(state: LifeHarnessData, candidateId: st
     };
   }
 
-  const intake = buildCareerIntakeFromCandidate(candidate, state.resumeModules);
+  let intake = buildCareerIntakeFromCandidate(candidate, state.resumeModules);
+  if (state.careerSourcePack) {
+    const sourceName = state.jobSources.find((s) => s.id === candidate.sourceId)?.name;
+    const packMatch = matchCandidateWithCareerPack(
+      candidate,
+      state.careerSourcePack.pack,
+      state.resumeModules,
+      sourceName
+    );
+    if (packMatch.suggestedSummaryAngle) {
+      intake = { ...intake, resumeAngle: packMatch.suggestedSummaryAngle };
+    }
+    if (packMatch.suggestedModuleOrder.length > 0) {
+      intake = {
+        ...intake,
+        projectsToEmphasize: packMatch.suggestedModuleOrder.join("; ")
+      };
+    }
+  }
   const card = createCareerApplicationCard(intake);
   card.nextTinyAction = "Tailor resume angle and submit application.";
   card.whyItMatters = "Fit found through Job Scout; applying keeps career momentum warm.";
@@ -717,6 +742,53 @@ export function applyUpdateJobSource(
     },
     ok: true,
     message: `Updated ${source.name}.`
+  };
+}
+
+export function applyImportCareerSourcePack(
+  state: LifeHarnessData,
+  json: string,
+  importedAt = nowIso()
+): ActionResult {
+  const parsed = parseCareerSourcePackJson(json);
+  if (!parsed.ok) {
+    return {
+      state,
+      ok: false,
+      message: parsed.error
+    };
+  }
+
+  const updatedModules = upsertPackResumeModules(state.resumeModules, parsed.pack.resumeModules);
+  const warningNote =
+    parsed.warnings.length > 0
+      ? ` Warnings: ${parsed.warnings.slice(0, 2).join(" · ")}`
+      : "";
+
+  return {
+    state: {
+      ...state,
+      resumeModules: updatedModules,
+      careerSourcePack: { pack: parsed.pack, importedAt }
+    },
+    ok: true,
+    message: `Imported Career Source Pack (${parsed.pack.resumeModules.length} modules, ${parsed.pack.roleRecipes.length} role recipes).${warningNote}`
+  };
+}
+
+export function applyClearCareerSourcePack(state: LifeHarnessData): ActionResult {
+  if (!state.careerSourcePack) {
+    return { state, ok: true, message: "No Career Pack is imported." };
+  }
+
+  return {
+    state: {
+      ...state,
+      careerSourcePack: null
+    },
+    ok: true,
+    message:
+      "Cleared Career Pack. Matching and queue filters removed; imported Resume Bank modules remain."
   };
 }
 
