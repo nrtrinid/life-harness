@@ -17,6 +17,8 @@ from app.models import (
     ChatHarnessResponse,
     HealthResponse,
     ProviderKind,
+    RawLabRequest,
+    RawLabResponse,
     SensitivityLevel,
 )
 from app.providers.base import (
@@ -168,6 +170,28 @@ def chat_harness_endpoint(request: ChatHarnessRequest) -> ChatHarnessResponse:
 
     try:
         return provider.chat_harness(request)
+    except ProviderInputError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except ProviderNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
+
+
+@app.post("/raw-lab", response_model=RawLabResponse)
+def raw_lab_endpoint(request: RawLabRequest) -> RawLabResponse:
+    # Future: if RawLabRequest gains sensitivity, reject S3 here before provider call.
+    # if request.sensitivity == SensitivityLevel.S3:
+    #     raise HTTPException(status_code=422, detail="S3: rules-only, not sent to model")
+
+    provider = get_provider()
+    logger.info(
+        "raw_lab provider=%s message_len=%d history_turns=%d",
+        provider.name,
+        len(request.message),
+        len(request.recent_turns),
+    )
+
+    try:
+        return provider.raw_lab(request)
     except ProviderInputError as exc:
         raise HTTPException(status_code=422, detail=exc.message) from exc
     except ProviderNotReadyError as exc:

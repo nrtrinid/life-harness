@@ -1,0 +1,285 @@
+import { type ReactNode, type RefObject, useEffect, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+
+import type { QuickQuestion } from "../askHarness/ChatComposer";
+import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
+import { styles } from "../styles";
+import type { RawLabResponse } from "../../core/rawLabClient";
+import type { RawLabTurn } from "../../core/rawLabThreadState";
+import { RawLabEmptyState } from "./RawLabEmptyState";
+
+export interface RawLabThreadError {
+  id: string;
+  content: string;
+}
+
+export interface RawLabTurnDisplay {
+  turn: RawLabTurn;
+  response?: RawLabResponse;
+}
+
+interface RawLabThreadProps {
+  turns: RawLabTurnDisplay[];
+  errors?: RawLabThreadError[];
+  threadScrollRef?: RefObject<ScrollView | null>;
+  loading?: boolean;
+  onSelectPrompt?: (item: QuickQuestion) => void;
+  onPin?: (content: string) => void;
+  onDoNotRepeat?: (content: string) => void;
+  onOpenLoop?: (content: string) => void;
+  onAddVoiceTrait?: (content: string) => void;
+  onAddConversationalInstinct?: (content: string) => void;
+  onAddRecurringInterest?: (content: string) => void;
+  onAddUserRespondsWellTo?: (content: string) => void;
+  onAddUserDislike?: (content: string) => void;
+  onSetCurrentStance?: (content: string) => void;
+}
+
+function CompactActionMenu({
+  label,
+  children
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <View style={styles.checklist}>
+      <Pressable style={styles.chatBubbleToggle} onPress={() => setOpen((value) => !value)}>
+        <Text style={styles.chatBubbleToggleText}>{open ? `Hide ${label}` : label}</Text>
+      </Pressable>
+      {open ? <View style={styles.splitRow}>{children}</View> : null}
+    </View>
+  );
+}
+
+function BubbleActions({
+  content,
+  onPin,
+  onDoNotRepeat,
+  onOpenLoop,
+  onAddVoiceTrait,
+  onAddConversationalInstinct,
+  onAddRecurringInterest,
+  onAddUserRespondsWellTo,
+  onAddUserDislike,
+  onSetCurrentStance
+}: {
+  content: string;
+  onPin?: (content: string) => void;
+  onDoNotRepeat?: (content: string) => void;
+  onOpenLoop?: (content: string) => void;
+  onAddVoiceTrait?: (content: string) => void;
+  onAddConversationalInstinct?: (content: string) => void;
+  onAddRecurringInterest?: (content: string) => void;
+  onAddUserRespondsWellTo?: (content: string) => void;
+  onAddUserDislike?: (content: string) => void;
+  onSetCurrentStance?: (content: string) => void;
+}) {
+  const hasThreadActions = onPin || onDoNotRepeat || onOpenLoop;
+  const hasPersonalityActions =
+    onAddVoiceTrait ||
+    onAddConversationalInstinct ||
+    onAddRecurringInterest ||
+    onAddUserRespondsWellTo ||
+    onAddUserDislike ||
+    onSetCurrentStance;
+
+  if (!hasThreadActions && !hasPersonalityActions) {
+    return null;
+  }
+
+  return (
+    <View style={styles.checklist}>
+      {hasThreadActions ? (
+        <CompactActionMenu label="Thread actions">
+          {onPin ? (
+            <Pressable style={styles.chatBubbleToggle} onPress={() => onPin(content)}>
+              <Text style={styles.chatBubbleToggleText}>Pin</Text>
+            </Pressable>
+          ) : null}
+          {onDoNotRepeat ? (
+            <Pressable style={styles.chatBubbleToggle} onPress={() => onDoNotRepeat(content)}>
+              <Text style={styles.chatBubbleToggleText}>Do not repeat</Text>
+            </Pressable>
+          ) : null}
+          {onOpenLoop ? (
+            <Pressable style={styles.chatBubbleToggle} onPress={() => onOpenLoop(content)}>
+              <Text style={styles.chatBubbleToggleText}>Open loop</Text>
+            </Pressable>
+          ) : null}
+        </CompactActionMenu>
+      ) : null}
+
+      {hasPersonalityActions ? (
+        <CompactActionMenu label="Shape personality">
+          {onAddVoiceTrait ? (
+            <Pressable style={styles.chatBubbleToggle} onPress={() => onAddVoiceTrait(content)}>
+              <Text style={styles.chatBubbleToggleText}>Voice trait</Text>
+            </Pressable>
+          ) : null}
+          {onAddConversationalInstinct ? (
+            <Pressable
+              style={styles.chatBubbleToggle}
+              onPress={() => onAddConversationalInstinct(content)}
+            >
+              <Text style={styles.chatBubbleToggleText}>Instinct</Text>
+            </Pressable>
+          ) : null}
+          {onAddRecurringInterest ? (
+            <Pressable
+              style={styles.chatBubbleToggle}
+              onPress={() => onAddRecurringInterest(content)}
+            >
+              <Text style={styles.chatBubbleToggleText}>Recurring interest</Text>
+            </Pressable>
+          ) : null}
+          {onAddUserRespondsWellTo ? (
+            <Pressable
+              style={styles.chatBubbleToggle}
+              onPress={() => onAddUserRespondsWellTo(content)}
+            >
+              <Text style={styles.chatBubbleToggleText}>Likes this</Text>
+            </Pressable>
+          ) : null}
+          {onAddUserDislike ? (
+            <Pressable style={styles.chatBubbleToggle} onPress={() => onAddUserDislike(content)}>
+              <Text style={styles.chatBubbleToggleText}>Avoid this</Text>
+            </Pressable>
+          ) : null}
+          {onSetCurrentStance ? (
+            <Pressable style={styles.chatBubbleToggle} onPress={() => onSetCurrentStance(content)}>
+              <Text style={styles.chatBubbleToggleText}>Current stance</Text>
+            </Pressable>
+          ) : null}
+        </CompactActionMenu>
+      ) : null}
+    </View>
+  );
+}
+
+function AssistantTurn({
+  content,
+  response,
+  ...actionProps
+}: {
+  content: string;
+  response?: RawLabResponse;
+  onPin?: (content: string) => void;
+  onDoNotRepeat?: (content: string) => void;
+  onOpenLoop?: (content: string) => void;
+  onAddVoiceTrait?: (content: string) => void;
+  onAddConversationalInstinct?: (content: string) => void;
+  onAddRecurringInterest?: (content: string) => void;
+  onAddUserRespondsWellTo?: (content: string) => void;
+  onAddUserDislike?: (content: string) => void;
+  onSetCurrentStance?: (content: string) => void;
+}) {
+  const [showSafety, setShowSafety] = useState(false);
+  const safetyNotes = response?.safety_notes ?? [];
+
+  return (
+    <View style={styles.chatBubbleAssistant}>
+      <Text style={styles.chatSpeakerLabel}>Raw Lab</Text>
+      <Text style={styles.chatAnswerText}>{content}</Text>
+      <BubbleActions content={content} {...actionProps} />
+      {safetyNotes.length > 0 ? (
+        <View style={styles.checklist}>
+          <Pressable style={styles.chatBubbleToggle} onPress={() => setShowSafety((open) => !open)}>
+            <Text style={styles.chatBubbleToggleText}>
+              {showSafety ? "Hide safety notes" : "Safety notes"}
+            </Text>
+          </Pressable>
+          {showSafety
+            ? safetyNotes.map((note) => (
+                <Text key={note} style={styles.helpText}>
+                  {note}
+                </Text>
+              ))
+            : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export function RawLabThread({
+  turns,
+  errors = [],
+  threadScrollRef,
+  loading = false,
+  onSelectPrompt,
+  onPin,
+  onDoNotRepeat,
+  onOpenLoop,
+  onAddVoiceTrait,
+  onAddConversationalInstinct,
+  onAddRecurringInterest,
+  onAddUserRespondsWellTo,
+  onAddUserDislike,
+  onSetCurrentStance
+}: RawLabThreadProps) {
+  const itemCount = turns.length + errors.length;
+  const actionProps = {
+    onPin,
+    onDoNotRepeat,
+    onOpenLoop,
+    onAddVoiceTrait,
+    onAddConversationalInstinct,
+    onAddRecurringInterest,
+    onAddUserRespondsWellTo,
+    onAddUserDislike,
+    onSetCurrentStance
+  };
+
+  useEffect(() => {
+    if (itemCount === 0) {
+      return;
+    }
+
+    scrollChatThreadToEnd(threadScrollRef);
+  }, [itemCount, loading, threadScrollRef]);
+
+  if (itemCount === 0) {
+    return (
+      <View style={styles.chatThreadScroll}>
+        {onSelectPrompt ? <RawLabEmptyState onSelectPrompt={onSelectPrompt} /> : null}
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      ref={threadScrollRef}
+      style={styles.chatThreadScroll}
+      contentContainerStyle={styles.chatThreadContent}
+      onContentSizeChange={() => scrollChatThreadToEnd(threadScrollRef)}
+    >
+      {turns.map(({ turn, response }) => {
+        if (turn.role === "user") {
+          return (
+            <View key={turn.id} style={styles.chatBubbleUser}>
+              <Text style={styles.chatSpeakerLabel}>You</Text>
+              <Text style={styles.chatUserText}>{turn.content}</Text>
+              <BubbleActions content={turn.content} {...actionProps} />
+            </View>
+          );
+        }
+
+        return (
+          <AssistantTurn key={turn.id} content={turn.content} response={response} {...actionProps} />
+        );
+      })}
+      {errors.map((error) => (
+        <View key={error.id} style={styles.chatBubbleError}>
+          <Text style={styles.chatSpeakerLabel}>Couldn&apos;t reach Raw Lab</Text>
+          <Text style={styles.bodyText}>
+            Your message is still here — check the gateway and try again.
+          </Text>
+          <Text style={styles.helpText}>{error.content}</Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}

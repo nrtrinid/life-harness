@@ -27,6 +27,9 @@ class Settings:
     timeout_seconds: float
     max_input_chars: int
     temperature: float
+    raw_lab_max_new_tokens: int
+    raw_lab_temperature: float
+    raw_lab_repetition_penalty: float
     dev_cors: bool
 
     @classmethod
@@ -44,6 +47,11 @@ class Settings:
             timeout_seconds=float(os.getenv("SCOUT_TIMEOUT_SECONDS", "120")),
             max_input_chars=int(os.getenv("SCOUT_MAX_INPUT_CHARS", "12000")),
             temperature=float(os.getenv("SCOUT_TEMPERATURE", "0.2")),
+            raw_lab_max_new_tokens=int(os.getenv("SCOUT_RAW_LAB_MAX_NEW_TOKENS", "2048")),
+            raw_lab_temperature=float(os.getenv("SCOUT_RAW_LAB_TEMPERATURE", "0.7")),
+            raw_lab_repetition_penalty=float(
+                os.getenv("SCOUT_RAW_LAB_REPETITION_PENALTY", "1.12")
+            ),
             dev_cors=_env_flag("SCOUT_DEV_CORS", True),
         )
 

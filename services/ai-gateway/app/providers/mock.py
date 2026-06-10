@@ -19,6 +19,8 @@ from app.models import (
     PossibleCard,
     ProposedCardUpdate,
     ProviderHealth,
+    RawLabRequest,
+    RawLabResponse,
     WarmthLevel,
 )
 
@@ -522,4 +524,67 @@ class MockProvider:
             used_context=used_context,
             confidence_notes=confidence_notes,
             safety_notes=safety_notes,
+        )
+
+    def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
+        message_lower = request.message.lower()
+        prefix = ""
+        if request.recent_turns:
+            prefix = "Continuing our thread — "
+            last_assistant = next(
+                (
+                    turn.content
+                    for turn in reversed(request.recent_turns)
+                    if turn.role.value == "assistant"
+                ),
+                None,
+            )
+            if last_assistant:
+                snippet = last_assistant[:80].rstrip()
+                if len(last_assistant) > 80:
+                    snippet += "..."
+                prefix = f"Continuing our thread (last: \"{snippet}\") — "
+
+        if request.thread_state.open_loops:
+            prefix += f"Open loop noted: \"{request.thread_state.open_loops[0][:60]}\" — "
+        if request.thread_state.do_not_repeat:
+            prefix += "Avoiding prior phrasing — "
+        if request.thread_state.personality.voice_traits:
+            traits = ", ".join(request.thread_state.personality.voice_traits[:2])
+            prefix += f"Thread voice: {traits} — "
+
+        if "blunt" in message_lower or "honest" in message_lower:
+            body = (
+                "Blunt take: I have zero visibility into your board or life logs. "
+                "Whatever you're sitting on, name the smallest honest next move — "
+                "not the heroic one."
+            )
+        elif "weird" in message_lower or "speculat" in message_lower:
+            body = (
+                "Speculative riff: maybe you're circling the idea because "
+                "the safe version feels too small. I can't verify that — Raw Lab "
+                "doesn't know your actual context."
+            )
+        elif "roleplay" in message_lower or "story" in message_lower:
+            body = (
+                "Sure — fictional sandbox, your scene. "
+                "What characters, tone, and opening beat do you want?"
+            )
+        elif request.recent_turns and len(message_lower.split()) <= 4:
+            body = (
+                f"Got it — moving forward from \"{request.message}\". "
+                "Next beat: something new happens here instead of repeating the last line."
+            )
+        else:
+            body = (
+                "Raw Lab here — direct, ungrounded, no board access. "
+                f"You said: \"{request.message[:120]}{'...' if len(request.message) > 120 else ''}\" "
+                "Say more if you want a fuller answer."
+            )
+
+        return RawLabResponse(
+            answer=f"{prefix}{body}",
+            mode="raw_lab",
+            safety_notes=[],
+            used_context=False,
         )

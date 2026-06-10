@@ -222,3 +222,43 @@ class ChatHarnessResponse(StrictModel):
     used_context: bool
     confidence_notes: list[str]
     safety_notes: list[str]
+
+
+class RawLabTurn(StrictModel):
+    role: ChatRole
+    content: str = Field(..., min_length=1)
+
+
+class RawLabPersonalityState(StrictModel):
+    voice_traits: list[str] = Field(default_factory=list)
+    conversational_instincts: list[str] = Field(default_factory=list)
+    recurring_interests: list[str] = Field(default_factory=list)
+    user_responds_well_to: list[str] = Field(default_factory=list)
+    user_dislikes: list[str] = Field(default_factory=list)
+    current_stance: str = ""
+    growth_notes: list[str] = Field(default_factory=list)
+    updated_at: str | None = None
+
+
+class RawLabThreadState(StrictModel):
+    recent_digest: str = ""
+    pinned_facts: list[str] = Field(default_factory=list)
+    decisions: list[str] = Field(default_factory=list)
+    open_loops: list[str] = Field(default_factory=list)
+    tone_preferences: list[str] = Field(default_factory=list)
+    do_not_repeat: list[str] = Field(default_factory=list)
+    personality: RawLabPersonalityState = Field(default_factory=RawLabPersonalityState)
+    updated_at: str | None = None
+
+
+class RawLabRequest(StrictModel):
+    message: str = Field(..., min_length=1)
+    recent_turns: list[RawLabTurn] = Field(default_factory=list)
+    thread_state: RawLabThreadState = Field(default_factory=RawLabThreadState)
+
+
+class RawLabResponse(StrictModel):
+    answer: str
+    mode: Literal["raw_lab"] = "raw_lab"
+    safety_notes: list[str]
+    used_context: Literal[False] = False

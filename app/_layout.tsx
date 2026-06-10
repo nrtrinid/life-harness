@@ -15,6 +15,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="board" options={{ headerShown: false }} />
+        <Stack.Screen name="career" options={{ headerShown: false }} />
         <Stack.Screen name="progress" options={{ headerShown: false }} />
         <Stack.Screen name="log" options={{ headerShown: false }} />
         <Stack.Screen name="career-intake" options={{ headerShown: false }} />
@@ -25,6 +26,7 @@ export default function RootLayout() {
         <Stack.Screen name="job-sources" options={{ headerShown: false }} />
         <Stack.Screen name="source-setup" options={{ headerShown: false }} />
         <Stack.Screen name="ask-harness" options={{ headerShown: false }} />
+        <Stack.Screen name="raw-lab" options={{ headerShown: false }} />
         <Stack.Screen name="card/[id]" options={{ title: "Card Detail" }} />
       </Stack>
     </LifeHarnessProvider>

@@ -1,41 +1,51 @@
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View
+} from "react-native";
 
+import { AskHarnessAdvancedPanel } from "../src/components/askHarness/AskHarnessAdvancedPanel";
+import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/ChatComposer";
+import { ChatThread } from "../src/components/askHarness/ChatThread";
+import { HarnessReadCard } from "../src/components/askHarness/HarnessReadCard";
+import type { ChatThreadItem, ContextExportMode } from "../src/components/askHarness/types";
+import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { Nav } from "../src/components/Nav";
+import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
-import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
 import {
-  ANDROID_EMULATOR_CHAT_HARNESS_URL,
   askChatHarness,
   ChatHarnessError,
-  DEFAULT_CHAT_HARNESS_URL,
-  PHYSICAL_DEVICE_URL_HINT
+  DEFAULT_CHAT_HARNESS_URL
 } from "../src/core/chatHarnessClient";
 import {
-  AUTO_COMPACT_THRESHOLD_CHARS,
   buildCompactHarnessContext,
   buildContextQualitySummary,
   buildHarnessContext,
+  DEFAULT_GATEWAY_MAX_INPUT_CHARS,
+  estimateChatHarnessPromptChars,
   estimateHarnessContextChars,
   getActiveLimitSignal,
+  resolveChatHarnessContextForGateway,
+  shouldAutoSelectCompactExport,
   type ChatHarnessMode,
-  type ChatHarnessResponse,
   type HarnessExportInput
 } from "../src/core/harnessContext";
-import { buildChatSummary } from "../src/core/harnessMemory";
+import { createId } from "../src/core/ids";
 import {
-  buildMemoryCandidatesFromChatSummary,
   createMemoryItem,
   memoryItemDedupeKey,
   sortMemoryItemsNewestFirst
 } from "../src/core/harnessMemoryBank";
-import type { HarnessMemoryItem, SensitivityLevel } from "../src/core/types";
+import type { HarnessChatSummary, HarnessMemoryItem, SensitivityLevel } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
-
-const MODES: ChatHarnessMode[] = ["general", "operator", "reflection", "builder"];
-const SENSITIVITIES: SensitivityLevel[] = ["S0", "S1", "S2", "S3"];
 
 const QUICK_QUESTIONS: { label: string; message: string; mode: ChatHarnessMode }[] = [
   { label: "Avoiding?", message: "What am I avoiding right now?", mode: "operator" },
@@ -55,8 +65,7 @@ const QUICK_QUESTIONS: { label: string; message: string; mode: ChatHarnessMode }
 ];
 
 const JSON_PREVIEW_LIMIT = 4000;
-
-type ContextExportMode = "full" | "compact";
+const WIDE_LAYOUT_BREAKPOINT = 900;
 
 function buildExportInput(state: ReturnType<typeof useLifeHarness>): HarnessExportInput {
   const input: HarnessExportInput = {
@@ -85,6 +94,16 @@ function buildExportInput(state: ReturnType<typeof useLifeHarness>): HarnessExpo
   return input;
 }
 
+function formatSendError(error: unknown): { text: string; status?: number } {
+  if (error instanceof ChatHarnessError) {
+    return { text: error.message, status: error.status };
+  }
+
+  return {
+    text: "Unexpected error while contacting Chat Harness. Check the gateway URL and try again."
+  };
+}
+
 export default function AskHarnessDevScreen() {
   const harnessState = useLifeHarness();
   const {
@@ -94,26 +113,57 @@ export default function AskHarnessDevScreen() {
     deleteMemoryItem,
     toggleMemoryItemActive
   } = harnessState;
+  const { width, height } = useWindowDimensions();
+  const isWideLayout = width >= WIDE_LAYOUT_BREAKPOINT;
+  const chatSurfaceHeight = getChatSurfaceHeight(height, "harness", isWideLayout);
+  const threadScrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+
   const [baseUrl, setBaseUrl] = useState(DEFAULT_CHAT_HARNESS_URL);
   const [mode, setMode] = useState<ChatHarnessMode>("general");
   const [sensitivity, setSensitivity] = useState<SensitivityLevel>("S1");
-  const [message, setMessage] = useState("What am I avoiding right now?");
+  const [message, setMessage] = useState("");
+  const [thread, setThread] = useState<ChatThreadItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<NoticeState | null>(null);
-  const [response, setResponse] = useState<ChatHarnessResponse | null>(null);
-  const [savedMemoryKey, setSavedMemoryKey] = useState<string | null>(null);
-  const [savedCandidateKeys, setSavedCandidateKeys] = useState<Set<string>>(() => new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(isWideLayout);
+
+  function handleQuickQuestion(item: QuickQuestion) {
+    setMessage(item.message);
+    setMode(item.mode);
+    if (Platform.OS === "web") {
+      inputRef.current?.focus();
+    }
+  }
+
+  useEffect(() => {
+    setAdvancedOpen(isWideLayout);
+  }, [isWideLayout]);
 
   const exportInput = useMemo(() => buildExportInput(harnessState), [harnessState]);
   const fullContext = useMemo(() => buildHarnessContext(exportInput), [exportInput]);
   const compactContext = useMemo(() => buildCompactHarnessContext(exportInput), [exportInput]);
   const fullChars = useMemo(() => estimateHarnessContextChars(fullContext), [fullContext]);
   const compactChars = useMemo(() => estimateHarnessContextChars(compactContext), [compactContext]);
-  const defaultContextMode: ContextExportMode =
-    fullChars > AUTO_COMPACT_THRESHOLD_CHARS ? "compact" : "full";
-  const [contextMode, setContextMode] = useState<ContextExportMode>(defaultContextMode);
+  const fullPromptChars = useMemo(
+    () => estimateChatHarnessPromptChars(fullContext, { message }),
+    [fullContext, message]
+  );
+  const compactPromptChars = useMemo(
+    () => estimateChatHarnessPromptChars(compactContext, { message }),
+    [compactContext, message]
+  );
+  const autoContextMode: ContextExportMode = shouldAutoSelectCompactExport(fullContext, message)
+    ? "compact"
+    : "full";
+  const [contextModeOverride, setContextModeOverride] = useState<ContextExportMode | null>(null);
+  const contextMode = contextModeOverride ?? autoContextMode;
   const selectedContext = contextMode === "compact" ? compactContext : fullContext;
+  const selectedJsonChars = contextMode === "compact" ? compactChars : fullChars;
+  const selectedPromptChars = contextMode === "compact" ? compactPromptChars : fullPromptChars;
+  const promptOverBudget = selectedPromptChars > DEFAULT_GATEWAY_MAX_INPUT_CHARS;
   const activeLimitSignal = useMemo(() => getActiveLimitSignal(exportInput), [exportInput]);
   const activeMemoryCount = useMemo(
     () => harnessState.memoryItems.filter((item) => item.isActive).length,
@@ -136,21 +186,6 @@ export default function AskHarnessDevScreen() {
       activeMemoryCount
     ]
   );
-  const memoryPreview = useMemo(() => {
-    if (!response) {
-      return null;
-    }
-
-    return buildChatSummary({
-      userMessage: message,
-      assistantAnswer: response.answer,
-      mode,
-      confidenceNotes: response.confidence_notes,
-      safetyNotes: response.safety_notes
-    });
-  }, [response, message, mode]);
-  const currentMemoryKey = response ? `${message}::${response.answer.slice(0, 120)}` : null;
-  const memoryAlreadySaved = currentMemoryKey !== null && savedMemoryKey === currentMemoryKey;
   const recentMemories = useMemo(
     () =>
       [...harnessState.chatSummaries]
@@ -158,20 +193,10 @@ export default function AskHarnessDevScreen() {
         .slice(0, 3),
     [harnessState.chatSummaries]
   );
-  const memoryBankCandidates = useMemo(() => {
-    if (!memoryPreview || !memoryAlreadySaved) {
-      return [];
-    }
-
-    return buildMemoryCandidatesFromChatSummary(memoryPreview, harnessState.memoryItems).filter(
-      (candidate) => !savedCandidateKeys.has(memoryItemDedupeKey(candidate))
-    );
-  }, [memoryPreview, memoryAlreadySaved, harnessState.memoryItems, savedCandidateKeys]);
   const recentMemoryBankItems = useMemo(
     () => sortMemoryItemsNewestFirst(harnessState.memoryItems).slice(0, 5),
     [harnessState.memoryItems]
   );
-  const [qualityOpen, setQualityOpen] = useState(false);
 
   const previewText = useMemo(() => {
     if (!previewOpen) {
@@ -184,49 +209,96 @@ export default function AskHarnessDevScreen() {
     return `${json.slice(0, JSON_PREVIEW_LIMIT)}\n… truncated`;
   }, [selectedContext, previewOpen]);
 
+  function updateAssistantTurn(
+    turnId: string,
+    patch: Partial<Extract<ChatThreadItem, { kind: "assistant" }>>
+  ) {
+    setThread((previous) =>
+      previous.map((item) =>
+        item.id === turnId && item.kind === "assistant" ? { ...item, ...patch } : item
+      )
+    );
+  }
+
   async function handleSend() {
+    const trimmed = message.trim();
+    if (!trimmed || loading) {
+      return;
+    }
+
     setNotice(null);
     setLoading(true);
 
+    setThread((previous) => [
+      ...previous,
+      { id: createId("chat-user"), kind: "user", text: trimmed, mode }
+    ]);
+
     try {
+      const contextForSend = resolveChatHarnessContextForGateway(exportInput, {
+        preferredMode: contextMode,
+        message: trimmed
+      });
+      const sendPromptChars = estimateChatHarnessPromptChars(contextForSend, { message: trimmed });
+      if (sendPromptChars > DEFAULT_GATEWAY_MAX_INPUT_CHARS) {
+        throw new ChatHarnessError(
+          `Serialized prompt would be ~${sendPromptChars} chars; gateway limit is ${DEFAULT_GATEWAY_MAX_INPUT_CHARS}. Try Compact context, a shorter message, or raise SCOUT_MAX_INPUT_CHARS on ai-gateway.`
+        );
+      }
+
       const result = await askChatHarness({
         baseUrl,
-        message,
+        message: trimmed,
         mode,
         sensitivity,
-        context: selectedContext
+        context: contextForSend
       });
-      setResponse(result);
-      setSavedMemoryKey(null);
-      setSavedCandidateKeys(new Set());
+
+      setThread((previous) => [
+        ...previous,
+        {
+          id: createId("chat-assistant"),
+          kind: "assistant",
+          userText: trimmed,
+          mode,
+          response: result,
+          memorySaved: false,
+          savedCandidateKeys: [],
+          showMemoryPreview: false,
+          showConfidence: false,
+          showMemoryTools: false
+        }
+      ]);
+      setMessage("");
+      if (Platform.OS === "web") {
+        inputRef.current?.focus();
+      }
     } catch (error) {
-      setResponse(null);
-      const text =
-        error instanceof ChatHarnessError
-          ? error.message
-          : "Could not reach Chat Harness. Check the gateway URL and try again.";
-      setNotice({ kind: "error", message: text });
+      const formatted = formatSendError(error);
+      setThread((previous) => [
+        ...previous,
+        {
+          id: createId("chat-error"),
+          kind: "error",
+          text: formatted.text,
+          contextMode,
+          baseUrl,
+          status: formatted.status
+        }
+      ]);
     } finally {
       setLoading(false);
     }
   }
 
-  function handleSaveMemory() {
-    if (!memoryPreview || memoryAlreadySaved) {
-      return;
-    }
-
-    saveChatSummary(memoryPreview);
-    setSavedMemoryKey(currentMemoryKey);
+  function handleSaveChatSummary(turnId: string, summary: HarnessChatSummary) {
+    saveChatSummary(summary);
+    updateAssistantTurn(turnId, { memorySaved: true });
     setNotice({ kind: "success", message: "Chat memory saved." });
   }
 
-  function handleSaveMemoryBankCandidate(candidate: HarnessMemoryItem) {
+  function handleSaveMemoryBankCandidate(turnId: string, candidate: HarnessMemoryItem) {
     const key = memoryItemDedupeKey(candidate);
-    if (savedCandidateKeys.has(key)) {
-      return;
-    }
-
     const item = createMemoryItem({
       kind: candidate.kind,
       title: candidate.title,
@@ -237,269 +309,137 @@ export default function AskHarnessDevScreen() {
       isActive: true
     });
     saveMemoryItem(item);
-    setSavedCandidateKeys((previous) => new Set(previous).add(key));
+    setThread((previous) =>
+      previous.map((entry) => {
+        if (entry.id !== turnId || entry.kind !== "assistant") {
+          return entry;
+        }
+        if (entry.savedCandidateKeys.includes(key)) {
+          return entry;
+        }
+        return {
+          ...entry,
+          savedCandidateKeys: [...entry.savedCandidateKeys, key]
+        };
+      })
+    );
     setNotice({ kind: "success", message: "Saved to Memory Bank." });
   }
+
+  const inspectorPanel = (
+    <AskHarnessAdvancedPanel
+      baseUrl={baseUrl}
+      onBaseUrlChange={setBaseUrl}
+      mode={mode}
+      onModeChange={setMode}
+      sensitivity={sensitivity}
+      onSensitivityChange={setSensitivity}
+      contextMode={contextMode}
+      onContextModeChange={setContextModeOverride}
+      selectedJsonChars={selectedJsonChars}
+      selectedPromptChars={selectedPromptChars}
+      fullChars={fullChars}
+      compactChars={compactChars}
+      fullPromptChars={fullPromptChars}
+      compactPromptChars={compactPromptChars}
+      promptOverBudget={promptOverBudget}
+      qualitySummary={qualitySummary}
+      qualityOpen={qualityOpen}
+      onQualityOpenToggle={() => setQualityOpen((open) => !open)}
+      previewOpen={previewOpen}
+      onPreviewOpenToggle={() => setPreviewOpen((open) => !open)}
+      previewText={previewText}
+      recentMemories={recentMemories}
+      onDeleteChatSummary={deleteChatSummary}
+      recentMemoryBankItems={recentMemoryBankItems}
+      onToggleMemoryItemActive={toggleMemoryItemActive}
+      onDeleteMemoryItem={deleteMemoryItem}
+    />
+  );
 
   return (
     <Screen>
       <Nav />
-      <Text style={styles.screenIntro}>Ask Harness Dev</Text>
-      <Notice kind="info" message="Dev sandbox — sends current board context to local ai-gateway." />
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
+      <PageHeader
+        title="Ask Harness Dev"
+        subtitle="Dev sandbox — grounded chat with board context."
+      />
 
-      <Section title="Gateway">
-        <TextInput
-          value={baseUrl}
-          onChangeText={setBaseUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder={DEFAULT_CHAT_HARNESS_URL}
-          placeholderTextColor="rgba(212,216,200,0.3)"
-          style={styles.captureInput}
-        />
-        <Text style={styles.helpText}>
-          Web/desktop: {DEFAULT_CHAT_HARNESS_URL}. Android emulator: {ANDROID_EMULATOR_CHAT_HARNESS_URL}.{" "}
-          {PHYSICAL_DEVICE_URL_HINT}
-        </Text>
-      </Section>
+      <View style={isWideLayout ? styles.chatLayoutRow : undefined}>
+        <View style={styles.chatPrimaryColumn}>
+          <HarnessReadCard
+            contextMode={contextMode}
+            context={selectedContext}
+            chatSummaryCount={harnessState.chatSummaries.length}
+            memoryItemCount={harnessState.memoryItems.length}
+            activeMemoryCount={activeMemoryCount}
+            activeLimitSignal={activeLimitSignal}
+          />
 
-      <Section title="Mode">
-        <View style={styles.splitRow}>
-          {MODES.map((option) => (
-            <Pressable
-              key={option}
-              style={mode === option ? styles.navButtonActive : styles.smallButton}
-              onPress={() => setMode(option)}
-            >
-              <Text style={styles.smallButtonText}>{option}</Text>
-            </Pressable>
-          ))}
+          <View style={[styles.chatSurface, { height: chatSurfaceHeight }]}>
+            <ChatThread
+              thread={thread}
+              threadScrollRef={threadScrollRef}
+              loading={loading}
+              memoryItems={harnessState.memoryItems}
+              onSelectPrompt={handleQuickQuestion}
+              onToggleConfidence={(turnId) =>
+              setThread((previous) =>
+                previous.map((item) =>
+                  item.id === turnId && item.kind === "assistant"
+                    ? { ...item, showConfidence: !item.showConfidence }
+                    : item
+                )
+              )
+            }
+            onToggleMemoryTools={(turnId) =>
+              setThread((previous) =>
+                previous.map((item) =>
+                  item.id === turnId && item.kind === "assistant"
+                    ? { ...item, showMemoryTools: !item.showMemoryTools }
+                    : item
+                )
+              )
+            }
+            onToggleMemoryPreview={(turnId) =>
+              setThread((previous) =>
+                previous.map((item) =>
+                  item.id === turnId && item.kind === "assistant"
+                    ? { ...item, showMemoryPreview: !item.showMemoryPreview }
+                    : item
+                )
+              )
+            }
+              onSaveChatSummary={handleSaveChatSummary}
+              onSaveMemoryBankCandidate={handleSaveMemoryBankCandidate}
+            />
+
+            <ChatComposer
+              message={message}
+              loading={loading}
+              quickQuestions={QUICK_QUESTIONS}
+              inputRef={inputRef}
+              onMessageChange={setMessage}
+              onQuickQuestion={handleQuickQuestion}
+              onSend={() => void handleSend()}
+            />
+          </View>
         </View>
-      </Section>
 
-      <Section title="Sensitivity">
-        <View style={styles.splitRow}>
-          {SENSITIVITIES.map((option) => (
-            <Pressable
-              key={option}
-              style={sensitivity === option ? styles.navButtonActive : styles.smallButton}
-              onPress={() => setSensitivity(option)}
-            >
-              <Text style={styles.smallButtonText}>{option}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </Section>
-
-      <Section title="Message">
-        <TextInput
-          value={message}
-          onChangeText={setMessage}
-          multiline
-          placeholder="Ask the scout…"
-          placeholderTextColor="rgba(212,216,200,0.3)"
-          style={[styles.captureInput, { minHeight: 96 }]}
-        />
-        <View style={styles.splitRow}>
-          {QUICK_QUESTIONS.map((item) => (
-            <Pressable
-              key={item.label}
-              style={styles.smallButton}
-              onPress={() => {
-                setMessage(item.message);
-                setMode(item.mode);
-              }}
-            >
-              <Text style={styles.smallButtonText}>{item.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Pressable
-          style={styles.primaryAction}
-          disabled={loading || !message.trim()}
-          onPress={() => void handleSend()}
-        >
-          {loading ? (
-            <ActivityIndicator color="#0E100A" />
-          ) : (
-            <Text style={styles.primaryActionText}>Send to Chat Harness</Text>
-          )}
-        </Pressable>
-      </Section>
-
-      <Section title="Exported context">
-        <Text style={styles.bodyText}>
-          Full: {fullChars} chars · Compact: {compactChars} chars · Sending: {contextMode}
-        </Text>
-        <View style={styles.splitRow}>
-          {(["full", "compact"] as const).map((option) => (
-            <Pressable
-              key={option}
-              style={contextMode === option ? styles.navButtonActive : styles.smallButton}
-              onPress={() => setContextMode(option)}
-            >
-              <Text style={styles.smallButtonText}>{option === "full" ? "Full context" : "Compact context"}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {compactChars < fullChars ? (
-          <Text style={styles.helpText}>
-            Compact strips resume bank cards first for gateway headroom. Use Compact for OpenVINO when full exceeds
-            budget.
-          </Text>
-        ) : null}
-        <Text style={styles.bodyText}>{qualitySummary.split("\n")[0]}</Text>
-        <Pressable style={styles.smallButton} onPress={() => setQualityOpen((open) => !open)}>
-          <Text style={styles.smallButtonText}>
-            {qualityOpen ? "Hide context quality summary" : "Show context quality summary"}
-          </Text>
-        </Pressable>
-        {qualityOpen ? (
-          <Text style={styles.bodyText}>{qualitySummary}</Text>
-        ) : null}
-        <Pressable style={styles.smallButton} onPress={() => setPreviewOpen((open) => !open)}>
-          <Text style={styles.smallButtonText}>{previewOpen ? "Hide JSON preview" : "Show JSON preview"}</Text>
-        </Pressable>
-        {previewOpen ? (
-          <ScrollView horizontal>
-            <Text style={[styles.bodyText, { fontFamily: "monospace" }]}>{previewText}</Text>
-          </ScrollView>
-        ) : null}
-      </Section>
-
-      {response ? (
-        <Section title="Response">
-          <Text style={styles.titleText}>{response.answer}</Text>
-          <Text style={styles.bodyText}>Used context: {response.used_context ? "yes" : "no"}</Text>
-          {response.confidence_notes.length > 0 ? (
-            <View style={styles.checklist}>
-              <Text style={styles.helpText}>Confidence notes</Text>
-              {response.confidence_notes.map((note) => (
-                <Text key={note} style={styles.bodyText}>
-                  • {note}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          {response.safety_notes.length > 0 ? (
-            <View style={styles.checklist}>
-              <Text style={styles.helpText}>Safety notes</Text>
-              {response.safety_notes.map((note) => (
-                <Text key={note} style={styles.bodyText}>
-                  • {note}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          {memoryPreview ? (
-            <View style={styles.checklist}>
-              <Text style={styles.helpText}>Preview memory</Text>
-              <Text style={styles.bodyText}>Summary: {memoryPreview.assistantSummary}</Text>
-              {memoryPreview.patterns.length > 0 ? (
-                <Text style={styles.bodyText}>Patterns: {memoryPreview.patterns.join(", ")}</Text>
-              ) : null}
-              {memoryPreview.rememberForNextTime.map((item) => (
-                <Text key={item} style={styles.bodyText}>
-                  • Remember: {item}
-                </Text>
-              ))}
-              {memoryPreview.decisions.length > 0 ? (
-                <Text style={styles.bodyText}>Decisions: {memoryPreview.decisions.join(" · ")}</Text>
-              ) : null}
-              <Pressable
-                style={memoryAlreadySaved ? styles.smallButton : styles.primaryAction}
-                disabled={memoryAlreadySaved}
-                onPress={handleSaveMemory}
-              >
-                <Text style={memoryAlreadySaved ? styles.smallButtonText : styles.primaryActionText}>
-                  {memoryAlreadySaved ? "Chat memory saved" : "Save chat summary to memory"}
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </Section>
-      ) : null}
-
-      {memoryBankCandidates.length > 0 ? (
-        <Section title="Suggested durable memories">
-          <Text style={styles.helpText}>
-            From the saved chat summary. Save only what should persist across sessions.
-          </Text>
-          {memoryBankCandidates.map((candidate) => {
-            const key = memoryItemDedupeKey(candidate);
-            const saved = savedCandidateKeys.has(key);
-            return (
-              <View key={key} style={styles.checklist}>
-                <Text style={styles.bodyText}>
-                  {candidate.kind} · {candidate.title}
-                </Text>
-                <Text style={styles.bodyText}>{candidate.summary}</Text>
-                {candidate.tags.length > 0 ? (
-                  <Text style={styles.helpText}>Tags: {candidate.tags.join(", ")}</Text>
-                ) : null}
-                {candidate.sourceChatSummaryId ? (
-                  <Text style={styles.helpText}>Source: {candidate.sourceChatSummaryId}</Text>
-                ) : null}
-                <Pressable
-                  style={saved ? styles.smallButton : styles.primaryAction}
-                  disabled={saved}
-                  onPress={() => handleSaveMemoryBankCandidate(candidate)}
-                >
-                  <Text style={saved ? styles.smallButtonText : styles.primaryActionText}>
-                    {saved ? "Saved to Memory Bank" : "Save to Memory Bank"}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </Section>
-      ) : null}
-
-      {recentMemoryBankItems.length > 0 ? (
-        <Section title="Recent Memory Bank">
-          {recentMemoryBankItems.map((item) => (
-            <View key={item.id} style={styles.checklist}>
-              <Text style={styles.bodyText}>
-                {item.kind} · {item.title} · {item.isActive ? "Active" : "Inactive"}
+        {isWideLayout ? (
+          inspectorPanel
+        ) : (
+          <View style={styles.chatSecondaryColumn}>
+            <Pressable style={styles.smallButton} onPress={() => setAdvancedOpen((open) => !open)}>
+              <Text style={styles.smallButtonText}>
+                {advancedOpen ? "Hide inspector" : "Show inspector"}
               </Text>
-              <Text style={styles.bodyText}>{item.summary}</Text>
-              {item.tags.length > 0 ? (
-                <Text style={styles.helpText}>Tags: {item.tags.join(", ")}</Text>
-              ) : null}
-              <View style={styles.splitRow}>
-                <Pressable style={styles.smallButton} onPress={() => toggleMemoryItemActive(item.id)}>
-                  <Text style={styles.smallButtonText}>
-                    {item.isActive ? "Mark inactive" : "Mark active"}
-                  </Text>
-                </Pressable>
-                <Pressable style={styles.smallButton} onPress={() => deleteMemoryItem(item.id)}>
-                  <Text style={styles.smallButtonText}>Delete</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-        </Section>
-      ) : null}
-
-      {recentMemories.length > 0 ? (
-        <Section title="Recent chat memories">
-          {recentMemories.map((item) => (
-            <View key={item.id} style={styles.checklist}>
-              <Text style={styles.bodyText}>
-                {item.mode} · {item.createdAt.slice(0, 16).replace("T", " ")}
-              </Text>
-              <Text style={styles.bodyText}>{item.assistantSummary}</Text>
-              {item.patterns.length > 0 ? (
-                <Text style={styles.helpText}>Patterns: {item.patterns.join(", ")}</Text>
-              ) : null}
-              <Pressable style={styles.smallButton} onPress={() => deleteChatSummary(item.id)}>
-                <Text style={styles.smallButtonText}>Delete</Text>
-              </Pressable>
-            </View>
-          ))}
-        </Section>
-      ) : null}
+            </Pressable>
+            {advancedOpen ? inspectorPanel : null}
+          </View>
+        )}
+      </View>
     </Screen>
   );
 }

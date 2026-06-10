@@ -7,12 +7,15 @@ from app.models import (
     AskHarnessMode,
     AskHarnessRequest,
     ChatHarnessRequest,
+    RawLabRequest,
+    RawLabThreadState,
     SensitivityLevel,
 )
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "transcript_analysis.md"
 _ASK_PROMPT_PATH = Path(__file__).parent / "prompts" / "ask_harness.md"
 _CHAT_PROMPT_PATH = Path(__file__).parent / "prompts" / "chat_harness.md"
+_RAW_LAB_PROMPT_PATH = Path(__file__).parent / "prompts" / "raw_lab.md"
 
 
 def load_prompt_template() -> str:
@@ -80,4 +83,33 @@ def build_chat_harness_prompt(*, request: ChatHarnessRequest) -> str:
         .replace("{message}", request.message)
         .replace("{context_json}", context_json)
         .replace("{conversation_history_json}", history_json)
+    )
+
+
+RAW_LAB_INPUT_OVERHEAD_CHARS = 128
+
+
+def load_raw_lab_template() -> str:
+    return _RAW_LAB_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _serialize_raw_lab_thread_state(thread_state: RawLabThreadState | None) -> str:
+    state = thread_state or RawLabThreadState()
+    return json.dumps(state.model_dump(mode="json"), indent=2, ensure_ascii=False)
+
+
+def build_raw_lab_system_prompt(*, thread_state: RawLabThreadState | None = None) -> str:
+    template = load_raw_lab_template()
+    return template.replace("{thread_state_json}", _serialize_raw_lab_thread_state(thread_state))
+
+
+def estimate_raw_lab_input_chars(*, system: str, request: RawLabRequest) -> int:
+    history_chars = sum(len(turn.content) for turn in request.recent_turns)
+    thread_state_chars = len(_serialize_raw_lab_thread_state(request.thread_state))
+    return (
+        len(system)
+        + history_chars
+        + thread_state_chars
+        + len(request.message)
+        + RAW_LAB_INPUT_OVERHEAD_CHARS
     )

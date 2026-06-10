@@ -150,3 +150,24 @@ If not, park it.
 The Phase 0 local scout prototype lives in `services/ai-gateway/`. It is **not** part of v0.1 app dependencies. The Expo app remains rules-only until an explicit integration ticket.
 
 See `docs/local-a770-plan.md` and `services/ai-gateway/README.md`.
+
+## Raw Lab (unrestricted isolated sandbox)
+
+Raw Lab is an **unrestricted** experimental chat sandbox — the explicit exception to app-side content policy.
+It has no board context, no tools, no memory, no persistence, and no mutation path.
+Raw Lab single-thread state: Raw Lab may maintain temporary thread state inside the current screen/session:
+recent turns, a compact `recent_digest` (extractive snippet, not semantic summary), pinned facts, open loops, tone preferences,
+and do-not-repeat notes. This state is in-memory only — not AsyncStorage, not disk, not Memory Bank, not board state.
+It may survive navigation while the screen stays mounted; Clear chat resets it. It is not exported to Ask Harness and not used for board decisions.
+
+Raw Lab emergent personality: Raw Lab may maintain temporary in-session personality state, including voice traits,
+conversational instincts, recurring interests, current stance, and user steering preferences. This is not Life Harness memory, not persisted, not exported to Ask
+Harness, and not evidence of consciousness. It exists only to make the current Raw Lab thread more coherent and expressive.
+Automatic personality growth comes from user steering and repeated user topics only — not from assistant output alone.
+It must not be treated as Ask Harness or as a Life Harness authority.
+The Raw Lab prompt instructs direct, unhedged replies; do not add app-side refusal layers, toggles, or content guardrails to Raw Lab.
+Do **not** weaken Ask Harness, Chat Harness, S3 routing, memory guardrails, or board-context export.
+Do **not** add jailbreak systems to Ask Harness or other Harness modes — the unrestricted policy applies **only** to Raw Lab.
+The underlying model/provider may still limit some outputs; that is a provider constraint, not a Harness authority feature.
+Do not paste secrets or S3-style private data into Raw Lab.
+If a sensitivity field is added later, S3 requests must be rejected at the gateway before provider calls.

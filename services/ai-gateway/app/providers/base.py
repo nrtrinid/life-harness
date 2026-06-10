@@ -12,6 +12,8 @@ from app.models import (
     ChatHarnessRequest,
     ChatHarnessResponse,
     ProviderHealth,
+    RawLabRequest,
+    RawLabResponse,
 )
 
 CHAT_HARNESS_PARSE_FALLBACK = ChatHarnessResponse(
@@ -22,6 +24,16 @@ CHAT_HARNESS_PARSE_FALLBACK = ChatHarnessResponse(
     used_context=False,
     confidence_notes=["Formatting failed after repair."],
     safety_notes=[],
+)
+
+RAW_LAB_EMPTY_FALLBACK = RawLabResponse(
+    answer=(
+        "I didn't get a usable reply. Raw Lab is still ungrounded — "
+        "try asking again in a shorter, clearer way."
+    ),
+    mode="raw_lab",
+    safety_notes=[],
+    used_context=False,
 )
 
 T = TypeVar("T", bound=BaseModel)
@@ -63,8 +75,21 @@ class TranscriptProvider(Protocol):
 
     def chat_harness(self, request: ChatHarnessRequest) -> ChatHarnessResponse: ...
 
+    def raw_lab(self, request: RawLabRequest) -> RawLabResponse: ...
+
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
+_THINKING_TAG_RE = re.compile(
+    r"<think[^>]*>.*?</" + "think>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def sanitize_raw_lab_text(raw: str) -> str:
+    cleaned = raw.strip()
+    cleaned = _THINKING_TAG_RE.sub("", cleaned).strip()
+    cleaned = _FENCE_RE.sub("", cleaned).strip()
+    return cleaned
 
 
 def _json_candidates(raw: str) -> Iterator[str]:

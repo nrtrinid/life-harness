@@ -13,12 +13,17 @@ import {
   countCardsByState,
   countCardsByWarmth,
   DEFAULT_COMPACT_MAX_CONTEXT_CHARS,
+  DEFAULT_GATEWAY_MAX_INPUT_CHARS,
+  estimateChatHarnessPromptChars,
   estimateHarnessContextChars,
+  GATEWAY_PROMPT_SAFETY_MARGIN_CHARS,
   getActiveLimitSignal,
   getColdOrDormantCards,
   HARNESS_STATIC_DECISIONS,
   mapLogType,
+  resolveChatHarnessContextForGateway,
   scoreCompactCardPriority,
+  shouldAutoSelectCompactExport,
   type HarnessExportInput
 } from "./harnessContext";
 import { CHAT_MEMORY_ANALYSIS_PREFIX } from "./harnessMemory";
@@ -219,9 +224,23 @@ describe("buildCompactHarnessContext", () => {
     expect(estimateHarnessContextChars(context)).toBe(JSON.stringify(context).length);
   });
 
-  it("seed compact export fits under the default budget", () => {
+  it("seed compact export fits under the default gateway prompt budget", () => {
     const compact = buildCompactHarnessContext(baseInput());
-    expect(estimateHarnessContextChars(compact)).toBeLessThanOrEqual(DEFAULT_COMPACT_MAX_CONTEXT_CHARS);
+    expect(estimateChatHarnessPromptChars(compact)).toBeLessThanOrEqual(
+      DEFAULT_GATEWAY_MAX_INPUT_CHARS - GATEWAY_PROMPT_SAFETY_MARGIN_CHARS
+    );
+  });
+
+  it("auto-selects compact when full prompt exceeds gateway budget", () => {
+    const full = buildHarnessContext(baseInput());
+    expect(shouldAutoSelectCompactExport(full, "What am I avoiding right now?")).toBe(true);
+    const resolved = resolveChatHarnessContextForGateway(baseInput(), {
+      preferredMode: "full",
+      message: "What am I avoiding right now?"
+    });
+    expect(estimateChatHarnessPromptChars(resolved, { message: "What am I avoiding right now?" })).toBeLessThanOrEqual(
+      DEFAULT_GATEWAY_MAX_INPUT_CHARS - GATEWAY_PROMPT_SAFETY_MARGIN_CHARS
+    );
   });
 
   it("compact export is smaller than full when resume modules are present", () => {

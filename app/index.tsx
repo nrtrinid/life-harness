@@ -6,6 +6,7 @@ import { ActiveLimitBanner } from "../src/components/ActiveLimitBanner";
 import { CardTile } from "../src/components/CardTile";
 import { MvdChecklist } from "../src/components/MvdChecklist";
 import { Nav } from "../src/components/Nav";
+import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { ProofShelf } from "../src/components/ProofShelf";
 import { ProgressBar } from "../src/components/ProgressBar";
@@ -80,6 +81,7 @@ export default function TodayScreen() {
   return (
     <Screen>
       <Nav />
+      <PageHeader title="Today" subtitle="Daily command surface — see what matters and start one move." />
 
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <ActiveLimitBanner />

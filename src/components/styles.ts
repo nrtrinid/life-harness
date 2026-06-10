@@ -87,33 +87,94 @@ export const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: spacing.sm
   },
-  navRow: {
+  navShell: {
+    gap: spacing.md
+  },
+  navPrimaryRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm
   },
-  navButton: {
+  navSecondaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  navGroupLabel: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.4,
+    marginBottom: spacing.xs
+  },
+  navPrimaryButton: {
+    borderBottomColor: "transparent",
+    borderBottomWidth: 2,
+    borderRadius: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  navPrimaryButtonActive: {
+    borderBottomColor: colors.accentPrimary,
+    borderBottomWidth: 2,
+    borderRadius: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  navPrimaryButtonText: {
+    color: colors.textTertiary,
+    fontSize: typography.bodyMedium,
+    fontWeight: "600"
+  },
+  navPrimaryButtonTextActive: {
+    color: colors.textPrimary,
+    fontSize: typography.bodyMedium,
+    fontWeight: "700"
+  },
+  navSecondaryButton: {
     backgroundColor: colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: 3,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10
+    borderRadius: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6
   },
-  navButtonActive: {
+  navSecondaryButtonActive: {
     backgroundColor: colors.bgTertiary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: colors.borderAccent,
-    borderRadius: 3,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6
   },
-  navButtonText: {
-    color: colors.accentPrimary,
-    fontSize: typography.labelMedium,
+  navSecondaryButtonText: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "600"
+  },
+  navSecondaryButtonTextActive: {
+    color: colors.textSecondary,
+    fontSize: typography.labelSmall,
+    fontWeight: "700"
+  },
+  pageHeader: {
+    gap: spacing.xs,
+    marginBottom: spacing.sm
+  },
+  pageHeaderTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.headingLarge,
     fontWeight: "700",
-    letterSpacing: 1.4,
-    textTransform: "uppercase"
+    letterSpacing: 0.2
+  },
+  pageHeaderSubtitle: {
+    color: colors.textTertiary,
+    fontSize: typography.bodyMedium,
+    lineHeight: 22
+  },
+  pageHeaderChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.xs
   },
   section: {
     backgroundColor: colors.bgSecondary,
@@ -501,6 +562,321 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.xs
+  },
+  chatLayoutRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.lg
+  },
+  chatPrimaryColumn: {
+    flex: 3,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 320,
+    gap: spacing.lg,
+    minWidth: 320
+  },
+  chatSecondaryColumn: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 260,
+    gap: spacing.md,
+    maxWidth: 340,
+    minWidth: 260
+  },
+  chatInspectorColumn: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 3,
+    borderWidth: 1,
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 260,
+    gap: spacing.sm,
+    maxWidth: 340,
+    minWidth: 260,
+    padding: spacing.md
+  },
+  chatInspectorHeader: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 1.2,
+    marginBottom: spacing.xs,
+    textTransform: "uppercase"
+  },
+  chatInspectorStatusLine: {
+    color: colors.textTertiary,
+    fontSize: typography.labelSmall,
+    letterSpacing: 0.4,
+    marginBottom: spacing.sm
+  },
+  chatSurface: {
+    flexDirection: "column",
+    gap: spacing.md,
+    overflow: "hidden"
+  },
+  chatThreadScroll: {
+    flex: 1,
+    minHeight: 0
+  },
+  chatThreadContent: {
+    gap: spacing.lg,
+    paddingBottom: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  chatEmptyState: {
+    alignItems: "center",
+    flex: 1,
+    gap: spacing.md,
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl
+  },
+  chatEmptyStateTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.headingSmall,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textAlign: "center"
+  },
+  chatEmptyStateCopy: {
+    color: colors.textTertiary,
+    fontSize: typography.bodyMedium,
+    lineHeight: 22,
+    maxWidth: 420,
+    textAlign: "center"
+  },
+  chatEmptyStateSuggestions: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    maxWidth: 480,
+    width: "100%"
+  },
+  chatSuggestionCard: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  chatSuggestionCardText: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyMedium,
+    lineHeight: 22
+  },
+  chatBubbleUser: {
+    alignSelf: "flex-end",
+    backgroundColor: "rgba(30,32,26,0.85)",
+    borderRadius: 8,
+    gap: spacing.xs,
+    maxWidth: "72%",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  chatBubbleAssistant: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.bgCard,
+    borderColor: colors.borderSubtle,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    maxWidth: "88%",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md
+  },
+  chatBubbleError: {
+    alignSelf: "stretch",
+    backgroundColor: colors.bgSecondary,
+    borderColor: "rgba(220,80,50,0.35)",
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  chatSpeakerLabel: {
+    color: colors.textLabel,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase"
+  },
+  chatAnswerText: {
+    color: colors.textPrimary,
+    fontSize: typography.bodyLarge,
+    lineHeight: 24
+  },
+  chatMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  chatMetaPill: {
+    backgroundColor: colors.bgTertiary,
+    borderRadius: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  },
+  chatMetaPillAccent: {
+    backgroundColor: "rgba(200,168,75,0.12)",
+    borderColor: colors.borderAccent,
+    borderRadius: 2,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  },
+  chatMetaPillText: {
+    color: colors.textTertiary,
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.4
+  },
+  chatMetaPillTextAccent: {
+    color: colors.accentPrimary,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4
+  },
+  chatUserText: {
+    color: colors.textPrimary,
+    fontSize: typography.bodyMedium,
+    lineHeight: 22
+  },
+  chatStatusRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.xs
+  },
+  chatReadCard: {
+    backgroundColor: colors.bgCard,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  chatComposer: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 8,
+    borderTopWidth: 1,
+    borderWidth: 0,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  chatComposerInputRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  chatComposerInput: {
+    backgroundColor: colors.bgPrimary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    color: colors.inputText,
+    flex: 1,
+    fontSize: typography.bodyMedium,
+    lineHeight: 22,
+    minHeight: 72,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    textAlignVertical: "top"
+  },
+  chatComposerHint: {
+    color: colors.textTertiary,
+    fontSize: typography.labelSmall,
+    letterSpacing: 0.3
+  },
+  chatComposerRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "flex-end"
+  },
+  chatSendButton: {
+    backgroundColor: colors.accentPrimary,
+    borderRadius: 6,
+    minWidth: 72,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  chatQuickChip: {
+    backgroundColor: colors.bgPrimary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 3,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6
+  },
+  chatQuickChipText: {
+    color: colors.textTertiary,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.8
+  },
+  chatInspectorSection: {
+    borderTopColor: colors.borderSubtle,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+    paddingTop: spacing.sm
+  },
+  chatInspectorSectionTitle: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 1.4,
+    textTransform: "uppercase"
+  },
+  chatInspectorToggle: {
+    alignSelf: "flex-start",
+    paddingVertical: 2
+  },
+  chatInspectorToggleText: {
+    color: colors.textLabel,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  chatBubbleToggle: {
+    alignSelf: "flex-start",
+    paddingVertical: 2
+  },
+  chatBubbleToggleText: {
+    color: colors.textTertiary,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.4
+  },
+  chatMemoryTools: {
+    borderTopColor: colors.borderSubtle,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm
+  },
+  chatBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.bgTertiary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 2,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3
+  },
+  chatBadgeText: {
+    color: colors.textLabel,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase"
   }
 });
 

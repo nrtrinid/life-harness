@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { Nav } from "../src/components/Nav";
+import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
@@ -55,9 +56,10 @@ export default function JobCandidatesScreen() {
     <Screen>
       <Nav />
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
-      <Text style={styles.screenIntro}>
-        Job candidates stay in the queue until you approve them into an application card.
-      </Text>
+      <PageHeader
+        title="Queue"
+        subtitle="Job candidates stay in the queue until you approve them into an application card."
+      />
       <Text style={styles.helpText}>{FIT_SCORE_DISCLAIMER}</Text>
 
       {STATUS_ORDER.map((status) => {

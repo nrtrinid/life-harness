@@ -58,3 +58,36 @@ def test_cors_allows_post_from_expo_web_origin(client):
     assert response.status_code == 200
     assert response.headers.get("access-control-allow-origin") == "http://127.0.0.1:19006"
     assert "answer" in response.json()
+
+
+def test_cors_preflight_allows_expo_web_origin_raw_lab(client):
+    response = client.options(
+        "/raw-lab",
+        headers={
+            "Origin": "http://localhost:8081",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:8081"
+    assert "POST" in response.headers.get("access-control-allow-methods", "")
+
+
+def test_cors_allows_post_from_expo_web_origin_raw_lab(client):
+    response = client.post(
+        "/raw-lab",
+        headers={"Origin": "http://127.0.0.1:19006"},
+        json={
+            "message": "Say something candid.",
+            "recent_turns": [],
+            "thread_state": {},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://127.0.0.1:19006"
+    body = response.json()
+    assert body["mode"] == "raw_lab"
+    assert body["used_context"] is False

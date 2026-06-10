@@ -15,19 +15,27 @@ from app.models import (
     ChatHarnessResponse,
     HealthStatus,
     ProviderHealth,
+    ConversationTurn,
+    RawLabRequest,
+    RawLabResponse,
 )
 from app.prompt_loader import (
     build_analysis_prompt,
     build_ask_harness_prompt,
     build_chat_harness_prompt,
+    build_raw_lab_system_prompt,
+    estimate_raw_lab_input_chars,
 )
+from app.raw_lab_utils import is_repetitive_response, raw_lab_repair_instruction
 from app.providers.base import (
     CHAT_HARNESS_PARSE_FALLBACK,
+    RAW_LAB_EMPTY_FALLBACK,
     ProviderInputError,
     ProviderNotReadyError,
     ProviderParseError,
     parse_model_json,
     parse_strict_json,
+    sanitize_raw_lab_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,7 +88,6 @@ Required top-level fields (all must be present):
 Broken output:
 {broken}
 """
-
 
 def _model_path_ready(model_path: str) -> bool:
     path = Path(model_path)
@@ -233,6 +240,48 @@ class OpenVinoProvider:
                 logger.warning("openvino chat_harness parse failed after repair; returning fallback")
                 return CHAT_HARNESS_PARSE_FALLBACK
 
+    def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
+        self._ensure_pipeline()
+        system = build_raw_lab_system_prompt(thread_state=request.thread_state)
+        input_chars = estimate_raw_lab_input_chars(system=system, request=request)
+        if input_chars > self._settings.max_input_chars:
+            raise ProviderInputError(
+                f"Serialized input length {input_chars} exceeds SCOUT_MAX_INPUT_CHARS="
+                f"{self._settings.max_input_chars}"
+            )
+
+        history = [
+            ConversationTurn(role=turn.role, content=turn.content)
+            for turn in request.recent_turns
+        ]
+        raw = self._generate_chat(
+            system=system,
+            history=history,
+            message=request.message,
+        )
+        answer = sanitize_raw_lab_text(raw)
+        if answer and is_repetitive_response(answer, request.recent_turns):
+            repaired_raw = self._generate_chat_repair(
+                system=system,
+                history=history,
+                draft=answer,
+                message=request.message,
+            )
+            repaired = sanitize_raw_lab_text(repaired_raw)
+            if repaired and not is_repetitive_response(repaired, request.recent_turns):
+                answer = repaired
+
+        if not answer:
+            logger.warning("openvino raw_lab returned empty text; using fallback")
+            return RAW_LAB_EMPTY_FALLBACK
+
+        return RawLabResponse(
+            answer=answer,
+            mode="raw_lab",
+            safety_notes=[],
+            used_context=False,
+        )
+
     def _ensure_pipeline(self) -> None:
         if self._pipeline is not None:
             return
@@ -268,6 +317,89 @@ class OpenVinoProvider:
         if hasattr(config, "apply_chat_template"):
             config.apply_chat_template = True
         return config
+
+    def _raw_lab_generation_config(self) -> Any:
+        assert ov_genai is not None
+        config = ov_genai.GenerationConfig()
+        config.max_new_tokens = self._settings.raw_lab_max_new_tokens
+        if hasattr(config, "temperature"):
+            config.temperature = self._settings.raw_lab_temperature
+        if hasattr(config, "repetition_penalty"):
+            config.repetition_penalty = self._settings.raw_lab_repetition_penalty
+        if hasattr(config, "apply_chat_template"):
+            config.apply_chat_template = True
+        return config
+
+    def _generate_chat_repair(
+        self,
+        *,
+        system: str,
+        history: list[ConversationTurn],
+        draft: str,
+        message: str,
+    ) -> str:
+        """Internal repair pass only — repair prompts never enter recent_turns or UI."""
+        self._ensure_pipeline()
+        assert self._pipeline is not None
+        assert ov_genai is not None
+
+        config = self._raw_lab_generation_config()
+        repair_instruction = raw_lab_repair_instruction()
+
+        chat_history = ov_genai.ChatHistory()
+        chat_history.set_extra_context({"enable_thinking": False})
+        chat_history.append({"role": "system", "content": system})
+        for turn in history:
+            chat_history.append({"role": turn.role.value, "content": turn.content})
+        chat_history.append({"role": "assistant", "content": draft})
+        chat_history.append({"role": "user", "content": repair_instruction})
+        chat_history.append({"role": "user", "content": message})
+
+        def _run() -> str:
+            result = self._pipeline.generate(chat_history, config)
+            return str(result)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run)
+            try:
+                return future.result(timeout=self._settings.timeout_seconds)
+            except FuturesTimeoutError as exc:
+                raise ProviderNotReadyError(
+                    f"Inference timed out after {self._settings.timeout_seconds}s"
+                ) from exc
+
+    def _generate_chat(
+        self,
+        *,
+        system: str,
+        history: list[ConversationTurn],
+        message: str,
+    ) -> str:
+        self._ensure_pipeline()
+        assert self._pipeline is not None
+        assert ov_genai is not None
+
+        config = self._raw_lab_generation_config()
+
+        chat_history = ov_genai.ChatHistory()
+        chat_history.set_extra_context({"enable_thinking": False})
+        chat_history.append({"role": "system", "content": system})
+        for turn in history:
+            chat_history.append({"role": turn.role.value, "content": turn.content})
+        chat_history.append({"role": "user", "content": message})
+
+        def _run() -> str:
+            result = self._pipeline.generate(chat_history, config)
+            return str(result)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run)
+            try:
+                return future.result(timeout=self._settings.timeout_seconds)
+            except FuturesTimeoutError as exc:
+                raise ProviderNotReadyError(
+                    f"Inference timed out after {self._settings.timeout_seconds}s"
+                ) from exc
 
     def _generate(self, prompt: str) -> str:
         self._ensure_pipeline()

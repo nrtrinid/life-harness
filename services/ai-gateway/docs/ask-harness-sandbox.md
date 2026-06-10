@@ -124,6 +124,10 @@ OpenVINO smoke results: [ask-harness-openvino-smoke.md](./ask-harness-openvino-s
 
 Prompt expects a substantive `answer` (2–6 sentences, not the voice template alone) and JSON-only output with all list fields as arrays.
 
+## Raw Lab (separate endpoint)
+
+`POST /raw-lab` is an **unrestricted, ungrounded** sandbox — not Ask Harness or Chat Harness. No context bundle, no memory, no card updates, no app-side content guardrails. See [README](../README.md#post-raw-lab). Do not paste S3-style private data into Raw Lab.
+
 ## Future path
 
 - Read-only chat over real Life Harness board state (app integration ticket)

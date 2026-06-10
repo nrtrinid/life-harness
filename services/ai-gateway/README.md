@@ -180,6 +180,28 @@ Conversational scout chat with simpler response shape. See Phase 1.8b above.
 
 **Errors:** 422 / 503 only (no 502 for parse failure — OpenVINO returns a safe fallback body with HTTP 200).
 
+### `POST /raw-lab`
+
+**Unrestricted** isolated sandbox chat. **Not** Ask Harness or Chat Harness. App-side prompt policy is direct and unhedged; only Life Harness isolation constraints apply (no board, no tools, no mutations).
+
+**Request:** `{ message, recent_turns?, thread_state? }`
+
+- `recent_turns`: prior user/assistant turns for this chat (not the latest `message`).
+- `thread_state`: temporary in-request thread memory (`recent_digest`, `pinned_facts`, `decisions`, `open_loops`, `tone_preferences`, `do_not_repeat`, `personality`, `updated_at`). `recent_digest` is an extractive snippet, not a semantic summary.
+- `thread_state.personality`: emergent in-session style (`voice_traits`, `conversational_instincts`, `recurring_interests`, `user_responds_well_to`, `user_dislikes`, `current_stance`, `growth_notes`, `updated_at`). Not consciousness, not persistent memory, not exported to Ask Harness.
+
+**Response:** `{ answer, mode: "raw_lab", safety_notes, used_context: false }`
+
+**Isolation:** No `context`, `board_context`, `memory_context`, `proposed_card_updates`, `tools_enabled`, `save_summary`, or `conversation_history` — unknown fields rejected with HTTP 422. Always returns `used_context: false`. Does not use ask-harness or chat-harness prompts.
+
+**Sensitivity:** v0.1 has no `sensitivity` field. Do not paste secrets or S3-style private data into Raw Lab. If `sensitivity` is added later, `S3` must be rejected with HTTP 422 before the provider runs.
+
+**Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. OpenVINO may run one internal anti-repeat repair pass; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
+
+**Provider note:** Output may still be limited by the underlying model; Raw Lab does not add Harness-side refusal layers.
+
+**Errors:** 422 / 503 only (empty model output returns a safe fallback with HTTP 200).
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -192,7 +214,10 @@ Conversational scout chat with simpler response shape. See Phase 1.8b above.
 | `SCOUT_MAX_NEW_TOKENS` | `1024` | Max tokens generated |
 | `SCOUT_TIMEOUT_SECONDS` | `120` | Inference timeout per request |
 | `SCOUT_MAX_INPUT_CHARS` | `12000` | Max transcript length for OpenVINO |
-| `SCOUT_TEMPERATURE` | `0.2` | Sampling temperature |
+| `SCOUT_TEMPERATURE` | `0.2` | Sampling temperature (scout endpoints) |
+| `SCOUT_RAW_LAB_MAX_NEW_TOKENS` | `2048` | Max tokens for Raw Lab replies |
+| `SCOUT_RAW_LAB_TEMPERATURE` | `0.7` | Sampling temperature for Raw Lab |
+| `SCOUT_RAW_LAB_REPETITION_PENALTY` | `1.12` | Repetition penalty for Raw Lab (when supported by OpenVINO) |
 
 ## Privacy
 
@@ -225,6 +250,7 @@ app/
     transcript_analysis.md
     ask_harness.md
     chat_harness.md
+    raw_lab.md
 playground/
   ask_harness.html
 scripts/
@@ -241,6 +267,7 @@ tests/
   test_ask_harness_cli.py
   test_chat_harness_contract.py
   test_chat_harness_cli.py
+  test_raw_lab_contract.py
   test_playground.py
   test_openvino_provider.py
   test_smoke_openvino_cli.py
