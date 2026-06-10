@@ -17,10 +17,13 @@ Local scout gateway for Life Harness: transcript analysis, grounded chat (Ask/Ch
 ## Chat Harness request fields
 
 - `message` — latest user turn
-- `context` — board snapshot (source of truth)
+- `context` — board snapshot (source of truth; required v0.1)
+- `context_packet` — optional ranked `AiContextPacket` wire (`packet_version: "0.1"`); when present, draft and deep critic prompts prefer compact packet sections over raw `context` JSON; invalid packet is stripped (legacy `context` fallback)
 - `conversation_history` — prior turns; assistant content = answer text only
 - `thread_state` — temporary working memory (no personality)
 - `reasoning_depth` — `fast` (default), `deliberate`, or `deep`
+- `SCOUT_CRITIC_SLOT=secondary` — deep critic via `critic_fast` (`critic_small` in yaml v2) + `LlamaCppCriticBackend` (HTTP to external `llama-server`); disabled slot falls back to same/mock; see [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md)
+- Frozen model roles / load policy: [docs/plans/model-stack-freeze-v3.md](../../docs/plans/model-stack-freeze-v3.md)
 
 Raw Lab accepts `message`, `recent_turns`, `thread_state` (+ personality). **Rejects** `context`, `conversation_history`, board/memory/action fields.
 
@@ -64,7 +67,9 @@ uvicorn app.main:app --host 127.0.0.1 --port 8111
 
 ## Agent workflow
 
-1. Read root `AGENTS.md` and `docs/conversation-thread-intelligence.md`.
+1. Read root `AGENTS.md`, [`docs/local-ai-agent-guide.md`](../../docs/local-ai-agent-guide.md), and `docs/conversation-thread-intelligence.md` (harness/thread work).
 2. Smallest change that satisfies the ticket.
-3. Run `pytest` before finishing.
+3. Run `SCOUT_PROVIDER=mock pytest` before finishing (thread evals when touching verifier / Raw Lab / compaction).
 4. Keep `CHAT_HARNESS_PROMPT_SHELL_CHARS` in app `harnessContext.ts` synced with `tests/test_prompt_shell_sync.py`.
+
+Full verify command table: root `AGENTS.md` → **Verify commands**.

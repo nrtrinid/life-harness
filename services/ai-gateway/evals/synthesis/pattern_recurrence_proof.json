@@ -1,0 +1,12 @@
+[
+  {
+    "name": "pattern_recurrence_proof",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "I notice I defer career follow-ups again.",
+    "expect_json_fields": {
+      "status": ["completed"],
+      "hidden_risk_grounding[].kind": ["proof_log", "active_card", "inferred_from_prompt"]
+    },
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

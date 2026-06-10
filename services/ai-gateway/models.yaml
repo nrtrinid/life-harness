@@ -1,0 +1,129 @@
+# Gateway-internal model slot catalog — not app-facing.
+# v2 naming (2026-06): see migration block below.
+#
+# Migration from v1 slot ids:
+#   critic              -> critic_small
+#   coding_daily        -> coder_daily
+#   coding_stretch      -> stretch_batch
+#   reflection_stretch  -> stretch_batch
+#   experimental_qwen30 -> stretch_batch (default) or stretch_experimental
+#
+# mock provider (SCOUT_PROVIDER=mock) is not a slot — CI/evals/schema safety only.
+version: 2
+
+defaults:
+  idle_unload_seconds: 300
+  heavy_load_timeout_seconds: 120
+  warm_on_start:
+    - companion_fast
+
+slots:
+  companion_fast:
+    enabled: true
+    backend: openvino
+    model_id: OpenVINO/Qwen3-8B-int4-ov
+    model_path: models/qwen3-8b-int4-ov
+    device: GPU
+    keep_loaded: true
+    heavy: false
+    max_new_tokens: 1024
+    temperature: 0.2
+    # role: Ask, Raw Lab, chat, transcript, self-reflection
+    # load_policy: keep_loaded
+
+  memory_embed:
+    enabled: false
+    backend: openvino
+    model_id: OpenVINO/Qwen3-Embedding-0.6B
+    model_path: models/qwen3-embedding-0.6b-ov
+    device: GPU
+    keep_loaded: false
+    heavy: false
+    batch_only: false
+    # role: board / career / memory / code retrieval pre-rank
+    # load_policy: on_demand (lazy)
+
+  critic_small:
+    enabled: false
+    backend: llamacpp
+    model_id: microsoft/Phi-4-mini-instruct
+    model_path: models/phi-4-mini-instruct-q4_k_m.gguf
+    keep_loaded: false
+    heavy: true
+    batch_only: false
+    max_new_tokens: 512
+    temperature: 0.1
+    llamacpp:
+      host: 127.0.0.1
+      port: 8121  # used when SCOUT_LLAMA_BASE_URL is unset
+      n_gpu_layers: -1
+      ctx_size: 8192
+    # role: async critique, deep chat review (SCOUT_CRITIC_SLOT=secondary)
+    # load_policy: on_demand
+    # backend_alt: openvino when a convenient OV build exists
+
+  coder_daily:
+    enabled: false
+    backend: llamacpp
+    model_id: deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct
+    model_path: models/deepseek-coder-v2-lite-instruct-q4_k_m.gguf
+    keep_loaded: false
+    heavy: true
+    batch_only: false
+    max_new_tokens: 2048
+    temperature: 0.2
+    llamacpp:
+      host: 127.0.0.1
+      port: 8122
+      n_gpu_layers: -1
+      ctx_size: 16384
+    # role: dev /ai/code-* contained patch attempts
+    # load_policy: on_demand (heavy mutex — unload companion before load)
+
+  coder_daily_alt:
+    enabled: false
+    backend: llamacpp
+    model_id: Qwen/Qwen2.5-Coder-14B-Instruct
+    model_path: models/qwen2.5-coder-14b-instruct-q4_k_m.gguf
+    keep_loaded: false
+    heavy: true
+    batch_only: false
+    max_new_tokens: 2048
+    temperature: 0.2
+    llamacpp:
+      host: 127.0.0.1
+      port: 8122
+      n_gpu_layers: -1
+      ctx_size: 16384
+    # benchmark alternate — enable at most one of coder_daily | coder_daily_alt
+
+  stretch_batch:
+    enabled: false
+    backend: llamacpp
+    model_id: Qwen/Qwen3-30B-A3B-Instruct-2507
+    model_path: models/qwen3-30b-a3b-instruct-2507-q4_k_m.gguf
+    keep_loaded: false
+    heavy: true
+    batch_only: true
+    llamacpp:
+      host: 127.0.0.1
+      port: 8123
+      n_gpu_layers: -1
+      ctx_size: 8192
+    # role: overnight brain, with_stretch deep synthesis, code-deep-pass jobs
+    # load_policy: never_hot
+
+  stretch_experimental:
+    enabled: false
+    backend: llamacpp
+    model_id: Qwen/Qwen3-Coder-30B-A3B-Instruct
+    model_path: models/qwen3-coder-30b-a3b-instruct-q4_k_m.gguf
+    keep_loaded: false
+    heavy: true
+    batch_only: true
+    llamacpp:
+      host: 127.0.0.1
+      port: 8123
+      n_gpu_layers: -1
+      ctx_size: 8192
+    # manual SYCL experiments only — not daily use on A770

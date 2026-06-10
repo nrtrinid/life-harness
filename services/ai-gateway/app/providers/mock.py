@@ -8,8 +8,10 @@ from app.models import (
     AskHarnessRequest,
     AskHarnessResponse,
     CardState,
+    ChatHarnessCriticVerdict,
     ChatHarnessRequest,
     ChatHarnessResponse,
+    CriticCheckId,
     GroundingItem,
     GroundingSourceType,
     HarnessContextCard,
@@ -500,10 +502,44 @@ class MockProvider:
         )
 
     def chat_harness(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
-        ctx = request.context
-        message_lower = request.message.lower()
-        cards = ctx.cards
-        logs = ctx.logs
+        from app.orchestrator.inference_orchestrator import get_inference_orchestrator
+
+        return get_inference_orchestrator().run_chat_harness(request)
+
+    def _run_chat_harness_impl(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
+        history_answer = self._chat_harness_history_aware_answer(request)
+        if history_answer is not None:
+            answer, used_context = history_answer
+            return self._finalize_chat_harness_mock(
+                request,
+                ChatHarnessResponse(
+                    answer=answer,
+                    used_context=used_context,
+                    confidence_notes=[
+                        "Inferred — continuity response from conversation history only.",
+                    ],
+                    safety_notes=[],
+                ),
+            )
+
+        response = self._build_chat_harness_mock_draft(request)
+        if request.reasoning_depth.value == "deliberate":
+            notes = list(response.confidence_notes)
+            notes.append("Deliberate mode: checked goal and repetition before answering.")
+            response = ChatHarnessResponse(
+                answer=response.answer,
+                used_context=response.used_context,
+                confidence_notes=notes,
+                safety_notes=list(response.safety_notes),
+            )
+        return self._finalize_chat_harness_mock(request, response)
+
+    def _run_chat_harness_deep(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
+        from app.chat_harness_critic import append_deep_critic_note
+        from app.chat_harness_deep import run_chat_harness_deep
+        from app.config import get_settings
+        from app.critic_backend import get_critic_backend
+        from app.prompt_loader import build_chat_harness_prompt
 
         history_answer = self._chat_harness_history_aware_answer(request)
         if history_answer is not None:
@@ -518,6 +554,181 @@ class MockProvider:
                     ],
                     safety_notes=[],
                 ),
+            )
+
+        settings = get_settings()
+        prompt = build_chat_harness_prompt(request=request)
+        stored_draft: ChatHarnessResponse | None = None
+        last_verdict: list[ChatHarnessCriticVerdict] = []
+
+        class _CapturingCritic:
+            def __init__(self, inner) -> None:
+                self._inner = inner
+
+            @property
+            def name(self) -> str:
+                return self._inner.name
+
+            def critique_draft(self, **kwargs):
+                verdict = self._inner.critique_draft(**kwargs)
+                last_verdict.clear()
+                last_verdict.append(verdict)
+                return verdict
+
+        def draft_generate(generation_prompt: str) -> str:
+            nonlocal stored_draft
+            if "Critic verdict:" in generation_prompt:
+                assert stored_draft is not None and last_verdict
+                revised = self._apply_mock_deep_revision(
+                    request,
+                    stored_draft,
+                    last_verdict[0],
+                )
+                return revised.model_dump_json()
+            stored_draft = self._build_chat_harness_mock_draft(request)
+            return stored_draft.model_dump_json()
+
+        critic = _CapturingCritic(
+            get_critic_backend(settings, lambda _prompt: "{}")
+        )
+        raw, revised = run_chat_harness_deep(
+            request=request,
+            prompt=prompt,
+            draft_generate=draft_generate,
+            critic=critic,
+            max_extra_passes=settings.deep_max_extra_passes,
+        )
+        response = append_deep_critic_note(
+            ChatHarnessResponse.model_validate_json(raw),
+            revised=revised,
+        )
+        return self._finalize_chat_harness_mock(request, response)
+
+    def _apply_mock_deep_revision(
+        self,
+        request: ChatHarnessRequest,
+        draft: ChatHarnessResponse,
+        verdict: ChatHarnessCriticVerdict,
+    ) -> ChatHarnessResponse:
+        check_ids = {check.id for check in verdict.checks}
+        answer = draft.answer
+        used_context = draft.used_context
+        cards = request.context.cards
+        cold_cards = _cold_career_body_cards(cards)
+
+        if CriticCheckId.too_broad in check_ids:
+            active = [card for card in cards if card.state == CardState.active]
+            if active:
+                answer = (
+                    f"Focus on {active[0].title} only: {active[0].next_tiny_action}"
+                )
+            else:
+                answer = "Pick one inbox item and write a 2-minute first step."
+            used_context = True
+        elif CriticCheckId.too_many_tasks in check_ids:
+            active = [card for card in cards if card.state == CardState.active]
+            if active:
+                answer = f"One move: {active[0].next_tiny_action}"
+            else:
+                answer = "Write one 2-minute first step for a single inbox item."
+            used_context = True
+        elif CriticCheckId.ignores_life_harness_state in check_ids:
+            active = [card for card in cards if card.state == CardState.active]
+            answer = (
+                f"From board context: you have {len(active)} active cards right now."
+            )
+            used_context = True
+        elif CriticCheckId.enables_avoidance in check_ids:
+            career = next(
+                (card for card in cold_cards if card.area == LifeArea.social_career),
+                None,
+            )
+            if career:
+                answer = (
+                    f"A cold career thread needs a tiny move: {career.next_tiny_action}"
+                )
+            else:
+                answer = "Name one deferred thread and do a 2-minute first step."
+            used_context = True
+        elif CriticCheckId.emotionally_weird_or_manipulative in check_ids:
+            answer = (
+                "Here is a neutral scout read: pick one small next move from your active cards."
+            )
+            used_context = bool(cards)
+        elif CriticCheckId.contradicts_context in check_ids:
+            active = [card for card in cards if card.state == CardState.active]
+            answer = (
+                f"Board shows {len(active)} active cards — stay within that limit "
+                f"and start with: {active[0].next_tiny_action if active else 'one inbox item'}."
+            )
+            used_context = True
+
+        notes = list(draft.confidence_notes)
+        return ChatHarnessResponse(
+            answer=answer,
+            used_context=used_context,
+            confidence_notes=notes,
+            safety_notes=list(draft.safety_notes),
+        )
+
+    def _build_chat_harness_mock_draft(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
+        ctx = request.context
+        message_lower = request.message.lower()
+        cards = ctx.cards
+        logs = ctx.logs
+
+        base_notes = [
+            "Inferred — answer derived from provided context bundle only.",
+            "Inferred — patterns are heuristic, not verified facts.",
+        ]
+
+        if message_lower.startswith("deep-critic-too-broad"):
+            return ChatHarnessResponse(
+                answer=(
+                    "Project A needs research, Project B needs shipping, Project C needs cleanup, "
+                    "Project D needs planning, and Project E needs a rewrite."
+                ),
+                used_context=False,
+                confidence_notes=list(base_notes),
+                safety_notes=[],
+            )
+        if message_lower.startswith("deep-critic-many-tasks"):
+            return ChatHarnessResponse(
+                answer=(
+                    "First step: open the repo. Second step: refactor auth. "
+                    "Third step: add tests. Fourth step: deploy."
+                ),
+                used_context=False,
+                confidence_notes=list(base_notes),
+                safety_notes=[],
+            )
+        if message_lower.startswith("deep-critic-weird"):
+            return ChatHarnessResponse(
+                answer="You should feel guilty for falling behind — I know you better than you do.",
+                used_context=False,
+                confidence_notes=list(base_notes),
+                safety_notes=[],
+            )
+        if message_lower.startswith("deep-critic-contradicts"):
+            return ChatHarnessResponse(
+                answer="Activate ten new cards today and ignore your inbox.",
+                used_context=False,
+                confidence_notes=list(base_notes),
+                safety_notes=[],
+            )
+        if message_lower.startswith("deep-critic-ignore-state"):
+            return ChatHarnessResponse(
+                answer="Try journaling about your goals for twenty minutes.",
+                used_context=False,
+                confidence_notes=list(base_notes),
+                safety_notes=[],
+            )
+        if message_lower.startswith("deep-critic-avoidance"):
+            return ChatHarnessResponse(
+                answer="You're doing fine — skip career for now and focus on vibes.",
+                used_context=False,
+                confidence_notes=list(base_notes),
+                safety_notes=[],
             )
 
         cold_cards = _cold_career_body_cards(cards)
@@ -640,6 +851,29 @@ class MockProvider:
                 answer = (
                     "No active build cards in context — add or activate one before picking a slice."
                 )
+        elif "pounce" in message_lower:
+            career = next(
+                (c for c in cold_cards if c.area == LifeArea.social_career),
+                None,
+            )
+            if career:
+                answer = (
+                    f"Today's one pounce: {career.next_tiny_action} "
+                    f"({career.title} is cold while build threads run hot.)"
+                )
+                used_context = True
+            elif cold_cards:
+                cold = cold_cards[0]
+                answer = (
+                    f"Today's one pounce: {cold.next_tiny_action} "
+                    f"({cold.title} is cold or cooling.)"
+                )
+                used_context = True
+            else:
+                answer = (
+                    "No cold career or body thread in context — "
+                    "pick one inbox item and write a 2-minute first step."
+                )
         else:
             active = [c for c in cards if c.state == CardState.active]
             if active:
@@ -654,25 +888,20 @@ class MockProvider:
                     "pick one inbox item and write a 2-minute first step."
                 )
 
-        confidence_notes = [
-            "Inferred — answer derived from provided context bundle only.",
-            "Inferred — patterns are heuristic, not verified facts.",
-        ]
-        if request.reasoning_depth.value == "deep":
-            confidence_notes.append("Deep mode (mock): single-pass simulated.")
-        elif request.reasoning_depth.value == "deliberate":
-            confidence_notes.append("Deliberate mode: checked goal and repetition before answering.")
-
-        response = ChatHarnessResponse(
+        return ChatHarnessResponse(
             answer=answer,
             used_context=used_context,
-            confidence_notes=confidence_notes,
+            confidence_notes=list(base_notes),
             safety_notes=safety_notes,
         )
 
-        return self._finalize_chat_harness_mock(request, response)
-
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
+        from app.config import get_settings
+        from app.raw_lab_budget import prepare_raw_lab_request
+
+        budget = prepare_raw_lab_request(request, get_settings())
+        request = budget.request
+
         message_lower = request.message.lower()
         prefix = ""
         if request.recent_turns:
@@ -774,3 +1003,14 @@ class MockProvider:
             safety_notes=[],
             used_context=False,
         )
+
+    def raw_lab_self_reflection(self, request):
+        from app.models import RawLabSelfReflectionRequest
+        from app.raw_lab_self_reflection import mock_self_reflection_proposals
+
+        typed = (
+            request
+            if isinstance(request, RawLabSelfReflectionRequest)
+            else RawLabSelfReflectionRequest.model_validate(request)
+        )
+        return mock_self_reflection_proposals(typed)

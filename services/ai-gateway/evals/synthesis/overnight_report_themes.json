@@ -1,0 +1,9 @@
+[
+  {
+    "name": "overnight_report_themes",
+    "endpoint": "overnight-brain",
+    "user_prompt": "weekly themes",
+    "skip_phase": "0",
+    "tags": ["phase_1b", "overnight-brain"]
+  }
+]

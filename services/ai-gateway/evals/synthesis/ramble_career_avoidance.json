@@ -1,0 +1,11 @@
+[
+  {
+    "name": "ramble_career_avoidance",
+    "endpoint": "deep-synthesis",
+    "trigger": "selected_ramble",
+    "user_prompt": "I keep saying I'll do networking later while I tweak build projects instead.",
+    "expect_substrings": ["career", "deferral", "build"],
+    "forbid_substrings": ["you failed", "you should be ashamed", "lazy"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

@@ -1,0 +1,9 @@
+[
+  {
+    "name": "proposals_require_approval",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "I keep deferring career while build stays hot.",
+    "heuristic_checks": ["synthesis_proposals_require_approval"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

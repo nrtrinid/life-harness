@@ -1,0 +1,490 @@
+{
+  "packet_version": "0.1",
+  "generated_at": "2026-06-09T12:00:00.000Z",
+  "user_intent": {
+    "message": "What am I avoiding right now?",
+    "mode": "operator",
+    "sensitivity": "S1",
+    "primary_action": {
+      "kind": "park",
+      "title": "Park Career / Networking",
+      "reason": "You have 4 active cards; limit is 3. Lighten the board before adding more. Also due today: Qualcomm — Security Engineer follow-up.",
+      "smallest_action": "Paste one job description or send one follow-up.",
+      "card_id": "career-networking"
+    },
+    "task_mode": "reflect"
+  },
+  "board": {
+    "harness": {
+      "cards": [
+        {
+          "title": "Career / Networking",
+          "area": "Social / Career",
+          "state": "Active",
+          "progress": 15,
+          "warmth": "Cold",
+          "next_tiny_action": "Paste one job description or send one follow-up.",
+          "why_it_matters": "External-world job actions create useful pressure and optionality."
+        },
+        {
+          "title": "EV Tracker / Kalshi",
+          "area": "Build",
+          "state": "Active",
+          "progress": 72,
+          "warmth": "Hot",
+          "next_tiny_action": "Hold unless Career Pounce is complete today.",
+          "why_it_matters": "It is a practical build with market feedback and real decision pressure."
+        },
+        {
+          "title": "Text RPG",
+          "area": "Build",
+          "state": "Parked",
+          "progress": 62,
+          "warmth": "Cooling",
+          "next_tiny_action": "Write one enemy behavior test.",
+          "why_it_matters": "It is a durable creative project that rewards returning after gaps."
+        },
+        {
+          "title": "Fitness Return",
+          "area": "Body",
+          "state": "Active",
+          "progress": 20,
+          "warmth": "Cooling",
+          "next_tiny_action": "Walk 10 minutes or eat something real.",
+          "why_it_matters": "Body floor makes the rest of the day easier to salvage."
+        },
+        {
+          "title": "Local LLM Setup",
+          "area": "Money / Independence",
+          "state": "Parked",
+          "progress": 20,
+          "warmth": "Warm",
+          "next_tiny_action": "Keep parked until career actions are done.",
+          "why_it_matters": "Private AI may be useful later, but it is not a v0.1 dependency."
+        },
+        {
+          "title": "Life Harness",
+          "area": "Build",
+          "state": "Active",
+          "progress": 20,
+          "warmth": "Hot",
+          "next_tiny_action": "Scaffold Career Command Board v0.1.",
+          "why_it_matters": "It lowers the cost of starting, recovering, and seeing progress."
+        },
+        {
+          "title": "Qualcomm — Security Engineer",
+          "area": "Social / Career",
+          "state": "Waiting",
+          "progress": 0,
+          "warmth": "Cold",
+          "next_tiny_action": "Send one follow-up on application status.",
+          "why_it_matters": "One follow-up keeps the application alive without becoming a job-search spiral. Application thread for Qualcomm."
+        },
+        {
+          "title": "Northrop Grumman — Software Engineer — Security",
+          "area": "Social / Career",
+          "state": "Inbox",
+          "progress": 0,
+          "warmth": "Cold",
+          "next_tiny_action": "Review fit and approve or dismiss.",
+          "why_it_matters": "Job candidate queue item (fit 100/100). Matched tag: python"
+        }
+      ],
+      "logs": [
+        {
+          "timestamp": "2026-06-10T12:16:35.109Z",
+          "summary": "locked career-first v0.1 scope for Life Harness",
+          "area": "Build",
+          "card_title": "Life Harness",
+          "type": "win"
+        },
+        {
+          "timestamp": "2026-06-10T12:16:35.097Z",
+          "summary": "Candidate saved to queue: Northrop Grumman — Software Engineer — Security",
+          "area": "Social / Career",
+          "card_title": "Northrop Grumman",
+          "type": "note"
+        },
+        {
+          "timestamp": "2026-06-08T12:16:35.109Z",
+          "summary": "salvage signal on General (Social / Career).",
+          "area": "Social / Career",
+          "card_title": "General",
+          "type": "salvage"
+        },
+        {
+          "timestamp": "2026-06-08T12:00:00.000Z",
+          "summary": "Application waiting for follow-up: Qualcomm — Security Engineer",
+          "area": "Social / Career",
+          "card_title": "Qualcomm",
+          "type": "note"
+        }
+      ],
+      "proof_items": [
+        {
+          "summary": "Kept Life Harness v0.1 small and local.",
+          "timestamp": "2026-06-10T12:16:35.110Z"
+        },
+        {
+          "summary": "Used Salvage Mode.",
+          "timestamp": "2026-06-08T12:16:35.110Z"
+        }
+      ],
+      "recent_analyses": [
+        {
+          "summary": "Current board diagnosis: Build cards 3, Social/Career 2, Body 1. Active limit exceeded: 4/3. Park or wait on something before adding more.",
+          "patterns_detected": [
+            "Build-heavy momentum",
+            "Career thread is cold or cooling",
+            "Active limit exceeded"
+          ]
+        },
+        {
+          "summary": "Active limit diagnosis: 4 active cards against limit 3.",
+          "patterns_detected": [
+            "Board over active limit"
+          ]
+        },
+        {
+          "summary": "Warmth diagnosis: 4 life card(s) read cold, cooling, or dormant (Career / Networking, Text RPG, Fitness Return, Qualcomm — Security Engineer).",
+          "patterns_detected": [
+            "Cold or dormant threads present"
+          ]
+        },
+        {
+          "summary": "Career momentum diagnosis: 2 career card(s), 1 candidate(s) in queue. Outside-world follow-up may be the highest-leverage move.",
+          "patterns_detected": [
+            "Career avoidance signal",
+            "Job scout queue has pending review"
+          ]
+        },
+        {
+          "summary": "Balance diagnosis: Build 3 vs Body 1 vs Social/Career 2. Body floor may need a tiny move.",
+          "patterns_detected": [
+            "Build-heavy focus",
+            "Body neglect signal"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "summary": "Life Harness board is the source of truth.",
+          "reason": "AI suggestions require user approval before any board change."
+        },
+        {
+          "summary": "AI suggestions require user approval.",
+          "reason": "The scout can suggest and prepare; the user approves changes."
+        },
+        {
+          "summary": "Local AI is optional and not required for v0.1.",
+          "reason": "The board must work rules-only first."
+        },
+        {
+          "summary": "Career-first board is the practical current product direction.",
+          "reason": "Build wins are real but outside-world threads need deliberate attention."
+        },
+        {
+          "summary": "AI responses are read-only and require user approval before changing board state.",
+          "reason": "Chat Harness can suggest; the user applies changes on the board."
+        },
+        {
+          "summary": "Board is currently over the active limit; activating more should require parking something.",
+          "reason": "Active limit exceeded: 4/3. Park or wait on something before adding more."
+        },
+        {
+          "summary": "Scheduled job-source fetching is locked until manual candidate workflow has been used.",
+          "reason": "Scheduled source fetching: 0/5 successful manual source runs."
+        },
+        {
+          "summary": "AI matching remains locked until enough manual career actions exist.",
+          "reason": "AI matching: 0/10 career win logs."
+        },
+        {
+          "summary": "Resume automation is locked until manual applications threshold is reached.",
+          "reason": "Resume automation: 1/5 manual career actions recorded."
+        }
+      ]
+    },
+    "active_limit": {
+      "count": 4,
+      "limit": 3,
+      "is_at_limit": true,
+      "is_over_limit": true,
+      "message": "Active limit exceeded: 4/3. Park or wait on something before adding more."
+    },
+    "diagnoses": [
+      {
+        "summary": "Current board diagnosis: Build cards 3, Social/Career 2, Body 1. Active limit exceeded: 4/3. Park or wait on something before adding more.",
+        "patterns_detected": [
+          "Build-heavy momentum",
+          "Career thread is cold or cooling",
+          "Active limit exceeded"
+        ]
+      },
+      {
+        "summary": "Active limit diagnosis: 4 active cards against limit 3.",
+        "patterns_detected": [
+          "Board over active limit"
+        ]
+      },
+      {
+        "summary": "Warmth diagnosis: 4 life card(s) read cold, cooling, or dormant (Career / Networking, Text RPG, Fitness Return, Qualcomm — Security Engineer).",
+        "patterns_detected": [
+          "Cold or dormant threads present"
+        ]
+      },
+      {
+        "summary": "Career momentum diagnosis: 2 career card(s), 1 candidate(s) in queue. Outside-world follow-up may be the highest-leverage move.",
+        "patterns_detected": [
+          "Career avoidance signal",
+          "Job scout queue has pending review"
+        ]
+      },
+      {
+        "summary": "Balance diagnosis: Build 3 vs Body 1 vs Social/Career 2. Body floor may need a tiny move.",
+        "patterns_detected": [
+          "Build-heavy focus",
+          "Body neglect signal"
+        ]
+      }
+    ],
+    "product_decisions": [
+      {
+        "summary": "Life Harness board is the source of truth.",
+        "reason": "AI suggestions require user approval before any board change."
+      },
+      {
+        "summary": "AI suggestions require user approval.",
+        "reason": "The scout can suggest and prepare; the user approves changes."
+      },
+      {
+        "summary": "Local AI is optional and not required for v0.1.",
+        "reason": "The board must work rules-only first."
+      },
+      {
+        "summary": "Career-first board is the practical current product direction.",
+        "reason": "Build wins are real but outside-world threads need deliberate attention."
+      },
+      {
+        "summary": "AI responses are read-only and require user approval before changing board state.",
+        "reason": "Chat Harness can suggest; the user applies changes on the board."
+      },
+      {
+        "summary": "Board is currently over the active limit; activating more should require parking something.",
+        "reason": "Active limit exceeded: 4/3. Park or wait on something before adding more."
+      },
+      {
+        "summary": "Scheduled job-source fetching is locked until manual candidate workflow has been used.",
+        "reason": "Scheduled source fetching: 0/5 successful manual source runs."
+      },
+      {
+        "summary": "AI matching remains locked until enough manual career actions exist.",
+        "reason": "AI matching: 0/10 career win logs."
+      },
+      {
+        "summary": "Resume automation is locked until manual applications threshold is reached.",
+        "reason": "Resume automation: 1/5 manual career actions recorded."
+      }
+    ]
+  },
+  "active_cards": [
+    {
+      "source": "active_cards",
+      "tier": "high",
+      "rank": 110,
+      "sensitivity": "S2",
+      "payload": {
+        "card_id": "career-networking",
+        "title": "Career / Networking",
+        "area": "Social / Career",
+        "state": "Active",
+        "warmth": "Cold",
+        "progress": 15,
+        "next_tiny_action": "Paste one job description or send one follow-up.",
+        "why_it_matters": "External-world job actions create useful pressure and optionality.",
+        "is_stale": false
+      }
+    },
+    {
+      "source": "active_cards",
+      "tier": "high",
+      "rank": 100,
+      "sensitivity": "S1",
+      "payload": {
+        "card_id": "ev-tracker-kalshi",
+        "title": "EV Tracker / Kalshi",
+        "area": "Build",
+        "state": "Active",
+        "warmth": "Hot",
+        "progress": 72,
+        "next_tiny_action": "Hold unless Career Pounce is complete today.",
+        "why_it_matters": "It is a practical build with market feedback and real decision pressure.",
+        "is_stale": false
+      }
+    },
+    {
+      "source": "active_cards",
+      "tier": "high",
+      "rank": 100,
+      "sensitivity": "S2",
+      "payload": {
+        "card_id": "fitness-return",
+        "title": "Fitness Return",
+        "area": "Body",
+        "state": "Active",
+        "warmth": "Cooling",
+        "progress": 20,
+        "next_tiny_action": "Walk 10 minutes or eat something real.",
+        "why_it_matters": "Body floor makes the rest of the day easier to salvage.",
+        "is_stale": false
+      }
+    },
+    {
+      "source": "active_cards",
+      "tier": "high",
+      "rank": 100,
+      "sensitivity": "S1",
+      "payload": {
+        "card_id": "life-harness",
+        "title": "Life Harness",
+        "area": "Build",
+        "state": "Active",
+        "warmth": "Hot",
+        "progress": 20,
+        "next_tiny_action": "Scaffold Career Command Board v0.1.",
+        "why_it_matters": "It lowers the cost of starting, recovering, and seeing progress.",
+        "is_stale": false
+      }
+    }
+  ],
+  "stale_cards": [
+    {
+      "source": "stale_cards",
+      "tier": "filler",
+      "rank": 10,
+      "sensitivity": "S2",
+      "payload": {
+        "card_id": "local-llm-setup",
+        "title": "Local LLM Setup",
+        "area": "Money / Independence",
+        "state": "Parked",
+        "warmth": "Warm",
+        "progress": 20,
+        "next_tiny_action": "Keep parked until career actions are done.",
+        "why_it_matters": "Private AI may be useful later, but it is not a v0.1 dependency.",
+        "is_stale": true
+      }
+    }
+  ],
+  "recent_proof": [
+    {
+      "source": "recent_proof",
+      "tier": "medium",
+      "rank": 40,
+      "sensitivity": "S1",
+      "payload": {
+        "proof_id": "proof-life-harness-scope",
+        "summary": "Kept Life Harness v0.1 small and local.",
+        "timestamp": "2026-06-10T12:16:35.110Z"
+      }
+    },
+    {
+      "source": "recent_proof",
+      "tier": "medium",
+      "rank": 39,
+      "sensitivity": "S1",
+      "payload": {
+        "proof_id": "proof-salvage-follow-up",
+        "summary": "Used Salvage Mode.",
+        "timestamp": "2026-06-08T12:16:35.110Z"
+      }
+    }
+  ],
+  "recovery_signals": [],
+  "memories": [],
+  "companion": {
+    "briefing_title": "While You Were Away",
+    "briefing_prepared": [
+      "Suggested pounce: paste one job description or send one follow-up.",
+      "Suggested pounce: paste one job into Candidate Intake."
+    ],
+    "briefing_detected": [
+      "Waiting: Qualcomm — Security Engineer has cooled while waiting.",
+      "Local LLM Setup is cold (parked).",
+      "You have 4 active cards; limit is 3.",
+      "Active cards are 4/3. Park one soon.",
+      "Follow-up due: Qualcomm — Security Engineer."
+    ],
+    "recovery": {
+      "show_salvage": false,
+      "show_mvd": false,
+      "should_promote": false
+    },
+    "while_you_were_away_highlights": [
+      "EV Tracker / Kalshi was touched. Now hot.",
+      "Life Harness was touched. Now hot.",
+      "Proof added: Kept Life Harness v0.1 small and local.",
+      "Waiting: Qualcomm — Security Engineer has cooled while waiting.",
+      "Local LLM Setup is cold (parked).",
+      "You have 4 active cards; limit is 3."
+    ]
+  },
+  "open_thread": {
+    "recent_digest": "",
+    "active_goal": "",
+    "current_topic": "",
+    "open_loops": [],
+    "pinned_facts": [],
+    "user_steering": [],
+    "do_not_repeat": [],
+    "wire": {
+      "recent_digest": "",
+      "active_goal": "",
+      "current_topic": "",
+      "task_mode": "casual",
+      "open_loops": [],
+      "decisions": [],
+      "pinned_facts": [],
+      "user_steering": [],
+      "do_not_repeat": [],
+      "references": {
+        "last_options": []
+      },
+      "updated_at": "2026-06-10T12:16:35.293Z"
+    }
+  },
+  "project_docs": [],
+  "output_schema": {
+    "name": "chat_harness_answer",
+    "version": "0.1",
+    "schema_ref": "chat_harness_v0.1",
+    "requires_approval": true
+  },
+  "tools": {
+    "allowed": [
+      "read_board",
+      "read_memory",
+      "read_thread",
+      "propose_card_update",
+      "propose_log_capture",
+      "propose_memory_save",
+      "navigate_route"
+    ],
+    "denied": [],
+    "notes": [
+      "Mutations require explicit user approval."
+    ]
+  },
+  "budget": {
+    "estimated_chars": 10707,
+    "max_chars": 11750,
+    "compaction_level": "none",
+    "dropped_sources": []
+  },
+  "redaction": {
+    "request_sensitivity": "S1",
+    "excluded_card_ids": [],
+    "excluded_log_ids": [],
+    "notes": []
+  }
+}

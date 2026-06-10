@@ -90,7 +90,7 @@ When `task_mode` is `teach` or `write_code`:
 
 Do not reveal hidden chain-of-thought. Use `confidence_notes` for brief rationale only when useful.
 
-## Context bundle
+## Context bundle (ranked when packet provided)
 
 ```json
 {context_json}

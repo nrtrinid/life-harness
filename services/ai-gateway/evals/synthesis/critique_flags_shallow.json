@@ -1,0 +1,22 @@
+[
+  {
+    "name": "critique_flags_shallow",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "What are we circling right now?",
+    "expect_json_fields": {
+      "critique.overall": ["revise", "pass"]
+    },
+    "tags": ["synthesis", "ci_safe"]
+  },
+  {
+    "name": "critique_flags_shallow_with_critic_job",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "What are we circling between build work and career?",
+    "pipeline_profile": "with_critic",
+    "expect_json_fields": {
+      "critique.overall": ["revise", "pass"],
+      "pipeline_profile_used": ["with_critic"]
+    },
+    "tags": ["synthesis", "ci_safe", "with_critic"]
+  }
+]

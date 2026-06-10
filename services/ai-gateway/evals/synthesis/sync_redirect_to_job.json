@@ -1,0 +1,13 @@
+[
+  {
+    "name": "sync_redirect_to_job",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "Deep synthesis with stretch reflection.",
+    "pipeline_profile": "with_stretch",
+    "expect_json_fields": {
+      "status": ["queued"]
+    },
+    "heuristic_checks": ["sync_queued_redirect"],
+    "tags": ["synthesis", "ci_safe"]
+  }
+]

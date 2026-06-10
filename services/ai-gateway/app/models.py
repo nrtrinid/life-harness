@@ -1,7 +1,13 @@
+import logging
 from enum import Enum
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.context_packet import AiContextPacketWire
 
 
 class AnalysisMode(str, Enum):
@@ -73,6 +79,18 @@ class ProviderKind(str, Enum):
     openvino = "openvino"
 
 
+class SlotHealthStatus(str, Enum):
+    disabled = "disabled"
+    ready = "ready"
+    warming = "warming"
+    degraded = "degraded"
+
+
+class SlotHealthEntry(StrictModel):
+    enabled: bool
+    state: SlotHealthStatus
+
+
 class HealthResponse(StrictModel):
     status: HealthStatus
     provider: ProviderKind
@@ -80,6 +98,7 @@ class HealthResponse(StrictModel):
     model: str | None = None
     device: str | None = None
     message: str | None = None
+    slots: dict[str, SlotHealthEntry] | None = None
 
 
 class ProviderHealth(StrictModel):
@@ -260,6 +279,29 @@ class ReasoningDepth(str, Enum):
     deep = "deep"
 
 
+class CriticCheckId(str, Enum):
+    too_many_tasks = "too_many_tasks"
+    too_broad = "too_broad"
+    ignores_life_harness_state = "ignores_life_harness_state"
+    enables_avoidance = "enables_avoidance"
+    emotionally_weird_or_manipulative = "emotionally_weird_or_manipulative"
+    contradicts_context = "contradicts_context"
+    invalid_or_unstructured_output = "invalid_or_unstructured_output"
+    no_issue = "no_issue"
+
+
+class CriticCheckEntry(StrictModel):
+    id: CriticCheckId
+    severity: Literal["info", "warn", "error"]
+    message: str = Field(..., max_length=300)
+
+
+class ChatHarnessCriticVerdict(StrictModel):
+    needs_revision: bool
+    checks: list[CriticCheckEntry] = Field(default_factory=list)
+    revision_instruction: str = Field(default="", max_length=400)
+
+
 class ChatHarnessRequest(StrictModel):
     message: str = Field(..., min_length=1)
     mode: AskHarnessMode = AskHarnessMode.general
@@ -268,6 +310,25 @@ class ChatHarnessRequest(StrictModel):
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
     thread_state: ChatHarnessThreadState = Field(default_factory=ChatHarnessThreadState)
     reasoning_depth: ReasoningDepth = ReasoningDepth.fast
+    context_packet: "AiContextPacketWire | None" = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def strip_invalid_context_packet(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        raw_packet = data.get("context_packet")
+        if raw_packet is None:
+            return data
+        from app.context_packet import AiContextPacketWire
+
+        try:
+            AiContextPacketWire.model_validate(raw_packet)
+        except ValidationError:
+            logger.warning("Invalid context_packet stripped; falling back to legacy context")
+            data = dict(data)
+            data["context_packet"] = None
+        return data
 
 
 class ChatHarnessResponse(StrictModel):
@@ -311,10 +372,21 @@ class RawLabThreadState(StrictModel):
     updated_at: str | None = None
 
 
+class RawLabCompanionSelfMemory(StrictModel):
+    id: str
+    kind: str
+    subject: Literal["companion_self", "interaction_pattern", "user_preference"]
+    scope: str = "raw_lab"
+    text: str = Field(..., min_length=1, max_length=280)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    sensitivity: Literal["S0", "S1", "S2"] = "S0"
+
+
 class RawLabRequest(StrictModel):
     message: str = Field(..., min_length=1)
     recent_turns: list[RawLabTurn] = Field(default_factory=list)
     thread_state: RawLabThreadState = Field(default_factory=RawLabThreadState)
+    companion_self_memories: list[RawLabCompanionSelfMemory] = Field(default_factory=list)
 
 
 class RawLabResponse(StrictModel):
@@ -322,3 +394,28 @@ class RawLabResponse(StrictModel):
     mode: Literal["raw_lab"] = "raw_lab"
     safety_notes: list[str]
     used_context: Literal[False] = False
+
+
+class RawLabSelfReflectionRequest(StrictModel):
+    recent_turns: list[RawLabTurn] = Field(default_factory=list)
+    thread_state: RawLabThreadState = Field(default_factory=RawLabThreadState)
+    existing_self_memories: list[RawLabCompanionSelfMemory] = Field(default_factory=list)
+
+
+class RawLabSelfMemoryProposal(StrictModel):
+    kind: str
+    subject: Literal["companion_self", "interaction_pattern", "user_preference"] = (
+        "companion_self"
+    )
+    text: str = Field(..., min_length=1, max_length=280)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    sensitivity: Literal["S0", "S1", "S2"] = "S0"
+    reason: str = ""
+
+
+class RawLabSelfReflectionResponse(StrictModel):
+    proposals: list[RawLabSelfMemoryProposal] = Field(default_factory=list)
+    safety_notes: list[str] = Field(default_factory=list)
+    used_context: Literal[False] = False
+
+

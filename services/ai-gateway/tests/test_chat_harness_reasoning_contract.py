@@ -65,7 +65,7 @@ def test_chat_harness_deep_includes_confidence_note(client, chat_payload):
     response = client.post("/chat-harness", json=payload)
     assert response.status_code == 200
     notes = response.json().get("confidence_notes", [])
-    assert any("Deep mode" in note for note in notes)
+    assert any("structured critic" in note.lower() for note in notes)
 
 
 def test_chat_harness_rejects_invalid_reasoning_depth(client, chat_payload):

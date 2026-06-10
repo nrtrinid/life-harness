@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.main import app, get_provider
+from app.context_packet import AiContextPacketWire
 from app.models import ChatHarnessRequest, ChatHarnessResponse, HarnessContext
 from app.providers.base import CHAT_HARNESS_PARSE_FALLBACK
 from app.providers.mock import MockProvider
@@ -16,6 +17,9 @@ from app.providers.openvino_provider import OpenVinoProvider
 os.environ.setdefault("SCOUT_PROVIDER", "mock")
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "synthetic_harness_context.json"
+PACKET_FIXTURE_PATH = (
+    Path(__file__).resolve().parent / "fixtures" / "synthetic_context_packet.json"
+)
 DEFAULT_MESSAGE = "What am I avoiding right now?"
 
 
@@ -56,6 +60,17 @@ def test_chat_harness_mock_returns_strict_json(client, chat_payload):
     assert parsed.answer
     assert parsed.used_context is True
     assert len(parsed.confidence_notes) >= 1
+
+
+def test_chat_harness_accepts_context_packet_with_legacy_context(client, chat_payload):
+    packet_data = json.loads(PACKET_FIXTURE_PATH.read_text(encoding="utf-8"))
+    AiContextPacketWire.model_validate(packet_data)
+    chat_payload["context_packet"] = packet_data
+    response = client.post("/chat-harness", json=chat_payload)
+    assert response.status_code == 200
+    parsed = ChatHarnessResponse.model_validate(response.json())
+    assert parsed.answer
+    assert parsed.used_context is True
 
 
 def test_chat_harness_avoiding_mentions_career_body_or_build(client, chat_payload):
@@ -171,7 +186,8 @@ def test_openvino_chat_harness_parse_failure_returns_fallback_not_502(
     )
 
     with patch.object(provider, "_generate", return_value="not valid json {{{"):
-        result = provider.chat_harness(request)
+        with patch("app.main.get_provider", return_value=provider):
+            result = provider.chat_harness(request)
 
         assert result.used_context is False
         assert any("Formatting failed after repair" in note for note in result.confidence_notes)

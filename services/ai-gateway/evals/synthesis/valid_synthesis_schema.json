@@ -1,0 +1,12 @@
+[
+  {
+    "name": "valid_synthesis_schema",
+    "endpoint": "deep-synthesis",
+    "user_prompt": "Synthesize my board tension.",
+    "expect_schema": "DeepSynthesisCompletedBody",
+    "expect_json_fields": {
+      "status": ["completed"]
+    },
+    "tags": ["synthesis", "ci_safe"]
+  }
+]
