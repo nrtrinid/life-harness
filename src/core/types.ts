@@ -57,6 +57,7 @@ export type JobSourceKind =
   | "greenhouse"
   | "lever"
   | "ashby"
+  | "governmentjobs"
   | "jobposting_jsonld"
   | "company_careers"
   | "manual";
@@ -211,4 +212,18 @@ export interface Briefing {
 export interface BriefingHighlight {
   text: string;
   cardId?: string;
+}
+
+export type HarnessChatSummaryMode = "operator" | "reflection" | "builder" | "general";
+
+export interface HarnessChatSummary {
+  id: string;
+  createdAt: string;
+  mode: HarnessChatSummaryMode;
+  userMessage: string;
+  assistantSummary: string;
+  patterns: string[];
+  decisions: string[];
+  suggestedNextActions: string[];
+  rememberForNextTime: string[];
 }

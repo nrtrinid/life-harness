@@ -24,6 +24,7 @@ import {
   applyRunJobSourceResult,
   applySalvage,
   applySaveJobCandidate,
+  applySaveJobSourceWithOptionalImport,
   applyUpdateJobSource,
   withProofSuffix,
   type JobSourceInput,
@@ -51,6 +52,10 @@ import {
   runSourceViaRunner
 } from "../core/jobScoutRunnerClient";
 import { startSession } from "../core/briefing";
+import {
+  applyDeleteChatSummary,
+  applySaveChatSummary
+} from "../core/harnessMemory";
 import { nowIso } from "../core/ids";
 import { createSeedState } from "../data/createSeedState";
 import {
@@ -61,7 +66,7 @@ import {
   savePersistedState,
   serializeEnvelope
 } from "../storage/persistence";
-import type { CardState, DailyState, JobSource, LifeCard, LifeLogEntry, ProofItem } from "../core/types";
+import type { CardState, DailyState, HarnessChatSummary, JobSource, LifeCard, LifeLogEntry, ProofItem } from "../core/types";
 
 export interface BatchRunProgress {
   current: number;
@@ -80,6 +85,8 @@ type LifeHarnessAction =
   | { type: "job_candidate_intake_applied"; state: LifeHarnessData }
   | { type: "job_candidate_updated"; state: LifeHarnessData }
   | { type: "job_source_updated"; state: LifeHarnessData }
+  | { type: "save_chat_summary"; summary: HarnessChatSummary }
+  | { type: "delete_chat_summary"; summaryId: string }
   | { type: "state_replaced"; state: LifeHarnessData };
 
 interface LifeHarnessContextValue extends LifeHarnessData {
@@ -98,6 +105,11 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     candidateId: string
   ) => { ok: boolean; message?: string; cardId?: string; candidateId?: string };
   addJobSource: (input: JobSourceInput) => { ok: boolean; message?: string };
+  saveJobSourceFromSetup: (
+    input: JobSourceInput,
+    previewOutput?: JobSourceRunOutput,
+    importPreview?: boolean
+  ) => { ok: boolean; message?: string };
   updateJobSource: (sourceId: string, patch: JobSourcePatch) => { ok: boolean; message?: string };
   recordJobSourceRun: (
     source: JobSource,
@@ -107,6 +119,8 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   exportSnapshot: () => { ok: boolean; message?: string };
   importSnapshot: (json: string) => { ok: boolean; message?: string };
   resetToSeed: () => { ok: boolean; message?: string };
+  saveChatSummary: (summary: HarnessChatSummary) => void;
+  deleteChatSummary: (summaryId: string) => void;
   isBatchRunning: boolean;
   batchRunProgress: BatchRunProgress | null;
   runOneJobSource: (
@@ -183,6 +197,10 @@ function lifeHarnessReducer(state: LifeHarnessData, action: LifeHarnessAction): 
     case "job_source_updated":
     case "state_replaced":
       return action.state;
+    case "save_chat_summary":
+      return applySaveChatSummary(state, action.summary);
+    case "delete_chat_summary":
+      return applyDeleteChatSummary(state, action.summaryId);
     default:
       return state;
   }
@@ -340,6 +358,20 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     [state]
   );
 
+  const saveJobSourceFromSetup = useCallback(
+    (input: JobSourceInput, previewOutput?: JobSourceRunOutput, importPreview?: boolean) => {
+      const result =
+        importPreview && previewOutput
+          ? applySaveJobSourceWithOptionalImport(state, input, previewOutput)
+          : applyAddJobSource(state, input);
+      if (result.ok) {
+        dispatch({ type: "job_source_updated", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
   const updateJobSourceAction = useCallback(
     (sourceId: string, patch: JobSourcePatch) => {
       const result = applyUpdateJobSource(state, sourceId, patch);
@@ -398,6 +430,14 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     clearPersistedState();
     dispatch({ type: "state_replaced", state: createSeedState(nowIso()) });
     return { ok: true, message: "Restored seed state." };
+  }, []);
+
+  const saveChatSummary = useCallback((summary: HarnessChatSummary) => {
+    dispatch({ type: "save_chat_summary", summary });
+  }, []);
+
+  const deleteChatSummary = useCallback((summaryId: string) => {
+    dispatch({ type: "delete_chat_summary", summaryId });
   }, []);
 
   const runSourceOnState = useCallback(
@@ -549,12 +589,15 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       dismissJobCandidate: dismissJobCandidateAction,
       approveJobCandidate: approveJobCandidateAction,
       addJobSource: addJobSourceAction,
+      saveJobSourceFromSetup,
       updateJobSource: updateJobSourceAction,
       recordJobSourceRun: recordJobSourceRunAction,
       setCardState,
       exportSnapshot,
       importSnapshot,
       resetToSeed,
+      saveChatSummary,
+      deleteChatSummary,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,
@@ -574,12 +617,15 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       dismissJobCandidateAction,
       approveJobCandidateAction,
       addJobSourceAction,
+      saveJobSourceFromSetup,
       updateJobSourceAction,
       recordJobSourceRunAction,
       setCardState,
       exportSnapshot,
       importSnapshot,
       resetToSeed,
+      saveChatSummary,
+      deleteChatSummary,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,

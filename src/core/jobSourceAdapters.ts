@@ -19,6 +19,7 @@ const SUPPORTED_ADAPTER_KINDS = new Set<JobSourceKind>([
   "greenhouse",
   "lever",
   "ashby",
+  "governmentjobs",
   "jobposting_jsonld",
   "manual"
 ]);
@@ -298,8 +299,222 @@ function normalizeManual(raw: unknown, source: JobSource): NormalizedJobPosting[
   return single ? [single] : [];
 }
 
+export const GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE =
+  "No static GovernmentJobs listings found. This page may require a future XHR/pagination adapter.";
+
+function extractAgencySlugFromSourceUrl(sourceUrl: string): string | null {
+  try {
+    const parsed = new URL(
+      sourceUrl,
+      sourceUrl.startsWith("/") ? "https://www.governmentjobs.com" : undefined
+    );
+    const match = parsed.pathname.match(/^\/careers\/([^/]+)/i);
+    return match?.[1]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveGovernmentJobsHref(href: string, sourceUrl: string): string {
+  const base = sourceUrl.startsWith("http")
+    ? sourceUrl
+    : `https://www.governmentjobs.com${sourceUrl.startsWith("/") ? sourceUrl : `/${sourceUrl}`}`;
+  try {
+    return new URL(href, base).href;
+  } catch {
+    return href;
+  }
+}
+
+function isCareersJobDetailPath(href: string, agency: string | null): boolean {
+  let pathname = href;
+  try {
+    pathname = href.startsWith("http") ? new URL(href).pathname : href.split("?")[0] ?? href;
+  } catch {
+    return false;
+  }
+  if (agency) {
+    return new RegExp(`^/careers/${agency}/jobs/`, "i").test(pathname);
+  }
+  return /^\/careers\/[^/]+\/jobs\//i.test(pathname);
+}
+
+function extractClassText(block: string, className: string): string | undefined {
+  const match = block.match(
+    new RegExp(`<[^>]*class=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>([\\s\\S]*?)<`, "i")
+  );
+  if (!match?.[1]) {
+    return undefined;
+  }
+  const text = stripHtml(match[1]);
+  return text || undefined;
+}
+
+function composeGovernmentJobsDescription(input: {
+  roleTitle: string;
+  location?: string;
+  salary?: string;
+  department?: string;
+  jobType?: string;
+  closingDate?: string;
+  snippet?: string;
+}): string {
+  const lines = [`Title: ${input.roleTitle}`];
+  if (input.location) {
+    lines.push(`Location: ${input.location}`);
+  }
+  if (input.salary) {
+    lines.push(`Salary: ${input.salary}`);
+  }
+  if (input.department) {
+    lines.push(`Department: ${input.department}`);
+  }
+  if (input.jobType) {
+    lines.push(`Job Type: ${input.jobType}`);
+  }
+  if (input.closingDate) {
+    lines.push(`Closing Date: ${input.closingDate}`);
+  }
+  if (input.snippet) {
+    lines.push(`Snippet: ${input.snippet}`);
+  }
+  return truncateDescription(lines.join("\n"));
+}
+
+function buildGovernmentJobsPosting(input: {
+  roleTitle: string;
+  sourceUrl?: string;
+  location?: string;
+  salary?: string;
+  department?: string;
+  jobType?: string;
+  closingDate?: string;
+  snippet?: string;
+  company: string;
+}): NormalizedJobPosting {
+  const description = composeGovernmentJobsDescription(input);
+  return {
+    company: input.company,
+    roleTitle: input.roleTitle,
+    sourceUrl: input.sourceUrl,
+    location: input.location,
+    description,
+    roleType: inferRoleType(input.roleTitle, description)
+  };
+}
+
+function parseGovernmentJobsListItem(
+  block: string,
+  source: JobSource,
+  company: string
+): NormalizedJobPosting | undefined {
+  const titleMatch = block.match(
+    /<h3[^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i
+  );
+  if (!titleMatch) {
+    return undefined;
+  }
+  const href = titleMatch[1] ?? "";
+  const roleTitle = stripHtml(titleMatch[2] ?? "");
+  if (!roleTitle) {
+    return undefined;
+  }
+
+  return buildGovernmentJobsPosting({
+    roleTitle,
+    sourceUrl: resolveGovernmentJobsHref(href, source.url),
+    location: extractClassText(block, "location"),
+    salary: extractClassText(block, "salary"),
+    department: extractClassText(block, "department"),
+    jobType: extractClassText(block, "job-type"),
+    closingDate: extractClassText(block, "closing-date"),
+    snippet: extractClassText(block, "snippet"),
+    company
+  });
+}
+
+function postingsFromGovernmentJobsJsonLd(html: string, source: JobSource): NormalizedJobPosting[] {
+  const company = source.name.replace(/\s+(Careers|Jobs)$/i, "").trim();
+  const objects = extractJobPostingsFromJsonLdHtml(html);
+  return objects
+    .map((object): NormalizedJobPosting | undefined => {
+      const item = asRecord(object);
+      if (!item) {
+        return undefined;
+      }
+      const roleTitle = asString(item.title);
+      if (!roleTitle) {
+        return undefined;
+      }
+      const hiringOrg = asRecord(item.hiringOrganization);
+      const jobLocation = asRecord(item.jobLocation);
+      const address = asRecord(jobLocation?.address);
+      const snippet = stripHtml(asString(item.description) ?? asString(item.summary) ?? "");
+      return buildGovernmentJobsPosting({
+        roleTitle,
+        sourceUrl: asString(item.url) ?? asString(item.identifier),
+        location: asString(address?.addressLocality) ?? asString(jobLocation?.name),
+        snippet: snippet || undefined,
+        company: asString(hiringOrg?.name) ?? company
+      });
+    })
+    .filter((posting): posting is NormalizedJobPosting => posting !== undefined);
+}
+
+export function parseGovernmentJobsListingHtml(html: string, source: JobSource): NormalizedJobPosting[] {
+  const company = source.name.replace(/\s+(Careers|Jobs)$/i, "").trim();
+  const agency = extractAgencySlugFromSourceUrl(source.url);
+  const deduped = new Map<string, NormalizedJobPosting>();
+
+  function addPosting(posting: NormalizedJobPosting | undefined) {
+    if (!posting) {
+      return;
+    }
+    const key = `${(posting.sourceUrl ?? "").toLowerCase()}|${posting.roleTitle.toLowerCase()}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, posting);
+    }
+  }
+
+  for (const match of html.matchAll(/<li[^>]*class=["'][^"']*list-item[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi)) {
+    addPosting(parseGovernmentJobsListItem(match[1] ?? "", source, company));
+  }
+
+  for (const match of html.matchAll(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = match[1] ?? "";
+    if (!isCareersJobDetailPath(href, agency)) {
+      continue;
+    }
+    const roleTitle = stripHtml(match[2] ?? "");
+    if (!roleTitle) {
+      continue;
+    }
+    addPosting(
+      buildGovernmentJobsPosting({
+        roleTitle,
+        sourceUrl: resolveGovernmentJobsHref(href, source.url),
+        company
+      })
+    );
+  }
+
+  for (const posting of postingsFromGovernmentJobsJsonLd(html, source)) {
+    addPosting(posting);
+  }
+
+  return [...deduped.values()];
+}
+
+function normalizeGovernmentJobs(raw: unknown, source: JobSource): NormalizedJobPosting[] {
+  const html = typeof raw === "string" ? raw : "";
+  if (!html.trim()) {
+    return [];
+  }
+  return parseGovernmentJobsListingHtml(html, source);
+}
+
 const ADAPTERS: Record<
-  "greenhouse" | "lever" | "ashby" | "jobposting_jsonld" | "manual",
+  "greenhouse" | "lever" | "ashby" | "governmentjobs" | "jobposting_jsonld" | "manual",
   JobSourceAdapter
 > = {
   greenhouse: {
@@ -316,6 +531,11 @@ const ADAPTERS: Record<
     kind: "ashby",
     label: "Ashby",
     normalize: normalizeAshby
+  },
+  governmentjobs: {
+    kind: "governmentjobs",
+    label: "GovernmentJobs / NEOGOV",
+    normalize: normalizeGovernmentJobs
   },
   jobposting_jsonld: {
     kind: "jobposting_jsonld",

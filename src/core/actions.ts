@@ -24,9 +24,11 @@ import type {
   LifeCard,
   LifeLogEntry,
   ProofItem,
-  ResumeModule
+  ResumeModule,
+  HarnessChatSummary
 } from "./types";
 import type { JobSourceRunOutput } from "./jobSourceRunner";
+import { rebindJobSourceRunOutput } from "./jobSourceRunner";
 
 export interface LifeHarnessData {
   cards: LifeCard[];
@@ -37,6 +39,7 @@ export interface LifeHarnessData {
   jobCandidates: JobCandidate[];
   jobSources: JobSource[];
   jobSourceRuns: JobSourceRunResult[];
+  chatSummaries: HarnessChatSummary[];
 }
 
 export interface JobSourceInput {
@@ -666,6 +669,25 @@ export function applyAddJobSource(state: LifeHarnessData, input: JobSourceInput)
     ok: true,
     message: `Added source ${source.name}.`
   };
+}
+
+export function applySaveJobSourceWithOptionalImport(
+  state: LifeHarnessData,
+  input: JobSourceInput,
+  previewOutput?: JobSourceRunOutput
+): ActionResult {
+  const addResult = applyAddJobSource(state, input);
+  if (!addResult.ok) {
+    return addResult;
+  }
+
+  const savedSource = addResult.state.jobSources[0];
+  if (!previewOutput || !savedSource) {
+    return addResult;
+  }
+
+  const rebound = rebindJobSourceRunOutput(previewOutput, savedSource);
+  return applyRunJobSourceResult(addResult.state, rebound);
 }
 
 export function applyUpdateJobSource(

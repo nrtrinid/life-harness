@@ -1,9 +1,15 @@
 import { FIT_SCORE_DISCLAIMER, AREA_LABELS, CARD_STATE_LABELS, WARMTH_LABELS } from "./labels";
 import { checkCareerUseBeforeImproveLocks } from "./career";
 import { ACTIVE_CARD_LIMIT } from "./guards";
+import {
+  buildChatMemoryAnalyses,
+  buildChatMemoryDecisions,
+  CHAT_MEMORY_ANALYSIS_PREFIX
+} from "./harnessMemory";
 import type {
   CardState,
   DailyState,
+  HarnessChatSummary,
   JobCandidate,
   JobSourceRunResult,
   LifeArea,
@@ -106,6 +112,7 @@ export type HarnessExportInput = {
   resumeModules?: ResumeModule[];
   jobCandidates?: JobCandidate[];
   jobSourceRuns?: JobSourceRunResult[];
+  chatSummaries?: HarnessChatSummary[];
 };
 
 export interface ActiveLimitSignal {
@@ -137,7 +144,220 @@ export const HARNESS_STATIC_DECISIONS: HarnessDecision[] = [
 
 const MAX_EXPORT_LOGS = 30;
 const MAX_EXPORT_PROOF = 20;
+const COMPACT_MAX_LOGS = 10;
+const COMPACT_MAX_PROOF = 5;
+const COMPACT_TEXT_LIMIT = 80;
 const COLD_WARMTH: Warmth[] = ["cold", "dormant", "cooling"];
+
+/** Dev UI auto-selects Compact when full export exceeds this (compact JSON). */
+export const AUTO_COMPACT_THRESHOLD_CHARS = 10_000;
+
+/**
+ * Target max for compact export (compact JSON). Upper bound for acceptance; gateway
+ * re-indents context in the prompt (~15–25% overhead) plus template/message — compact
+ * also drops resume-module cards first even when under this cap.
+ */
+export const DEFAULT_COMPACT_MAX_CONTEXT_CHARS = 11_000;
+
+export interface CompactHarnessContextOptions {
+  maxContextChars?: number;
+}
+
+/**
+ * Compact JSON length of a HarnessContext (matches client POST serialization).
+ * Gateway re-indents context in the prompt (~15–25% overhead) plus template/message —
+ * use buildCompactHarnessContext for OpenVINO budget headroom, not raw 12k on this value.
+ */
+export function estimateHarnessContextChars(context: HarnessContext): number {
+  return JSON.stringify(context).length;
+}
+
+export function scoreCompactCardPriority(card: HarnessContextCard): number {
+  if (card.title.startsWith("Resume:")) {
+    return 10;
+  }
+
+  if (card.state === "Active") {
+    return 100;
+  }
+
+  if (card.state === "Waiting") {
+    return 90;
+  }
+
+  if (card.state === "Inbox") {
+    return 85;
+  }
+
+  if (card.warmth === "Cold" || card.warmth === "Dormant") {
+    return 80;
+  }
+
+  if (card.area === "Social / Career") {
+    return 75;
+  }
+
+  if (card.state === "Parked") {
+    return 30;
+  }
+
+  return 60;
+}
+
+function cloneHarnessContext(context: HarnessContext): HarnessContext {
+  return structuredClone(context);
+}
+
+function truncateCompactText(text: string, limit = COMPACT_TEXT_LIMIT): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= limit) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, limit - 1)}…`;
+}
+
+function removeResumeModuleCards(context: HarnessContext): boolean {
+  const before = context.cards.length;
+  context.cards = context.cards.filter((card) => !card.title.startsWith("Resume:"));
+  return context.cards.length < before;
+}
+
+function capCompactLogs(context: HarnessContext): boolean {
+  if (context.logs.length <= COMPACT_MAX_LOGS) {
+    return false;
+  }
+
+  context.logs = context.logs.slice(0, COMPACT_MAX_LOGS);
+  return true;
+}
+
+function capCompactProof(context: HarnessContext): boolean {
+  if (context.proof_items.length <= COMPACT_MAX_PROOF) {
+    return false;
+  }
+
+  context.proof_items = context.proof_items.slice(0, COMPACT_MAX_PROOF);
+  return true;
+}
+
+function stripCompactDecisionReasons(context: HarnessContext): boolean {
+  let changed = false;
+
+  for (const decision of context.decisions) {
+    if (decision.reason !== "") {
+      decision.reason = "";
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function dropLowestPriorityCard(context: HarnessContext): boolean {
+  if (context.cards.length === 0) {
+    return false;
+  }
+
+  const sorted = [...context.cards].sort(
+    (left, right) => scoreCompactCardPriority(left) - scoreCompactCardPriority(right)
+  );
+  const dropTitle = sorted[0]?.title;
+  if (!dropTitle) {
+    return false;
+  }
+
+  context.cards = context.cards.filter((card) => card.title !== dropTitle);
+  return true;
+}
+
+function truncateLowPriorityCardText(context: HarnessContext): boolean {
+  let changed = false;
+
+  for (const card of context.cards) {
+    if (scoreCompactCardPriority(card) >= 75) {
+      continue;
+    }
+
+    const nextWhy = truncateCompactText(card.why_it_matters);
+    const nextAction = truncateCompactText(card.next_tiny_action);
+
+    if (nextWhy !== card.why_it_matters) {
+      card.why_it_matters = nextWhy;
+      changed = true;
+    }
+
+    if (nextAction !== card.next_tiny_action) {
+      card.next_tiny_action = nextAction;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function trimChatMemoryAnalyses(context: HarnessContext, keepLatest: number): boolean {
+  const chatEntries = context.recent_analyses.filter((item) =>
+    item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX)
+  );
+  const otherEntries = context.recent_analyses.filter(
+    (item) => !item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX)
+  );
+
+  if (chatEntries.length <= keepLatest) {
+    return false;
+  }
+
+  const keptCount = Math.max(1, keepLatest);
+  context.recent_analyses = [...chatEntries.slice(0, keptCount), ...otherEntries];
+  return true;
+}
+
+export function buildCompactHarnessContext(
+  data: HarnessExportInput,
+  options: CompactHarnessContextOptions = {}
+): HarnessContext {
+  const maxContextChars = options.maxContextChars ?? DEFAULT_COMPACT_MAX_CONTEXT_CHARS;
+  const context = cloneHarnessContext(buildHarnessContext(data));
+
+  removeResumeModuleCards(context);
+
+  if (estimateHarnessContextChars(context) <= maxContextChars) {
+    return context;
+  }
+
+  const passes: Array<() => boolean> = [
+    () => trimChatMemoryAnalyses(context, 3),
+    () => capCompactLogs(context),
+    () => capCompactProof(context),
+    () => stripCompactDecisionReasons(context),
+    () => dropLowestPriorityCard(context),
+    () => truncateLowPriorityCardText(context)
+  ];
+
+  for (let round = 0; round < 32; round += 1) {
+    if (estimateHarnessContextChars(context) <= maxContextChars) {
+      return context;
+    }
+
+    let progress = false;
+    for (const pass of passes) {
+      if (pass()) {
+        progress = true;
+      }
+
+      if (estimateHarnessContextChars(context) <= maxContextChars) {
+        return context;
+      }
+    }
+
+    if (!progress) {
+      break;
+    }
+  }
+
+  return context;
+}
 
 export function mapLifeArea(area: LifeArea): HarnessArea {
   return AREA_LABELS[area] as HarnessArea;
@@ -238,7 +458,11 @@ export function getColdOrDormantCards(context: HarnessContext): HarnessContextCa
   return context.cards.filter((card) => card.warmth === "Cold" || card.warmth === "Dormant");
 }
 
-export function buildContextQualitySummary(context: HarnessContext, activeSignal: ActiveLimitSignal): string {
+export function buildContextQualitySummary(
+  context: HarnessContext,
+  activeSignal: ActiveLimitSignal,
+  savedChatSummaryCount = 0
+): string {
   const byState = countCardsByState(context);
   const byArea = countCardsByArea(context);
   const byWarmth = countCardsByWarmth(context);
@@ -246,9 +470,13 @@ export function buildContextQualitySummary(context: HarnessContext, activeSignal
     .slice(0, 6)
     .map((card) => card.title)
     .join(", ");
+  const chatMemoriesInExport = context.recent_analyses.some((item) =>
+    item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX)
+  );
 
   const lines = [
-    `Cards ${context.cards.length} · Logs ${context.logs.length} · Proof ${context.proof_items.length} · Analyses ${context.recent_analyses.length} · Decisions ${context.decisions.length}`,
+    `Cards ${context.cards.length} · Logs ${context.logs.length} · Proof ${context.proof_items.length} · Analyses ${context.recent_analyses.length} · Decisions ${context.decisions.length} · Chat summaries saved ${savedChatSummaryCount}`,
+    `Chat memories in export: ${chatMemoriesInExport ? "yes" : "no"}`,
     `By state: Inbox ${byState.Inbox} · Active ${byState.Active} · Parked ${byState.Parked} · Waiting ${byState.Waiting}`,
     `By area: Build ${byArea.Build} · Body ${byArea.Body} · Social/Career ${byArea["Social / Career"]} · Money ${byArea["Money / Independence"]}`,
     `Warmth: Hot ${byWarmth.Hot} · Warm ${byWarmth.Warm} · Cooling ${byWarmth.Cooling} · Cold ${byWarmth.Cold} · Dormant ${byWarmth.Dormant}`,
@@ -637,8 +865,15 @@ export function buildHarnessContext(data: HarnessExportInput): HarnessContext {
       timestamp: item.timestamp
     }));
 
-  const recent_analyses = buildHarnessBoardDiagnosis(data);
-  const decisions = [...HARNESS_STATIC_DECISIONS, ...buildDynamicDecisions(data)];
+  const recent_analyses = [
+    ...buildChatMemoryAnalyses(data.chatSummaries ?? [], 5),
+    ...buildHarnessBoardDiagnosis(data)
+  ].slice(0, 8);
+  const decisions = [
+    ...HARNESS_STATIC_DECISIONS,
+    ...buildChatMemoryDecisions(data.chatSummaries ?? [], 5),
+    ...buildDynamicDecisions(data)
+  ];
 
   return {
     cards,

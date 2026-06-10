@@ -1,6 +1,7 @@
 import { createId, nowIso } from "./ids";
 import {
   isSupportedAdapterKind,
+  GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
   normalizeWithAdapter,
   type NormalizedJobPosting
 } from "./jobSourceAdapters";
@@ -14,6 +15,50 @@ import type {
 } from "./types";
 
 const DEFAULT_MAX_RESULTS = 25;
+
+export const PREVIEW_JOB_SOURCE_ID = "job-source-preview";
+
+export function buildTemporaryJobSource(input: {
+  name: string;
+  url: string;
+  kind: JobSource["kind"];
+  enabled?: boolean;
+  cadence?: JobSource["cadence"];
+  maxResults?: number;
+  notes?: string;
+  adapterNotes?: string;
+  id?: string;
+}): JobSource {
+  return {
+    id: input.id ?? PREVIEW_JOB_SOURCE_ID,
+    name: input.name.trim(),
+    url: input.url.trim(),
+    kind: input.kind,
+    enabled: true,
+    cadence: input.cadence ?? "manual",
+    maxResults: input.maxResults ?? DEFAULT_MAX_RESULTS,
+    notes: input.notes?.trim() || undefined,
+    adapterNotes: input.adapterNotes?.trim() || undefined,
+    runStatus: "idle"
+  };
+}
+
+export function rebindJobSourceRunOutput(
+  output: JobSourceRunOutput,
+  source: JobSource
+): JobSourceRunOutput {
+  return {
+    ...output,
+    result: {
+      ...output.result,
+      sourceId: source.id
+    },
+    candidates: output.candidates.map((candidate) => ({
+      ...candidate,
+      sourceId: source.id
+    }))
+  };
+}
 
 export function isValidSourceUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -140,14 +185,17 @@ export function runJobSourceFromRaw(
   const { unique, skippedDuplicates } = dedupeJobPostings(capped, existingCandidates);
   const candidates = createCandidatesFromPostings(unique, source, resumeModules);
   const errors = [...normalizeErrors];
+  const isGovernmentJobsWeakPass =
+    source.kind === "governmentjobs" && normalized.length === 0 && normalizeErrors.length === 0;
 
-  if (normalized.length === 0 && errors.length === 0) {
+  if (normalized.length === 0 && errors.length === 0 && !isGovernmentJobsWeakPass) {
     errors.push("No supported public postings found at this URL.");
   }
 
   const runStatus: JobSourceRunStatus = errors.length > 0 ? "error" : "success";
-  const message =
-    errors.length > 0
+  const message = isGovernmentJobsWeakPass
+    ? GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE
+    : errors.length > 0
       ? errors[0]
       : candidates.length > 0
         ? `Found ${candidates.length} new candidate${candidates.length === 1 ? "" : "s"}. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.`
@@ -219,7 +267,7 @@ export function buildFetchErrorRunOutput(
 }
 
 export function parseFetchedRaw(source: JobSource, responseText: string): unknown {
-  if (source.kind === "jobposting_jsonld") {
+  if (source.kind === "jobposting_jsonld" || source.kind === "governmentjobs") {
     return responseText;
   }
   try {

@@ -14,13 +14,17 @@ import {
   PHYSICAL_DEVICE_URL_HINT
 } from "../src/core/chatHarnessClient";
 import {
+  AUTO_COMPACT_THRESHOLD_CHARS,
+  buildCompactHarnessContext,
   buildContextQualitySummary,
   buildHarnessContext,
+  estimateHarnessContextChars,
   getActiveLimitSignal,
   type ChatHarnessMode,
   type ChatHarnessResponse,
   type HarnessExportInput
 } from "../src/core/harnessContext";
+import { buildChatSummary } from "../src/core/harnessMemory";
 import type { SensitivityLevel } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
@@ -46,6 +50,8 @@ const QUICK_QUESTIONS: { label: string; message: string; mode: ChatHarnessMode }
 
 const JSON_PREVIEW_LIMIT = 4000;
 
+type ContextExportMode = "full" | "compact";
+
 function buildExportInput(state: ReturnType<typeof useLifeHarness>): HarnessExportInput {
   const input: HarnessExportInput = {
     cards: state.cards,
@@ -63,12 +69,16 @@ function buildExportInput(state: ReturnType<typeof useLifeHarness>): HarnessExpo
   if (state.jobSourceRuns) {
     input.jobSourceRuns = state.jobSourceRuns;
   }
+  if (state.chatSummaries) {
+    input.chatSummaries = state.chatSummaries;
+  }
 
   return input;
 }
 
 export default function AskHarnessDevScreen() {
   const harnessState = useLifeHarness();
+  const { saveChatSummary, deleteChatSummary } = harnessState;
   const [baseUrl, setBaseUrl] = useState(DEFAULT_CHAT_HARNESS_URL);
   const [mode, setMode] = useState<ChatHarnessMode>("general");
   const [sensitivity, setSensitivity] = useState<SensitivityLevel>("S1");
@@ -76,14 +86,49 @@ export default function AskHarnessDevScreen() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [response, setResponse] = useState<ChatHarnessResponse | null>(null);
+  const [savedMemoryKey, setSavedMemoryKey] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const exportInput = useMemo(() => buildExportInput(harnessState), [harnessState]);
-  const exportedContext = useMemo(() => buildHarnessContext(exportInput), [exportInput]);
+  const fullContext = useMemo(() => buildHarnessContext(exportInput), [exportInput]);
+  const compactContext = useMemo(() => buildCompactHarnessContext(exportInput), [exportInput]);
+  const fullChars = useMemo(() => estimateHarnessContextChars(fullContext), [fullContext]);
+  const compactChars = useMemo(() => estimateHarnessContextChars(compactContext), [compactContext]);
+  const defaultContextMode: ContextExportMode =
+    fullChars > AUTO_COMPACT_THRESHOLD_CHARS ? "compact" : "full";
+  const [contextMode, setContextMode] = useState<ContextExportMode>(defaultContextMode);
+  const selectedContext = contextMode === "compact" ? compactContext : fullContext;
   const activeLimitSignal = useMemo(() => getActiveLimitSignal(exportInput), [exportInput]);
   const qualitySummary = useMemo(
-    () => buildContextQualitySummary(exportedContext, activeLimitSignal),
-    [exportedContext, activeLimitSignal]
+    () =>
+      buildContextQualitySummary(
+        selectedContext,
+        activeLimitSignal,
+        harnessState.chatSummaries.length
+      ),
+    [selectedContext, activeLimitSignal, harnessState.chatSummaries.length]
+  );
+  const memoryPreview = useMemo(() => {
+    if (!response) {
+      return null;
+    }
+
+    return buildChatSummary({
+      userMessage: message,
+      assistantAnswer: response.answer,
+      mode,
+      confidenceNotes: response.confidence_notes,
+      safetyNotes: response.safety_notes
+    });
+  }, [response, message, mode]);
+  const currentMemoryKey = response ? `${message}::${response.answer.slice(0, 120)}` : null;
+  const memoryAlreadySaved = currentMemoryKey !== null && savedMemoryKey === currentMemoryKey;
+  const recentMemories = useMemo(
+    () =>
+      [...harnessState.chatSummaries]
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+        .slice(0, 3),
+    [harnessState.chatSummaries]
   );
   const [qualityOpen, setQualityOpen] = useState(false);
 
@@ -91,12 +136,12 @@ export default function AskHarnessDevScreen() {
     if (!previewOpen) {
       return "";
     }
-    const json = JSON.stringify(exportedContext, null, 2);
+    const json = JSON.stringify(selectedContext, null, 2);
     if (json.length <= JSON_PREVIEW_LIMIT) {
       return json;
     }
     return `${json.slice(0, JSON_PREVIEW_LIMIT)}\n… truncated`;
-  }, [exportedContext, previewOpen]);
+  }, [selectedContext, previewOpen]);
 
   async function handleSend() {
     setNotice(null);
@@ -108,9 +153,10 @@ export default function AskHarnessDevScreen() {
         message,
         mode,
         sensitivity,
-        context: exportedContext
+        context: selectedContext
       });
       setResponse(result);
+      setSavedMemoryKey(null);
     } catch (error) {
       setResponse(null);
       const text =
@@ -121,6 +167,16 @@ export default function AskHarnessDevScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleSaveMemory() {
+    if (!memoryPreview || memoryAlreadySaved) {
+      return;
+    }
+
+    saveChatSummary(memoryPreview);
+    setSavedMemoryKey(currentMemoryKey);
+    setNotice({ kind: "success", message: "Chat memory saved." });
   }
 
   return (
@@ -211,6 +267,26 @@ export default function AskHarnessDevScreen() {
       </Section>
 
       <Section title="Exported context">
+        <Text style={styles.bodyText}>
+          Full: {fullChars} chars · Compact: {compactChars} chars · Sending: {contextMode}
+        </Text>
+        <View style={styles.splitRow}>
+          {(["full", "compact"] as const).map((option) => (
+            <Pressable
+              key={option}
+              style={contextMode === option ? styles.navButtonActive : styles.smallButton}
+              onPress={() => setContextMode(option)}
+            >
+              <Text style={styles.smallButtonText}>{option === "full" ? "Full context" : "Compact context"}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {compactChars < fullChars ? (
+          <Text style={styles.helpText}>
+            Compact strips resume bank cards first for gateway headroom. Use Compact for OpenVINO when full exceeds
+            budget.
+          </Text>
+        ) : null}
         <Text style={styles.bodyText}>{qualitySummary.split("\n")[0]}</Text>
         <Pressable style={styles.smallButton} onPress={() => setQualityOpen((open) => !open)}>
           <Text style={styles.smallButtonText}>
@@ -254,6 +330,51 @@ export default function AskHarnessDevScreen() {
               ))}
             </View>
           ) : null}
+          {memoryPreview ? (
+            <View style={styles.checklist}>
+              <Text style={styles.helpText}>Preview memory</Text>
+              <Text style={styles.bodyText}>Summary: {memoryPreview.assistantSummary}</Text>
+              {memoryPreview.patterns.length > 0 ? (
+                <Text style={styles.bodyText}>Patterns: {memoryPreview.patterns.join(", ")}</Text>
+              ) : null}
+              {memoryPreview.rememberForNextTime.map((item) => (
+                <Text key={item} style={styles.bodyText}>
+                  • Remember: {item}
+                </Text>
+              ))}
+              {memoryPreview.decisions.length > 0 ? (
+                <Text style={styles.bodyText}>Decisions: {memoryPreview.decisions.join(" · ")}</Text>
+              ) : null}
+              <Pressable
+                style={memoryAlreadySaved ? styles.smallButton : styles.primaryAction}
+                disabled={memoryAlreadySaved}
+                onPress={handleSaveMemory}
+              >
+                <Text style={memoryAlreadySaved ? styles.smallButtonText : styles.primaryActionText}>
+                  {memoryAlreadySaved ? "Chat memory saved" : "Save chat summary to memory"}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </Section>
+      ) : null}
+
+      {recentMemories.length > 0 ? (
+        <Section title="Recent chat memories">
+          {recentMemories.map((item) => (
+            <View key={item.id} style={styles.checklist}>
+              <Text style={styles.bodyText}>
+                {item.mode} · {item.createdAt.slice(0, 16).replace("T", " ")}
+              </Text>
+              <Text style={styles.bodyText}>{item.assistantSummary}</Text>
+              {item.patterns.length > 0 ? (
+                <Text style={styles.helpText}>Patterns: {item.patterns.join(", ")}</Text>
+              ) : null}
+              <Pressable style={styles.smallButton} onPress={() => deleteChatSummary(item.id)}>
+                <Text style={styles.smallButtonText}>Delete</Text>
+              </Pressable>
+            </View>
+          ))}
         </Section>
       ) : null}
     </Screen>

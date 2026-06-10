@@ -58,6 +58,7 @@ export const JOB_SOURCE_KIND_LABELS: Record<JobSourceKind, string> = {
   greenhouse: "Greenhouse",
   lever: "Lever",
   ashby: "Ashby",
+  governmentjobs: "GovernmentJobs / NEOGOV",
   jobposting_jsonld: "JobPosting JSON-LD",
   company_careers: "Company Careers",
   manual: "Manual"

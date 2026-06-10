@@ -16,6 +16,8 @@ Other targets: `npm run android`, `npm run ios`.
 
 Job Scout approved-source fetching uses the local runner in v0.4. Without `npm run scout:runner`, **Sources → Run Source** shows a start-runner message (no browser fetch fallback).
 
+Use **Setup** (`/source-setup`) to paste a careers URL, detect the adapter shape, dry-run test, and save — see [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md). GovernmentJobs / NEOGOV `/careers/{agency}` URLs are supported in v0.8 — see [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md).
+
 ## Verify
 
 ```bash
@@ -30,6 +32,7 @@ npx expo export --platform web
 1. Open **Today**
 2. Click **Pounce** (career pounce)
 3. Use **Paste** (Candidate Intake) or **Intake** to add a job (candidate queue or direct application card)
+3b. Or open **Setup**, paste a Greenhouse/Lever/Ashby or GovernmentJobs `/careers/{agency}` URL, detect, test, and save (v0.7–v0.8). For offline adapter testing, use the GovernmentJobs Fixture example in Setup.
 4. Start **`npm run scout:runner`**, open **Sources**, set a source cadence to **Daily**, and click **Run Due Sources**
 5. Review fit in **Queue**, approve to Inbox when ready
 6. **Refresh browser** — candidates, source runs, and cards should persist (v0.5)
@@ -55,6 +58,7 @@ Did this make me start, recover, or feel less scattered?
 - Waiting card (Qualcomm Follow-up) shows soft "cooled while waiting" copy in briefing
 - Progress: warmth, cold/dormant, proof shelf distinct from Log
 - Sources: due badges, Run Due / Run All batch buttons, cadence edit
+- Setup: URL detect, dry-run test preview, save registry-only Workday targets without test; GovernmentJobs careers detect + fixture example
 
 ## Known limitations
 
@@ -66,8 +70,8 @@ Did this make me start, recover, or feel less scattered?
 
 ## Docs
 
-See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/job-scout-foundation-v0.2.md`](docs/job-scout-foundation-v0.2.md), [`docs/job-scout-approved-sources-v0.3.md`](docs/job-scout-approved-sources-v0.3.md), [`docs/job-scout-runner-v0.4.md`](docs/job-scout-runner-v0.4.md), [`docs/persistence-audit-v0.5.md`](docs/persistence-audit-v0.5.md), [`docs/job-scout-run-due-v0.6.md`](docs/job-scout-run-due-v0.6.md), and `docs/` for product rules and scope.
+See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/job-scout-foundation-v0.2.md`](docs/job-scout-foundation-v0.2.md), [`docs/job-scout-approved-sources-v0.3.md`](docs/job-scout-approved-sources-v0.3.md), [`docs/job-scout-runner-v0.4.md`](docs/job-scout-runner-v0.4.md), [`docs/persistence-audit-v0.5.md`](docs/persistence-audit-v0.5.md), [`docs/job-scout-run-due-v0.6.md`](docs/job-scout-run-due-v0.6.md), [`docs/job-scout-source-setup-v0.7.md`](docs/job-scout-source-setup-v0.7.md), [`docs/job-scout-governmentjobs-v0.8.md`](docs/job-scout-governmentjobs-v0.8.md), and `docs/` for product rules and scope.
 
 ## Dev: Ask Harness (optional)
 
-Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask Harness Dev** in the app nav. See [`docs/harness-context-export-v0.1.md`](docs/harness-context-export-v0.1.md) and [`docs/harness-context-quality-v0.1.md`](docs/harness-context-quality-v0.1.md).
+Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask Harness Dev** in the app nav. See [`docs/harness-context-export-v0.1.md`](docs/harness-context-export-v0.1.md), [`docs/harness-context-quality-v0.1.md`](docs/harness-context-quality-v0.1.md), and [`docs/conversation-summary-memory-v0.1.md`](docs/conversation-summary-memory-v0.1.md).

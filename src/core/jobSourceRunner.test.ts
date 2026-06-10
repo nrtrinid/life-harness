@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,8 +14,11 @@ import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/see
 import {
   buildFetchErrorRunOutput,
   dedupeJobPostings,
+  PREVIEW_JOB_SOURCE_ID,
+  rebindJobSourceRunOutput,
   runJobSourceFromRaw
 } from "./jobSourceRunner";
+import { GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE } from "./jobSourceAdapters";
 import type { JobSource } from "./types";
 
 const greenhouseFixture = {
@@ -35,6 +41,21 @@ const fixtureSource: JobSource = {
   cadence: "manual"
 };
 
+const governmentJobsFixtureHtml = readFileSync(
+  join(process.cwd(), "public/fixtures/sample-governmentjobs-listing.html"),
+  "utf8"
+);
+
+const governmentJobsSource: JobSource = {
+  id: "source-fixture-governmentjobs",
+  name: "County of San Diego",
+  url: "/fixtures/sample-governmentjobs-listing.html",
+  kind: "governmentjobs",
+  enabled: true,
+  cadence: "manual",
+  maxResults: 25
+};
+
 function createState(): LifeHarnessData {
   return {
     cards: structuredClone(seedCards),
@@ -44,7 +65,8 @@ function createState(): LifeHarnessData {
     resumeModules: structuredClone(seedResumeModules),
     jobCandidates: structuredClone(seedJobCandidates),
     jobSources: structuredClone(seedJobSources),
-    jobSourceRuns: []
+    jobSourceRuns: [],
+    chatSummaries: []
   };
 }
 
@@ -123,6 +145,85 @@ describe("jobSourceRunner", () => {
     expect(result.ok).toBe(false);
     expect(result.state.jobCandidates).toHaveLength(seedJobCandidates.length);
     expect(result.state.jobSourceRuns[0]?.errors[0]).toContain("CORS");
+  });
+
+  it("rebinds preview source ids to saved source id on import", () => {
+    const previewSource: JobSource = { ...fixtureSource, id: PREVIEW_JOB_SOURCE_ID };
+    const output = runJobSourceFromRaw(previewSource, greenhouseFixture, [], seedResumeModules);
+    expect(output.result.sourceId).toBe(PREVIEW_JOB_SOURCE_ID);
+    expect(output.candidates[0]?.sourceId).toBe(PREVIEW_JOB_SOURCE_ID);
+
+    const savedSource: JobSource = { ...fixtureSource, id: "job-source-saved-abc" };
+    const rebound = rebindJobSourceRunOutput(output, savedSource);
+    expect(rebound.result.sourceId).toBe("job-source-saved-abc");
+    expect(rebound.candidates.every((candidate) => candidate.sourceId === "job-source-saved-abc")).toBe(
+      true
+    );
+  });
+
+  it("creates source_fetch candidates from governmentjobs fixture HTML", () => {
+    const output = runJobSourceFromRaw(
+      governmentJobsSource,
+      governmentJobsFixtureHtml,
+      [],
+      seedResumeModules
+    );
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(output.candidates.every((candidate) => candidate.origin === "source_fetch")).toBe(true);
+    expect(output.updatedSource.runStatus).toBe("success");
+  });
+
+  it("dedupes repeated governmentjobs postings on second run", () => {
+    const first = runJobSourceFromRaw(
+      governmentJobsSource,
+      governmentJobsFixtureHtml,
+      [],
+      seedResumeModules
+    );
+    const second = runJobSourceFromRaw(
+      governmentJobsSource,
+      governmentJobsFixtureHtml,
+      first.candidates,
+      seedResumeModules
+    );
+    expect(second.result.createdCandidateIds).toHaveLength(0);
+    expect(second.result.skippedDuplicates).toBeGreaterThan(0);
+  });
+
+  it("caps governmentjobs output with maxResults", () => {
+    const output = runJobSourceFromRaw(
+      { ...governmentJobsSource, maxResults: 1 },
+      governmentJobsFixtureHtml,
+      [],
+      seedResumeModules
+    );
+    expect(output.candidates).toHaveLength(1);
+  });
+
+  it("treats empty governmentjobs HTML as weak pass with informative message", () => {
+    const output = runJobSourceFromRaw(
+      governmentJobsSource,
+      "<html><body>Loading...</body></html>",
+      [],
+      seedResumeModules
+    );
+    expect(output.candidates).toHaveLength(0);
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.result.message).toBe(GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE);
+    expect(output.updatedSource.runStatus).toBe("success");
+  });
+
+  it("governmentjobs source run does not create application cards", () => {
+    const output = runJobSourceFromRaw(
+      governmentJobsSource,
+      governmentJobsFixtureHtml,
+      [],
+      seedResumeModules
+    );
+    const state = createState();
+    const result = applyRunJobSourceResult(state, output);
+    expect(result.state.cards).toHaveLength(state.cards.length);
   });
 
   it("uses manual-run enabled and scheduled lock thresholds", () => {

@@ -27,6 +27,7 @@ const KIND_OPTIONS: JobSourceKind[] = [
   "greenhouse",
   "lever",
   "ashby",
+  "governmentjobs",
   "jobposting_jsonld",
   "manual",
   "company_careers"
@@ -178,6 +179,11 @@ export default function JobSourcesScreen() {
         <Link href="/job-candidates" asChild>
           <Pressable style={styles.secondaryAction}>
             <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
+          </Pressable>
+        </Link>
+        <Link href="/source-setup" asChild>
+          <Pressable style={styles.secondaryAction}>
+            <Text style={styles.secondaryActionText}>Setup / Test New Source</Text>
           </Pressable>
         </Link>
       </Section>

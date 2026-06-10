@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/job-candidates", label: "Queue" },
   { href: "/resume-bank", label: "Bank" },
   { href: "/job-sources", label: "Sources" },
+  { href: "/source-setup", label: "Setup" },
   { href: "/progress", label: "Progress" },
   { href: "/log", label: "Log" },
   { href: "/ask-harness", label: "Ask Harness Dev" }

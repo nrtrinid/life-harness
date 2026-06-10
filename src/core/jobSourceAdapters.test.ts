@@ -1,12 +1,21 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
   extractJobPostingsFromJsonLdHtml,
   getAdapterForKind,
+  GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
   normalizeWithAdapter,
+  parseGovernmentJobsListingHtml,
   stripHtml
 } from "./jobSourceAdapters";
 import type { JobSource } from "./types";
+
+const fixtureDir = join(process.cwd(), "public/fixtures");
+const listingHtml = readFileSync(join(fixtureDir, "sample-governmentjobs-listing.html"), "utf8");
+const emptyHtml = readFileSync(join(fixtureDir, "sample-governmentjobs-empty.html"), "utf8");
 
 const greenhouseSource: JobSource = {
   id: "source-test",
@@ -104,5 +113,66 @@ describe("jobSourceAdapters", () => {
 
   it("strips HTML from descriptions", () => {
     expect(stripHtml("<p>Hello <strong>world</strong></p>")).toBe("Hello world");
+  });
+
+  it("parses governmentjobs fixture with at least two postings", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "governmentjobs",
+      name: "County of San Diego",
+      url: "https://www.governmentjobs.com/careers/sdcounty"
+    };
+    const postings = parseGovernmentJobsListingHtml(listingHtml, source);
+    expect(postings.length).toBeGreaterThanOrEqual(2);
+    expect(postings.every((posting) => posting.roleTitle.length > 0)).toBe(true);
+    expect(postings.every((posting) => posting.sourceUrl?.includes("/careers/sdcounty/jobs/"))).toBe(
+      true
+    );
+    expect(postings[0]?.location).toBeTruthy();
+    expect(postings[0]?.description).toContain("Title:");
+    expect(postings.some((posting) => posting.roleType === "cybersecurity" || posting.roleType === "it")).toBe(
+      true
+    );
+  });
+
+  it("ignores newprint links in governmentjobs fallback parsing", () => {
+    const html = `
+      <a href="/jobs/newprint/999">Print</a>
+      <a href="/careers/sdcounty/jobs/111/example-role">Example Role</a>
+    `;
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "governmentjobs",
+      name: "County of San Diego",
+      url: "https://www.governmentjobs.com/careers/sdcounty"
+    };
+    const postings = parseGovernmentJobsListingHtml(html, source);
+    expect(postings).toHaveLength(1);
+    expect(postings[0]?.roleTitle).toBe("Example Role");
+  });
+
+  it("returns empty list for unsupported governmentjobs HTML", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "governmentjobs",
+      name: "County of San Diego",
+      url: "https://www.governmentjobs.com/careers/sdcounty"
+    };
+    expect(parseGovernmentJobsListingHtml(emptyHtml, source)).toEqual([]);
+    expect(normalizeWithAdapter(emptyHtml, source).postings).toEqual([]);
+  });
+
+  it("normalizes governmentjobs via adapter registry", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "governmentjobs",
+      name: "County of San Diego",
+      url: "/fixtures/sample-governmentjobs-listing.html"
+    };
+    const result = normalizeWithAdapter(listingHtml, source);
+    expect(result.errors).toEqual([]);
+    expect(result.postings.length).toBeGreaterThanOrEqual(2);
+    expect(getAdapterForKind("governmentjobs")).toBeDefined();
+    expect(GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE).toContain("No static GovernmentJobs listings found");
   });
 });

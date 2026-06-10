@@ -4,18 +4,25 @@ import { createSeedState } from "../data/createSeedState";
 import { seedCards, seedLogs } from "../data/seed";
 import { seedJobCandidates, seedResumeModules } from "../data/seedJobScout";
 import {
+  AUTO_COMPACT_THRESHOLD_CHARS,
+  buildCompactHarnessContext,
   buildContextQualitySummary,
   buildHarnessContext,
   buildHarnessBoardDiagnosis,
   countCardsByArea,
   countCardsByState,
   countCardsByWarmth,
+  DEFAULT_COMPACT_MAX_CONTEXT_CHARS,
+  estimateHarnessContextChars,
   getActiveLimitSignal,
   getColdOrDormantCards,
   HARNESS_STATIC_DECISIONS,
   mapLogType,
+  scoreCompactCardPriority,
   type HarnessExportInput
 } from "./harnessContext";
+import { CHAT_MEMORY_ANALYSIS_PREFIX } from "./harnessMemory";
+import type { HarnessChatSummary } from "./types";
 
 function baseInput(overrides: Partial<HarnessExportInput> = {}): HarnessExportInput {
   const seed = createSeedState("2026-06-09T12:00:00.000Z");
@@ -201,5 +208,159 @@ describe("buildHarnessContext", () => {
     const summary = buildContextQualitySummary(context, activeSignal);
     expect(summary).toContain("Cards ");
     expect(summary).toContain("Active limit exceeded");
+  });
+});
+
+describe("buildCompactHarnessContext", () => {
+  it("estimateHarnessContextChars matches JSON.stringify length", () => {
+    const context = buildHarnessContext(baseInput());
+    expect(estimateHarnessContextChars(context)).toBe(JSON.stringify(context).length);
+  });
+
+  it("seed compact export fits under the default budget", () => {
+    const compact = buildCompactHarnessContext(baseInput());
+    expect(estimateHarnessContextChars(compact)).toBeLessThanOrEqual(DEFAULT_COMPACT_MAX_CONTEXT_CHARS);
+  });
+
+  it("compact export is smaller than full when resume modules are present", () => {
+    const full = buildHarnessContext(baseInput());
+    const compact = buildCompactHarnessContext(baseInput());
+
+    expect(estimateHarnessContextChars(full)).toBeGreaterThan(estimateHarnessContextChars(compact));
+    expect(full.cards.some((card) => card.title.startsWith("Resume:"))).toBe(true);
+    expect(compact.cards.every((card) => !card.title.startsWith("Resume:"))).toBe(true);
+  });
+
+  it("preserves recent analyses after compact export", () => {
+    const compact = buildCompactHarnessContext(baseInput());
+    expect(compact.recent_analyses.length).toBeGreaterThanOrEqual(2);
+    expect(compact.recent_analyses[0]?.summary).toMatch(/diagnosis/i);
+  });
+
+  it("preserves active and waiting card titles", () => {
+    const full = buildHarnessContext(baseInput());
+    const compact = buildCompactHarnessContext(baseInput());
+    const keepStates = new Set(["Active", "Waiting"]);
+
+    for (const card of full.cards.filter((item) => keepStates.has(item.state))) {
+      expect(compact.cards.some((item) => item.title === card.title)).toBe(true);
+    }
+  });
+
+  it("preserves career signals after compact export", () => {
+    const compact = buildCompactHarnessContext(baseInput());
+
+    expect(compact.cards.some((card) => card.area === "Social / Career")).toBe(true);
+    expect(
+      compact.recent_analyses.some((item) => item.summary.toLowerCase().includes("career"))
+    ).toBe(true);
+  });
+
+  it("preserves cold or dormant signal after compact export", () => {
+    const compact = buildCompactHarnessContext(baseInput());
+
+    expect(
+      compact.recent_analyses.some((item) =>
+        item.patterns_detected.some((pattern) => pattern.toLowerCase().includes("cold"))
+      ) || compact.cards.some((card) => card.warmth === "Cold" || card.warmth === "Dormant")
+    ).toBe(true);
+  });
+
+  it("drops resume cards before active cards when forced to trim further", () => {
+    expect(scoreCompactCardPriority({ title: "Resume: Test", area: "Build", state: "Parked", progress: 0, warmth: "Dormant", next_tiny_action: "x", why_it_matters: "y" })).toBeLessThan(
+      scoreCompactCardPriority({ title: "Active card", area: "Build", state: "Active", progress: 0, warmth: "Hot", next_tiny_action: "x", why_it_matters: "y" })
+    );
+
+    const compact = buildCompactHarnessContext(baseInput(), { maxContextChars: 3_500 });
+    expect(compact.cards.every((card) => !card.title.startsWith("Resume:"))).toBe(true);
+    expect(compact.cards.some((card) => card.state === "Active")).toBe(true);
+  });
+
+  it("returns full export unchanged when already under the budget without resume modules", () => {
+    const input: HarnessExportInput = {
+      cards: structuredClone(seedCards),
+      logs: structuredClone(seedLogs),
+      proofItems: [],
+      dailyState: createSeedState().dailyState
+    };
+    const full = buildHarnessContext(input);
+    const compact = buildCompactHarnessContext(input);
+
+    expect(estimateHarnessContextChars(full)).toBeLessThanOrEqual(AUTO_COMPACT_THRESHOLD_CHARS);
+    expect(compact).toEqual(full);
+  });
+
+  it("does not mutate the input object", () => {
+    const input = baseInput();
+    const before = JSON.stringify(input);
+    buildCompactHarnessContext(input);
+    expect(JSON.stringify(input)).toBe(before);
+  });
+});
+
+function fixtureChatSummary(overrides: Partial<HarnessChatSummary> = {}): HarnessChatSummary {
+  return {
+    id: "chat-memory-fixture",
+    createdAt: "2026-06-09T13:00:00.000Z",
+    mode: "operator",
+    userMessage: "What am I avoiding right now?",
+    assistantSummary: "Career thread looks cold while Build stays hot.",
+    patterns: ["career avoidance", "build-heavy momentum"],
+    decisions: ["Next step: send one tiny career follow-up."],
+    suggestedNextActions: ["Review the candidate queue."],
+    rememberForNextTime: ["User asked about avoidance."],
+    ...overrides
+  };
+}
+
+describe("chat summary export", () => {
+  it("does not throw when chatSummaries are omitted", () => {
+    const context = buildHarnessContext(baseInput());
+    expect(context.recent_analyses.every((item) => !item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX))).toBe(
+      true
+    );
+  });
+
+  it("includes chat summaries as recent_analyses", () => {
+    const context = buildHarnessContext(
+      baseInput({
+        chatSummaries: [fixtureChatSummary()]
+      })
+    );
+
+    expect(
+      context.recent_analyses.some((item) => item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX))
+    ).toBe(true);
+  });
+
+  it("includes chat decisions in export decisions", () => {
+    const context = buildHarnessContext(
+      baseInput({
+        chatSummaries: [fixtureChatSummary()]
+      })
+    );
+
+    expect(context.decisions.some((item) => item.summary.includes("career follow-up"))).toBe(true);
+  });
+
+  it("compact export retains at least one chat memory analysis", () => {
+    const context = buildCompactHarnessContext(
+      baseInput({
+        chatSummaries: [fixtureChatSummary()]
+      })
+    );
+
+    expect(
+      context.recent_analyses.some((item) => item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX))
+    ).toBe(true);
+  });
+
+  it("does not mutate export input when chat summaries are present", () => {
+    const input = baseInput({
+      chatSummaries: [fixtureChatSummary()]
+    });
+    const before = JSON.stringify(input);
+    buildHarnessContext(input);
+    expect(JSON.stringify(input)).toBe(before);
   });
 });

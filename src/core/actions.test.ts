@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyAddJobSource,
   applyApproveJobCandidate,
   applyCardStateChange,
   applyCareerIntake,
@@ -12,9 +13,10 @@ import {
   applyRunJobSourceResult,
   applySalvage,
   applySaveJobCandidate,
+  applySaveJobSourceWithOptionalImport,
   type LifeHarnessData
 } from "./actions";
-import { runJobSourceFromRaw } from "./jobSourceRunner";
+import { PREVIEW_JOB_SOURCE_ID, runJobSourceFromRaw } from "./jobSourceRunner";
 import { seedJobCandidates, seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";
 import type { DailyState } from "./types";
@@ -28,7 +30,8 @@ function createState(dailyStateOverrides: Partial<DailyState> = {}): LifeHarness
     resumeModules: structuredClone(seedResumeModules),
     jobCandidates: structuredClone(seedJobCandidates),
     jobSources: structuredClone(seedJobSources),
-    jobSourceRuns: []
+    jobSourceRuns: [],
+    chatSummaries: []
   };
 }
 
@@ -254,5 +257,90 @@ describe("job candidate actions", () => {
     expect(result.state.jobCandidates[0]?.origin).toBe("source_fetch");
     expect(result.state.jobSourceRuns).toHaveLength(1);
     expect(result.state.cards).toHaveLength(state.cards.length);
+  });
+
+  it("adds detected-style job source via applyAddJobSource", () => {
+    const state = createState();
+    const result = applyAddJobSource(state, {
+      name: "Netskope",
+      url: "https://boards-api.greenhouse.io/v1/boards/netskope/jobs",
+      kind: "greenhouse",
+      enabled: true,
+      cadence: "manual",
+      maxResults: 25
+    });
+    expect(result.ok).toBe(true);
+    expect(result.state.jobSources[0]?.name).toBe("Netskope");
+    expect(result.state.jobSources).toHaveLength(state.jobSources.length + 1);
+    expect(result.state.jobCandidates).toHaveLength(state.jobCandidates.length);
+  });
+
+  it("save without preview import does not add candidates", () => {
+    const state = createState();
+    const source = state.jobSources.find((item) => item.id === "source-fixture-greenhouse");
+    const previewOutput = runJobSourceFromRaw(
+      { ...source!, id: PREVIEW_JOB_SOURCE_ID },
+      {
+        jobs: [
+          {
+            title: "Preview Role",
+            absolute_url: "https://boards.example.com/jobs/preview-1",
+            content: "TypeScript React testing."
+          }
+        ]
+      },
+      state.jobCandidates,
+      state.resumeModules
+    );
+
+    const result = applySaveJobSourceWithOptionalImport(state, {
+      name: "New Greenhouse Source",
+      url: "https://boards-api.greenhouse.io/v1/boards/acme/jobs",
+      kind: "greenhouse"
+    });
+    expect(result.ok).toBe(true);
+    expect(result.state.jobCandidates).toHaveLength(state.jobCandidates.length);
+    expect(result.state.jobSourceRuns).toHaveLength(0);
+    expect(previewOutput.candidates.length).toBeGreaterThan(0);
+  });
+
+  it("save with preview import adds source_fetch candidates and run record", () => {
+    const state = createState();
+    const previewOutput = runJobSourceFromRaw(
+      {
+        id: PREVIEW_JOB_SOURCE_ID,
+        name: "Preview",
+        url: "https://boards-api.greenhouse.io/v1/boards/acme/jobs",
+        kind: "greenhouse",
+        enabled: true,
+        cadence: "manual"
+      },
+      {
+        jobs: [
+          {
+            title: "Imported Role",
+            absolute_url: "https://boards.example.com/jobs/import-1",
+            content: "Python security application security."
+          }
+        ]
+      },
+      state.jobCandidates,
+      state.resumeModules
+    );
+
+    const result = applySaveJobSourceWithOptionalImport(
+      state,
+      {
+        name: "Imported Source",
+        url: "https://boards-api.greenhouse.io/v1/boards/acme/jobs",
+        kind: "greenhouse"
+      },
+      previewOutput
+    );
+    expect(result.ok).toBe(true);
+    expect(result.state.jobCandidates[0]?.origin).toBe("source_fetch");
+    expect(result.state.jobCandidates[0]?.sourceId).toBe(result.state.jobSources[0]?.id);
+    expect(result.state.jobSourceRuns).toHaveLength(1);
+    expect(result.state.jobSourceRuns[0]?.sourceId).toBe(result.state.jobSources[0]?.id);
   });
 });

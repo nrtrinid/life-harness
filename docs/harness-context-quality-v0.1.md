@@ -49,6 +49,28 @@ Phrasing uses **signal** / **diagnosis**, not certainty.
 3. Gateway scout reads cards, logs, proof, analyses, and decisions in the prompt
 4. Response displays in the dev screen — **no board mutation**
 
+## Context budget (v0.1)
+
+Full export can exceed the OpenVINO gateway prompt budget (`SCOUT_MAX_INPUT_CHARS=12000`) because ai-gateway re-indents context in the prompt plus template and message overhead.
+
+Ask Harness Dev offers two export modes:
+
+| Mode | Function | Use |
+|------|----------|-----|
+| **Full** | `buildHarnessContext()` | Maximum fidelity for inspection |
+| **Compact** | `buildCompactHarnessContext()` | Live OpenVINO dogfood |
+
+Compact trimming (deterministic, read-only):
+
+1. Always drops `Resume: …` synthetic cards first (signal remains in `recent_analyses` + decisions)
+2. Then caps logs/proof, shortens decision reasons, drops lowest-priority cards if still over budget
+
+**Preserved first:** all `recent_analyses`, Active/Waiting cards, career + Inbox candidate cards, cold/dormant signals, proof (capped).
+
+Dev screen defaults to **Compact** when full export exceeds **10,000** chars (`AUTO_COMPACT_THRESHOLD_CHARS`). Compact target max is **11,000** chars (`DEFAULT_COMPACT_MAX_CONTEXT_CHARS`). Debug panel shows `Full: N chars · Compact: M chars · Sending: mode`.
+
+Use **Compact context** for OpenVINO when the help text notes resume bank stripping — even if full JSON is under 10k, compact removes resume-module bloat for gateway headroom.
+
 ## Dogfood steps
 
 1. Start ai-gateway:
@@ -59,9 +81,10 @@ Phrasing uses **signal** / **diagnosis**, not certainty.
    ```
 2. Start Expo: `npm run web`
 3. Nav → **Ask Harness Dev**
-4. Expand **context quality summary** — check counts, active limit, cold/dormant titles
-5. Ask: *What am I avoiding right now?*
-6. Check whether the answer cites real board signals (career cold, candidate queue, active limit, Local LLM parked, etc.)
+4. Select **Compact context** if full exceeds budget (or when resume modules inflate export)
+5. Expand **context quality summary** — check counts, active limit, cold/dormant titles
+6. Ask: *What am I avoiding right now?*
+7. Check whether the answer cites real board signals (career cold, candidate queue, active limit, Local LLM parked, etc.)
 
 CLI replay with seed board:
 
