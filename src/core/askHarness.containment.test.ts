@@ -8,6 +8,7 @@ const CONTEXT_PANEL_PATH = resolve(
   __dirname,
   "../components/askHarness/ChatThreadContextPanel.tsx"
 );
+const ASK_SYNTHESIS_PATH = resolve(__dirname, "askHarnessSynthesis.ts");
 
 function readSource(path: string): string {
   return readFileSync(path, "utf8");
@@ -41,5 +42,29 @@ describe("ask-harness thread context containment", () => {
     expect(screenSource).toContain("threadState");
     expect(screenSource).toContain("toWireChatHarnessThreadState");
     expect(screenSource).not.toMatch(/personality/i);
+  });
+});
+
+describe("askHarnessSynthesis containment", () => {
+  const synthesisSource = readSource(ASK_SYNTHESIS_PATH);
+
+  it("does not import Raw Lab modules", () => {
+    expect(synthesisSource).not.toMatch(/from\s+["'].*rawLab/i);
+    expect(synthesisSource).not.toMatch(/RawLabPersonality/i);
+  });
+
+  it("does not call persistence helpers", () => {
+    expect(synthesisSource).not.toMatch(/\bsaveMemoryItem\s*\(/);
+    expect(synthesisSource).not.toMatch(/\bsaveChatSummary\s*\(/);
+  });
+
+  it("does not import board mutation paths", () => {
+    expect(synthesisSource).not.toMatch(/from\s+["'].*primaryAction/i);
+    expect(synthesisSource).not.toMatch(/from\s+["'].*useLifeHarness/i);
+    expect(synthesisSource).not.toMatch(/applyCardUpdate|applyLogUpdate|dispatch/i);
+  });
+
+  it("does not assemble personality state in outbound requests", () => {
+    expect(synthesisSource).not.toMatch(/personality/i);
   });
 });
