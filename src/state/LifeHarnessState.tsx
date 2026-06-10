@@ -56,6 +56,12 @@ import {
   applyDeleteChatSummary,
   applySaveChatSummary
 } from "../core/harnessMemory";
+import {
+  applyDeleteMemoryItem,
+  applySaveMemoryItem,
+  applyToggleMemoryItemActive,
+  applyUpdateMemoryItem
+} from "../core/harnessMemoryBank";
 import { nowIso } from "../core/ids";
 import { createSeedState } from "../data/createSeedState";
 import {
@@ -66,7 +72,7 @@ import {
   savePersistedState,
   serializeEnvelope
 } from "../storage/persistence";
-import type { CardState, DailyState, HarnessChatSummary, JobSource, LifeCard, LifeLogEntry, ProofItem } from "../core/types";
+import type { CardState, DailyState, HarnessChatSummary, HarnessMemoryItem, JobSource, LifeCard, LifeLogEntry, ProofItem } from "../core/types";
 
 export interface BatchRunProgress {
   current: number;
@@ -87,6 +93,10 @@ type LifeHarnessAction =
   | { type: "job_source_updated"; state: LifeHarnessData }
   | { type: "save_chat_summary"; summary: HarnessChatSummary }
   | { type: "delete_chat_summary"; summaryId: string }
+  | { type: "save_memory_item"; item: HarnessMemoryItem }
+  | { type: "delete_memory_item"; itemId: string }
+  | { type: "update_memory_item"; item: HarnessMemoryItem }
+  | { type: "toggle_memory_item_active"; itemId: string }
   | { type: "state_replaced"; state: LifeHarnessData };
 
 interface LifeHarnessContextValue extends LifeHarnessData {
@@ -121,6 +131,10 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   resetToSeed: () => { ok: boolean; message?: string };
   saveChatSummary: (summary: HarnessChatSummary) => void;
   deleteChatSummary: (summaryId: string) => void;
+  saveMemoryItem: (item: HarnessMemoryItem) => void;
+  deleteMemoryItem: (itemId: string) => void;
+  updateMemoryItem: (item: HarnessMemoryItem) => void;
+  toggleMemoryItemActive: (itemId: string) => void;
   isBatchRunning: boolean;
   batchRunProgress: BatchRunProgress | null;
   runOneJobSource: (
@@ -201,6 +215,14 @@ function lifeHarnessReducer(state: LifeHarnessData, action: LifeHarnessAction): 
       return applySaveChatSummary(state, action.summary);
     case "delete_chat_summary":
       return applyDeleteChatSummary(state, action.summaryId);
+    case "save_memory_item":
+      return applySaveMemoryItem(state, action.item);
+    case "delete_memory_item":
+      return applyDeleteMemoryItem(state, action.itemId);
+    case "update_memory_item":
+      return applyUpdateMemoryItem(state, action.item);
+    case "toggle_memory_item_active":
+      return applyToggleMemoryItemActive(state, action.itemId);
     default:
       return state;
   }
@@ -440,6 +462,22 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     dispatch({ type: "delete_chat_summary", summaryId });
   }, []);
 
+  const saveMemoryItem = useCallback((item: HarnessMemoryItem) => {
+    dispatch({ type: "save_memory_item", item });
+  }, []);
+
+  const deleteMemoryItem = useCallback((itemId: string) => {
+    dispatch({ type: "delete_memory_item", itemId });
+  }, []);
+
+  const updateMemoryItem = useCallback((item: HarnessMemoryItem) => {
+    dispatch({ type: "update_memory_item", item });
+  }, []);
+
+  const toggleMemoryItemActive = useCallback((itemId: string) => {
+    dispatch({ type: "toggle_memory_item_active", itemId });
+  }, []);
+
   const runSourceOnState = useCallback(
     async (current: LifeHarnessData, source: JobSource): Promise<{
       state: LifeHarnessData;
@@ -598,6 +636,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       resetToSeed,
       saveChatSummary,
       deleteChatSummary,
+      saveMemoryItem,
+      deleteMemoryItem,
+      updateMemoryItem,
+      toggleMemoryItemActive,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,
@@ -626,6 +668,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       resetToSeed,
       saveChatSummary,
       deleteChatSummary,
+      saveMemoryItem,
+      deleteMemoryItem,
+      updateMemoryItem,
+      toggleMemoryItemActive,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,

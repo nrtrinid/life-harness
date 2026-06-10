@@ -228,3 +228,25 @@ export interface HarnessChatSummary {
   suggestedNextActions: string[];
   rememberForNextTime: string[];
 }
+
+export type HarnessMemoryKind =
+  | "pattern"
+  | "preference"
+  | "trap"
+  | "identity"
+  | "project_fact"
+  | "decision"
+  | "rule";
+
+export interface HarnessMemoryItem {
+  id: string;
+  kind: HarnessMemoryKind;
+  title: string;
+  summary: string;
+  tags: string[];
+  evidence?: string;
+  sourceChatSummaryId?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

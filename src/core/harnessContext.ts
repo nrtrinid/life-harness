@@ -6,10 +6,17 @@ import {
   buildChatMemoryDecisions,
   CHAT_MEMORY_ANALYSIS_PREFIX
 } from "./harnessMemory";
+import {
+  buildMemoryBankAnalyses,
+  buildMemoryBankDecisions,
+  getActiveMemoryItems,
+  MEMORY_BANK_PREFIX
+} from "./harnessMemoryBank";
 import type {
   CardState,
   DailyState,
   HarnessChatSummary,
+  HarnessMemoryItem,
   JobCandidate,
   JobSourceRunResult,
   LifeArea,
@@ -113,6 +120,7 @@ export type HarnessExportInput = {
   jobCandidates?: JobCandidate[];
   jobSourceRuns?: JobSourceRunResult[];
   chatSummaries?: HarnessChatSummary[];
+  memoryItems?: HarnessMemoryItem[];
 };
 
 export interface ActiveLimitSignal {
@@ -296,6 +304,40 @@ function truncateLowPriorityCardText(context: HarnessContext): boolean {
   return changed;
 }
 
+function trimMemoryBankAnalyses(context: HarnessContext, keepLatest: number): boolean {
+  const memoryEntries = context.recent_analyses.filter((item) =>
+    item.summary.startsWith(MEMORY_BANK_PREFIX)
+  );
+  const otherEntries = context.recent_analyses.filter(
+    (item) => !item.summary.startsWith(MEMORY_BANK_PREFIX)
+  );
+
+  if (memoryEntries.length <= keepLatest) {
+    return false;
+  }
+
+  const keptCount = Math.max(1, keepLatest);
+  context.recent_analyses = [...memoryEntries.slice(0, keptCount), ...otherEntries];
+  return true;
+}
+
+function trimMemoryBankDecisions(context: HarnessContext, keepLatest: number): boolean {
+  const memoryEntries = context.decisions.filter((item) =>
+    item.summary.startsWith(MEMORY_BANK_PREFIX)
+  );
+  const otherEntries = context.decisions.filter(
+    (item) => !item.summary.startsWith(MEMORY_BANK_PREFIX)
+  );
+
+  if (memoryEntries.length <= keepLatest) {
+    return false;
+  }
+
+  const keptCount = Math.max(1, keepLatest);
+  context.decisions = [...memoryEntries.slice(0, keptCount), ...otherEntries];
+  return true;
+}
+
 function trimChatMemoryAnalyses(context: HarnessContext, keepLatest: number): boolean {
   const chatEntries = context.recent_analyses.filter((item) =>
     item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX)
@@ -327,6 +369,8 @@ export function buildCompactHarnessContext(
   }
 
   const passes: Array<() => boolean> = [
+    () => trimMemoryBankAnalyses(context, 3),
+    () => trimMemoryBankDecisions(context, 3),
     () => trimChatMemoryAnalyses(context, 3),
     () => capCompactLogs(context),
     () => capCompactProof(context),
@@ -461,7 +505,9 @@ export function getColdOrDormantCards(context: HarnessContext): HarnessContextCa
 export function buildContextQualitySummary(
   context: HarnessContext,
   activeSignal: ActiveLimitSignal,
-  savedChatSummaryCount = 0
+  savedChatSummaryCount = 0,
+  memoryItemsSaved = 0,
+  activeMemoryCount = 0
 ): string {
   const byState = countCardsByState(context);
   const byArea = countCardsByArea(context);
@@ -473,10 +519,15 @@ export function buildContextQualitySummary(
   const chatMemoriesInExport = context.recent_analyses.some((item) =>
     item.summary.startsWith(CHAT_MEMORY_ANALYSIS_PREFIX)
   );
+  const memoryItemsInExport =
+    context.recent_analyses.some((item) => item.summary.startsWith(MEMORY_BANK_PREFIX)) ||
+    context.decisions.some((item) => item.summary.startsWith(MEMORY_BANK_PREFIX));
 
   const lines = [
     `Cards ${context.cards.length} · Logs ${context.logs.length} · Proof ${context.proof_items.length} · Analyses ${context.recent_analyses.length} · Decisions ${context.decisions.length} · Chat summaries saved ${savedChatSummaryCount}`,
+    `Memory items saved: ${memoryItemsSaved} · Active: ${activeMemoryCount}`,
     `Chat memories in export: ${chatMemoriesInExport ? "yes" : "no"}`,
+    `Memory items in export: ${memoryItemsInExport ? "yes" : "no"}`,
     `By state: Inbox ${byState.Inbox} · Active ${byState.Active} · Parked ${byState.Parked} · Waiting ${byState.Waiting}`,
     `By area: Build ${byArea.Build} · Body ${byArea.Body} · Social/Career ${byArea["Social / Career"]} · Money ${byArea["Money / Independence"]}`,
     `Warmth: Hot ${byWarmth.Hot} · Warm ${byWarmth.Warm} · Cooling ${byWarmth.Cooling} · Cold ${byWarmth.Cold} · Dormant ${byWarmth.Dormant}`,
@@ -865,12 +916,16 @@ export function buildHarnessContext(data: HarnessExportInput): HarnessContext {
       timestamp: item.timestamp
     }));
 
+  const activeMemory = getActiveMemoryItems(data.memoryItems ?? []);
+
   const recent_analyses = [
+    ...buildMemoryBankAnalyses(activeMemory, 10),
     ...buildChatMemoryAnalyses(data.chatSummaries ?? [], 5),
     ...buildHarnessBoardDiagnosis(data)
-  ].slice(0, 8);
+  ].slice(0, 15);
   const decisions = [
     ...HARNESS_STATIC_DECISIONS,
+    ...buildMemoryBankDecisions(activeMemory, 10),
     ...buildChatMemoryDecisions(data.chatSummaries ?? [], 5),
     ...buildDynamicDecisions(data)
   ];

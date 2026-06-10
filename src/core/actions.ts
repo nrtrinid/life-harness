@@ -25,7 +25,8 @@ import type {
   LifeLogEntry,
   ProofItem,
   ResumeModule,
-  HarnessChatSummary
+  HarnessChatSummary,
+  HarnessMemoryItem
 } from "./types";
 import type { JobSourceRunOutput } from "./jobSourceRunner";
 import { rebindJobSourceRunOutput } from "./jobSourceRunner";
@@ -40,6 +41,7 @@ export interface LifeHarnessData {
   jobSources: JobSource[];
   jobSourceRuns: JobSourceRunResult[];
   chatSummaries: HarnessChatSummary[];
+  memoryItems: HarnessMemoryItem[];
 }
 
 export interface JobSourceInput {

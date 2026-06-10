@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/candidate-intake", label: "Paste" },
   { href: "/job-candidates", label: "Queue" },
   { href: "/resume-bank", label: "Bank" },
+  { href: "/memory-bank", label: "Memory" },
   { href: "/job-sources", label: "Sources" },
   { href: "/source-setup", label: "Setup" },
   { href: "/progress", label: "Progress" },

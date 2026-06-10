@@ -74,4 +74,4 @@ See `AGENTS.md`, [`docs/career-command-board-v0.1.md`](docs/career-command-board
 
 ## Dev: Ask Harness (optional)
 
-Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask Harness Dev** in the app nav. See [`docs/harness-context-export-v0.1.md`](docs/harness-context-export-v0.1.md), [`docs/harness-context-quality-v0.1.md`](docs/harness-context-quality-v0.1.md), and [`docs/conversation-summary-memory-v0.1.md`](docs/conversation-summary-memory-v0.1.md).
+Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask Harness Dev** in the app nav. See [`docs/harness-context-export-v0.1.md`](docs/harness-context-export-v0.1.md), [`docs/harness-context-quality-v0.1.md`](docs/harness-context-quality-v0.1.md), [`docs/conversation-summary-memory-v0.1.md`](docs/conversation-summary-memory-v0.1.md), and [`docs/memory-bank-v0.1.md`](docs/memory-bank-v0.1.md).

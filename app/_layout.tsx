@@ -21,6 +21,7 @@ export default function RootLayout() {
         <Stack.Screen name="candidate-intake" options={{ headerShown: false }} />
         <Stack.Screen name="job-candidates" options={{ headerShown: false }} />
         <Stack.Screen name="resume-bank" options={{ headerShown: false }} />
+        <Stack.Screen name="memory-bank" options={{ headerShown: false }} />
         <Stack.Screen name="job-sources" options={{ headerShown: false }} />
         <Stack.Screen name="source-setup" options={{ headerShown: false }} />
         <Stack.Screen name="ask-harness" options={{ headerShown: false }} />

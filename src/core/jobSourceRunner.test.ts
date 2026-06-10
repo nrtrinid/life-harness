@@ -85,7 +85,8 @@ function createState(): LifeHarnessData {
     jobCandidates: structuredClone(seedJobCandidates),
     jobSources: structuredClone(seedJobSources),
     jobSourceRuns: [],
-    chatSummaries: []
+    chatSummaries: [],
+    memoryItems: []
   };
 }
 

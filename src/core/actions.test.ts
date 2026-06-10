@@ -31,7 +31,8 @@ function createState(dailyStateOverrides: Partial<DailyState> = {}): LifeHarness
     jobCandidates: structuredClone(seedJobCandidates),
     jobSources: structuredClone(seedJobSources),
     jobSourceRuns: [],
-    chatSummaries: []
+    chatSummaries: [],
+    memoryItems: []
   };
 }
 

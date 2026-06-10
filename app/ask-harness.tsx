@@ -25,7 +25,13 @@ import {
   type HarnessExportInput
 } from "../src/core/harnessContext";
 import { buildChatSummary } from "../src/core/harnessMemory";
-import type { SensitivityLevel } from "../src/core/types";
+import {
+  buildMemoryCandidatesFromChatSummary,
+  createMemoryItem,
+  memoryItemDedupeKey,
+  sortMemoryItemsNewestFirst
+} from "../src/core/harnessMemoryBank";
+import type { HarnessMemoryItem, SensitivityLevel } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 const MODES: ChatHarnessMode[] = ["general", "operator", "reflection", "builder"];
@@ -72,13 +78,22 @@ function buildExportInput(state: ReturnType<typeof useLifeHarness>): HarnessExpo
   if (state.chatSummaries) {
     input.chatSummaries = state.chatSummaries;
   }
+  if (state.memoryItems) {
+    input.memoryItems = state.memoryItems;
+  }
 
   return input;
 }
 
 export default function AskHarnessDevScreen() {
   const harnessState = useLifeHarness();
-  const { saveChatSummary, deleteChatSummary } = harnessState;
+  const {
+    saveChatSummary,
+    deleteChatSummary,
+    saveMemoryItem,
+    deleteMemoryItem,
+    toggleMemoryItemActive
+  } = harnessState;
   const [baseUrl, setBaseUrl] = useState(DEFAULT_CHAT_HARNESS_URL);
   const [mode, setMode] = useState<ChatHarnessMode>("general");
   const [sensitivity, setSensitivity] = useState<SensitivityLevel>("S1");
@@ -87,6 +102,7 @@ export default function AskHarnessDevScreen() {
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [response, setResponse] = useState<ChatHarnessResponse | null>(null);
   const [savedMemoryKey, setSavedMemoryKey] = useState<string | null>(null);
+  const [savedCandidateKeys, setSavedCandidateKeys] = useState<Set<string>>(() => new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const exportInput = useMemo(() => buildExportInput(harnessState), [harnessState]);
@@ -99,14 +115,26 @@ export default function AskHarnessDevScreen() {
   const [contextMode, setContextMode] = useState<ContextExportMode>(defaultContextMode);
   const selectedContext = contextMode === "compact" ? compactContext : fullContext;
   const activeLimitSignal = useMemo(() => getActiveLimitSignal(exportInput), [exportInput]);
+  const activeMemoryCount = useMemo(
+    () => harnessState.memoryItems.filter((item) => item.isActive).length,
+    [harnessState.memoryItems]
+  );
   const qualitySummary = useMemo(
     () =>
       buildContextQualitySummary(
         selectedContext,
         activeLimitSignal,
-        harnessState.chatSummaries.length
+        harnessState.chatSummaries.length,
+        harnessState.memoryItems.length,
+        activeMemoryCount
       ),
-    [selectedContext, activeLimitSignal, harnessState.chatSummaries.length]
+    [
+      selectedContext,
+      activeLimitSignal,
+      harnessState.chatSummaries.length,
+      harnessState.memoryItems.length,
+      activeMemoryCount
+    ]
   );
   const memoryPreview = useMemo(() => {
     if (!response) {
@@ -129,6 +157,19 @@ export default function AskHarnessDevScreen() {
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
         .slice(0, 3),
     [harnessState.chatSummaries]
+  );
+  const memoryBankCandidates = useMemo(() => {
+    if (!memoryPreview || !memoryAlreadySaved) {
+      return [];
+    }
+
+    return buildMemoryCandidatesFromChatSummary(memoryPreview, harnessState.memoryItems).filter(
+      (candidate) => !savedCandidateKeys.has(memoryItemDedupeKey(candidate))
+    );
+  }, [memoryPreview, memoryAlreadySaved, harnessState.memoryItems, savedCandidateKeys]);
+  const recentMemoryBankItems = useMemo(
+    () => sortMemoryItemsNewestFirst(harnessState.memoryItems).slice(0, 5),
+    [harnessState.memoryItems]
   );
   const [qualityOpen, setQualityOpen] = useState(false);
 
@@ -157,6 +198,7 @@ export default function AskHarnessDevScreen() {
       });
       setResponse(result);
       setSavedMemoryKey(null);
+      setSavedCandidateKeys(new Set());
     } catch (error) {
       setResponse(null);
       const text =
@@ -177,6 +219,26 @@ export default function AskHarnessDevScreen() {
     saveChatSummary(memoryPreview);
     setSavedMemoryKey(currentMemoryKey);
     setNotice({ kind: "success", message: "Chat memory saved." });
+  }
+
+  function handleSaveMemoryBankCandidate(candidate: HarnessMemoryItem) {
+    const key = memoryItemDedupeKey(candidate);
+    if (savedCandidateKeys.has(key)) {
+      return;
+    }
+
+    const item = createMemoryItem({
+      kind: candidate.kind,
+      title: candidate.title,
+      summary: candidate.summary,
+      tags: candidate.tags,
+      evidence: candidate.evidence,
+      sourceChatSummaryId: candidate.sourceChatSummaryId,
+      isActive: true
+    });
+    saveMemoryItem(item);
+    setSavedCandidateKeys((previous) => new Set(previous).add(key));
+    setNotice({ kind: "success", message: "Saved to Memory Bank." });
   }
 
   return (
@@ -356,6 +418,67 @@ export default function AskHarnessDevScreen() {
               </Pressable>
             </View>
           ) : null}
+        </Section>
+      ) : null}
+
+      {memoryBankCandidates.length > 0 ? (
+        <Section title="Suggested durable memories">
+          <Text style={styles.helpText}>
+            From the saved chat summary. Save only what should persist across sessions.
+          </Text>
+          {memoryBankCandidates.map((candidate) => {
+            const key = memoryItemDedupeKey(candidate);
+            const saved = savedCandidateKeys.has(key);
+            return (
+              <View key={key} style={styles.checklist}>
+                <Text style={styles.bodyText}>
+                  {candidate.kind} · {candidate.title}
+                </Text>
+                <Text style={styles.bodyText}>{candidate.summary}</Text>
+                {candidate.tags.length > 0 ? (
+                  <Text style={styles.helpText}>Tags: {candidate.tags.join(", ")}</Text>
+                ) : null}
+                {candidate.sourceChatSummaryId ? (
+                  <Text style={styles.helpText}>Source: {candidate.sourceChatSummaryId}</Text>
+                ) : null}
+                <Pressable
+                  style={saved ? styles.smallButton : styles.primaryAction}
+                  disabled={saved}
+                  onPress={() => handleSaveMemoryBankCandidate(candidate)}
+                >
+                  <Text style={saved ? styles.smallButtonText : styles.primaryActionText}>
+                    {saved ? "Saved to Memory Bank" : "Save to Memory Bank"}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </Section>
+      ) : null}
+
+      {recentMemoryBankItems.length > 0 ? (
+        <Section title="Recent Memory Bank">
+          {recentMemoryBankItems.map((item) => (
+            <View key={item.id} style={styles.checklist}>
+              <Text style={styles.bodyText}>
+                {item.kind} · {item.title} · {item.isActive ? "Active" : "Inactive"}
+              </Text>
+              <Text style={styles.bodyText}>{item.summary}</Text>
+              {item.tags.length > 0 ? (
+                <Text style={styles.helpText}>Tags: {item.tags.join(", ")}</Text>
+              ) : null}
+              <View style={styles.splitRow}>
+                <Pressable style={styles.smallButton} onPress={() => toggleMemoryItemActive(item.id)}>
+                  <Text style={styles.smallButtonText}>
+                    {item.isActive ? "Mark inactive" : "Mark active"}
+                  </Text>
+                </Pressable>
+                <Pressable style={styles.smallButton} onPress={() => deleteMemoryItem(item.id)}>
+                  <Text style={styles.smallButtonText}>Delete</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
         </Section>
       ) : null}
 

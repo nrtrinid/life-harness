@@ -22,7 +22,8 @@ import {
   type HarnessExportInput
 } from "./harnessContext";
 import { CHAT_MEMORY_ANALYSIS_PREFIX } from "./harnessMemory";
-import type { HarnessChatSummary } from "./types";
+import { MEMORY_BANK_PREFIX } from "./harnessMemoryBank";
+import type { HarnessChatSummary, HarnessMemoryItem } from "./types";
 
 function baseInput(overrides: Partial<HarnessExportInput> = {}): HarnessExportInput {
   const seed = createSeedState("2026-06-09T12:00:00.000Z");
@@ -205,9 +206,10 @@ describe("buildHarnessContext", () => {
     expect(countCardsByWarmth(context).Hot).toBeGreaterThan(0);
     expect(getColdOrDormantCards(context).length).toBeGreaterThan(0);
 
-    const summary = buildContextQualitySummary(context, activeSignal);
+    const summary = buildContextQualitySummary(context, activeSignal, 0, 2, 1);
     expect(summary).toContain("Cards ");
     expect(summary).toContain("Active limit exceeded");
+    expect(summary).toContain("Memory items saved: 2 · Active: 1");
   });
 });
 
@@ -358,6 +360,114 @@ describe("chat summary export", () => {
   it("does not mutate export input when chat summaries are present", () => {
     const input = baseInput({
       chatSummaries: [fixtureChatSummary()]
+    });
+    const before = JSON.stringify(input);
+    buildHarnessContext(input);
+    expect(JSON.stringify(input)).toBe(before);
+  });
+});
+
+function fixtureMemoryItem(overrides: Partial<HarnessMemoryItem> = {}): HarnessMemoryItem {
+  return {
+    id: overrides.id ?? "memory-item-fixture",
+    kind: overrides.kind ?? "pattern",
+    title: overrides.title ?? "Career avoidance pattern",
+    summary: overrides.summary ?? "Career threads can stay cold while build work stays hot.",
+    tags: overrides.tags ?? ["career"],
+    sourceChatSummaryId: overrides.sourceChatSummaryId ?? "chat-memory-fixture",
+    isActive: overrides.isActive ?? true,
+    createdAt: overrides.createdAt ?? "2026-06-09T13:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-06-09T13:00:00.000Z",
+    ...overrides
+  };
+}
+
+describe("memory bank export", () => {
+  it("does not throw when memoryItems are omitted", () => {
+    expect(() => buildHarnessContext(baseInput())).not.toThrow();
+  });
+
+  it("includes active pattern memory in recent_analyses", () => {
+    const context = buildHarnessContext(
+      baseInput({
+        memoryItems: [fixtureMemoryItem()]
+      })
+    );
+
+    expect(
+      context.recent_analyses.some((item) => item.summary.startsWith(MEMORY_BANK_PREFIX))
+    ).toBe(true);
+  });
+
+  it("includes active rule memory in decisions", () => {
+    const context = buildHarnessContext(
+      baseInput({
+        memoryItems: [
+          fixtureMemoryItem({
+            kind: "rule",
+            title: "Career-before-tooling",
+            summary: "Career pounce comes before tooling."
+          })
+        ]
+      })
+    );
+
+    expect(
+      context.decisions.some(
+        (item) => item.summary.startsWith(MEMORY_BANK_PREFIX) && item.reason === "Approved durable memory."
+      )
+    ).toBe(true);
+  });
+
+  it("excludes inactive memory items from export", () => {
+    const context = buildHarnessContext(
+      baseInput({
+        memoryItems: [fixtureMemoryItem({ isActive: false, title: "Hidden pattern" })]
+      })
+    );
+
+    expect(context.recent_analyses.every((item) => !item.summary.includes("Hidden pattern"))).toBe(true);
+  });
+
+  it("compact export retains at least three memory bank analyses when many are saved", () => {
+    const memoryItems = Array.from({ length: 6 }, (_, index) =>
+      fixtureMemoryItem({
+        id: `memory-item-${index}`,
+        title: `Pattern ${index}`,
+        summary: `Summary ${index}.`,
+        updatedAt: `2026-06-09T1${index}:00:00.000Z`
+      })
+    );
+    const context = buildCompactHarnessContext(
+      baseInput({
+        memoryItems
+      })
+    );
+
+    const memoryAnalyses = context.recent_analyses.filter((item) =>
+      item.summary.startsWith(MEMORY_BANK_PREFIX)
+    );
+    expect(memoryAnalyses.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("reports memory counts in quality summary", () => {
+    const context = buildHarnessContext(
+      baseInput({
+        memoryItems: [
+          fixtureMemoryItem(),
+          fixtureMemoryItem({ id: "memory-item-inactive", isActive: false, title: "Inactive" })
+        ]
+      })
+    );
+    const summary = buildContextQualitySummary(context, getActiveLimitSignal(baseInput()), 0, 2, 1);
+
+    expect(summary).toContain("Memory items saved: 2 · Active: 1");
+    expect(summary).toContain("Memory items in export: yes");
+  });
+
+  it("does not mutate export input when memory items are present", () => {
+    const input = baseInput({
+      memoryItems: [fixtureMemoryItem()]
     });
     const before = JSON.stringify(input);
     buildHarnessContext(input);
