@@ -11,3 +11,4 @@ docs/sample-outputs/openvino_*.json
 *.egg-info/
 dist/
 build/
+bench_results/

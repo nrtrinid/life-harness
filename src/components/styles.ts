@@ -195,6 +195,16 @@ export const styles = StyleSheet.create({
     paddingBottom: 6,
     marginBottom: spacing.xs
   },
+  collapsibleHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  collapsibleChevron: {
+    color: colors.textMuted,
+    fontSize: typography.bodyMedium,
+    marginLeft: spacing.sm
+  },
   titleText: {
     color: colors.textPrimary,
     fontSize: typography.headingSmall,

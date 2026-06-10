@@ -60,6 +60,9 @@ def _settings(**overrides) -> Settings:
         debug_thinking_trace=overrides.pop(
             "debug_thinking_trace", base.debug_thinking_trace
         ),
+        real_model_bench_enabled=overrides.pop(
+            "real_model_bench_enabled", base.real_model_bench_enabled
+        ),
         **overrides,
     )
 

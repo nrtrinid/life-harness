@@ -137,6 +137,8 @@ class Settings:
 
     debug_thinking_trace: bool
 
+    real_model_bench_enabled: bool
+
     @classmethod
 
     def from_env(cls) -> "Settings":
@@ -242,6 +244,8 @@ class Settings:
             critic_heavy=_env_flag("SCOUT_CRITIC_HEAVY", False),
 
             debug_thinking_trace=_env_flag("SCOUT_DEBUG_THINKING_TRACE", False),
+
+            real_model_bench_enabled=_env_flag("SCOUT_REAL_MODEL_BENCH", False),
 
         )
 

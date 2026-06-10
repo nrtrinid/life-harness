@@ -126,6 +126,7 @@ def _settings_with_critic(**overrides) -> Settings:
         critic_timeout_seconds=critic_fields["critic_timeout_seconds"],
         critic_heavy=critic_fields["critic_heavy"],
         debug_thinking_trace=base.debug_thinking_trace,
+        real_model_bench_enabled=base.real_model_bench_enabled,
     )
 
 
