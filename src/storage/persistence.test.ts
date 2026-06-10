@@ -279,6 +279,28 @@ describe("export/import round trip", () => {
     expect(imported.data?.jobSourceRuns).toHaveLength(1);
     expect(imported.data?.jobCandidates.some((item) => item.id === "candidate-test")).toBe(true);
   });
+
+  it("preserves requestConfig on job sources", () => {
+    const state = createSeedState("2026-06-09T12:00:00.000Z");
+    const requestConfig = {
+      method: "POST" as const,
+      bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" }
+    };
+    state.jobSources = [
+      {
+        id: "source-workday-endpoint",
+        name: "Workday Endpoint Fixture",
+        url: "/fixtures/sample-workday-cxs-response.json",
+        kind: "workday",
+        enabled: true,
+        cadence: "manual",
+        requestConfig
+      }
+    ];
+    const imported = parseImportJson(serializeEnvelope(state), new Date("2026-06-09T12:00:00.000Z"));
+    expect(imported.ok).toBe(true);
+    expect(imported.data?.jobSources[0]?.requestConfig).toEqual(requestConfig);
+  });
 });
 
 describe("createSeedState", () => {

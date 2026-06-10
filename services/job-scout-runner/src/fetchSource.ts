@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
 
 import {
+  buildSafeRequestHeaders,
+  validateJobSourceRequestConfig
+} from "../../../src/core/jobSourceRequestConfig";
+import type { JobSourceRequestConfig } from "../../../src/core/types";
+import {
   assertUrlSafeForFetch,
   FETCH_TIMEOUT_MS,
   MAX_RESPONSE_BYTES,
@@ -15,6 +20,7 @@ export interface FetchSourceResult {
   text: string;
   byteSize: number;
   mode: "fixture" | "network";
+  method: "GET" | "POST";
   hostname?: string;
   resolvedAddresses?: string[];
 }
@@ -68,13 +74,14 @@ async function readFixture(filePath: string): Promise<FetchSourceResult | FetchS
   if (byteSize > MAX_RESPONSE_BYTES) {
     return { ok: false, error: "Fixture exceeded max size (2 MB)." };
   }
-  return { ok: true, text, byteSize, mode: "fixture" };
+  return { ok: true, text, byteSize, mode: "fixture", method: "GET" };
 }
 
 async function fetchNetworkUrl(
   url: string,
   resolvedAddresses: string[],
-  fetchImpl: FetchImpl
+  fetchImpl: FetchImpl,
+  requestConfig?: JobSourceRequestConfig
 ): Promise<FetchSourceResult | FetchSourceError> {
   let hostname: string | undefined;
   try {
@@ -83,7 +90,18 @@ async function fetchNetworkUrl(
     hostname = undefined;
   }
 
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  const method = requestConfig?.method ?? "GET";
+  const headers = buildSafeRequestHeaders();
+  const init: RequestInit = {
+    method,
+    headers,
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  };
+  if (method === "POST") {
+    init.body = JSON.stringify(requestConfig?.bodyJson ?? {});
+  }
+
+  const response = await fetchImpl(url, init);
   if (!response.ok) {
     return { ok: false, error: `Fetch failed with HTTP ${response.status}.` };
   }
@@ -98,6 +116,7 @@ async function fetchNetworkUrl(
     text: body.text,
     byteSize: body.byteSize,
     mode: "network",
+    method,
     hostname,
     resolvedAddresses
   };
@@ -105,18 +124,39 @@ async function fetchNetworkUrl(
 
 export async function fetchSourceText(
   url: string,
-  options: { resolveHost?: DnsResolver; fetchImpl?: FetchImpl } = {}
+  options: {
+    requestConfig?: JobSourceRequestConfig;
+    resolveHost?: DnsResolver;
+    fetchImpl?: FetchImpl;
+  } = {}
 ): Promise<FetchSourceResult | FetchSourceError> {
+  const configValidation = validateJobSourceRequestConfig(options.requestConfig);
+  if (!configValidation.ok) {
+    return { ok: false, error: configValidation.error };
+  }
+
   const safety = await assertUrlSafeForFetch(url, options.resolveHost);
   if (!safety.ok) {
     return { ok: false, error: safety.error };
   }
 
   if (safety.mode === "fixture") {
-    return readFixture(safety.filePath);
+    const fixture = await readFixture(safety.filePath);
+    if (!fixture.ok) {
+      return fixture;
+    }
+    return {
+      ...fixture,
+      method: options.requestConfig?.method ?? "GET"
+    };
   }
 
-  return fetchNetworkUrl(safety.url, safety.resolvedAddresses, options.fetchImpl ?? fetch);
+  return fetchNetworkUrl(
+    safety.url,
+    safety.resolvedAddresses,
+    options.fetchImpl ?? fetch,
+    options.requestConfig
+  );
 }
 
 export function getSafetyMode(safety: UrlSafetyResult): "fixture" | "network" | "error" {

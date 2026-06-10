@@ -13,6 +13,7 @@ import { seedJobCandidates, seedJobSources, seedResumeModules } from "../data/se
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";
 import {
   buildFetchErrorRunOutput,
+  canRunJobSource,
   dedupeJobPostings,
   PREVIEW_JOB_SOURCE_ID,
   rebindJobSourceRunOutput,
@@ -62,6 +63,10 @@ const workdaySearchJson = readFileSync(
 );
 const workdayEmptyJson = readFileSync(
   join(process.cwd(), "public/fixtures/sample-workday-empty.json"),
+  "utf8"
+);
+const workdayCxsResponseJson = readFileSync(
+  join(process.cwd(), "public/fixtures/sample-workday-cxs-response.json"),
   "utf8"
 );
 
@@ -322,6 +327,37 @@ describe("jobSourceRunner", () => {
     const state = createState();
     const result = applyRunJobSourceResult(state, output);
     expect(result.state.cards).toHaveLength(state.cards.length);
+  });
+
+  it("creates candidates from workday CXS response fixture", () => {
+    const source: JobSource = {
+      ...workdaySource,
+      url: "/fixtures/sample-workday-cxs-response.json",
+      requestConfig: {
+        method: "POST",
+        bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" }
+      }
+    };
+    const output = runJobSourceFromRaw(
+      source,
+      JSON.parse(workdayCxsResponseJson),
+      [],
+      seedResumeModules
+    );
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.candidates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("rejects workday source with forbidden credential keys in requestConfig", () => {
+    const guard = canRunJobSource({
+      ...workdaySource,
+      requestConfig: {
+        method: "POST",
+        bodyJson: { authorization: "Bearer secret", appliedFacets: {} }
+      }
+    });
+    expect(guard.ok).toBe(false);
+    expect(guard.reason).toContain("authorization");
   });
 
   it("uses manual-run enabled and scheduled lock thresholds", () => {

@@ -20,6 +20,7 @@ const listingHtml = readFileSync(join(fixtureDir, "sample-governmentjobs-listing
 const emptyHtml = readFileSync(join(fixtureDir, "sample-governmentjobs-empty.html"), "utf8");
 const workdaySearchJson = readFileSync(join(fixtureDir, "sample-workday-search.json"), "utf8");
 const workdayEmptyJson = readFileSync(join(fixtureDir, "sample-workday-empty.json"), "utf8");
+const workdayCxsResponseJson = readFileSync(join(fixtureDir, "sample-workday-cxs-response.json"), "utf8");
 
 const greenhouseSource: JobSource = {
   id: "source-test",
@@ -230,5 +231,20 @@ describe("jobSourceAdapters", () => {
     expect(result.postings.length).toBeGreaterThanOrEqual(2);
     expect(getAdapterForKind("workday")).toBeDefined();
     expect(WORKDAY_ZERO_LISTINGS_MESSAGE).toContain("No supported Workday postings found");
+  });
+
+  it("parses workday CXS response fixture with nested body.jobPostings", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "workday",
+      name: "Qualcomm",
+      url: "https://qualcomm.wd12.myworkdayjobs.com/wday/cxs/qualcomm/External/jobs"
+    };
+    const postings = parseWorkdaySearchPayload(JSON.parse(workdayCxsResponseJson), source);
+    expect(postings.length).toBeGreaterThanOrEqual(2);
+    expect(postings[0]?.sourceUrl).toContain("qualcomm.wd12.myworkdayjobs.com");
+    expect(postings[0]?.location).toBeTruthy();
+    expect(postings[0]?.description).toContain("Title:");
+    expect(postings.some((posting) => posting.roleType === "cybersecurity")).toBe(true);
   });
 });

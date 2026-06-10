@@ -323,6 +323,7 @@ function detectWorkday(parsed: URL, inputUrl: string): SourceDetectionResult | n
     confidence: "medium",
     notes: [
       "Workday / MyWorkdayJobs source detected.",
+      "Endpoint-backed mode available: paste JSON search endpoint URL and request body in Source Setup.",
       "Workday sources are testable but adapter-limited. Default cadence: manual. Change to daily/weekly only after a successful candidate-producing run."
     ],
     warnings,

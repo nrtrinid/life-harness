@@ -517,12 +517,26 @@ function normalizeGovernmentJobs(raw: unknown, source: JobSource): NormalizedJob
 export const WORKDAY_ZERO_LISTINGS_MESSAGE =
   "No supported Workday postings found at this URL/payload. This source may need endpoint discovery or a different Workday site path.";
 
+function resolveWorkdayBaseUrl(sourceUrl: string): string {
+  if (sourceUrl.startsWith("http")) {
+    try {
+      const parsed = new URL(sourceUrl);
+      if (parsed.pathname.toLowerCase().includes("/wday/cxs/")) {
+        return parsed.origin;
+      }
+      return sourceUrl;
+    } catch {
+      return sourceUrl;
+    }
+  }
+  if (sourceUrl.startsWith("/")) {
+    return `https://example.myworkdayjobs.com${sourceUrl}`;
+  }
+  return `https://example.myworkdayjobs.com/${sourceUrl}`;
+}
+
 function resolveWorkdayHref(href: string, sourceUrl: string): string {
-  const base = sourceUrl.startsWith("http")
-    ? sourceUrl
-    : sourceUrl.startsWith("/")
-      ? `https://example.myworkdayjobs.com${sourceUrl}`
-      : `https://example.myworkdayjobs.com/${sourceUrl}`;
+  const base = resolveWorkdayBaseUrl(sourceUrl);
   try {
     return new URL(href, base).href;
   } catch {
@@ -540,6 +554,50 @@ function firstWorkdayString(record: Record<string, unknown>, keys: string[]): st
   return undefined;
 }
 
+function looksLikeWorkdayJob(item: unknown): boolean {
+  const record = asRecord(item);
+  if (!record) {
+    return false;
+  }
+  return Boolean(
+    firstWorkdayString(record, ["title", "jobTitle", "name", "externalTitle"]) &&
+      (firstWorkdayString(record, ["externalPath", "externalUrl", "jobPostingUrl", "href", "path"]) ||
+        firstWorkdayString(record, ["title", "jobTitle"]))
+  );
+}
+
+function collectWorkdayJobArrays(value: unknown, depth: number, collected: unknown[][]): void {
+  if (depth > 2) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    if (value.length > 0 && value.every((item) => looksLikeWorkdayJob(item) || asRecord(item))) {
+      if (value.some((item) => looksLikeWorkdayJob(item))) {
+        collected.push(value);
+      }
+    }
+    for (const item of value) {
+      collectWorkdayJobArrays(item, depth + 1, collected);
+    }
+    return;
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return;
+  }
+  for (const key of [
+    "jobPostings",
+    "jobs",
+    "data",
+    "children",
+    "results",
+    "body",
+    "jobSearchPageData"
+  ]) {
+    collectWorkdayJobArrays(record[key], depth + 1, collected);
+  }
+}
+
 function extractWorkdayJobArray(raw: unknown): unknown[] {
   if (Array.isArray(raw)) {
     return raw;
@@ -548,18 +606,45 @@ function extractWorkdayJobArray(raw: unknown): unknown[] {
   if (!record) {
     return [];
   }
+
+  const nestedCandidates: unknown[][] = [];
+  collectWorkdayJobArrays(raw, 0, nestedCandidates);
+
   for (const key of ["jobPostings", "jobs", "data", "children", "results"]) {
     const value = record[key];
     if (Array.isArray(value) && value.length > 0) {
       return value;
     }
   }
+
+  const body = asRecord(record.body);
+  if (body) {
+    for (const key of ["jobPostings", "children"]) {
+      const value = body[key];
+      if (Array.isArray(value) && value.length > 0) {
+        return value;
+      }
+    }
+  }
+
+  const jobSearchPageData = asRecord(record.jobSearchPageData);
+  if (Array.isArray(jobSearchPageData?.jobs) && jobSearchPageData.jobs.length > 0) {
+    return jobSearchPageData.jobs;
+  }
+
+  for (const candidate of nestedCandidates) {
+    if (candidate.length > 0) {
+      return candidate;
+    }
+  }
+
   for (const key of ["jobPostings", "jobs", "data", "children", "results"]) {
     const value = record[key];
     if (Array.isArray(value)) {
       return value;
     }
   }
+
   return [];
 }
 

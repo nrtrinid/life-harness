@@ -270,4 +270,85 @@ describe("job-scout-runner server", () => {
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
+
+  it("returns source_fetch candidates for workday POST fixture source", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+
+    const result = await postRunSource(port, {
+      source: {
+        id: "source-workday-cxs-fixture",
+        name: "Workday Endpoint Fixture",
+        url: "/fixtures/sample-workday-cxs-response.json",
+        kind: "workday",
+        enabled: true,
+        cadence: "manual",
+        requestConfig: {
+          method: "POST",
+          bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" }
+        }
+      },
+      existingCandidates: [],
+      resumeModules: seedResumeModules
+    });
+
+    const body = result.body as RunSourceResponseBody;
+    expect(body.result.errors).toHaveLength(0);
+    expect(body.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(body.candidates.every((candidate) => candidate.origin === "source_fetch")).toBe(true);
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("returns error-run when requestConfig contains forbidden credential keys", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+
+    const result = await postRunSource(port, {
+      source: {
+        ...fixtureSource,
+        kind: "workday",
+        url: "/fixtures/sample-workday-cxs-response.json",
+        requestConfig: {
+          method: "POST",
+          bodyJson: { session: "abc", appliedFacets: {} }
+        }
+      },
+      existingCandidates: [],
+      resumeModules: seedResumeModules
+    });
+
+    const body = result.body as RunSourceResponseBody;
+    expect(body.result.errors[0]).toContain("session");
+    expect(body.candidates).toHaveLength(0);
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("blocks private URL targets for POST sources", async () => {
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+
+    const result = await postRunSource(port, {
+      source: {
+        ...fixtureSource,
+        kind: "workday",
+        url: "http://192.168.1.1/jobs",
+        requestConfig: {
+          method: "POST",
+          bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" }
+        }
+      },
+      existingCandidates: [],
+      resumeModules: seedResumeModules
+    });
+
+    const body = result.body as RunSourceResponseBody;
+    expect(body.result.errors[0]).toContain("Blocked URL hostname");
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
 });

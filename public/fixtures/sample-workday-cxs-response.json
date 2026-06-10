@@ -1,0 +1,24 @@
+{
+  "total": 2,
+  "body": {
+    "jobPostings": [
+      {
+        "title": "Principal Software Engineer",
+        "externalPath": "/en-US/External/job/San-Diego-CA/Principal-Software-Engineer_R223456",
+        "locationsText": "San Diego, CA",
+        "postedOn": "2026-05-10",
+        "jobFamily": "Engineering",
+        "timeType": "Full time",
+        "jobReqId": "R223456",
+        "bulletFields": ["Lead platform services.", "Mentor engineers."]
+      },
+      {
+        "title": "Security Operations Engineer",
+        "externalPath": "/en-US/External/job/Remote-CA/Security-Operations-Engineer_R223457",
+        "locationsText": "Remote, CA",
+        "postedOn": "2026-05-11",
+        "department": "Information Security"
+      }
+    ]
+  }
+}

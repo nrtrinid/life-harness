@@ -67,6 +67,13 @@ export type JobSourceCadence = "manual" | "daily" | "weekly";
 
 export type JobSourceRunStatus = "idle" | "running" | "success" | "error";
 
+export type JobSourceRequestMethod = "GET" | "POST";
+
+export interface JobSourceRequestConfig {
+  method: JobSourceRequestMethod;
+  bodyJson?: unknown;
+}
+
 export interface JobSource {
   id: string;
   name: string;
@@ -82,6 +89,7 @@ export interface JobSource {
   lastFetchedCount?: number;
   maxResults?: number;
   adapterNotes?: string;
+  requestConfig?: JobSourceRequestConfig;
 }
 
 export interface JobSourceRunResult {

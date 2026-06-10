@@ -143,6 +143,13 @@ export const SOURCE_CANDIDATE_EXAMPLES: SourceCandidateExample[] = [
     notes: "Workday external site — live fetch may return HTML shell until endpoint discovery."
   },
   {
+    name: "Workday Endpoint Fixture (local)",
+    kind: "workday",
+    url: "/fixtures/sample-workday-cxs-response.json",
+    notes:
+      "Endpoint-backed Workday fixture. Use endpoint mode → POST with body from sample-workday-cxs-request.json."
+  },
+  {
     name: "Workday (corporate)",
     kind: "workday",
     url: "https://workday.wd5.myworkdayjobs.com/Workday",

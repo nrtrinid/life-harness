@@ -7,6 +7,7 @@ import {
   type NormalizedJobPosting
 } from "./jobSourceAdapters";
 import { createJobCandidate } from "./jobScout";
+import { validateJobSourceRequestConfig } from "./jobSourceRequestConfig";
 import type {
   JobCandidate,
   JobSource,
@@ -28,6 +29,7 @@ export function buildTemporaryJobSource(input: {
   maxResults?: number;
   notes?: string;
   adapterNotes?: string;
+  requestConfig?: JobSource["requestConfig"];
   id?: string;
 }): JobSource {
   return {
@@ -40,6 +42,7 @@ export function buildTemporaryJobSource(input: {
     maxResults: input.maxResults ?? DEFAULT_MAX_RESULTS,
     notes: input.notes?.trim() || undefined,
     adapterNotes: input.adapterNotes?.trim() || undefined,
+    requestConfig: input.requestConfig,
     runStatus: "idle"
   };
 }
@@ -92,6 +95,10 @@ export function canRunJobSource(source: JobSource): { ok: boolean; reason?: stri
   }
   if (!isValidSourceUrl(source.url)) {
     return { ok: false, reason: "Source URL must be http(s) or a web fixture path." };
+  }
+  const configValidation = validateJobSourceRequestConfig(source.requestConfig);
+  if (!configValidation.ok) {
+    return { ok: false, reason: configValidation.error };
   }
   return { ok: true };
 }

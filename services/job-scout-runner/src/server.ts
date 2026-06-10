@@ -40,6 +40,7 @@ function sendJson(response: http.ServerResponse, statusCode: number, body: unkno
 
 function logRunEvent(input: {
   source: JobSource;
+  method?: "GET" | "POST";
   hostname?: string;
   resolvedAddresses?: string[];
   byteSize?: number;
@@ -52,8 +53,9 @@ function logRunEvent(input: {
     input.resolvedAddresses && input.resolvedAddresses.length > 0
       ? input.resolvedAddresses.join(",")
       : "n/a";
+  const method = input.method ?? input.source.requestConfig?.method ?? "GET";
   console.log(
-    `[job-scout-runner] source=${input.source.id} name="${input.source.name}" host=${hostname} resolved=${resolved} bytes=${input.byteSize ?? 0} candidates=${input.candidateCount} skipped=${input.skippedDuplicates} errors=${input.errors.length}`
+    `[job-scout-runner] source=${input.source.id} name="${input.source.name}" host=${hostname} method=${method} resolved=${resolved} bytes=${input.byteSize ?? 0} candidates=${input.candidateCount} skipped=${input.skippedDuplicates} errors=${input.errors.length}`
   );
   if (input.errors.length > 0) {
     console.log(`[job-scout-runner] error=${input.errors[0]}`);
@@ -104,6 +106,7 @@ async function handleRunSource(
   }
 
   const fetched = await fetchSourceText(source.url, {
+    requestConfig: source.requestConfig,
     resolveHost: options.resolveHost,
     fetchImpl: options.fetchImpl
   });
@@ -124,6 +127,7 @@ async function handleRunSource(
 
   logRunEvent({
     source,
+    method: fetched.method,
     hostname: fetched.hostname,
     resolvedAddresses: fetched.resolvedAddresses,
     byteSize: fetched.byteSize,

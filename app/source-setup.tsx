@@ -26,7 +26,8 @@ import {
 } from "../src/core/jobScoutRunnerClient";
 import { buildTemporaryJobSource, isValidSourceUrl, type JobSourceRunOutput } from "../src/core/jobSourceRunner";
 import { WORKDAY_ZERO_LISTINGS_MESSAGE } from "../src/core/jobSourceAdapters";
-import type { JobSourceCadence, JobSourceKind } from "../src/core/types";
+import { parseJsonBodyText, validateJobSourceRequestConfig } from "../src/core/jobSourceRequestConfig";
+import type { JobSourceCadence, JobSourceKind, JobSourceRequestMethod } from "../src/core/types";
 import { SOURCE_CANDIDATE_EXAMPLES, type SourceCandidateExample } from "../src/data/sourceCandidates";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
@@ -42,6 +43,15 @@ const KIND_OPTIONS: JobSourceKind[] = [
 ];
 
 const CADENCE_OPTIONS: JobSourceCadence[] = ["manual", "daily", "weekly"];
+
+const WORKDAY_CXS_BODY_TEMPLATE = `{
+  "appliedFacets": {},
+  "limit": 20,
+  "offset": 0,
+  "searchText": ""
+}`;
+
+const REQUEST_METHOD_OPTIONS: JobSourceRequestMethod[] = ["GET", "POST"];
 
 const CONFIDENCE_LABELS = {
   high: "High confidence",
@@ -71,10 +81,16 @@ export default function SourceSetupScreen() {
   const [importPreview, setImportPreview] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [endpointMode, setEndpointMode] = useState(false);
+  const [endpointUrl, setEndpointUrl] = useState("");
+  const [requestMethod, setRequestMethod] = useState<JobSourceRequestMethod>("POST");
+  const [bodyJsonText, setBodyJsonText] = useState(WORKDAY_CXS_BODY_TEMPLATE);
+
+  const activeUrl = endpointMode ? endpointUrl : form.url;
 
   const canTest =
     form.name.trim().length > 0 &&
-    isValidSourceUrl(form.url) &&
+    isValidSourceUrl(activeUrl) &&
     (detection?.isRunnable === true || form.kind === "governmentjobs" || form.kind === "workday");
 
   const previewSucceeded =
@@ -88,8 +104,61 @@ export default function SourceSetupScreen() {
     previewOutput.result.message === WORKDAY_ZERO_LISTINGS_MESSAGE;
 
   const showWorkdayHelp = form.kind === "workday" || detection?.detectedKind === "workday";
+  const cadenceLocked = endpointMode && showWorkdayHelp;
+
+  function resetEndpointMode() {
+    setEndpointMode(false);
+    setEndpointUrl("");
+    setRequestMethod("POST");
+    setBodyJsonText(WORKDAY_CXS_BODY_TEMPLATE);
+    setForm((current) => ({ ...current, requestConfig: undefined }));
+  }
+
+  function enableEndpointMode(seedUrl?: string) {
+    setEndpointMode(true);
+    setEndpointUrl(seedUrl ?? form.url);
+    setRequestMethod("POST");
+    setBodyJsonText(WORKDAY_CXS_BODY_TEMPLATE);
+    setForm((current) => ({ ...current, cadence: "manual", requestConfig: undefined }));
+  }
+
+  function buildSourcePayload():
+    | { ok: true; input: JobSourceInput; tempSource: ReturnType<typeof buildTemporaryJobSource> }
+    | { ok: false; message: string } {
+    let requestConfig = form.requestConfig;
+    if (endpointMode && showWorkdayHelp) {
+      const parsedBody = parseJsonBodyText(bodyJsonText);
+      if (!parsedBody.ok) {
+        return { ok: false, message: parsedBody.error };
+      }
+      requestConfig = {
+        method: requestMethod,
+        bodyJson: parsedBody.value
+      };
+      const configValidation = validateJobSourceRequestConfig(requestConfig);
+      if (!configValidation.ok) {
+        return { ok: false, message: configValidation.error };
+      }
+    }
+
+    const input: JobSourceInput = {
+      ...form,
+      name: form.name.trim(),
+      url: (endpointMode ? endpointUrl : form.url).trim(),
+      cadence: endpointMode ? "manual" : form.cadence,
+      maxResults: form.maxResults ?? 25,
+      requestConfig: endpointMode ? requestConfig : undefined
+    };
+
+    return {
+      ok: true,
+      input,
+      tempSource: buildTemporaryJobSource(input)
+    };
+  }
 
   function applyDetection(result: SourceDetectionResult) {
+    resetEndpointMode();
     setDetection(result);
     const suggested = buildSuggestedSourceFromDetection(result);
     setForm((current) => ({
@@ -120,11 +189,16 @@ export default function SourceSetupScreen() {
   function handleUseExample(example: SourceCandidateExample) {
     setPasteUrl(example.url);
     applyDetection(detectJobSourceFromUrl(example.url));
+    const isEndpointFixture = example.url.includes("sample-workday-cxs-response");
+    if (isEndpointFixture) {
+      enableEndpointMode(example.url);
+    }
     setForm((current) => ({
       ...current,
       name: example.name,
       url: example.url,
       kind: example.kind,
+      cadence: isEndpointFixture ? "manual" : current.cadence,
       adapterNotes: example.notes
     }));
     setNotice(null);
@@ -141,14 +215,19 @@ export default function SourceSetupScreen() {
       return;
     }
 
+    const payload = buildSourcePayload();
+    if (!payload.ok) {
+      setNotice({ kind: "warning", message: payload.message });
+      return;
+    }
+
     setIsTesting(true);
     setPreviewOutput(null);
     setImportPreview(false);
 
     try {
-      const tempSource = buildTemporaryJobSource(form);
       const output = await runSourceViaRunner({
-        source: tempSource,
+        source: payload.tempSource,
         existingCandidates: jobCandidates,
         resumeModules
       });
@@ -167,8 +246,14 @@ export default function SourceSetupScreen() {
   }
 
   function handleSaveSource() {
-    if (!form.name.trim() || !form.url.trim()) {
+    if (!form.name.trim() || !(endpointMode ? endpointUrl.trim() : form.url.trim())) {
       setNotice({ kind: "warning", message: "Name and URL are required." });
+      return;
+    }
+
+    const payload = buildSourcePayload();
+    if (!payload.ok) {
+      setNotice({ kind: "warning", message: payload.message });
       return;
     }
 
@@ -180,16 +265,7 @@ export default function SourceSetupScreen() {
       return;
     }
 
-    const result = saveJobSourceFromSetup(
-      {
-        ...form,
-        name: form.name.trim(),
-        url: form.url.trim(),
-        maxResults: form.maxResults ?? 25
-      },
-      previewOutput ?? undefined,
-      importPreview
-    );
+    const result = saveJobSourceFromSetup(payload.input, previewOutput ?? undefined, importPreview);
 
     setNotice({
       kind: result.ok ? "success" : "warning",
@@ -200,10 +276,13 @@ export default function SourceSetupScreen() {
       setPasteUrl("");
       setDetection(null);
       setForm(emptyForm());
+      resetEndpointMode();
       setPreviewOutput(null);
       setImportPreview(false);
     }
   }
+
+  const previewEndpointBacked = endpointMode || Boolean(form.requestConfig);
 
   const sampleCandidates = previewOutput?.candidates.slice(0, 5) ?? [];
 
@@ -301,23 +380,119 @@ export default function SourceSetupScreen() {
             />
           </View>
           <Text style={[styles.label, { marginTop: 12 }]}>Cadence</Text>
-          <View style={styles.cardActions}>
-            {CADENCE_OPTIONS.map((cadence) => (
-              <Pressable
-                key={cadence}
-                style={form.cadence === cadence ? styles.primaryAction : styles.secondaryAction}
-                onPress={() => setForm((current) => ({ ...current, cadence }))}
-              >
-                <Text
-                  style={
-                    form.cadence === cadence ? styles.primaryActionText : styles.secondaryActionText
-                  }
+          {cadenceLocked ? (
+            <Text style={styles.helpText}>
+              Manual — endpoint-backed. Endpoint-backed Workday sources default to Manual. Only change
+              cadence after a successful candidate-producing run.
+            </Text>
+          ) : (
+            <View style={styles.cardActions}>
+              {CADENCE_OPTIONS.map((cadence) => (
+                <Pressable
+                  key={cadence}
+                  style={form.cadence === cadence ? styles.primaryAction : styles.secondaryAction}
+                  onPress={() => setForm((current) => ({ ...current, cadence }))}
                 >
-                  {JOB_SOURCE_CADENCE_LABELS[cadence]}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+                  <Text
+                    style={
+                      form.cadence === cadence ? styles.primaryActionText : styles.secondaryActionText
+                    }
+                  >
+                    {JOB_SOURCE_CADENCE_LABELS[cadence]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {showWorkdayHelp ? (
+            <View style={{ marginTop: 16 }}>
+              <Text style={styles.titleText}>Workday Endpoint Needed</Text>
+              <Text style={styles.helpText}>
+                Workday page URLs often return an HTML shell. To make this source runnable, open
+                DevTools Network while loading or searching the Workday jobs page, find the JSON job
+                search request, and paste the endpoint URL and JSON body here. Do not paste cookies,
+                authorization headers, or private data.
+              </Text>
+              <View style={[styles.cardActions, { marginTop: 8 }]}>
+                <Pressable
+                  style={!endpointMode ? styles.primaryAction : styles.secondaryAction}
+                  onPress={() => {
+                    resetEndpointMode();
+                    setForm((current) => ({
+                      ...current,
+                      url: detection?.runnableUrl ?? current.url
+                    }));
+                  }}
+                >
+                  <Text
+                    style={
+                      !endpointMode ? styles.primaryActionText : styles.secondaryActionText
+                    }
+                  >
+                    Use detected page URL
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={endpointMode ? styles.primaryAction : styles.secondaryAction}
+                  onPress={() => enableEndpointMode(detection?.runnableUrl ?? form.url)}
+                >
+                  <Text
+                    style={endpointMode ? styles.primaryActionText : styles.secondaryActionText}
+                  >
+                    Use endpoint mode
+                  </Text>
+                </Pressable>
+              </View>
+              {endpointMode ? (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.label}>Endpoint URL</Text>
+                  <TextInput
+                    style={styles.captureInput}
+                    value={endpointUrl}
+                    onChangeText={setEndpointUrl}
+                    placeholder="https://.../wday/cxs/.../jobs or /fixtures/..."
+                    placeholderTextColor={colors.inputPlaceholder}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Text style={[styles.label, { marginTop: 12 }]}>Request method</Text>
+                  <View style={styles.cardActions}>
+                    {REQUEST_METHOD_OPTIONS.map((method) => (
+                      <Pressable
+                        key={method}
+                        style={requestMethod === method ? styles.primaryAction : styles.secondaryAction}
+                        onPress={() => setRequestMethod(method)}
+                      >
+                        <Text
+                          style={
+                            requestMethod === method
+                              ? styles.primaryActionText
+                              : styles.secondaryActionText
+                          }
+                        >
+                          {method}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={[styles.label, { marginTop: 12 }]}>JSON request body</Text>
+                  <TextInput
+                    style={[styles.captureInput, { minHeight: 120 }]}
+                    value={bodyJsonText}
+                    onChangeText={setBodyJsonText}
+                    placeholder='{"appliedFacets":{},"limit":20,"offset":0,"searchText":""}'
+                    placeholderTextColor={colors.inputPlaceholder}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    multiline
+                  />
+                  <Text style={[styles.helpText, { marginTop: 8 }]}>
+                    Accept: application/json{"\n"}Content-Type: application/json
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           <Text style={[styles.label, { marginTop: 12 }]}>Max results</Text>
           <TextInput
             style={styles.captureInput}
@@ -398,6 +573,9 @@ export default function SourceSetupScreen() {
 
         {previewOutput ? (
           <Section title="Preview Results">
+            {previewEndpointBacked ? (
+              <Text style={styles.helpText}>Endpoint-backed · {requestMethod}</Text>
+            ) : null}
             <Text style={styles.bodyText}>
               Candidates: {previewOutput.candidates.length} · Skipped duplicates:{" "}
               {previewOutput.result.skippedDuplicates}

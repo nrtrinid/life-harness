@@ -269,6 +269,11 @@ export default function JobSourcesScreen() {
                 {JOB_SOURCE_KIND_LABELS[source.kind]} · {source.enabled ? "Enabled" : "Disabled"}{" "}
                 · {JOB_SOURCE_CADENCE_LABELS[source.cadence]} · max {source.maxResults ?? 25}
               </Text>
+              {source.requestConfig ? (
+                <Text style={styles.helpText}>
+                  Endpoint-backed · {source.requestConfig.method}
+                </Text>
+              ) : null}
               <Text style={styles.helpText}>Schedule: {SOURCE_DUE_BADGE_LABELS[dueBadge]}</Text>
               <Text style={styles.helpText}>
                 Run status: {JOB_SOURCE_RUN_STATUS_LABELS[source.runStatus ?? "idle"]}

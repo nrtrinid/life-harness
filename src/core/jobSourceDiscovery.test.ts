@@ -118,6 +118,13 @@ describe("detectJobSourceFromUrl", () => {
     expect(result.isRunnable).toBe(true);
   });
 
+  it("includes endpoint-backed mode note for workday detection", () => {
+    const result = detectJobSourceFromUrl(
+      "https://qualcomm.wd12.myworkdayjobs.com/en-US/External"
+    );
+    expect(result.notes.some((note) => note.includes("Endpoint-backed mode available"))).toBe(true);
+  });
+
   it("detects GovernmentJobs careers URL as runnable governmentjobs", () => {
     const result = detectJobSourceFromUrl("https://www.governmentjobs.com/careers/sdcounty");
     expect(result.detectedKind).toBe("governmentjobs");

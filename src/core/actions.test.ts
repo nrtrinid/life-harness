@@ -276,6 +276,21 @@ describe("job candidate actions", () => {
     expect(result.state.jobCandidates).toHaveLength(state.jobCandidates.length);
   });
 
+  it("persists requestConfig on applyAddJobSource", () => {
+    const state = createState();
+    const requestConfig = {
+      method: "POST" as const,
+      bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" }
+    };
+    const result = applyAddJobSource(state, {
+      name: "Qualcomm Endpoint",
+      url: "/fixtures/sample-workday-cxs-response.json",
+      kind: "workday",
+      requestConfig
+    });
+    expect(result.state.jobSources[0]?.requestConfig).toEqual(requestConfig);
+  });
+
   it("save without preview import does not add candidates", () => {
     const state = createState();
     const source = state.jobSources.find((item) => item.id === "source-fixture-greenhouse");

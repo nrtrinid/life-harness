@@ -53,6 +53,7 @@ export interface JobSourceInput {
   maxResults?: number;
   notes?: string;
   adapterNotes?: string;
+  requestConfig?: JobSource["requestConfig"];
 }
 
 export type JobSourcePatch = Partial<
@@ -66,6 +67,7 @@ export type JobSourcePatch = Partial<
     | "maxResults"
     | "notes"
     | "adapterNotes"
+    | "requestConfig"
     | "runStatus"
     | "lastRunAt"
     | "lastRunMessage"
@@ -660,6 +662,7 @@ export function applyAddJobSource(state: LifeHarnessData, input: JobSourceInput)
     maxResults: input.maxResults ?? 25,
     notes: input.notes?.trim() || undefined,
     adapterNotes: input.adapterNotes?.trim() || undefined,
+    requestConfig: input.requestConfig,
     runStatus: "idle"
   };
 
