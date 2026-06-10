@@ -1,3 +1,24 @@
+import {
+  clearSharedThreadMemory,
+  compactText,
+  createEmptySharedChatThreadState,
+  detectUserSteering,
+  MAX_DECISIONS,
+  MAX_DO_NOT_REPEAT,
+  MAX_OPEN_LOOPS,
+  MAX_PINNED_FACTS,
+  MAX_USER_STEERING,
+  pinThreadFact,
+  removeSharedThreadStateItem,
+  toWireChatHarnessThreadState,
+  updateSharedChatThreadStateAfterTurn,
+  type ChatTurn,
+  type SharedChatThreadState,
+  type SharedThreadStateListKey
+} from "./chatThreadState";
+
+export { compactText } from "./chatThreadState";
+
 export type RawLabRole = "user" | "assistant";
 
 export type RawLabTurn = {
@@ -18,15 +39,8 @@ export type RawLabPersonalityState = {
   updatedAt: string;
 };
 
-export type RawLabThreadState = {
-  recentDigest: string;
-  pinnedFacts: string[];
-  decisions: string[];
-  openLoops: string[];
-  tonePreferences: string[];
-  doNotRepeat: string[];
+export type RawLabThreadState = SharedChatThreadState & {
   personality: RawLabPersonalityState;
-  updatedAt: string;
 };
 
 export const RAW_LAB_MAX_RECENT_TURNS = 20;
@@ -72,13 +86,11 @@ export type RawLabWirePersonalityState = {
   updated_at: string | null;
 };
 
-export type RawLabWireThreadState = {
-  recent_digest: string;
-  pinned_facts: string[];
-  decisions: string[];
-  open_loops: string[];
+export type RawLabWireThreadState = Omit<
+  ReturnType<typeof toWireChatHarnessThreadState>,
+  "updated_at"
+> & {
   tone_preferences: string[];
-  do_not_repeat: string[];
   personality: RawLabWirePersonalityState;
   updated_at: string | null;
 };
@@ -217,26 +229,9 @@ export function createEmptyRawLabPersonalityState(
 
 export function createEmptyRawLabThreadState(now: string = new Date().toISOString()): RawLabThreadState {
   return {
-    recentDigest: "",
-    pinnedFacts: [],
-    decisions: [],
-    openLoops: [],
-    tonePreferences: [],
-    doNotRepeat: [],
-    personality: createEmptyRawLabPersonalityState(now),
-    updatedAt: now
+    ...createEmptySharedChatThreadState(now),
+    personality: createEmptyRawLabPersonalityState(now)
   };
-}
-
-export function compactText(text: string, maxChars: number): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxChars) {
-    return normalized;
-  }
-  if (maxChars <= 3) {
-    return normalized.slice(0, maxChars);
-  }
-  return `${normalized.slice(0, maxChars - 3).trimEnd()}...`;
 }
 
 function estimateWireTurnsChars(turns: RawLabWireTurn[]): number {
@@ -284,13 +279,10 @@ export function toWirePersonalityState(state: RawLabPersonalityState): RawLabWir
 }
 
 export function toWireThreadState(state: RawLabThreadState): RawLabWireThreadState {
+  const shared = toWireChatHarnessThreadState(state);
   return {
-    recent_digest: state.recentDigest,
-    pinned_facts: state.pinnedFacts,
-    decisions: state.decisions,
-    open_loops: state.openLoops,
-    tone_preferences: state.tonePreferences,
-    do_not_repeat: state.doNotRepeat,
+    ...shared,
+    tone_preferences: state.userSteering,
     personality: toWirePersonalityState(state.personality),
     updated_at: state.updatedAt || null
   };
@@ -670,44 +662,21 @@ export function updateRawLabThreadStateAfterTurn(args: {
   now?: string;
 }): RawLabThreadState {
   const now = args.now ?? new Date().toISOString();
-  let next: RawLabThreadState = {
-    ...args.previous,
-    recentDigest: buildRecentDigest(args.turns),
-    updatedAt: now
-  };
+  const chatTurns: ChatTurn[] = args.turns.map((turn) => ({
+    role: turn.role,
+    content: turn.content
+  }));
 
-  for (const loop of detectOpenLoops(args.userMessage)) {
-    next = {
-      ...next,
-      openLoops: appendCappedUnique(next.openLoops, loop, RAW_LAB_MAX_OPEN_LOOPS)
-    };
-  }
+  const sharedNext = updateSharedChatThreadStateAfterTurn({
+    previous: args.previous,
+    userMessage: args.userMessage,
+    assistantAnswer: args.assistantAnswer,
+    turns: chatTurns,
+    now
+  });
 
-  for (const tone of detectTonePreferences(args.userMessage)) {
-    next = {
-      ...next,
-      tonePreferences: appendCappedUnique(
-        next.tonePreferences,
-        tone,
-        RAW_LAB_MAX_TONE_PREFERENCES
-      )
-    };
-  }
-
-  const doNotRepeatSnippet = deriveDoNotRepeatSnippet(args.assistantAnswer);
-  if (doNotRepeatSnippet) {
-    next = {
-      ...next,
-      doNotRepeat: appendCappedUnique(
-        next.doNotRepeat,
-        doNotRepeatSnippet,
-        RAW_LAB_MAX_DO_NOT_REPEAT
-      )
-    };
-  }
-
-  next = {
-    ...next,
+  return {
+    ...sharedNext,
     personality: updateRawLabPersonalityAfterTurn({
       previous: args.previous.personality,
       userMessage: args.userMessage,
@@ -716,16 +685,10 @@ export function updateRawLabThreadStateAfterTurn(args: {
       now
     })
   };
-
-  return next;
 }
 
 export function pinFact(state: RawLabThreadState, text: string): RawLabThreadState {
-  return {
-    ...state,
-    pinnedFacts: appendCappedUnique(state.pinnedFacts, text, RAW_LAB_MAX_PINNED_FACTS),
-    updatedAt: new Date().toISOString()
-  };
+  return { ...pinThreadFact(state, text), personality: state.personality };
 }
 
 export function addDoNotRepeat(state: RawLabThreadState, text: string): RawLabThreadState {
@@ -752,27 +715,14 @@ export function addDecision(state: RawLabThreadState, text: string): RawLabThrea
   };
 }
 
-export type RawLabThreadStateListKey =
-  | "pinnedFacts"
-  | "decisions"
-  | "openLoops"
-  | "tonePreferences"
-  | "doNotRepeat";
+export type RawLabThreadStateListKey = SharedThreadStateListKey;
 
 export function removeThreadStateItem(
   state: RawLabThreadState,
   key: RawLabThreadStateListKey,
   index: number
 ): RawLabThreadState {
-  const list = state[key];
-  if (index < 0 || index >= list.length) {
-    return state;
-  }
-  return {
-    ...state,
-    [key]: list.filter((_, itemIndex) => itemIndex !== index),
-    updatedAt: new Date().toISOString()
-  };
+  return { ...removeSharedThreadStateItem(state, key, index), personality: state.personality };
 }
 
 export function clearThreadMemoryOnly(
@@ -780,14 +730,8 @@ export function clearThreadMemoryOnly(
   now: string = new Date().toISOString()
 ): RawLabThreadState {
   return {
-    ...state,
-    recentDigest: "",
-    pinnedFacts: [],
-    decisions: [],
-    openLoops: [],
-    tonePreferences: [],
-    doNotRepeat: [],
-    updatedAt: now
+    ...clearSharedThreadMemory(state, now),
+    personality: state.personality
   };
 }
 

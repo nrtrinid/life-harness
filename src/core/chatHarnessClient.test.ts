@@ -74,6 +74,48 @@ describe("askChatHarness", () => {
     vi.unstubAllGlobals();
   });
 
+  it("posts thread_state when provided and omits personality", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          answer: "Try one tiny move.",
+          used_context: true,
+          confidence_notes: [],
+          safety_notes: []
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await askChatHarness({
+      baseUrl: DEFAULT_CHAT_HARNESS_URL,
+      message: "Continue",
+      mode: "general",
+      sensitivity: "S1",
+      context,
+      threadState: {
+        recent_digest: "",
+        active_goal: "Ship thread state",
+        current_topic: "continuity",
+        task_mode: "plan",
+        open_loops: [],
+        decisions: [],
+        pinned_facts: [],
+        user_steering: [],
+        do_not_repeat: [],
+        references: { last_options: [] },
+        updated_at: "2026-01-01T00:00:00.000Z"
+      }
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as Record<string, unknown>;
+    expect(body.thread_state).toBeDefined();
+    expect(JSON.stringify(body)).not.toContain("personality");
+
+    vi.unstubAllGlobals();
+  });
+
   it("maps browser fetch failures to a CORS-aware error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 

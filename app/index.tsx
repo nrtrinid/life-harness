@@ -16,6 +16,7 @@ import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
 import { generateWhileYouWereAway, getBriefingHighlightItems } from "../src/core/briefing";
+import { computePrimaryAction } from "../src/core/primaryAction";
 import { getFollowUpsDue } from "../src/core/career";
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "../src/core/guards";
 import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
@@ -41,6 +42,7 @@ export default function TodayScreen() {
     jobSourceRuns
   );
   const highlights = getBriefingHighlightItems(briefing, cards, dailyState, logs, now, 5);
+  const primaryAction = computePrimaryAction(briefing, dailyState, cards, logs, now);
   const activeLimit = getActiveLimitStatus(cards);
   const followUpsDue = getFollowUpsDue(cards, now);
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
@@ -85,6 +87,36 @@ export default function TodayScreen() {
 
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <ActiveLimitBanner />
+
+      <Section title="What should I do now?">
+        <Text style={styles.titleText}>{primaryAction.title}</Text>
+        <Text style={[styles.bodyText, { marginTop: 8 }]}>{primaryAction.reason}</Text>
+        <Text style={[styles.label, { marginTop: 12 }]}>Smallest action</Text>
+        <Text style={styles.bodyText}>{primaryAction.smallestAction}</Text>
+        {primaryAction.kind === "pounce" && !primaryAction.targetRoute ? (
+          <Pressable
+            style={pounceLogged ? styles.secondaryAction : styles.primaryAction}
+            onPress={handlePounce}
+            disabled={pounceLogged}
+          >
+            <Text style={pounceLogged ? styles.secondaryActionText : styles.primaryActionText}>
+              {primaryAction.ctaLabel ?? "Start Pounce"}
+            </Text>
+          </Pressable>
+        ) : primaryAction.targetRoute ? (
+          <Link href={primaryAction.targetRoute} asChild>
+            <Pressable style={styles.primaryAction}>
+              <Text style={styles.primaryActionText}>{primaryAction.ctaLabel ?? "Go"}</Text>
+            </Pressable>
+          </Link>
+        ) : primaryAction.cardId ? (
+          <Link href={`/card/${primaryAction.cardId}`} asChild>
+            <Pressable style={styles.primaryAction}>
+              <Text style={styles.primaryActionText}>{primaryAction.ctaLabel ?? "Open Card"}</Text>
+            </Pressable>
+          </Link>
+        ) : null}
+      </Section>
 
       <Section title="While You Were Away">
         {highlights.length === 0 ? (

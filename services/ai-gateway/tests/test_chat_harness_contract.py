@@ -120,6 +120,39 @@ def test_openvino_chat_harness_returns_503_when_model_missing(client, chat_paylo
     assert "detail" in response.json()
 
 
+def test_chat_harness_accepts_conversation_history(client, chat_payload):
+    chat_payload["conversation_history"] = [
+        {"role": "user", "content": "Give me three options."},
+        {
+            "role": "assistant",
+            "content": "Option A: thread state\nOption B: multi-pass reasoning\nOption C: streaming",
+        },
+    ]
+    response = client.post("/chat-harness", json=chat_payload)
+    assert response.status_code == 200
+    ChatHarnessResponse.model_validate(response.json())
+
+
+def test_chat_harness_mock_second_option_uses_history(client, harness_context):
+    payload = {
+        "message": "do the second one",
+        "mode": "general",
+        "sensitivity": "S1",
+        "context": harness_context.model_dump(mode="json"),
+        "conversation_history": [
+            {"role": "user", "content": "What should we build?"},
+            {
+                "role": "assistant",
+                "content": "Option A: thread state\nOption B: multi-pass reasoning\nOption C: streaming",
+            },
+        ],
+    }
+    response = client.post("/chat-harness", json=payload)
+    assert response.status_code == 200
+    answer_lower = response.json()["answer"].lower()
+    assert "option b" in answer_lower or "multi-pass" in answer_lower
+
+
 def test_openvino_chat_harness_parse_failure_returns_fallback_not_502(
     client, chat_payload, harness_context
 ):

@@ -328,9 +328,11 @@ export function getBriefingHighlightItems(
 }
 
 export function startSession(dailyState: DailyState, nowIso: string): DailyState {
+  const previousOpen = dailyState.lastOpenedAt ?? dailyState.briefingSinceAt;
   return {
     ...dailyState,
-    briefingSinceAt: dailyState.briefingSinceAt ?? dailyState.lastOpenedAt ?? nowIso,
-    sessionStartedAt: dailyState.sessionStartedAt ?? nowIso
+    briefingSinceAt: previousOpen ?? nowIso,
+    lastOpenedAt: nowIso,
+    sessionStartedAt: nowIso
   };
 }

@@ -56,4 +56,11 @@ describe("raw-lab screen containment", () => {
     expect(memoryPanelSource).toContain("Personality forming in this chat");
     expect(memoryPanelSource).toContain("Temporary. Not saved to Life Harness.");
   });
+
+  it("handoff banner does not mention personality export or Memory Bank auto-save", () => {
+    expect(screenSource).toContain("Stay in Raw Lab");
+    expect(screenSource).toContain("Use board context");
+    expect(screenSource).not.toMatch(/export personality/i);
+    expect(screenSource).not.toMatch(/auto.?save.*memory bank/i);
+  });
 });

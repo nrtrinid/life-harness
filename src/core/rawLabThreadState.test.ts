@@ -47,16 +47,14 @@ const emptyPersonality = {
 describe("rawLabThreadState", () => {
   it("creates empty state shape with blank personality", () => {
     const state = createEmptyRawLabThreadState("2026-01-01T00:00:00Z");
-    expect(state).toEqual({
-      recentDigest: "",
-      pinnedFacts: [],
-      decisions: [],
-      openLoops: [],
-      tonePreferences: [],
-      doNotRepeat: [],
-      personality: emptyPersonality,
-      updatedAt: "2026-01-01T00:00:00Z"
-    });
+    expect(state.recentDigest).toBe("");
+    expect(state.pinnedFacts).toEqual([]);
+    expect(state.openLoops).toEqual([]);
+    expect(state.userSteering).toEqual([]);
+    expect(state.taskMode).toBe("casual");
+    expect(state.references.lastOptions).toEqual([]);
+    expect(state.personality).toEqual(emptyPersonality);
+    expect(state.updatedAt).toBe("2026-01-01T00:00:00Z");
   });
 
   it("compacts text with ellipsis", () => {
@@ -108,8 +106,8 @@ describe("rawLabThreadState", () => {
       assistantAnswer: "Short answer.",
       turns
     });
-    expect(next.tonePreferences).toContain("be blunt");
-    expect(next.tonePreferences).toContain("make it shorter");
+    expect(next.userSteering).toContain("be blunt");
+    expect(next.userSteering).toContain("make it shorter");
     expect(next.personality.voiceTraits).toContain("blunt");
   });
 

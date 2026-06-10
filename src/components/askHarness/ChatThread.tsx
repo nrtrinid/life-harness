@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
 import { styles } from "../styles";
@@ -8,6 +8,10 @@ import {
   buildMemoryCandidatesFromChatSummary,
   memoryItemDedupeKey
 } from "../../core/harnessMemoryBank";
+import {
+  RESPONSE_VARIANTS,
+  RESPONSE_VARIANTS_PRIMARY_COUNT
+} from "../../core/chatThreadState";
 import type { HarnessChatSummary, HarnessMemoryItem } from "../../core/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import type { QuickQuestion } from "./ChatComposer";
@@ -24,6 +28,7 @@ interface ChatThreadProps {
   onToggleMemoryPreview: (turnId: string) => void;
   onSaveChatSummary: (turnId: string, summary: HarnessChatSummary) => void;
   onSaveMemoryBankCandidate: (turnId: string, candidate: HarnessMemoryItem) => void;
+  onVariantPrompt?: (prompt: string) => void;
 }
 
 function MetaPill({ label, accent = false }: { label: string; accent?: boolean }) {
@@ -63,7 +68,8 @@ function AssistantTurn({
   onToggleMemoryTools,
   onToggleMemoryPreview,
   onSaveChatSummary,
-  onSaveMemoryBankCandidate
+  onSaveMemoryBankCandidate,
+  onVariantPrompt
 }: {
   turn: Extract<ChatThreadItem, { kind: "assistant" }>;
   memoryItems: HarnessMemoryItem[];
@@ -72,8 +78,15 @@ function AssistantTurn({
   onToggleMemoryPreview: (turnId: string) => void;
   onSaveChatSummary: (turnId: string, summary: HarnessChatSummary) => void;
   onSaveMemoryBankCandidate: (turnId: string, candidate: HarnessMemoryItem) => void;
+  onVariantPrompt?: (prompt: string) => void;
 }) {
   const [showSafety, setShowSafety] = useState(false);
+  const [showVariantOverflow, setShowVariantOverflow] = useState(false);
+  const { width } = useWindowDimensions();
+  const narrowVariants = width < 520;
+  const visibleVariants = narrowVariants && !showVariantOverflow
+    ? RESPONSE_VARIANTS.slice(0, RESPONSE_VARIANTS_PRIMARY_COUNT)
+    : RESPONSE_VARIANTS;
   const memoryPreview = buildChatSummary({
     userMessage: turn.userText,
     assistantAnswer: turn.response.answer,
@@ -125,6 +138,29 @@ function AssistantTurn({
                 </Text>
               ))
             : null}
+        </View>
+      ) : null}
+      {onVariantPrompt ? (
+        <View style={styles.splitRow}>
+          {visibleVariants.map((variant) => (
+            <Pressable
+              key={variant.label}
+              style={styles.chatBubbleToggle}
+              onPress={() => onVariantPrompt(variant.prompt)}
+            >
+              <Text style={styles.chatBubbleToggleText}>{variant.label}</Text>
+            </Pressable>
+          ))}
+          {narrowVariants ? (
+            <Pressable
+              style={styles.chatBubbleToggle}
+              onPress={() => setShowVariantOverflow((open) => !open)}
+            >
+              <Text style={styles.chatBubbleToggleText}>
+                {showVariantOverflow ? "Fewer" : "More"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       <View style={styles.chatMemoryTools}>
@@ -194,7 +230,8 @@ export function ChatThread({
   onToggleMemoryTools,
   onToggleMemoryPreview,
   onSaveChatSummary,
-  onSaveMemoryBankCandidate
+  onSaveMemoryBankCandidate,
+  onVariantPrompt
 }: ChatThreadProps) {
   useEffect(() => {
     if (thread.length === 0) {
@@ -255,6 +292,7 @@ export function ChatThread({
             onToggleMemoryPreview={onToggleMemoryPreview}
             onSaveChatSummary={onSaveChatSummary}
             onSaveMemoryBankCandidate={onSaveMemoryBankCandidate}
+            onVariantPrompt={onVariantPrompt}
           />
         );
       })}

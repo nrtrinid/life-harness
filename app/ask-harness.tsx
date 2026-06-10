@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   Platform,
   Pressable,
@@ -11,6 +12,7 @@ import {
 
 import { AskHarnessAdvancedPanel } from "../src/components/askHarness/AskHarnessAdvancedPanel";
 import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/ChatComposer";
+import { ChatThreadContextPanel } from "../src/components/askHarness/ChatThreadContextPanel";
 import { ChatThread } from "../src/components/askHarness/ChatThread";
 import { HarnessReadCard } from "../src/components/askHarness/HarnessReadCard";
 import type { ChatThreadItem, ContextExportMode } from "../src/components/askHarness/types";
@@ -23,8 +25,21 @@ import { styles } from "../src/components/styles";
 import {
   askChatHarness,
   ChatHarnessError,
-  DEFAULT_CHAT_HARNESS_URL
+  DEFAULT_CHAT_HARNESS_URL,
+  type ReasoningDepth
 } from "../src/core/chatHarnessClient";
+import { buildConversationHistoryFromThread } from "../src/core/askHarnessThreadAdapter";
+import {
+  applyLikelyReferenceForSend,
+  applyVariantPromptToThreadState,
+  CHAT_HARNESS_MAX_HISTORY_CHARS,
+  createEmptySharedChatThreadState,
+  packConversationHistoryForGateway,
+  toWireChatHarnessThreadState,
+  updateSharedChatThreadStateAfterTurn,
+  type ChatTurn,
+  type SharedChatThreadState
+} from "../src/core/chatThreadState";
 import {
   buildCompactHarnessContext,
   buildContextQualitySummary,
@@ -33,7 +48,7 @@ import {
   estimateChatHarnessPromptChars,
   estimateHarnessContextChars,
   getActiveLimitSignal,
-  resolveChatHarnessContextForGateway,
+  resolveChatHarnessSendBundle,
   shouldAutoSelectCompactExport,
   type ChatHarnessMode,
   type HarnessExportInput
@@ -105,6 +120,7 @@ function formatSendError(error: unknown): { text: string; status?: number } {
 }
 
 export default function AskHarnessDevScreen() {
+  const { digest: digestParam } = useLocalSearchParams<{ digest?: string }>();
   const harnessState = useLifeHarness();
   const {
     saveChatSummary,
@@ -122,8 +138,12 @@ export default function AskHarnessDevScreen() {
   const [baseUrl, setBaseUrl] = useState(DEFAULT_CHAT_HARNESS_URL);
   const [mode, setMode] = useState<ChatHarnessMode>("general");
   const [sensitivity, setSensitivity] = useState<SensitivityLevel>("S1");
+  const [reasoningDepth, setReasoningDepth] = useState<ReasoningDepth>("fast");
   const [message, setMessage] = useState("");
   const [thread, setThread] = useState<ChatThreadItem[]>([]);
+  const [threadState, setThreadState] = useState<SharedChatThreadState>(() =>
+    createEmptySharedChatThreadState()
+  );
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -141,6 +161,16 @@ export default function AskHarnessDevScreen() {
   useEffect(() => {
     setAdvancedOpen(isWideLayout);
   }, [isWideLayout]);
+
+  useEffect(() => {
+    const digest = typeof digestParam === "string" ? digestParam.trim() : "";
+    if (!digest) {
+      return;
+    }
+    setMessage(digest);
+    setThread([]);
+    setThreadState(createEmptySharedChatThreadState());
+  }, [digestParam]);
 
   const exportInput = useMemo(() => buildExportInput(harnessState), [harnessState]);
   const fullContext = useMemo(() => buildHarnessContext(exportInput), [exportInput]);
@@ -220,8 +250,28 @@ export default function AskHarnessDevScreen() {
     );
   }
 
-  async function handleSend() {
-    const trimmed = message.trim();
+  function handleClearConversation() {
+    setThread([]);
+    setThreadState(createEmptySharedChatThreadState());
+    setMessage("");
+    setNotice(null);
+  }
+
+  function buildCompletedChatTurns(
+    priorThread: ChatThreadItem[],
+    userText: string,
+    assistantAnswer: string
+  ): ChatTurn[] {
+    const base = buildConversationHistoryFromThread(priorThread);
+    return [
+      ...base,
+      { role: "user", content: userText },
+      { role: "assistant", content: assistantAnswer }
+    ];
+  }
+
+  async function handleSend(messageOverride?: string) {
+    const trimmed = (messageOverride ?? message).trim();
     if (!trimmed || loading) {
       return;
     }
@@ -229,17 +279,35 @@ export default function AskHarnessDevScreen() {
     setNotice(null);
     setLoading(true);
 
+    const priorThread = thread;
+    const threadStateForSend = applyLikelyReferenceForSend(threadState, trimmed);
+    const conversationHistory = packConversationHistoryForGateway({
+      turns: buildConversationHistoryFromThread(priorThread),
+      state: threadStateForSend,
+      latestMessage: trimmed,
+      maxChars: CHAT_HARNESS_MAX_HISTORY_CHARS
+    });
+    const wireThreadState = toWireChatHarnessThreadState(threadStateForSend);
+    const threadStateJsonChars = JSON.stringify(wireThreadState, null, 2).length;
+
     setThread((previous) => [
       ...previous,
       { id: createId("chat-user"), kind: "user", text: trimmed, mode }
     ]);
 
     try {
-      const contextForSend = resolveChatHarnessContextForGateway(exportInput, {
-        preferredMode: contextMode,
-        message: trimmed
+      const { context: contextForSend, conversationHistory: historyForSend } =
+        resolveChatHarnessSendBundle(exportInput, {
+          preferredMode: contextMode,
+          message: trimmed,
+          conversationHistory,
+          threadStateJsonChars
+        });
+      const sendPromptChars = estimateChatHarnessPromptChars(contextForSend, {
+        message: trimmed,
+        conversationHistory: historyForSend,
+        threadStateJsonChars
       });
-      const sendPromptChars = estimateChatHarnessPromptChars(contextForSend, { message: trimmed });
       if (sendPromptChars > DEFAULT_GATEWAY_MAX_INPUT_CHARS) {
         throw new ChatHarnessError(
           `Serialized prompt would be ~${sendPromptChars} chars; gateway limit is ${DEFAULT_GATEWAY_MAX_INPUT_CHARS}. Try Compact context, a shorter message, or raise SCOUT_MAX_INPUT_CHARS on ai-gateway.`
@@ -251,8 +319,21 @@ export default function AskHarnessDevScreen() {
         message: trimmed,
         mode,
         sensitivity,
-        context: contextForSend
+        context: contextForSend,
+        conversationHistory: historyForSend,
+        threadState: wireThreadState,
+        reasoningDepth
       });
+
+      const completedTurns = buildCompletedChatTurns(priorThread, trimmed, result.answer);
+      setThreadState((previous) =>
+        updateSharedChatThreadStateAfterTurn({
+          previous,
+          userMessage: trimmed,
+          assistantAnswer: result.answer,
+          turns: completedTurns
+        })
+      );
 
       setThread((previous) => [
         ...previous,
@@ -326,6 +407,11 @@ export default function AskHarnessDevScreen() {
     setNotice({ kind: "success", message: "Saved to Memory Bank." });
   }
 
+  async function handleVariantPrompt(prompt: string) {
+    setThreadState((previous) => applyVariantPromptToThreadState(previous, prompt));
+    await handleSend(prompt);
+  }
+
   const inspectorPanel = (
     <AskHarnessAdvancedPanel
       baseUrl={baseUrl}
@@ -334,6 +420,8 @@ export default function AskHarnessDevScreen() {
       onModeChange={setMode}
       sensitivity={sensitivity}
       onSensitivityChange={setSensitivity}
+      reasoningDepth={reasoningDepth}
+      onReasoningDepthChange={setReasoningDepth}
       contextMode={contextMode}
       onContextModeChange={setContextModeOverride}
       selectedJsonChars={selectedJsonChars}
@@ -378,6 +466,17 @@ export default function AskHarnessDevScreen() {
           />
 
           <View style={[styles.chatSurface, { height: chatSurfaceHeight }]}>
+            {thread.length > 0 ? (
+              <View style={styles.chatThreadToolbar}>
+                <Pressable style={styles.smallButton} onPress={handleClearConversation}>
+                  <Text style={styles.smallButtonText}>Clear conversation</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <ChatThreadContextPanel
+              threadState={threadState}
+              onThreadStateChange={setThreadState}
+            />
             <ChatThread
               thread={thread}
               threadScrollRef={threadScrollRef}
@@ -413,6 +512,7 @@ export default function AskHarnessDevScreen() {
             }
               onSaveChatSummary={handleSaveChatSummary}
               onSaveMemoryBankCandidate={handleSaveMemoryBankCandidate}
+              onVariantPrompt={(prompt) => void handleVariantPrompt(prompt)}
             />
 
             <ChatComposer

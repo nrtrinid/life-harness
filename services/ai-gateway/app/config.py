@@ -31,6 +31,9 @@ class Settings:
     raw_lab_temperature: float
     raw_lab_repetition_penalty: float
     dev_cors: bool
+    deep_enabled: bool
+    chat_harness_native_chat: bool
+    deep_max_extra_passes: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -53,6 +56,9 @@ class Settings:
                 os.getenv("SCOUT_RAW_LAB_REPETITION_PENALTY", "1.12")
             ),
             dev_cors=_env_flag("SCOUT_DEV_CORS", True),
+            deep_enabled=_env_flag("SCOUT_DEEP_ENABLED", True),
+            chat_harness_native_chat=_env_flag("SCOUT_CHAT_HARNESS_NATIVE_CHAT", False),
+            deep_max_extra_passes=int(os.getenv("SCOUT_DEEP_MAX_EXTRA_PASSES", "2")),
         )
 
 

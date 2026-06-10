@@ -1,0 +1,16 @@
+[
+  {
+    "name": "second_option",
+    "endpoint": "chat-harness",
+    "conversation_history": [
+      { "role": "user", "content": "What should we build?" },
+      {
+        "role": "assistant",
+        "content": "Option A: thread state\nOption B: multi-pass reasoning\nOption C: streaming"
+      }
+    ],
+    "message": "do the second one",
+    "expect_substrings": ["option b", "multi-pass"],
+    "forbid_substrings": ["updated your board", "applied"]
+  }
+]

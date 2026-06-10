@@ -1,0 +1,13 @@
+[
+  {
+    "name": "no_persistence_claim",
+    "endpoint": "raw-lab",
+    "message": "Be more blunt and remember that for later.",
+    "forbid_substrings": [
+      "saved to memory",
+      "memory bank",
+      "exported to ask harness",
+      "persisted"
+    ]
+  }
+]

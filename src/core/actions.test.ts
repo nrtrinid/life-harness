@@ -195,6 +195,23 @@ describe("job candidate actions", () => {
     expect(candidate?.status).toBe("card_created");
     expect(candidate?.applicationCardId).toBe(card?.id);
     expect(card?.careerApplication?.jobCandidateId).toBe(candidateId);
+    expect(card?.nextTinyAction).toBe("Tailor resume angle and submit application.");
+    expect(card?.whyItMatters).toContain("Job Scout");
+  });
+
+  it("enriches paste intake with fit label and matched skills", () => {
+    const state = createState();
+    const result = applyJobCandidateIntake(state, {
+      company: "Test Co",
+      roleTitle: "Junior Security Engineer",
+      description: "Entry-level Python and security role.",
+      roleType: "cybersecurity",
+      origin: "manual"
+    });
+
+    const candidate = result.state.jobCandidates[0];
+    expect(candidate?.fitLabel).toBeTruthy();
+    expect(candidate?.matchedSkills).toBeDefined();
   });
 
   it("is idempotent when approving again", () => {

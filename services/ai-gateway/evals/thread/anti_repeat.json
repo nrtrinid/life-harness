@@ -1,0 +1,15 @@
+[
+  {
+    "name": "reject_near_duplicate",
+    "endpoint": "chat-harness",
+    "conversation_history": [
+      {
+        "role": "assistant",
+        "content": "Same answer as before with no changes."
+      }
+    ],
+    "message": "say that again",
+    "expect_substrings": [],
+    "forbid_substrings": ["same answer as before with no changes"]
+  }
+]

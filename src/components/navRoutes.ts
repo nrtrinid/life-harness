@@ -17,7 +17,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/board", label: "Board" },
       { href: "/career", label: "Career" },
       { href: "/ask-harness", label: "Ask" },
-      { href: "/progress", label: "Progress" }
+      { href: "/progress", label: "Progress" },
+      { href: "/review", label: "Review" }
     ]
   },
   {

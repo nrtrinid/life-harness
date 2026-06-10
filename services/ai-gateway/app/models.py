@@ -209,12 +209,65 @@ class AskHarnessResponse(StrictModel):
     safety_notes: list[str]
 
 
+class ThreadTaskMode(str, Enum):
+    casual = "casual"
+    ask_factual = "ask_factual"
+    teach = "teach"
+    write_code = "write_code"
+    debug = "debug"
+    brainstorm = "brainstorm"
+    plan = "plan"
+    reflect = "reflect"
+    roleplay = "roleplay"
+    style_steering = "style_steering"
+    grounded_operator = "grounded_operator"
+    builder = "builder"
+
+
+class ChatHarnessCodeBlock(StrictModel):
+    language: str = ""
+    code: str = ""
+    purpose: str = ""
+
+
+class ChatHarnessThreadReferenceState(StrictModel):
+    last_options: list[str] = Field(default_factory=list)
+    last_code_block: ChatHarnessCodeBlock | None = None
+    last_plan: str = ""
+    last_named_thing: str = ""
+    likely_reference: str = ""
+
+
+class ChatHarnessThreadState(StrictModel):
+    recent_digest: str = ""
+    active_goal: str = ""
+    current_topic: str = ""
+    task_mode: ThreadTaskMode = ThreadTaskMode.casual
+    open_loops: list[str] = Field(default_factory=list)
+    decisions: list[str] = Field(default_factory=list)
+    pinned_facts: list[str] = Field(default_factory=list)
+    user_steering: list[str] = Field(default_factory=list)
+    do_not_repeat: list[str] = Field(default_factory=list)
+    references: ChatHarnessThreadReferenceState = Field(
+        default_factory=ChatHarnessThreadReferenceState
+    )
+    updated_at: str | None = None
+
+
+class ReasoningDepth(str, Enum):
+    fast = "fast"
+    deliberate = "deliberate"
+    deep = "deep"
+
+
 class ChatHarnessRequest(StrictModel):
     message: str = Field(..., min_length=1)
     mode: AskHarnessMode = AskHarnessMode.general
     sensitivity: SensitivityLevel = SensitivityLevel.S1
     context: HarnessContext
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
+    thread_state: ChatHarnessThreadState = Field(default_factory=ChatHarnessThreadState)
+    reasoning_depth: ReasoningDepth = ReasoningDepth.fast
 
 
 class ChatHarnessResponse(StrictModel):
@@ -242,11 +295,18 @@ class RawLabPersonalityState(StrictModel):
 
 class RawLabThreadState(StrictModel):
     recent_digest: str = ""
+    active_goal: str = ""
+    current_topic: str = ""
+    task_mode: ThreadTaskMode = ThreadTaskMode.casual
     pinned_facts: list[str] = Field(default_factory=list)
     decisions: list[str] = Field(default_factory=list)
     open_loops: list[str] = Field(default_factory=list)
+    user_steering: list[str] = Field(default_factory=list)
     tone_preferences: list[str] = Field(default_factory=list)
     do_not_repeat: list[str] = Field(default_factory=list)
+    references: ChatHarnessThreadReferenceState = Field(
+        default_factory=ChatHarnessThreadReferenceState
+    )
     personality: RawLabPersonalityState = Field(default_factory=RawLabPersonalityState)
     updated_at: str | None = None
 

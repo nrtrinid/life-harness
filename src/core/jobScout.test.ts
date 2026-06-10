@@ -3,11 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   buildCareerIntakeFromCandidate,
   buildCandidateBriefingSignals,
+  buildFitFinderResult,
   buildJobScoutStats,
   checkJobScoutLocks,
   countManualCandidates,
   createJobCandidate,
   createResumeModule,
+  detectSeniorityMismatch,
+  formatFitFinderNotice,
+  getFitLabel,
+  getFitLabelDisplay,
   getFitTier,
   getFitTierLabel,
   getSuggestedResumeModules,
@@ -25,13 +30,43 @@ describe("seedResumeModules", () => {
   });
 });
 
-describe("getFitTier", () => {
-  it("maps score boundaries correctly", () => {
-    expect(getFitTier(75)).toBe("strong");
-    expect(getFitTier(74)).toBe("mixed");
-    expect(getFitTier(45)).toBe("mixed");
-    expect(getFitTier(44)).toBe("weak");
+describe("getFitLabel and getFitTier aliases", () => {
+  it("maps 4-tier label boundaries correctly", () => {
+    expect(getFitLabel(85)).toBe("strong");
+    expect(getFitLabel(70)).toBe("possible");
+    expect(getFitLabel(50)).toBe("stretch");
+    expect(getFitLabel(30)).toBe("bad_fit");
+    expect(getFitLabelDisplay("possible")).toBe("Possible fit");
+  });
+
+  it("maps legacy getFitTier from score", () => {
+    expect(getFitTier(80)).toBe("strong");
+    expect(getFitTier(70)).toBe("mixed");
+    expect(getFitTier(50)).toBe("mixed");
+    expect(getFitTier(30)).toBe("weak");
     expect(getFitTierLabel(80)).toBe("Strong fit");
+  });
+});
+
+describe("detectSeniorityMismatch", () => {
+  it("hard disqualifies senior title", () => {
+    const result = detectSeniorityMismatch("Senior Software Engineer", "Build features.");
+    expect(result.hardDisqualifier).toBe(true);
+  });
+
+  it("penalizes description-only senior language without hard disqualifier", () => {
+    const result = detectSeniorityMismatch(
+      "Software Engineer",
+      "Collaborate with senior engineers on platform work."
+    );
+    expect(result.hardDisqualifier).toBe(false);
+    expect(result.penalty).toBeGreaterThan(0);
+    expect(result.gap).toBeTruthy();
+  });
+
+  it("hard disqualifies explicit years requirement", () => {
+    const result = detectSeniorityMismatch("Engineer", "Requires 10+ years experience.");
+    expect(result.hardDisqualifier).toBe(true);
   });
 });
 
@@ -61,7 +96,7 @@ describe("scoreJobCandidate", () => {
     })
   ];
 
-  it("returns bounded deterministic score with reasons", () => {
+  it("returns bounded deterministic score with reasons and matched skills", () => {
     const scored = scoreJobCandidate(
       {
         roleTitle: "Security Engineer",
@@ -75,6 +110,63 @@ describe("scoreJobCandidate", () => {
     expect(scored.fitScore).toBeLessThanOrEqual(100);
     expect(scored.fitReasons.length).toBeGreaterThan(0);
     expect(scored.suggestedResumeModuleIds.length).toBeGreaterThan(0);
+    expect(scored.matchedSkills?.length).toBeGreaterThan(0);
+    expect(scored.fitLabel).toBeTruthy();
+  });
+
+  it("scores entry-level software/security role strongly", () => {
+    const scored = scoreJobCandidate(
+      {
+        roleTitle: "Junior Software Engineer",
+        description: "Entry-level role. Python, security, and application security required.",
+        roleType: "cybersecurity"
+      },
+      modules
+    );
+
+    expect(scored.fitLabel).toMatch(/strong|possible/);
+    expect(scored.fitReasons.some((r) => r.includes("entry-level"))).toBe(true);
+  });
+
+  it("marks senior title as bad_fit", () => {
+    const scored = scoreJobCandidate(
+      {
+        roleTitle: "Senior Staff Security Engineer",
+        description: "Python and security.",
+        roleType: "cybersecurity"
+      },
+      modules
+    );
+
+    expect(scored.fitLabel).toBe("bad_fit");
+    expect(scored.fitScore).toBeLessThanOrEqual(40);
+  });
+
+  it("does not auto bad_fit for description-only senior mention", () => {
+    const scored = scoreJobCandidate(
+      {
+        roleTitle: "Software Engineer",
+        description: "Work with senior engineers. Python and security required.",
+        roleType: "software"
+      },
+      modules
+    );
+
+    expect(scored.fitLabel).not.toBe("bad_fit");
+    expect(scored.gaps.some((g) => g.includes("senior"))).toBe(true);
+  });
+
+  it("adds missing location signal when location unclear", () => {
+    const scored = scoreJobCandidate(
+      {
+        roleTitle: "Engineer",
+        description: "Python role with no location details.",
+        roleType: "software"
+      },
+      modules
+    );
+
+    expect(scored.missingSignals?.some((s) => s.includes("Location"))).toBe(true);
   });
 
   it("suggests 2-4 modules for cybersecurity posting", () => {
@@ -89,9 +181,77 @@ describe("scoreJobCandidate", () => {
       seedResumeModules
     );
 
+    expect(candidate.fitLabel).toBeTruthy();
+    expect(candidate.matchedSkills?.length).toBeGreaterThan(0);
+
     const suggested = getSuggestedResumeModules(candidate, seedResumeModules);
     expect(suggested.length).toBeGreaterThanOrEqual(2);
     expect(suggested.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("formatFitFinderNotice and buildFitFinderResult", () => {
+  it("formats tier counts for created candidates", () => {
+    const candidates = [
+      createJobCandidate(
+        {
+          company: "A",
+          roleTitle: "Junior Engineer",
+          description: "Entry-level Python security role.",
+          roleType: "software",
+          origin: "source_fetch"
+        },
+        seedResumeModules
+      ),
+      createJobCandidate(
+        {
+          company: "B",
+          roleTitle: "Senior Engineer",
+          description: "10+ years required.",
+          roleType: "software",
+          origin: "source_fetch"
+        },
+        seedResumeModules
+      )
+    ];
+
+    const message = formatFitFinderNotice({ createdCandidates: candidates, skippedDuplicates: 2 });
+    expect(message).toContain("fit match");
+    expect(message).toContain("Skipped 2 duplicates");
+  });
+
+  it("returns structured fit finder result", () => {
+    const candidate = createJobCandidate(
+      {
+        company: "A",
+        roleTitle: "Engineer",
+        description: "Python",
+        roleType: "software",
+        origin: "source_fetch"
+      },
+      seedResumeModules
+    );
+
+    const result = buildFitFinderResult({
+      ok: true,
+      createdCandidates: [candidate],
+      skippedDuplicates: 0
+    });
+
+    expect(result.createdCandidateIds).toEqual([candidate.id]);
+    expect(result.message.length).toBeGreaterThan(0);
+  });
+
+  it("handles no sources message", () => {
+    const result = buildFitFinderResult({
+      ok: false,
+      createdCandidates: [],
+      skippedDuplicates: 0,
+      noSourcesMessage: "Add a source first, or paste a job post to score it."
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Add a source first");
   });
 });
 

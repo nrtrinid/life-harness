@@ -153,10 +153,12 @@ export default function CandidateIntakeScreen() {
 
         {displayedCandidate ? (
           <Section title="Fit Review">
-            <Text style={styles.titleText}>{formatFitScore(displayedCandidate.fitScore)}</Text>
+            <Text style={styles.titleText}>
+              {formatFitScore(displayedCandidate.fitScore, displayedCandidate.fitLabel)}
+            </Text>
             <Text style={styles.helpText}>{FIT_SCORE_DISCLAIMER}</Text>
             <Text style={[styles.label, { marginTop: 12 }]}>Fit Reasons</Text>
-            {displayedCandidate.fitReasons.map((reason) => (
+            {displayedCandidate.fitReasons.slice(0, 2).map((reason) => (
               <Text key={reason} style={styles.listItem}>
                 ▸ {reason}
               </Text>
@@ -165,14 +167,38 @@ export default function CandidateIntakeScreen() {
             {displayedCandidate.gaps.length === 0 ? (
               <Text style={styles.emptyText}>No major gaps flagged.</Text>
             ) : (
-              displayedCandidate.gaps.map((gap) => (
+              displayedCandidate.gaps.slice(0, 1).map((gap) => (
                 <Text key={gap} style={styles.listItem}>
                   ▸ {gap}
                 </Text>
               ))
             )}
+            {displayedCandidate.matchedSkills && displayedCandidate.matchedSkills.length > 0 ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Matched Skills</Text>
+                <Text style={styles.bodyText}>
+                  {displayedCandidate.matchedSkills.slice(0, 6).join(", ")}
+                </Text>
+              </>
+            ) : null}
+            {displayedCandidate.missingSignals && displayedCandidate.missingSignals.length > 0 ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Missing Signals</Text>
+                {displayedCandidate.missingSignals.slice(0, 2).map((signal) => (
+                  <Text key={signal} style={styles.listItem}>
+                    ▸ {signal}
+                  </Text>
+                ))}
+              </>
+            ) : null}
+            {displayedCandidate.recommendedResumeAngle ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Resume Angle</Text>
+                <Text style={styles.bodyText}>{displayedCandidate.recommendedResumeAngle}</Text>
+              </>
+            ) : null}
             <Text style={[styles.label, { marginTop: 12 }]}>Suggested Modules</Text>
-            {suggested.map((module) => (
+            {suggested.slice(0, 3).map((module) => (
               <Text key={module.id} style={styles.listItem}>
                 ▸ {module.title}
               </Text>

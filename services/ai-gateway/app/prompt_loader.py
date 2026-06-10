@@ -7,10 +7,12 @@ from app.models import (
     AskHarnessMode,
     AskHarnessRequest,
     ChatHarnessRequest,
+    ChatHarnessThreadState,
     RawLabRequest,
     RawLabThreadState,
     SensitivityLevel,
 )
+from app.thread_verifier import reasoning_depth_prompt_suffix
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "transcript_analysis.md"
 _ASK_PROMPT_PATH = Path(__file__).parent / "prompts" / "ask_harness.md"
@@ -65,7 +67,25 @@ def load_chat_harness_template() -> str:
     return _CHAT_PROMPT_PATH.read_text(encoding="utf-8")
 
 
+def _serialize_chat_harness_thread_state(
+    thread_state: ChatHarnessThreadState | None,
+) -> str:
+    state = thread_state or ChatHarnessThreadState()
+    return json.dumps(state.model_dump(mode="json"), indent=2, ensure_ascii=False)
+
+
 def build_chat_harness_prompt(*, request: ChatHarnessRequest) -> str:
+    return _render_chat_harness_template(request=request, message=request.message)
+
+
+def build_chat_harness_system_prompt(*, request: ChatHarnessRequest) -> str:
+    return _render_chat_harness_template(
+        request=request,
+        message="(see latest user message in chat)",
+    )
+
+
+def _render_chat_harness_template(*, request: ChatHarnessRequest, message: str) -> str:
     template = load_chat_harness_template()
     context_json = json.dumps(
         request.context.model_dump(mode="json"),
@@ -77,12 +97,17 @@ def build_chat_harness_prompt(*, request: ChatHarnessRequest) -> str:
         indent=2,
         ensure_ascii=False,
     )
+    thread_state_json = _serialize_chat_harness_thread_state(request.thread_state)
+    reasoning_suffix = reasoning_depth_prompt_suffix(request.reasoning_depth)
     return (
         template.replace("{mode}", request.mode.value)
         .replace("{sensitivity}", request.sensitivity.value)
-        .replace("{message}", request.message)
+        .replace("{message}", message)
         .replace("{context_json}", context_json)
         .replace("{conversation_history_json}", history_json)
+        .replace("{thread_state_json}", thread_state_json)
+        .replace("{reasoning_depth}", request.reasoning_depth.value)
+        .replace("{reasoning_depth_suffix}", reasoning_suffix)
     )
 
 

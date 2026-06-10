@@ -1,6 +1,6 @@
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Linking, Platform, Pressable, Text, View } from "react-native";
 
 import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
@@ -13,18 +13,36 @@ import {
   JOB_CANDIDATE_ORIGIN_LABELS,
   JOB_CANDIDATE_STATUS_LABELS
 } from "../src/core/labels";
-import { formatFitScore, getSuggestedResumeModules } from "../src/core/jobScout";
-import type { JobCandidateStatus } from "../src/core/types";
+import { formatFitScore } from "../src/core/jobScout";
+import type { JobCandidate, JobCandidateStatus } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 const STATUS_ORDER: JobCandidateStatus[] = ["new", "saved", "dismissed", "card_created"];
+
+function sortByFitScore(candidates: JobCandidate[]): JobCandidate[] {
+  return [...candidates].sort((a, b) => b.fitScore - a.fitScore);
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, max - 1)}…`;
+}
+
+function openSourceUrl(url: string) {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  void Linking.openURL(url);
+}
 
 export default function JobCandidatesScreen() {
   const router = useRouter();
   const {
     jobCandidates,
     jobSources,
-    resumeModules,
     saveJobCandidate,
     dismissJobCandidate,
     approveJobCandidate
@@ -64,6 +82,9 @@ export default function JobCandidatesScreen() {
 
       {STATUS_ORDER.map((status) => {
         const grouped = jobCandidates.filter((candidate) => candidate.status === status);
+        const sorted =
+          status === "new" || status === "saved" ? sortByFitScore(grouped) : grouped;
+
         return (
           <Section
             key={status}
@@ -72,24 +93,48 @@ export default function JobCandidatesScreen() {
             {grouped.length === 0 ? (
               <Text style={styles.emptyText}>Nothing here.</Text>
             ) : (
-              grouped.map((candidate) => {
+              sorted.map((candidate) => {
                 const source = jobSources.find((item) => item.id === candidate.sourceId);
-                const suggested = getSuggestedResumeModules(candidate, resumeModules, 3);
+                const locationSuffix = candidate.location ? ` · ${candidate.location}` : "";
+                const topReasons = candidate.fitReasons.slice(0, 2);
+                const topGap = candidate.gaps[0];
+                const skillsLine =
+                  candidate.matchedSkills && candidate.matchedSkills.length > 0
+                    ? candidate.matchedSkills.slice(0, 6).join(", ")
+                    : null;
+
                 return (
                   <View key={candidate.id} style={styles.cardTile}>
                     <Text style={styles.titleText}>
                       {candidate.company} — {candidate.roleTitle}
+                      {locationSuffix}
                     </Text>
-                    <Text style={styles.bodyText}>{formatFitScore(candidate.fitScore)}</Text>
-                    <Text style={styles.helpText}>
-                      {JOB_CANDIDATE_ORIGIN_LABELS[candidate.origin]}
-                      {source ? ` · ${source.name}` : ""} · {candidate.nextTinyAction}
+                    <Text style={styles.bodyText}>
+                      {formatFitScore(candidate.fitScore, candidate.fitLabel)}
                     </Text>
-                    {suggested.length > 0 ? (
-                      <Text style={styles.bodyText}>
-                        Modules: {suggested.map((module) => module.title).join(", ")}
+                    {topReasons.map((reason) => (
+                      <Text key={reason} style={styles.listItem}>
+                        ▸ {truncate(reason, 120)}
+                      </Text>
+                    ))}
+                    {topGap ? (
+                      <Text style={[styles.listItem, { opacity: 0.85 }]}>
+                        △ {truncate(topGap, 120)}
                       </Text>
                     ) : null}
+                    {skillsLine ? (
+                      <Text style={styles.helpText}>Skills: {truncate(skillsLine, 100)}</Text>
+                    ) : null}
+                    {candidate.recommendedResumeAngle ? (
+                      <Text style={styles.helpText}>
+                        Angle: {truncate(candidate.recommendedResumeAngle, 120)}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.helpText}>
+                      {JOB_CANDIDATE_STATUS_LABELS[candidate.status]} ·{" "}
+                      {JOB_CANDIDATE_ORIGIN_LABELS[candidate.origin]}
+                      {source ? ` · ${source.name}` : ""}
+                    </Text>
                     <View style={styles.cardActions}>
                       {candidate.status !== "card_created" ? (
                         <>
@@ -97,7 +142,7 @@ export default function JobCandidatesScreen() {
                             style={styles.primaryAction}
                             onPress={() => handleAction("approve", candidate.id)}
                           >
-                            <Text style={styles.primaryActionText}>Approve to Application Card</Text>
+                            <Text style={styles.primaryActionText}>Create Application Card</Text>
                           </Pressable>
                           {candidate.status !== "saved" ? (
                             <Pressable
@@ -115,13 +160,24 @@ export default function JobCandidatesScreen() {
                               <Text style={styles.secondaryActionText}>Dismiss</Text>
                             </Pressable>
                           ) : null}
+                          {candidate.sourceUrl ? (
+                            <Pressable
+                              style={styles.secondaryAction}
+                              onPress={() => openSourceUrl(candidate.sourceUrl!)}
+                            >
+                              <Text style={styles.secondaryActionText}>Open source</Text>
+                            </Pressable>
+                          ) : null}
                         </>
                       ) : candidate.applicationCardId ? (
-                        <Link href={`/card/${candidate.applicationCardId}`} asChild>
-                          <Pressable style={styles.secondaryAction}>
-                            <Text style={styles.secondaryActionText}>Open Application Card</Text>
-                          </Pressable>
-                        </Link>
+                        <>
+                          <Text style={styles.helpText}>Application card exists.</Text>
+                          <Link href={`/card/${candidate.applicationCardId}`} asChild>
+                            <Pressable style={styles.secondaryAction}>
+                              <Text style={styles.secondaryActionText}>Open Application Card</Text>
+                            </Pressable>
+                          </Link>
+                        </>
                       ) : null}
                     </View>
                   </View>

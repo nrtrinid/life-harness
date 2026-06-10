@@ -79,7 +79,7 @@ export function RawLabThreadMemoryPanel({
     threadState.pinnedFacts.length > 0 ||
     threadState.decisions.length > 0 ||
     threadState.openLoops.length > 0 ||
-    threadState.tonePreferences.length > 0 ||
+    threadState.userSteering.length > 0 ||
     threadState.doNotRepeat.length > 0;
 
   const hasPersonalityContent =
@@ -161,9 +161,9 @@ export function RawLabThreadMemoryPanel({
             />
             <ListSection
               title="Tone preferences"
-              items={threadState.tonePreferences}
-              listKey="tonePreferences"
-              onRemove={(index) => handleRemoveMemory("tonePreferences", index)}
+              items={threadState.userSteering}
+              listKey="userSteering"
+              onRemove={(index) => handleRemoveMemory("userSteering", index)}
             />
             <ListSection
               title="Do-not-repeat notes"

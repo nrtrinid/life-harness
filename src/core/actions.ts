@@ -603,6 +603,11 @@ export function applyApproveJobCandidate(state: LifeHarnessData, candidateId: st
 
   const intake = buildCareerIntakeFromCandidate(candidate, state.resumeModules);
   const card = createCareerApplicationCard(intake);
+  card.nextTinyAction = "Tailor resume angle and submit application.";
+  card.whyItMatters = "Fit found through Job Scout; applying keeps career momentum warm.";
+  if (candidate.location?.trim()) {
+    card.openLoops = [...(card.openLoops ?? []), `Location: ${candidate.location.trim()}`];
+  }
   const log = createLogEntry({
     rawText: `Approved job candidate: ${candidate.company} — ${candidate.roleTitle}`,
     area: "social_career",

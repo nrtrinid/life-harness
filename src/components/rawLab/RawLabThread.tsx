@@ -23,6 +23,7 @@ interface RawLabThreadProps {
   errors?: RawLabThreadError[];
   threadScrollRef?: RefObject<ScrollView | null>;
   loading?: boolean;
+  streamingDraft?: string;
   onSelectPrompt?: (item: QuickQuestion) => void;
   onPin?: (content: string) => void;
   onDoNotRepeat?: (content: string) => void;
@@ -209,6 +210,7 @@ export function RawLabThread({
   errors = [],
   threadScrollRef,
   loading = false,
+  streamingDraft = "",
   onSelectPrompt,
   onPin,
   onDoNotRepeat,
@@ -239,7 +241,7 @@ export function RawLabThread({
     }
 
     scrollChatThreadToEnd(threadScrollRef);
-  }, [itemCount, loading, threadScrollRef]);
+  }, [itemCount, loading, streamingDraft, threadScrollRef]);
 
   if (itemCount === 0) {
     return (
@@ -280,6 +282,12 @@ export function RawLabThread({
           <Text style={styles.helpText}>{error.content}</Text>
         </View>
       ))}
+      {loading && streamingDraft ? (
+        <View style={styles.chatBubbleAssistant}>
+          <Text style={styles.chatSpeakerLabel}>Raw Lab</Text>
+          <Text style={styles.chatAnswerText}>{streamingDraft}</Text>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }

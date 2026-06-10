@@ -1,0 +1,15 @@
+[
+  {
+    "name": "trust_board_over_history",
+    "endpoint": "chat-harness",
+    "conversation_history": [
+      {
+        "role": "assistant",
+        "content": "You have 5 active cards on your board."
+      }
+    ],
+    "message": "How many active cards do I have?",
+    "expect_substrings": ["4", "context"],
+    "forbid_substrings": ["5 active", "I updated", "I changed"]
+  }
+]

@@ -124,6 +124,8 @@ export type JobCandidateStatus = "new" | "saved" | "dismissed" | "card_created";
 
 export type JobCandidateOrigin = "manual" | "source_fetch" | "import" | "agent";
 
+export type JobFitLabel = "strong" | "possible" | "stretch" | "bad_fit";
+
 export interface JobCandidate {
   id: string;
   sourceId?: string;
@@ -137,8 +139,11 @@ export interface JobCandidate {
   origin: JobCandidateOrigin;
   status: JobCandidateStatus;
   fitScore: number;
+  fitLabel?: JobFitLabel;
   fitReasons: string[];
   gaps: string[];
+  matchedSkills?: string[];
+  missingSignals?: string[];
   recommendedResumeAngle?: string;
   suggestedResumeModuleIds: string[];
   nextTinyAction: string;
@@ -278,14 +283,23 @@ export interface HarnessMemoryItem {
   updatedAt: string;
 }
 
+export type PrimaryActionKind =
+  | "park"
+  | "follow_up"
+  | "pounce"
+  | "reheat"
+  | "main_quest"
+  | "capture"
+  | "proof";
+
 export interface PrimaryAction {
-  actionText: string;
-  buttonLabel: string;
-  smallestStart?: string;
-  targetRoute?: string;
+  kind: PrimaryActionKind;
+  title: string;
+  reason: string;
+  smallestAction: string;
   cardId?: string;
-  isPounce: boolean;
-  isDeepLink: boolean;
+  ctaLabel?: string;
+  targetRoute?: string;
 }
 
 export interface CareerPipelineState {

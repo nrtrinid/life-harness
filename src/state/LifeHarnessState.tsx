@@ -32,7 +32,7 @@ import {
   type LifeHarnessData
 } from "../core/actions";
 import { type CareerIntakeInput } from "../core/career";
-import { type JobCandidateIntakeInput } from "../core/jobScout";
+import { buildFitFinderResult, type FitFinderResult, type JobCandidateIntakeInput } from "../core/jobScout";
 import {
   buildRunAllSummary,
   formatRunBatchNotice,
@@ -142,6 +142,7 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   ) => Promise<{ ok: boolean; message?: string; outcome?: SourceRunOutcome; runnerUnreachable?: boolean }>;
   runDueJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
   runAllEnabledJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
+  runFitFinder: () => Promise<FitFinderResult>;
 }
 
 const LifeHarnessContext = createContext<LifeHarnessContextValue | undefined>(undefined);
@@ -254,10 +255,6 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-
-  useEffect(() => {
-    dispatch({ type: "app_session_started" });
-  }, []);
 
   useEffect(() => {
     if (skipInitialSaveRef.current) {
@@ -613,6 +610,42 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     };
   }, [runSourceBatch]);
 
+  const runFitFinder = useCallback(async (): Promise<FitFinderResult> => {
+    const targets = getRunnableJobSources(stateRef.current.jobSources);
+    if (targets.length === 0) {
+      return buildFitFinderResult({
+        ok: false,
+        createdCandidates: [],
+        skippedDuplicates: 0,
+        noSourcesMessage: "Add a source first, or paste a job post to score it."
+      });
+    }
+
+    const beforeIds = new Set(stateRef.current.jobCandidates.map((c) => c.id));
+    const summary = await runSourceBatch(targets);
+
+    if (summary.runnerUnreachable) {
+      return buildFitFinderResult({
+        ok: false,
+        runnerUnreachable: true,
+        createdCandidates: [],
+        skippedDuplicates: summary.skippedDuplicates,
+        errors: summary.errors,
+        runnerMessage: RUNNER_UNREACHABLE_MESSAGE
+      });
+    }
+
+    const afterCandidates = stateRef.current.jobCandidates;
+    const createdCandidates = afterCandidates.filter((c) => !beforeIds.has(c.id));
+
+    return buildFitFinderResult({
+      ok: summary.failedSources === 0,
+      createdCandidates,
+      skippedDuplicates: summary.skippedDuplicates,
+      errors: summary.errors
+    });
+  }, [runSourceBatch]);
+
   const value = useMemo(
     () => ({
       ...state,
@@ -644,7 +677,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       batchRunProgress,
       runOneJobSource,
       runDueJobSources,
-      runAllEnabledJobSources
+      runAllEnabledJobSources,
+      runFitFinder
     }),
     [
       state,
@@ -676,7 +710,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       batchRunProgress,
       runOneJobSource,
       runDueJobSources,
-      runAllEnabledJobSources
+      runAllEnabledJobSources,
+      runFitFinder
     ]
   );
 

@@ -17,6 +17,7 @@ export default function RootLayout() {
         <Stack.Screen name="board" options={{ headerShown: false }} />
         <Stack.Screen name="career" options={{ headerShown: false }} />
         <Stack.Screen name="progress" options={{ headerShown: false }} />
+        <Stack.Screen name="review" options={{ headerShown: false }} />
         <Stack.Screen name="log" options={{ headerShown: false }} />
         <Stack.Screen name="career-intake" options={{ headerShown: false }} />
         <Stack.Screen name="candidate-intake" options={{ headerShown: false }} />

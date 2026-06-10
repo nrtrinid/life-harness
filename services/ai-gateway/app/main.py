@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 
 from app.config import Settings, get_settings
@@ -196,6 +196,49 @@ def raw_lab_endpoint(request: RawLabRequest) -> RawLabResponse:
         raise HTTPException(status_code=422, detail=exc.message) from exc
     except ProviderNotReadyError as exc:
         raise HTTPException(status_code=503, detail=exc.message) from exc
+
+
+def _chunk_text(text: str, chunk_size: int = 48) -> list[str]:
+    if not text:
+        return []
+    return [text[index : index + chunk_size] for index in range(0, len(text), chunk_size)]
+
+
+@app.post("/raw-lab/stream")
+def raw_lab_stream_endpoint(request: RawLabRequest) -> StreamingResponse:
+    provider = get_provider()
+    logger.info(
+        "raw_lab_stream provider=%s message_len=%d history_turns=%d",
+        provider.name,
+        len(request.message),
+        len(request.recent_turns),
+    )
+
+    def event_stream():
+        try:
+            response = provider.raw_lab(request)
+            answer = response.answer
+            for chunk in _chunk_text(answer):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "done": True,
+                        "answer": answer,
+                        "mode": response.mode,
+                        "safety_notes": response.safety_notes,
+                        "used_context": response.used_context,
+                    }
+                )
+                + "\n\n"
+            )
+        except ProviderInputError as exc:
+            yield f"data: {json.dumps({'error': exc.message, 'status': 422})}\n\n"
+        except ProviderNotReadyError as exc:
+            yield f"data: {json.dumps({'error': exc.message, 'status': 503})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get("/playground")

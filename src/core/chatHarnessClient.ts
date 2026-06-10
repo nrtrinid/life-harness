@@ -4,6 +4,7 @@ import type {
   ConversationTurn,
   HarnessContext
 } from "./harnessContext";
+import type { WireChatHarnessThreadState } from "./chatThreadState";
 import type { SensitivityLevel } from "./types";
 
 export const DEFAULT_CHAT_HARNESS_URL = "http://127.0.0.1:8111";
@@ -25,6 +26,8 @@ export class ChatHarnessError extends Error {
   }
 }
 
+export type ReasoningDepth = "fast" | "deliberate" | "deep";
+
 export interface AskChatHarnessInput {
   baseUrl: string;
   message: string;
@@ -32,6 +35,8 @@ export interface AskChatHarnessInput {
   sensitivity: SensitivityLevel;
   context: HarnessContext;
   conversationHistory?: ConversationTurn[];
+  threadState?: WireChatHarnessThreadState;
+  reasoningDepth?: ReasoningDepth;
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -112,13 +117,19 @@ export async function askChatHarness(input: AskChatHarnessInput): Promise<ChatHa
 
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   const url = `${baseUrl}/chat-harness`;
-  const body = {
+  const body: Record<string, unknown> = {
     message,
     mode: input.mode,
     sensitivity: input.sensitivity,
     context: input.context,
     conversation_history: input.conversationHistory ?? []
   };
+  if (input.threadState) {
+    body.thread_state = input.threadState;
+  }
+  if (input.reasoningDepth) {
+    body.reasoning_depth = input.reasoningDepth;
+  }
 
   let response: Response;
   try {

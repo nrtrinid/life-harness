@@ -149,6 +149,47 @@ The script prints **result JSON only** on stdout. stderr may show file path, len
 
 **Transcript safety:** Do not commit real transcripts. Use `*.transcript.txt` for local-only files (gitignored). Only `tests/fixtures/synthetic_transcript.txt` is committed (clearly fake).
 
+### Thread intelligence evals
+
+Fixtures live in `evals/thread/`:
+
+- `reference_resolution.json`
+- `code_teaching.json`
+- `grounded_context_vs_thread.json`
+- `anti_repeat.json`
+- `raw_lab_no_board_access.json`
+- `personality_growth.json`
+- `style_steering.json`
+
+Run against mock (no live server required):
+
+```powershell
+$env:SCOUT_PROVIDER="mock"
+pytest tests/test_thread_eval_fixtures.py -q
+pytest -q
+```
+
+**CI-safe:** MockProvider only. Deterministic fixtures: `reference_resolution`, `anti_repeat`, `raw_lab_no_board_access`, `style_steering`, `grounded_context_vs_thread`.
+
+**OpenVINO manual smoke** (not in CI — run before prompt/model changes):
+
+```powershell
+$env:SCOUT_PROVIDER="openvino"
+# Load model per OpenVINO section above
+uvicorn app.main:app --host 127.0.0.1 --port 8111
+python scripts/run_thread_eval.py
+```
+
+Model-dependent fixtures: `personality_growth`, `code_teaching` (phrasing may vary).
+
+**Failure meanings:** missing `expect_substrings`, forbidden substring in answer, HTTP 422 (validation/S3), HTTP 503 (provider not ready).
+
+Or against a running gateway (same as manual smoke):
+
+```powershell
+python scripts/run_thread_eval.py
+```
+
 ## Endpoints
 
 ### `GET /health`
@@ -176,6 +217,12 @@ Read-only scout chat over caller-provided context. See [docs/ask-harness-sandbox
 
 Conversational scout chat with simpler response shape. See Phase 1.8b above.
 
+**Request:** `{ message, mode?, sensitivity?, context, conversation_history?, thread_state?, reasoning_depth? }`
+
+- `conversation_history`: prior user/assistant turns (answer text only for assistant).
+- `thread_state`: temporary in-request working memory (`recent_digest`, `active_goal`, `current_topic`, `task_mode`, `open_loops`, `decisions`, `pinned_facts`, `user_steering`, `do_not_repeat`, `references`, `updated_at`). No personality.
+- `reasoning_depth`: `fast` (default), `deliberate`, or `deep`. Deep mode runs an extra critique pass when `SCOUT_DEEP_ENABLED=true`.
+
 **Sensitivity:** `S3` rejected with HTTP 422 before provider.
 
 **Errors:** 422 / 503 only (no 502 for parse failure — OpenVINO returns a safe fallback body with HTTP 200).
@@ -202,6 +249,12 @@ Conversational scout chat with simpler response shape. See Phase 1.8b above.
 
 **Errors:** 422 / 503 only (empty model output returns a safe fallback with HTTP 200).
 
+### `POST /raw-lab/stream`
+
+SSE streaming variant of Raw Lab. Emits `data: {"chunk": "..."}` events, then a final `data: {"done": true, "answer": "...", ...}` event. Falls back gracefully when streaming is unavailable (client may retry `/raw-lab`).
+
+**Errors:** provider errors are emitted as SSE `error` events with HTTP 200 on the stream response.
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -218,6 +271,9 @@ Conversational scout chat with simpler response shape. See Phase 1.8b above.
 | `SCOUT_RAW_LAB_MAX_NEW_TOKENS` | `2048` | Max tokens for Raw Lab replies |
 | `SCOUT_RAW_LAB_TEMPERATURE` | `0.7` | Sampling temperature for Raw Lab |
 | `SCOUT_RAW_LAB_REPETITION_PENALTY` | `1.12` | Repetition penalty for Raw Lab (when supported by OpenVINO) |
+| `SCOUT_DEEP_ENABLED` | `true` | Enable deep reasoning extra pass for Chat Harness |
+| `SCOUT_DEEP_MAX_EXTRA_PASSES` | `2` | Cap for deep-mode extra provider passes |
+| `SCOUT_CHAT_HARNESS_NATIVE_CHAT` | `false` | Experimental native chat template for Chat Harness (OpenVINO) |
 
 ## Privacy
 

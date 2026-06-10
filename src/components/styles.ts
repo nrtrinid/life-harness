@@ -619,6 +619,11 @@ export const styles = StyleSheet.create({
     gap: spacing.md,
     overflow: "hidden"
   },
+  chatThreadToolbar: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    justifyContent: "flex-end"
+  },
   chatThreadScroll: {
     flex: 1,
     minHeight: 0

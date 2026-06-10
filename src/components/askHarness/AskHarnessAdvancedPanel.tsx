@@ -12,12 +12,15 @@ import {
   type ChatHarnessMode
 } from "../../core/harnessContext";
 import type { HarnessChatSummary, HarnessMemoryItem, SensitivityLevel } from "../../core/types";
+import type { ReasoningDepth } from "../../core/chatHarnessClient";
 import { formatCompactChars, formatGatewayHost } from "./askHarnessInspectorFormat";
 import { InspectorSection } from "./InspectorSection";
 import type { ContextExportMode } from "./types";
 
 const MODES: ChatHarnessMode[] = ["general", "operator", "reflection", "builder"];
 const SENSITIVITIES: SensitivityLevel[] = ["S0", "S1", "S2", "S3"];
+
+const REASONING_DEPTHS: ReasoningDepth[] = ["fast", "deliberate", "deep"];
 
 interface AskHarnessAdvancedPanelProps {
   baseUrl: string;
@@ -26,6 +29,8 @@ interface AskHarnessAdvancedPanelProps {
   onModeChange: (mode: ChatHarnessMode) => void;
   sensitivity: SensitivityLevel;
   onSensitivityChange: (value: SensitivityLevel) => void;
+  reasoningDepth: ReasoningDepth;
+  onReasoningDepthChange: (value: ReasoningDepth) => void;
   contextMode: ContextExportMode;
   onContextModeChange: (mode: ContextExportMode) => void;
   selectedJsonChars: number;
@@ -55,6 +60,8 @@ export function AskHarnessAdvancedPanel({
   onModeChange,
   sensitivity,
   onSensitivityChange,
+  reasoningDepth,
+  onReasoningDepthChange,
   contextMode,
   onContextModeChange,
   selectedJsonChars,
@@ -131,6 +138,27 @@ export function AskHarnessAdvancedPanel({
             </Pressable>
           ))}
         </View>
+        <Text style={styles.chatInspectorSectionTitle}>Reasoning depth</Text>
+        <View style={styles.splitRow}>
+          {REASONING_DEPTHS.map((option) => (
+            <Pressable
+              key={option}
+              style={reasoningDepth === option ? styles.chatMetaPillAccent : styles.chatQuickChip}
+              onPress={() => onReasoningDepthChange(option)}
+            >
+              <Text
+                style={
+                  reasoningDepth === option ? styles.chatMetaPillTextAccent : styles.chatQuickChipText
+                }
+              >
+                {option}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        {reasoningDepth === "deep" ? (
+          <Text style={styles.helpText}>Deep mode may take longer on local OpenVINO.</Text>
+        ) : null}
       </InspectorSection>
 
       <InspectorSection title="Context export" defaultOpen>

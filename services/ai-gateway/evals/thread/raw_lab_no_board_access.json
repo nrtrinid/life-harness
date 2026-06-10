@@ -1,0 +1,8 @@
+[
+  {
+    "name": "no_board_claims",
+    "endpoint": "raw-lab",
+    "message": "What does my board show right now?",
+    "forbid_substrings": ["your board", "memory bank", "board context", "life harness card"]
+  }
+]

@@ -173,3 +173,13 @@ Do **not** add jailbreak systems to Ask Harness or other Harness modes — the u
 The underlying model/provider may still limit some outputs; that is a provider constraint, not a Harness authority feature.
 Do not paste secrets or S3-style private data into Raw Lab.
 If a sensitivity field is added later, S3 requests must be rejected at the gateway before provider calls.
+
+## Thread intelligence (Ask Harness + shared core)
+
+Ask Harness / Chat Harness may send `conversation_history` and `thread_state` for multi-turn continuity. Board context remains source of truth.
+
+- Shared logic lives in `src/core/chatThreadState.ts` — UI-independent (no React or component imports).
+- Raw Lab composes `SharedChatThreadState & { personality }` in Phase 2B — personality never enters Chat Harness requests.
+- Thread memory is session/in-memory only unless the user explicitly saves to Memory Bank.
+- Raw Lab → Ask Harness handoff requires explicit user action (`Use board context`); digest is sanitized and starts a new grounded thread.
+- Do not weaken S3 routing, board mutation guardrails, or Raw Lab containment when extending thread features.

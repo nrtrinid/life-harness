@@ -174,7 +174,8 @@ export function createCandidatesFromPostings(
         origin: "source_fetch"
       },
       modules,
-      "new"
+      "new",
+      { sourceName: source.name }
     )
   );
 }

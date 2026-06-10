@@ -171,3 +171,96 @@ export async function askRawLab(input: AskRawLabInput): Promise<RawLabResponse> 
 
   return parseRawLabResponse(payload);
 }
+
+function parseStreamEvent(line: string): Record<string, unknown> | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("data:")) {
+    return null;
+  }
+  try {
+    return JSON.parse(trimmed.slice(5).trim()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export async function streamRawLab(
+  input: AskRawLabInput & {
+    onChunk: (chunk: string) => void;
+    signal?: AbortSignal;
+  }
+): Promise<RawLabResponse> {
+  const message = input.message.trim();
+  if (!message) {
+    throw new RawLabError("Message must not be empty.");
+  }
+
+  const baseUrl = normalizeBaseUrl(input.baseUrl);
+  const url = `${baseUrl}/raw-lab/stream`;
+  const body = buildRawLabRequestBody({
+    message,
+    turns: input.turns ?? [],
+    threadState: input.threadState ?? createEmptyRawLabThreadState()
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: input.signal
+    });
+  } catch (error) {
+    if (input.signal?.aborted) {
+      throw new RawLabError("Raw Lab stream stopped.");
+    }
+    throw new RawLabError(rawLabFetchFailureMessage(baseUrl, error));
+  }
+
+  if (!response.ok || !response.body) {
+    return askRawLab(input);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalPayload: RawLabResponse | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (input.signal?.aborted) {
+      await reader.cancel();
+      throw new RawLabError("Raw Lab stream stopped.");
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const event = parseStreamEvent(line);
+      if (!event) {
+        continue;
+      }
+      if (typeof event.chunk === "string" && event.chunk.length > 0) {
+        input.onChunk(event.chunk);
+      }
+      if (event.done === true) {
+        finalPayload = parseRawLabResponse(event);
+      }
+      if (typeof event.error === "string") {
+        throw new RawLabError(event.error, typeof event.status === "number" ? event.status : undefined);
+      }
+    }
+  }
+
+  if (finalPayload) {
+    return finalPayload;
+  }
+
+  return askRawLab(input);
+}

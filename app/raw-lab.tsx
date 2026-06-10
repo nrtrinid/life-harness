@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { router } from "expo-router";
 import {
   Platform,
   Pressable,
@@ -23,8 +24,10 @@ import {
   askRawLab,
   DEFAULT_RAW_LAB_URL,
   RawLabError,
+  streamRawLab,
   type RawLabResponse
 } from "../src/core/rawLabClient";
+import { buildGroundedHandoffDigest, shouldSuggestGroundedHandoff } from "../src/core/chatThreadState";
 import {
   addConversationalInstinct,
   addDoNotRepeat,
@@ -79,11 +82,18 @@ export default function RawLabScreen() {
   const [errors, setErrors] = useState<RawLabThreadError[]>([]);
   const [threadState, setThreadState] = useState<RawLabThreadState>(createEmptyRawLabThreadState);
   const [loading, setLoading] = useState(false);
+  const [streamingAnswer, setStreamingAnswer] = useState("");
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [handoffDismissed, setHandoffDismissed] = useState(false);
+  const showHandoffBanner =
+    !handoffDismissed &&
+    (shouldSuggestGroundedHandoff(message) ||
+      turns.some((turn) => turn.role === "user" && shouldSuggestGroundedHandoff(turn.content)));
   const { height } = useWindowDimensions();
   const chatSurfaceHeight = getChatSurfaceHeight(height, "rawLab");
   const threadScrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   function handleQuickQuestion(item: QuickQuestion) {
     setMessage(item.message);
@@ -100,6 +110,10 @@ export default function RawLabScreen() {
 
     setNotice(null);
     setLoading(true);
+    setStreamingAnswer("");
+    abortRef.current?.abort();
+    const abortController = new AbortController();
+    abortRef.current = abortController;
 
     const priorTurns = turns;
     const userTurn: RawLabTurn = {
@@ -113,11 +127,15 @@ export default function RawLabScreen() {
     setErrors([]);
 
     try {
-      const response = await askRawLab({
+      const response = await streamRawLab({
         baseUrl,
         message: trimmed,
         turns: priorTurns,
-        threadState
+        threadState,
+        signal: abortController.signal,
+        onChunk: (chunk) => {
+          setStreamingAnswer((previous) => previous + chunk);
+        }
       });
 
       const assistantTurn: RawLabTurn = {
@@ -139,6 +157,7 @@ export default function RawLabScreen() {
         })
       );
       setMessage("");
+      setStreamingAnswer("");
       if (Platform.OS === "web") {
         inputRef.current?.focus();
       }
@@ -154,7 +173,20 @@ export default function RawLabScreen() {
       });
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
+  }
+
+  function handleStopStream() {
+    abortRef.current?.abort();
+  }
+
+  function handleUseBoardContext() {
+    const digest = buildGroundedHandoffDigest({
+      state: threadState,
+      recentUserMessages: turns.filter((turn) => turn.role === "user").map((turn) => turn.content)
+    });
+    router.push({ pathname: "/ask-harness", params: { digest } });
   }
 
   function handleClearChat() {
@@ -163,6 +195,7 @@ export default function RawLabScreen() {
     setErrors([]);
     setThreadState(clearThreadState());
     setMessage("");
+    setStreamingAnswer("");
     setNotice(null);
   }
 
@@ -247,10 +280,40 @@ export default function RawLabScreen() {
 
         <RawLabThreadMemoryPanel threadState={threadState} onThreadStateChange={setThreadState} />
 
+        {showHandoffBanner ? (
+          <View style={styles.bannerInfo}>
+            <Text style={styles.bannerInfoText}>
+              This sounds like a board question. Use board context for grounded help from your
+              exported snapshot.
+            </Text>
+            <View style={styles.splitRow}>
+              <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
+                <Text style={styles.smallButtonText}>Use board context</Text>
+              </Pressable>
+              <Pressable
+                style={styles.smallButton}
+                onPress={() => setHandoffDismissed(true)}
+              >
+                <Text style={styles.smallButtonText}>Stay in Raw Lab</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.splitRow}>
           <Pressable style={styles.smallButton} onPress={handleClearChat}>
             <Text style={styles.smallButtonText}>Clear chat</Text>
           </Pressable>
+          {turns.length > 0 ? (
+            <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
+              <Text style={styles.smallButtonText}>Use board context</Text>
+            </Pressable>
+          ) : null}
+          {loading ? (
+            <Pressable style={styles.smallButton} onPress={handleStopStream}>
+              <Text style={styles.smallButtonText}>Stop</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
@@ -261,6 +324,7 @@ export default function RawLabScreen() {
             errors={errors}
             threadScrollRef={threadScrollRef}
             loading={loading}
+            streamingDraft={streamingAnswer}
             onSelectPrompt={handleQuickQuestion}
             onPin={handlePin}
             onDoNotRepeat={handleDoNotRepeat}

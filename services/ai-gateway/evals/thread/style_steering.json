@@ -1,0 +1,15 @@
+[
+  {
+    "name": "shorter_answer",
+    "endpoint": "chat-harness",
+    "conversation_history": [
+      {
+        "role": "assistant",
+        "content": "This is a long answer with many words that goes on and on about thread state, packing, reference resolution, and other implementation details that should be shortened when the user asks for brevity."
+      }
+    ],
+    "message": "make it shorter",
+    "max_answer_chars": 120,
+    "forbid_substrings": ["updated your board", "I changed"]
+  }
+]

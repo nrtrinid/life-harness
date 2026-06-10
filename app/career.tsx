@@ -1,7 +1,9 @@
 import { Link } from "expo-router";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { Nav } from "../src/components/Nav";
+import { Notice, type NoticeState } from "../src/components/Notice";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
@@ -18,7 +20,17 @@ const CAREER_TOOL_LINKS = [
 ] as const;
 
 export default function CareerScreen() {
-  const { jobCandidates, cards, jobSources, jobSourceRuns } = useLifeHarness();
+  const {
+    jobCandidates,
+    cards,
+    jobSources,
+    jobSourceRuns,
+    runFitFinder,
+    isBatchRunning,
+    batchRunProgress
+  } = useLifeHarness();
+  const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [lastFitResult, setLastFitResult] = useState<{ createdCount: number } | null>(null);
   const now = new Date();
   const pipeline = buildCareerPipelineState(jobCandidates, cards, jobSources, jobSourceRuns, now);
 
@@ -41,14 +53,53 @@ export default function CareerScreen() {
     }
   ];
 
+  async function handleFindFitJobs() {
+    const result = await runFitFinder();
+    setLastFitResult({ createdCount: result.createdCandidateIds.length });
+    setNotice({
+      kind: result.ok ? "success" : result.runnerUnreachable ? "warning" : "info",
+      message: result.message
+    });
+  }
+
+  const runningLabel = batchRunProgress
+    ? `Running ${batchRunProgress.sourceName} (${batchRunProgress.current}/${batchRunProgress.total})…`
+    : "Finding fit matches…";
+
   return (
     <Screen>
       <Nav />
+      {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <PageHeader
         title="Career"
         subtitle="Career pipeline — review queue, sources, and applications."
         chips={chips}
       />
+
+      <View style={{ gap: 8, marginBottom: 16 }}>
+        <Pressable
+          style={[styles.primaryAction, isBatchRunning && { opacity: 0.7 }]}
+          onPress={() => void handleFindFitJobs()}
+          disabled={isBatchRunning}
+        >
+          <Text style={styles.primaryActionText}>
+            {isBatchRunning ? runningLabel : "Find jobs that fit me"}
+          </Text>
+        </Pressable>
+        <Text style={styles.helpText}>
+          Run approved sources, score matches, then apply to one.
+        </Text>
+        <Text style={styles.helpText}>
+          Find fits, then apply to one. Do not tune sources before sending an application.
+        </Text>
+        {lastFitResult && lastFitResult.createdCount > 0 ? (
+          <Link href="/job-candidates" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Open Queue to review matches</Text>
+            </Pressable>
+          </Link>
+        ) : null}
+      </View>
 
       {pipeline.lastRun ? (
         <Text style={styles.helpText}>

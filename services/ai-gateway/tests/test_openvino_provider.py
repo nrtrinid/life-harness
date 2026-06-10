@@ -64,6 +64,9 @@ def test_openvino_rejects_overlong_input(openvino_settings):
         raw_lab_temperature=openvino_settings.raw_lab_temperature,
         raw_lab_repetition_penalty=openvino_settings.raw_lab_repetition_penalty,
         dev_cors=openvino_settings.dev_cors,
+        deep_enabled=openvino_settings.deep_enabled,
+        chat_harness_native_chat=openvino_settings.chat_harness_native_chat,
+        deep_max_extra_passes=openvino_settings.deep_max_extra_passes,
     )
     provider = OpenVinoProvider(openvino_settings)
     request = AnalyzeTranscriptRequest(
@@ -99,6 +102,9 @@ def test_raw_lab_generation_config_sets_repetition_penalty_when_supported(openvi
         raw_lab_temperature=0.6,
         raw_lab_repetition_penalty=1.25,
         dev_cors=openvino_settings.dev_cors,
+        deep_enabled=openvino_settings.deep_enabled,
+        chat_harness_native_chat=openvino_settings.chat_harness_native_chat,
+        deep_max_extra_passes=openvino_settings.deep_max_extra_passes,
     )
     provider = OpenVinoProvider(openvino_settings)
 

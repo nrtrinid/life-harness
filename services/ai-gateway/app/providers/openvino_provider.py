@@ -18,14 +18,18 @@ from app.models import (
     ConversationTurn,
     RawLabRequest,
     RawLabResponse,
+    ReasoningDepth,
 )
 from app.prompt_loader import (
     build_analysis_prompt,
     build_ask_harness_prompt,
     build_chat_harness_prompt,
+    build_chat_harness_system_prompt,
     build_raw_lab_system_prompt,
     estimate_raw_lab_input_chars,
 )
+from app.chat_harness_finalize import finalize_chat_harness_response
+from app.thread_verifier import VerificationResult, verify_raw_lab_response
 from app.raw_lab_utils import (
     is_hedged_response,
     is_repetitive_response,
@@ -92,6 +96,22 @@ Required top-level fields (all must be present):
 
 Broken output:
 {broken}
+"""
+
+_CHAT_HARNESS_CONTENT_REPAIR = """\
+The previous answer failed a content check ({check}).
+{instruction}
+Return ONLY corrected JSON for the Chat Harness schema.
+
+Broken answer text:
+{answer}
+"""
+
+_CHAT_HARNESS_DEEP_CRITIQUE_PROMPT = """\
+Review this draft Chat Harness JSON answer for completeness, grounding, and repetition.
+User message: {message}
+Draft JSON: {draft}
+Return a brief critique (not JSON).
 """
 
 def _model_path_ready(model_path: str) -> bool:
@@ -233,7 +253,77 @@ class OpenVinoProvider:
                 f"{self._settings.max_input_chars}"
             )
 
-        raw = self._generate(prompt)
+        if self._settings.chat_harness_native_chat:
+            raw = self._generate_chat_harness_native(request, prompt)
+        elif (
+            self._settings.deep_enabled
+            and request.reasoning_depth == ReasoningDepth.deep
+        ):
+            raw = self._generate_chat_harness_deep(request, prompt)
+        else:
+            raw = self._generate(prompt)
+
+        response = self._parse_chat_harness_raw(raw)
+        return self._apply_chat_harness_verifier(request, response)
+
+    def _generate_chat_harness_native(
+        self, request: ChatHarnessRequest, fallback_prompt: str
+    ) -> str:
+        system = build_chat_harness_system_prompt(request=request)
+        history = list(request.conversation_history)
+        input_chars = len(system) + sum(len(turn.content) for turn in history) + len(
+            request.message
+        )
+        if input_chars > self._settings.max_input_chars:
+            raise ProviderInputError(
+                f"Serialized native chat input length {input_chars} exceeds "
+                f"SCOUT_MAX_INPUT_CHARS={self._settings.max_input_chars}"
+            )
+        try:
+            raw = self._generate_chat(
+                system=system,
+                history=history,
+                message=request.message,
+            )
+            parse_strict_json(raw, ChatHarnessResponse)
+            return raw
+        except ProviderParseError:
+            logger.warning(
+                "openvino chat_harness native chat parse failed; falling back to single prompt"
+            )
+            return self._generate(fallback_prompt)
+
+    def _generate_chat_harness_deep(
+        self, request: ChatHarnessRequest, prompt: str
+    ) -> str:
+        draft_raw = self._generate(prompt)
+        try:
+            parse_strict_json(draft_raw, ChatHarnessResponse)
+        except ProviderParseError:
+            return draft_raw
+
+        critique = self._generate(
+            _CHAT_HARNESS_DEEP_CRITIQUE_PROMPT.format(
+                message=request.message,
+                draft=draft_raw[:2000],
+            )
+        )
+        final_prompt = (
+            prompt
+            + "\n\nPrior draft:\n"
+            + draft_raw[:2000]
+            + "\n\nCritique:\n"
+            + critique[:800]
+            + "\n\nReturn ONLY the final corrected JSON object."
+        )
+        final_raw = self._generate(final_prompt)
+        try:
+            parse_strict_json(final_raw, ChatHarnessResponse)
+            return final_raw
+        except ProviderParseError:
+            return draft_raw
+
+    def _parse_chat_harness_raw(self, raw: str) -> ChatHarnessResponse:
         try:
             return parse_strict_json(raw, ChatHarnessResponse)
         except ProviderParseError:
@@ -244,6 +334,40 @@ class OpenVinoProvider:
             except ProviderParseError:
                 logger.warning("openvino chat_harness parse failed after repair; returning fallback")
                 return CHAT_HARNESS_PARSE_FALLBACK
+
+    def _repair_chat_harness_openvino(
+        self,
+        verification: VerificationResult,
+        request: ChatHarnessRequest,
+        response: ChatHarnessResponse,
+    ) -> ChatHarnessResponse:
+        repair_prompt = _CHAT_HARNESS_CONTENT_REPAIR.format(
+            check=verification.check,
+            instruction=verification.repair_instruction,
+            answer=response.answer[:2000],
+        )
+        repaired_raw = self._generate(repair_prompt)
+        repaired = parse_strict_json(repaired_raw, ChatHarnessResponse)
+        return ChatHarnessResponse(
+            answer=repaired.answer,
+            used_context=repaired.used_context,
+            confidence_notes=[
+                *repaired.confidence_notes,
+                f"Inferred — repaired {verification.check}.",
+            ],
+            safety_notes=repaired.safety_notes,
+        )
+
+    def _apply_chat_harness_verifier(
+        self,
+        request: ChatHarnessRequest,
+        response: ChatHarnessResponse,
+    ) -> ChatHarnessResponse:
+        return finalize_chat_harness_response(
+            request=request,
+            response=response,
+            repair_once=self._repair_chat_harness_openvino,
+        )
 
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
         self._ensure_pipeline()
@@ -292,6 +416,23 @@ class OpenVinoProvider:
             repaired = sanitize_raw_lab_text(repaired_raw)
             if repaired and not is_repetitive_response(repaired, request.recent_turns):
                 answer = repaired
+
+        verification = verify_raw_lab_response(
+            answer=answer or "",
+            user_message=request.message,
+            conversation_history=history,
+        )
+        if answer and not verification.ok and verification.repair_instruction:
+            verified_raw = self._generate_chat_repair(
+                system=system,
+                history=history,
+                draft=answer,
+                message=request.message,
+                repair_instruction=verification.repair_instruction,
+            )
+            verified = sanitize_raw_lab_text(verified_raw)
+            if verified:
+                answer = verified
 
         if not answer:
             logger.warning("openvino raw_lab returned empty text; using fallback")

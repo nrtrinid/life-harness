@@ -11,7 +11,8 @@ describe("navRoutes", () => {
     }
 
     expect(hrefs.has("/career")).toBe(true);
-    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length + 1);
+    expect(hrefs.has("/review")).toBe(true);
+    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length + 2);
   });
 
   it("detects active routes including index and nested paths", () => {

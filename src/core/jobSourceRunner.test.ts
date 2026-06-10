@@ -140,6 +140,15 @@ describe("jobSourceRunner", () => {
     expect(second.result.skippedDuplicates).toBe(1);
   });
 
+  it("scores source-created candidates with enriched fit fields", () => {
+    const output = runJobSourceFromRaw(fixtureSource, greenhouseFixture, [], seedResumeModules);
+    const candidate = output.candidates[0];
+    expect(candidate?.fitLabel).toBeTruthy();
+    expect(candidate?.fitScore).toBeGreaterThanOrEqual(0);
+    expect(candidate?.fitReasons.length).toBeGreaterThan(0);
+    expect(candidate?.origin).toBe("source_fetch");
+  });
+
   it("approving fetched candidate creates one inbox card with links", () => {
     const output = runJobSourceFromRaw(fixtureSource, greenhouseFixture, [], seedResumeModules);
     let state = createState();

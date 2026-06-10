@@ -24,6 +24,9 @@ from app.models import (
     WarmthLevel,
 )
 
+from app.chat_harness_finalize import finalize_chat_harness_response
+from app.thread_verifier import VerificationResult, verify_chat_harness_response, verify_raw_lab_response
+
 INFERRED_PREFIX = "Inferred from transcript — "
 
 THEME_PATTERNS: list[tuple[str, str]] = [
@@ -395,11 +398,127 @@ class MockProvider:
             safety_notes=safety_notes,
         )
 
+    def _chat_harness_history_aware_answer(
+        self, request: ChatHarnessRequest
+    ) -> tuple[str, bool] | None:
+        """Simple continuity responses for multi-turn mock tests."""
+        message_lower = request.message.lower().strip()
+        history = request.conversation_history
+        if not history:
+            return None
+
+        last_assistant = next(
+            (
+                turn.content
+                for turn in reversed(history)
+                if turn.role.value == "assistant"
+            ),
+            "",
+        )
+
+        if message_lower in {"continue", "go on", "keep going"} and last_assistant:
+            snippet = last_assistant[:120].rstrip()
+            if len(last_assistant) > 120:
+                snippet += "..."
+            return (
+                f"Continuing from where we left off: {snippet}",
+                False,
+            )
+
+        if "shorter" in message_lower and last_assistant:
+            words = last_assistant.split()
+            short = " ".join(words[: max(8, len(words) // 2)])
+            return (short.rstrip(".,;:") + ".", False)
+
+        if "say that again" in message_lower or (
+            "again" in message_lower and len(message_lower.split()) <= 4
+        ):
+            if last_assistant:
+                return (
+                    "Fresh angle: same point, different wording — without repeating the prior line verbatim.",
+                    False,
+                )
+
+        if any(
+            phrase in message_lower
+            for phrase in ("second one", "second option", "option b", "do the second")
+        ):
+            for turn in reversed(history):
+                if turn.role.value != "assistant":
+                    continue
+                lowered = turn.content.lower()
+                if "option b" in lowered or "b:" in lowered:
+                    for line in turn.content.splitlines():
+                        if "option b" in line.lower() or line.strip().lower().startswith("b)"):
+                            return (line.strip(), False)
+                    return ("Option B: multi-pass reasoning", False)
+                if "option a" in lowered or "a:" in lowered:
+                    continue
+            return ("Option B: multi-pass reasoning", False)
+
+        return None
+
+    def _repair_chat_harness_mock(
+        self,
+        verification: VerificationResult,
+        request: ChatHarnessRequest,
+        response: ChatHarnessResponse,
+    ) -> ChatHarnessResponse:
+        answer = response.answer
+        used_context = response.used_context
+        confidence_notes = list(response.confidence_notes)
+        safety_notes = list(response.safety_notes)
+
+        if verification.check == "ignored_steering":
+            words = answer.split()
+            answer = " ".join(words[: max(8, len(words) // 2)]).rstrip(".,;:") + "."
+        elif verification.check == "board_mutation_claim":
+            answer = answer.replace("I updated", "You could update").replace(
+                "I changed", "You could change"
+            )
+        elif verification.check == "anti_repeat":
+            answer = (
+                "Here's a fresh phrasing: advancing the thread without repeating the prior answer."
+            )
+
+        return ChatHarnessResponse(
+            answer=answer,
+            used_context=used_context,
+            confidence_notes=[*confidence_notes, f"Inferred — repaired {verification.check}."],
+            safety_notes=safety_notes,
+        )
+
+    def _finalize_chat_harness_mock(
+        self,
+        request: ChatHarnessRequest,
+        response: ChatHarnessResponse,
+    ) -> ChatHarnessResponse:
+        return finalize_chat_harness_response(
+            request=request,
+            response=response,
+            repair_once=self._repair_chat_harness_mock,
+        )
+
     def chat_harness(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
         ctx = request.context
         message_lower = request.message.lower()
         cards = ctx.cards
         logs = ctx.logs
+
+        history_answer = self._chat_harness_history_aware_answer(request)
+        if history_answer is not None:
+            answer, used_context = history_answer
+            return self._finalize_chat_harness_mock(
+                request,
+                ChatHarnessResponse(
+                    answer=answer,
+                    used_context=used_context,
+                    confidence_notes=[
+                        "Inferred — continuity response from conversation history only.",
+                    ],
+                    safety_notes=[],
+                ),
+            )
 
         cold_cards = _cold_career_body_cards(cards)
         build_wins = _build_win_logs(logs)
@@ -417,7 +536,28 @@ class MockProvider:
         used_context = False
         answer = ""
 
-        if "avoid" in message_lower:
+        if ("active card" in message_lower or "active cards" in message_lower) and (
+            "how many" in message_lower or "count" in message_lower
+        ):
+            active = [c for c in cards if c.state == CardState.active]
+            answer = (
+                f"From board context: you have {len(active)} active cards right now."
+            )
+            used_context = True
+        elif (
+            request.thread_state.references.last_code_block
+            and "inventory" in message_lower
+        ):
+            block = request.thread_state.references.last_code_block
+            answer = (
+                f"```{block.language}\n"
+                f"{block.code}\n"
+                "// inventory tracking added\n"
+                "```\n"
+                "Extended the prior snippet with inventory tracking."
+            )
+            used_context = False
+        elif "avoid" in message_lower:
             parts: list[str] = []
             if cold_cards:
                 titles = ", ".join(c.title for c in cold_cards[:3])
@@ -518,13 +658,19 @@ class MockProvider:
             "Inferred — answer derived from provided context bundle only.",
             "Inferred — patterns are heuristic, not verified facts.",
         ]
+        if request.reasoning_depth.value == "deep":
+            confidence_notes.append("Deep mode (mock): single-pass simulated.")
+        elif request.reasoning_depth.value == "deliberate":
+            confidence_notes.append("Deliberate mode: checked goal and repetition before answering.")
 
-        return ChatHarnessResponse(
+        response = ChatHarnessResponse(
             answer=answer,
             used_context=used_context,
             confidence_notes=confidence_notes,
             safety_notes=safety_notes,
         )
+
+        return self._finalize_chat_harness_mock(request, response)
 
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
         message_lower = request.message.lower()
@@ -571,6 +717,11 @@ class MockProvider:
                 "Whatever you're sitting on, name the smallest honest next move — "
                 "not the heroic one."
             )
+        elif "board" in message_lower:
+            body = (
+                "Raw Lab is ungrounded — I have no visibility into Life Harness data. "
+                "Use Ask Harness if you want grounded help."
+            )
         elif "weird" in message_lower or "speculat" in message_lower:
             body = (
                 "Speculative riff: maybe you're circling the idea because "
@@ -594,8 +745,31 @@ class MockProvider:
                 "Say more if you want a fuller answer."
             )
 
+        answer = f"{prefix}{body}"
+        history = [
+            turn
+            for turn in request.recent_turns
+        ]
+        verification = verify_raw_lab_response(
+            answer=answer,
+            user_message=request.message,
+            conversation_history=history,
+        )
+        if not verification.ok and verification.repair_instruction:
+            if verification.check == "raw_lab_board_claim":
+                answer = (
+                    f"{prefix}Raw Lab is ungrounded — I have no visibility into Life Harness data. "
+                    f"You asked: \"{request.message[:80]}\""
+                )
+            elif verification.check == "anti_repeat":
+                answer = f"{prefix}Moving forward with a new phrasing instead of repeating the last line."
+            elif verification.check == "ignored_steering":
+                words = answer.split()
+                shortened = " ".join(words[: max(8, len(words) // 2)]).rstrip(".,;:") + "."
+                answer = f"{prefix}{shortened}" if prefix else shortened
+
         return RawLabResponse(
-            answer=f"{prefix}{body}",
+            answer=answer,
             mode="raw_lab",
             safety_notes=[],
             used_context=False,

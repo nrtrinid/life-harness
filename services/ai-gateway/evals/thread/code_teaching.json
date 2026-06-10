@@ -1,0 +1,18 @@
+[
+  {
+    "name": "continue_code_block",
+    "endpoint": "chat-harness",
+    "thread_state": {
+      "task_mode": "write_code",
+      "references": {
+        "last_code_block": {
+          "language": "typescript",
+          "code": "export function greet(name: string) {\n  return `Hello, ${name}`;\n}"
+        }
+      }
+    },
+    "message": "add inventory tracking to that",
+    "expect_substrings": ["inventory"],
+    "forbid_substrings": ["updated your board"]
+  }
+]

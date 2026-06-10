@@ -76,27 +76,21 @@ describe("generateWhileYouWereAway", () => {
     ).toBe(true);
   });
 
-  it("uses frozen briefingSinceAt after session start", () => {
-    const daily = startSession(
-      {
-        ...baseDaily,
-        briefingSinceAt: "2026-06-07T08:00:00.000Z",
-        sessionStartedAt: "2026-06-09T12:00:00.000Z"
-      },
-      "2026-06-09T12:00:00.000Z"
-    );
+  it("rolls briefing window forward on session start", () => {
+    const firstOpen = startSession(baseDaily, "2026-06-09T12:00:00.000Z");
 
-    const logs: LifeLogEntry[] = [
-      {
-        id: "log-new",
-        timestamp: "2026-06-09T11:00:00.000Z",
-        rawText: "worked on harness",
-        area: "build",
-        cardId: "life-harness",
-        type: "win",
-        xp: 15
-      }
-    ];
+    expect(firstOpen.briefingSinceAt).toBe("2026-06-07T08:00:00.000Z");
+    expect(firstOpen.lastOpenedAt).toBe("2026-06-09T12:00:00.000Z");
+    expect(firstOpen.sessionStartedAt).toBe("2026-06-09T12:00:00.000Z");
+
+    const secondOpen = startSession(firstOpen, "2026-06-10T09:00:00.000Z");
+
+    expect(secondOpen.briefingSinceAt).toBe("2026-06-09T12:00:00.000Z");
+    expect(secondOpen.lastOpenedAt).toBe("2026-06-10T09:00:00.000Z");
+  });
+
+  it("includes proof activity since previous open", () => {
+    const daily = startSession(baseDaily, "2026-06-09T12:00:00.000Z");
 
     const proof: ProofItem[] = [
       {
@@ -108,19 +102,54 @@ describe("generateWhileYouWereAway", () => {
       }
     ];
 
+    const briefing = generateWhileYouWereAway([], [], proof, daily, NOW);
+
+    expect(briefing.updated.some((line) => line.includes("Started pounce mission."))).toBe(true);
+  });
+
+  it("handles first open with no prior timestamps", () => {
+    const emptyDaily: DailyState = {
+      date: "2026-06-09",
+      mode: "normal",
+      pounceStarted: false,
+      minimumViableDayCompleted: false,
+      salvageCompleted: false
+    };
+    const nowIso = "2026-06-09T12:00:00.000Z";
+    const daily = startSession(emptyDaily, nowIso);
+
+    expect(daily.briefingSinceAt).toBe(nowIso);
+    expect(daily.lastOpenedAt).toBe(nowIso);
+
+    const briefing = generateWhileYouWereAway([], [], [], daily, NOW);
+    expect(briefing.updated).toHaveLength(0);
+  });
+
+  it("preserves seeded demo away window", () => {
+    const daily = startSession(baseDaily, "2026-06-09T12:00:00.000Z");
     const cards = [
       makeCard({
         id: "life-harness",
         title: "Life Harness",
         state: "active",
-        lastTouched: "2026-06-09T10:00:00.000Z"
+        lastTouched: "2026-06-08T10:00:00.000Z"
       })
     ];
 
-    const briefing = generateWhileYouWereAway(cards, logs, proof, daily, NOW);
+    const briefing = generateWhileYouWereAway(cards, [], [], daily, NOW);
+
     expect(daily.briefingSinceAt).toBe("2026-06-07T08:00:00.000Z");
-    expect(briefing.updated.length).toBeGreaterThan(0);
-    expect(startSession(daily, NOW.toISOString()).briefingSinceAt).toBe("2026-06-07T08:00:00.000Z");
+    expect(briefing.updated.some((line) => line.includes("Life Harness was touched"))).toBe(true);
+  });
+});
+
+describe("startSession", () => {
+  it("detects dormant cards with rolled-forward watermark", () => {
+    const daily = startSession(baseDaily, "2026-06-09T12:00:00.000Z");
+    const cards = [makeCard({ state: "active", lastTouched: "2026-05-01T12:00:00.000Z" })];
+    const briefing = generateWhileYouWereAway(cards, [], [], daily, NOW);
+
+    expect(briefing.detected.some((line) => line.includes("dormant"))).toBe(true);
   });
 });
 

@@ -167,7 +167,7 @@ export const GATEWAY_PROMPT_SAFETY_MARGIN_CHARS = 250;
  * chat_harness.md with empty context/history and placeholder mode/sensitivity/message.
  * Keep in sync with `services/ai-gateway/app/prompts/chat_harness.md`.
  */
-export const CHAT_HARNESS_PROMPT_SHELL_CHARS = 2543;
+export const CHAT_HARNESS_PROMPT_SHELL_CHARS = 4070;
 
 /** Reserve user-message chars when trimming context for OpenVINO prompt budget. */
 export const COMPACT_MESSAGE_RESERVE_CHARS = 400;
@@ -191,6 +191,7 @@ export interface CompactHarnessContextOptions {
 export interface EstimateChatHarnessPromptOptions {
   message?: string;
   conversationHistory?: ConversationTurn[];
+  threadStateJsonChars?: number;
 }
 
 /**
@@ -209,20 +210,23 @@ export function estimateChatHarnessPromptChars(
 ): number {
   const message = options.message ?? "";
   const history = options.conversationHistory ?? [];
+  const threadStateChars = options.threadStateJsonChars ?? 0;
   return (
     CHAT_HARNESS_PROMPT_SHELL_CHARS +
     JSON.stringify(context, null, 2).length +
     JSON.stringify(history, null, 2).length +
+    threadStateChars +
     message.length
   );
 }
 
 export function shouldAutoSelectCompactExport(
   fullContext: HarnessContext,
-  message = ""
+  message = "",
+  conversationHistory: ConversationTurn[] = []
 ): boolean {
   return (
-    estimateChatHarnessPromptChars(fullContext, { message }) >
+    estimateChatHarnessPromptChars(fullContext, { message, conversationHistory }) >
     DEFAULT_GATEWAY_MAX_INPUT_CHARS - GATEWAY_PROMPT_SAFETY_MARGIN_CHARS
   );
 }
@@ -264,24 +268,76 @@ function fitsCompactBudget(
   return fitsCompactPromptBudget(context, options);
 }
 
+export interface ResolveChatHarnessContextOptions {
+  preferredMode?: "full" | "compact";
+  message?: string;
+  conversationHistory?: ConversationTurn[];
+}
+
+export function trimConversationHistoryForPromptBudget(
+  history: ConversationTurn[],
+  context: HarnessContext,
+  message: string,
+  maxPromptChars: number,
+  threadStateJsonChars = 0
+): ConversationTurn[] {
+  let trimmed = [...history];
+  while (
+    trimmed.length > 0 &&
+    estimateChatHarnessPromptChars(context, {
+      message,
+      conversationHistory: trimmed,
+      threadStateJsonChars
+    }) > maxPromptChars
+  ) {
+    trimmed = trimmed.slice(1);
+  }
+  return trimmed;
+}
+
 export function resolveChatHarnessContextForGateway(
   data: HarnessExportInput,
-  options: { preferredMode?: "full" | "compact"; message?: string } = {}
+  options: ResolveChatHarnessContextOptions = {}
 ): HarnessContext {
   const message = options.message ?? "";
+  const history = options.conversationHistory ?? [];
   const full = buildHarnessContext(data);
   const preferred =
     options.preferredMode ??
-    (shouldAutoSelectCompactExport(full, message) ? "compact" : "full");
+    (shouldAutoSelectCompactExport(full, message, history) ? "compact" : "full");
   let context =
     preferred === "compact" ? buildCompactHarnessContext(data) : full;
 
   const maxPromptChars = compactPromptBudget({});
-  if (estimateChatHarnessPromptChars(context, { message }) > maxPromptChars) {
+  if (
+    estimateChatHarnessPromptChars(context, { message, conversationHistory: history }) >
+    maxPromptChars
+  ) {
     context = buildCompactHarnessContext(data, { maxPromptChars });
   }
 
   return context;
+}
+
+export function resolveChatHarnessSendBundle(
+  data: HarnessExportInput,
+  options: ResolveChatHarnessContextOptions & { threadStateJsonChars?: number } = {}
+): { context: HarnessContext; conversationHistory: ConversationTurn[] } {
+  const message = options.message ?? "";
+  let history = options.conversationHistory ?? [];
+  const threadStateJsonChars = options.threadStateJsonChars ?? 0;
+  const context = resolveChatHarnessContextForGateway(data, options);
+  const maxPromptChars = compactPromptBudget({});
+
+  history = trimConversationHistoryForPromptBudget(
+    history,
+    context,
+    message,
+    maxPromptChars,
+    threadStateJsonChars
+  );
+
+  return { context, conversationHistory: history };
 }
 
 export function scoreCompactCardPriority(card: HarnessContextCard): number {
