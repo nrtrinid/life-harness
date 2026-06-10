@@ -12,6 +12,7 @@ Related: [`model-stack-freeze-v3.md`](./model-stack-freeze-v3.md), [`services/ai
 |------|---------|
 | `frozen_core` | Product safety / CI baseline; committed default path |
 | `near_core` | Shipped role; candidate for default after evidence review |
+| `bench_candidate` | Competing model file; manual env / one-off yaml only — never committed default |
 | `research_candidate` | Promising; manual smoke only |
 | `overnight_bench` | Batch-only; `never_hot`; heavy stretch / overnight jobs |
 
@@ -45,9 +46,16 @@ All items must appear in a bench report (`python scripts/run_model_bench.py` or 
 - **Comparative evidence** vs incumbent default
 - Human sign-off before yaml/env promotion
 
+### bench_candidate
+
+- Registered in bench harness with `promotion_tier=bench_candidate` on the target
+- Must beat or match incumbent mock/default target on the relevant profile (e.g. `coder_daily_default` vs `mock_fast_only` on latency + verifier gates)
+- No yaml/env promotion until **near_core** evidence checklist passes
+- At most one bench candidate per role family enabled in manual runs
+
 ### research_candidate
 
-- Manual smoke only
+- Manual smoke only (`SCOUT_PHI4_SMOKE=1` or opt-in bench target)
 - No promotion without full bench pass on target profile
 
 ### overnight_bench

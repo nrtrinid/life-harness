@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from app.eval_scorers import (
     check_forbid_substrings_in_fields,
     check_json_field_paths,
+    check_synthesis_proposals_require_approval,
+    check_synthesis_provenance,
     run_heuristic_checks,
     validate_response_schema,
 )
+from app.synthesis_models import DeepSynthesisCompletedBody
+from app.synthesis_verifier import verify_synthesis_completed
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 EVALS_ROOT = SERVICE_ROOT / "evals"
@@ -30,6 +36,15 @@ class EvalHttpClient(Protocol):
     def post(self, path: str, json: dict[str, Any]) -> Any: ...
 
     def get(self, path: str) -> Any: ...
+
+
+@dataclass
+class EvalCaseExecutionResult:
+    passed: bool
+    body: dict[str, Any] | None
+    failure_reason: str | None
+    score_breakdown: dict[str, Any]
+    latency_ms: float
 
 
 def load_eval_cases(path: Path) -> list[dict[str, Any]]:
@@ -76,6 +91,53 @@ def resolve_input_text(case: dict[str, Any]) -> str:
     return raw
 
 
+def collect_score_breakdown(body: dict[str, Any] | None) -> dict[str, Any]:
+    if not body:
+        return {
+            "verifier_valid": None,
+            "schema_valid": None,
+            "proposal_approval_valid": None,
+            "grounding_valid": None,
+            "pounce_count": None,
+            "degraded_notes": [],
+        }
+
+    breakdown: dict[str, Any] = {
+        "degraded_notes": list(body.get("degraded_notes") or []),
+    }
+
+    if body.get("status") == "completed":
+        schema_ok, _ = validate_response_schema("DeepSynthesisCompletedBody", body)
+        breakdown["schema_valid"] = schema_ok
+
+        try:
+            completed = DeepSynthesisCompletedBody.model_validate(
+                {**body, "status": "completed"}
+            )
+            verifier_issues = verify_synthesis_completed(completed)
+            breakdown["verifier_valid"] = len(verifier_issues) == 0
+            breakdown["verifier_issues"] = verifier_issues
+        except Exception as exc:
+            breakdown["verifier_valid"] = False
+            breakdown["verifier_issues"] = [str(exc)]
+
+        proposal_issues = check_synthesis_proposals_require_approval(body)
+        breakdown["proposal_approval_valid"] = len(proposal_issues) == 0
+
+        provenance_issues = check_synthesis_provenance(body)
+        breakdown["grounding_valid"] = len(provenance_issues) == 0
+
+        breakdown["pounce_count"] = 1 if body.get("next_pounce") else 0
+    else:
+        breakdown["verifier_valid"] = None
+        breakdown["schema_valid"] = None
+        breakdown["proposal_approval_valid"] = None
+        breakdown["grounding_valid"] = None
+        breakdown["pounce_count"] = None
+
+    return breakdown
+
+
 def _apply_response_gates(
     case: dict[str, Any], body: dict[str, Any], answer: str
 ) -> tuple[bool, str]:
@@ -115,13 +177,13 @@ def _apply_response_gates(
     return True, "ok"
 
 
-def run_eval_case(
+def _execute_eval_case(
     client: EvalHttpClient,
     case: dict[str, Any],
     context: dict[str, Any],
-) -> tuple[bool, str]:
+) -> tuple[dict[str, Any] | None, str, str | None]:
     endpoint = case.get("endpoint", "chat-harness")
-    body: dict[str, Any]
+    body: dict[str, Any] | None = None
     answer = ""
 
     if endpoint == "chat-harness":
@@ -136,7 +198,11 @@ def run_eval_case(
         }
         response = client.post("/chat-harness", json=payload)
         if response.status_code != 200:
-            return False, f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}"
+            return (
+                None,
+                "",
+                f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
+            )
         body = response.json()
         answer = str(body.get("answer", ""))
     elif endpoint == "raw-lab":
@@ -147,7 +213,11 @@ def run_eval_case(
         }
         response = client.post("/raw-lab", json=payload)
         if response.status_code != 200:
-            return False, f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}"
+            return (
+                None,
+                "",
+                f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
+            )
         body = response.json()
         answer = str(body.get("answer", ""))
     elif endpoint == "analyze-transcript":
@@ -159,7 +229,11 @@ def run_eval_case(
         }
         response = client.post("/analyze-transcript", json=payload)
         if response.status_code != 200:
-            return False, f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}"
+            return (
+                None,
+                "",
+                f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
+            )
         body = response.json()
         answer = ""
     elif endpoint == "ask-harness":

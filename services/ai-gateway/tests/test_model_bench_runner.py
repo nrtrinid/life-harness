@@ -6,7 +6,12 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.bench_models import BenchCaseStatus, BenchProfile, BenchRunResult
+from app.bench_models import (
+    BenchCaseStatus,
+    BenchProfile,
+    BenchRunResult,
+    ModelPromotionTier,
+)
 from app.bench_runner import (
     BENCH_TARGETS,
     bench_result_to_json,
@@ -103,23 +108,18 @@ def test_run_bench_three_targets_summaries(client, harness_context):
     targets = parse_targets("mock_fast_only,mock_with_critic,mock_with_stretch")
     post_counts: list[int] = []
 
-    def counting_post(path, json=None, **kwargs):
-        post_counts.append(1)
-        return client.post(path, json=json, **kwargs)
+    class CountingClient:
+        def post(self, path, **kwargs):
+            post_counts.append(1)
+            return client.post(path, **kwargs)
 
-    counting_client = type(
-        "CountingClient",
-        (),
-        {
-            "post": counting_post,
-            "get": client.get,
-        },
-    )()
+        def get(self, path, **kwargs):
+            return client.get(path, **kwargs)
 
     result = run_bench(
         profile=BenchProfile.synthesis_depth,
         targets=targets,
-        client=counting_client,
+        client=CountingClient(),
         context=harness_context,
     )
     assert len(result.summary) == 3
@@ -155,12 +155,17 @@ def test_run_bench_failure_isolation(client, harness_context):
     cases = load_eval_cases(SYNTHESIS_EVALS_DIR / "valid_synthesis_schema.json")
     good_case = cases[0]
 
-    def flaky_post(path, json=None, **kwargs):
-        if path == "/ai/deep-synthesis" and json.get("user_prompt") == "__force_fail__":
-            raise RuntimeError("injected bench failure")
-        return client.post(path, json=json, **kwargs)
+    class FlakyClient:
+        def post(self, path, **kwargs):
+            payload = kwargs.get("json") or {}
+            if path == "/ai/deep-synthesis" and payload.get("user_prompt") == "__force_fail__":
+                raise RuntimeError("injected bench failure")
+            return client.post(path, **kwargs)
 
-    flaky_client = type("FlakyClient", (), {"post": flaky_post, "get": client.get})()
+        def get(self, path, **kwargs):
+            return client.get(path, **kwargs)
+
+    flaky_client = FlakyClient()
     bad_case = {**good_case, "user_prompt": "__force_fail__"}
 
     with patch(
@@ -248,3 +253,13 @@ def test_summarize_case_results_rates():
     ]
     assert rows[0].total == 0
     assert rows[0].verifier_valid_rate is None
+
+
+def test_bench_targets_declare_promotion_tiers():
+    assert BENCH_TARGETS["mock_fast_only"].promotion_tier == ModelPromotionTier.frozen_core
+    assert BENCH_TARGETS["mock_with_critic"].promotion_tier == ModelPromotionTier.frozen_core
+    assert BENCH_TARGETS["mock_with_stretch"].promotion_tier == ModelPromotionTier.frozen_core
+    assert (
+        BENCH_TARGETS["real_phi4_with_critic"].promotion_tier
+        == ModelPromotionTier.research_candidate
+    )

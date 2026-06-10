@@ -360,6 +360,32 @@ Committed implementation: [`models.yaml`](models.yaml) (v2). `companion_fast` is
 
 Parse/validate in Python: `from app.config import get_slot_registry`.
 
+## Model bench harness (v0.1)
+
+CI-safe pipeline comparison over synthesis eval fixtures. Default targets are mock pipeline profiles (`mock_fast_only`, `mock_with_critic`, `mock_with_stretch`), not model files. Harness + promotion flow: [`docs/plans/a770-model-bench-harness.md`](../../docs/plans/a770-model-bench-harness.md), [`docs/plans/a770-model-promotion-gates.md`](../../docs/plans/a770-model-promotion-gates.md).
+
+```powershell
+cd services/ai-gateway
+$env:SCOUT_PROVIDER="mock"
+# Summary JSON to stdout (gateway must be running for CLI):
+python scripts/run_model_bench.py --profile synthesis_depth --targets mock_fast_only,mock_with_critic,mock_with_stretch
+# Optional full result file:
+python scripts/run_model_bench.py --profile critic_quality --targets mock_with_critic --output bench_results/latest.json
+```
+
+**Optional real Phi-4 critic bench target** (`real_phi4_with_critic`) — skipped unless explicitly enabled and the local llama.cpp critic server responds. Compare mock vs real on the same profile:
+
+```powershell
+$env:SCOUT_PROVIDER="mock"
+$env:SCOUT_REAL_MODEL_BENCH="1"
+$env:SCOUT_CRITIC_RUNTIME="llamacpp"
+$env:SCOUT_CRITIC_BASE_URL="http://127.0.0.1:8120/v1"
+$env:SCOUT_CRITIC_MODEL="phi-4-reasoning-plus"
+python scripts/run_model_bench.py --profile critic_quality --targets mock_with_critic,real_phi4_with_critic --output bench_results/phi4_critic.json
+```
+
+Requirements: gateway and llama-server must already be running; model files are user-provided and not committed. CI/default pytest uses mock targets only. If the real target is unavailable, the bench skips it with a `summary_note` and continues other targets.
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -389,6 +415,7 @@ Parse/validate in Python: `from app.config import get_slot_registry`.
 | `SCOUT_CRITIC_MODEL` | `phi-4-reasoning-plus` | Model id on llama.cpp wire for synthesis critic (gateway-internal only) |
 | `SCOUT_CRITIC_TIMEOUT_SECONDS` | `30` | HTTP timeout for synthesis critic llama.cpp calls |
 | `SCOUT_PHI4_SMOKE` | *(unset)* | Set to `1` to run optional manual synthesis critic smoke (`test_phi4_synthesis_critic_smoke.py`); skipped in CI |
+| `SCOUT_REAL_MODEL_BENCH` | *(unset)* | Set to `1` to enable optional `real_phi4_with_critic` bench target (requires `SCOUT_CRITIC_RUNTIME=llamacpp` and reachable critic server); skipped in CI |
 | `SCOUT_LLAMA_BASE_URL` | `http://127.0.0.1:8120` | llama.cpp OpenAI API base when env set; else `critic_small.llamacpp` host/port from `models.yaml` |
 | `SCOUT_LLAMA_TIMEOUT_SECONDS` | `60` | HTTP timeout for llama.cpp critic calls |
 | `SCOUT_LLAMA_API_KEY` | *(unset)* | Optional Bearer token for llama-server |

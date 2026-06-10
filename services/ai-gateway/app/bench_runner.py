@@ -19,6 +19,7 @@ from app.bench_models import (
     BenchProfile,
     BenchRunResult,
     BenchTarget,
+    ModelPromotionTier,
 )
 from app.bench_real_phi4 import (
     bench_target_runtime,
@@ -42,20 +43,24 @@ BENCH_TARGETS: dict[str, BenchTarget] = {
     "mock_fast_only": BenchTarget(
         target_id="mock_fast_only",
         pipeline_profile="fast_only",
+        promotion_tier=ModelPromotionTier.frozen_core,
     ),
     "mock_with_critic": BenchTarget(
         target_id="mock_with_critic",
         pipeline_profile="with_critic",
+        promotion_tier=ModelPromotionTier.frozen_core,
     ),
     "mock_with_stretch": BenchTarget(
         target_id="mock_with_stretch",
         pipeline_profile="with_stretch",
+        promotion_tier=ModelPromotionTier.frozen_core,
     ),
     "real_phi4_with_critic": BenchTarget(
         target_id="real_phi4_with_critic",
         pipeline_profile="with_critic",
         label="Phi-4 critic via local llama.cpp",
         requires_external=True,
+        promotion_tier=ModelPromotionTier.research_candidate,
     ),
 }
 

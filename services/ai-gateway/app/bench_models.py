@@ -15,6 +15,20 @@ class BenchCaseStatus(str, Enum):
     degraded = "degraded"
 
 
+class ModelPromotionTier(str, Enum):
+    """Slot tier a bench target is competing for or evidencing.
+
+    Canonical definitions: docs/plans/model-stack-freeze-v3.md and
+    docs/plans/a770-model-promotion-gates.md.
+    """
+
+    frozen_core = "frozen_core"
+    near_core = "near_core"
+    bench_candidate = "bench_candidate"
+    research_candidate = "research_candidate"
+    overnight_bench = "overnight_bench"
+
+
 class BenchProfile(str, Enum):
     synthesis_depth = "synthesis_depth"
     critic_quality = "critic_quality"
@@ -34,6 +48,7 @@ class BenchTarget(StrictModel):
     pipeline_profile: str = Field(..., min_length=1)
     label: str | None = None
     requires_external: bool = False
+    promotion_tier: ModelPromotionTier | None = None
 
 
 class BenchCaseResult(StrictModel):
