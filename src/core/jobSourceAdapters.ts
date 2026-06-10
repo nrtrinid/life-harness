@@ -757,6 +757,10 @@ function normalizeWorkdayJob(
   };
 }
 
+export function countWorkdayRawJobEntries(raw: unknown): number {
+  return extractWorkdayJobArray(raw).length;
+}
+
 export function parseWorkdaySearchPayload(raw: unknown, source: JobSource): NormalizedJobPosting[] {
   const company = source.name.replace(/\s+(Careers|Jobs|External Site)$/i, "").trim();
   const deduped = new Map<string, NormalizedJobPosting>();

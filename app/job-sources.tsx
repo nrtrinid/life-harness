@@ -9,10 +9,15 @@ import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
 import type { JobSourceInput } from "../src/core/actions";
 import {
+  getJobSourceHealth,
+  WORKDAY_WEAK_PASS_HEALTH_HINT
+} from "../src/core/jobSourceHealth";
+import {
   APPROVED_SOURCE_FETCHING_BANNER,
   JOB_SOURCE_CADENCE_LABELS,
   JOB_SOURCE_KIND_LABELS,
-  JOB_SOURCE_RUN_STATUS_LABELS
+  JOB_SOURCE_RUN_STATUS_LABELS,
+  SOURCE_HEALTH_LABELS
 } from "../src/core/labels";
 import {
   buildSourceScheduleStats,
@@ -40,6 +45,7 @@ export default function JobSourcesScreen() {
   const {
     jobSources,
     jobSourceRuns,
+    jobCandidates,
     addJobSource,
     updateJobSource,
     isBatchRunning,
@@ -261,9 +267,11 @@ export default function JobSourcesScreen() {
           const isRunning =
             runningId === source.id || source.runStatus === "running" || isBatchRunning;
           const dueBadge = getSourceDueBadge(source, now);
+          const health = getJobSourceHealth(source, jobSourceRuns, jobCandidates, now);
           return (
             <View key={source.id} style={styles.cardTile}>
               <Text style={styles.titleText}>{source.name}</Text>
+              <Text style={styles.helpText}>Health: {SOURCE_HEALTH_LABELS[health]}</Text>
               <Text style={styles.bodyText}>{source.url}</Text>
               <Text style={styles.helpText}>
                 {JOB_SOURCE_KIND_LABELS[source.kind]} · {source.enabled ? "Enabled" : "Disabled"}{" "}
@@ -272,7 +280,13 @@ export default function JobSourcesScreen() {
               {source.requestConfig ? (
                 <Text style={styles.helpText}>
                   Endpoint-backed · {source.requestConfig.method}
+                  {source.requestConfig.pagination?.mode === "workday_offset"
+                    ? ` · pagination ${source.requestConfig.pagination.maxPages ?? 3} pages`
+                    : ""}
                 </Text>
+              ) : null}
+              {health === "weak_pass" && source.kind === "workday" ? (
+                <Text style={styles.bodyText}>{WORKDAY_WEAK_PASS_HEALTH_HINT}</Text>
               ) : null}
               <Text style={styles.helpText}>Schedule: {SOURCE_DUE_BADGE_LABELS[dueBadge]}</Text>
               <Text style={styles.helpText}>

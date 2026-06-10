@@ -69,9 +69,19 @@ export type JobSourceRunStatus = "idle" | "running" | "success" | "error";
 
 export type JobSourceRequestMethod = "GET" | "POST";
 
+export type JobSourcePaginationMode = "none" | "workday_offset";
+
+export interface JobSourcePaginationConfig {
+  mode: JobSourcePaginationMode;
+  limit?: number;
+  maxPages?: number;
+  maxResults?: number;
+}
+
 export interface JobSourceRequestConfig {
   method: JobSourceRequestMethod;
   bodyJson?: unknown;
+  pagination?: JobSourcePaginationConfig;
 }
 
 export interface JobSource {
@@ -99,7 +109,16 @@ export interface JobSourceRunResult {
   skippedDuplicates: number;
   errors: string[];
   message: string;
+  pagesFetched?: number;
+  paginationStoppedReason?: string;
 }
+
+export type JobSourceHealth =
+  | "healthy"
+  | "weak_pass"
+  | "error"
+  | "stale"
+  | "never_run";
 
 export type JobCandidateStatus = "new" | "saved" | "dismissed" | "card_created";
 
@@ -257,4 +276,46 @@ export interface HarnessMemoryItem {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PrimaryAction {
+  actionText: string;
+  buttonLabel: string;
+  smallestStart?: string;
+  targetRoute?: string;
+  cardId?: string;
+  isPounce: boolean;
+  isDeepLink: boolean;
+}
+
+export interface CareerPipelineState {
+  candidatesWaiting: number;
+  candidatesByOrigin: {
+    saved: number;
+    fetched: number;
+  };
+  activeApplications: LifeCard[];
+  waitingApplications: LifeCard[];
+  followUpsDue: LifeCard[];
+  followUpsOverdue: LifeCard[];
+  dueSources: number;
+  enabledSources: number;
+  lastRun?: {
+    sourceName: string;
+    timestamp: string;
+    fetchedCount: number;
+    createdCount: number;
+  };
+}
+
+export interface RecoveryVisibility {
+  showSalvage: boolean;
+  showMvd: boolean;
+  shouldPromote: boolean;
+  salvageReason?: string;
+  mvdProgress: {
+    completed: number;
+    total: 4;
+    items: string[];
+  };
 }

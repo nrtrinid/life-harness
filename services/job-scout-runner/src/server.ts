@@ -5,14 +5,16 @@
  */
 import http from "node:http";
 
+import { shouldUseWorkdayPagination } from "../../../src/core/jobSourcePagination";
 import {
   buildFetchErrorRunOutput,
   canRunJobSource,
   parseFetchedRaw,
-  runJobSourceFromRaw
+  runJobSourceFromRaw,
+  runPaginatedJobSourceFromRaw
 } from "../../../src/core/jobSourceRunner";
 import type { JobSource } from "../../../src/core/types";
-import { fetchSourceText, type FetchImpl } from "./fetchSource";
+import { fetchSourceText, type FetchImpl, type FetchSourceResult } from "./fetchSource";
 import type { DnsResolver } from "./safety";
 import type {
   ErrorResponseBody,
@@ -105,32 +107,73 @@ async function handleRunSource(
     return response;
   }
 
-  const fetched = await fetchSourceText(source.url, {
-    requestConfig: source.requestConfig,
-    resolveHost: options.resolveHost,
-    fetchImpl: options.fetchImpl
-  });
-
-  if (!fetched.ok) {
-    const response = buildErrorRunResponse(source, fetched.error);
-    logRunEvent({
-      source,
-      candidateCount: 0,
-      skippedDuplicates: 0,
-      errors: response.result.errors
+  const fetchPage = async (pageSource: JobSource) => {
+    const pageFetched = await fetchSourceText(pageSource.url, {
+      requestConfig: pageSource.requestConfig,
+      resolveHost: options.resolveHost,
+      fetchImpl: options.fetchImpl
     });
-    return response;
+    if (!pageFetched.ok) {
+      return { ok: false as const, error: pageFetched.error };
+    }
+    return {
+      ok: true as const,
+      raw: parseFetchedRaw(pageSource, pageFetched.text),
+      fetchMeta: pageFetched
+    };
+  };
+
+  let output;
+  let lastFetchMeta: FetchSourceResult | undefined;
+
+  if (shouldUseWorkdayPagination(source)) {
+    output = await runPaginatedJobSourceFromRaw(
+      source,
+      existingCandidates,
+      resumeModules,
+      async (pageSource) => {
+        const pageResult = await fetchPage(pageSource);
+        if (pageResult.ok) {
+          lastFetchMeta = pageResult.fetchMeta;
+        }
+        return pageResult;
+      }
+    );
+  } else {
+    const fetched = await fetchSourceText(source.url, {
+      requestConfig: source.requestConfig,
+      resolveHost: options.resolveHost,
+      fetchImpl: options.fetchImpl
+    });
+
+    if (!fetched.ok) {
+      const response = buildErrorRunResponse(source, fetched.error);
+      logRunEvent({
+        source,
+        candidateCount: 0,
+        skippedDuplicates: 0,
+        errors: response.result.errors
+      });
+      return response;
+    }
+
+    lastFetchMeta = fetched;
+    const raw = parseFetchedRaw(source, fetched.text);
+    output = runJobSourceFromRaw(source, raw, existingCandidates, resumeModules);
   }
 
-  const raw = parseFetchedRaw(source, fetched.text);
-  const output = runJobSourceFromRaw(source, raw, existingCandidates, resumeModules);
+  if (output.result.pagesFetched && output.result.pagesFetched > 0) {
+    console.log(
+      `[job-scout-runner] pagination pages=${output.result.pagesFetched} stopped=${output.result.paginationStoppedReason ?? "unknown"}`
+    );
+  }
 
   logRunEvent({
     source,
-    method: fetched.method,
-    hostname: fetched.hostname,
-    resolvedAddresses: fetched.resolvedAddresses,
-    byteSize: fetched.byteSize,
+    method: lastFetchMeta?.method,
+    hostname: lastFetchMeta?.hostname,
+    resolvedAddresses: lastFetchMeta?.resolvedAddresses,
+    byteSize: lastFetchMeta?.byteSize,
     candidateCount: output.candidates.length,
     skippedDuplicates: output.result.skippedDuplicates,
     errors: output.result.errors

@@ -55,4 +55,19 @@ describe("jobSourceRequestConfig", () => {
       expect(result.error).toContain("JSON body");
     }
   });
+
+  it("validates workday pagination config", () => {
+    const valid = validateJobSourceRequestConfig({
+      method: "POST",
+      bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" },
+      pagination: { mode: "workday_offset", limit: 20, maxPages: 3 }
+    });
+    expect(valid).toEqual({ ok: true });
+
+    const invalid = validateJobSourceRequestConfig({
+      method: "GET",
+      pagination: { mode: "workday_offset" }
+    });
+    expect(invalid.ok).toBe(false);
+  });
 });

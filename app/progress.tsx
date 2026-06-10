@@ -11,6 +11,7 @@ import { Section } from "../src/components/Section";
 import { colors, styles } from "../src/components/styles";
 import { buildCareerStats } from "../src/core/career";
 import { buildJobScoutStats } from "../src/core/jobScout";
+import { buildSourceHealthStats } from "../src/core/jobSourceHealth";
 import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
 import {
   buildCardWarmthList,
@@ -116,6 +117,7 @@ export default function ProgressScreen() {
   );
   const locks = checkUseBeforeImproveLocks(cards, logs, jobCandidates, jobSourceRuns);
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
+  const healthStats = buildSourceHealthStats(jobSources, jobSourceRuns, jobCandidates, now);
 
   return (
     <Screen>
@@ -138,6 +140,22 @@ export default function ProgressScreen() {
         <Link href="/job-sources" asChild>
           <Pressable style={styles.secondaryAction}>
             <Text style={styles.secondaryActionText}>Run an approved source</Text>
+          </Pressable>
+        </Link>
+      </Section>
+
+      <Section title="Source Health">
+        <Text style={styles.listItem}>▸ Healthy sources: {healthStats.healthy}</Text>
+        <Text style={styles.listItem}>▸ Weak-pass sources: {healthStats.weakPass}</Text>
+        <Text style={styles.listItem}>▸ Error sources: {healthStats.error}</Text>
+        <Text style={styles.listItem}>▸ Stale sources: {healthStats.stale}</Text>
+        <Text style={styles.listItem}>▸ Never-run sources: {healthStats.neverRun}</Text>
+        <Text style={styles.listItem}>
+          ▸ Candidate-producing Workday sources: {healthStats.candidateProducingWorkdaySources}
+        </Text>
+        <Link href="/job-sources" asChild>
+          <Pressable style={styles.secondaryAction}>
+            <Text style={styles.secondaryActionText}>Open Job Sources</Text>
           </Pressable>
         </Link>
       </Section>

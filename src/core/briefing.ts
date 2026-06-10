@@ -1,6 +1,7 @@
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "./guards";
 import { getFollowUpsDue } from "./career";
 import { buildCandidateBriefingSignals, formatFitScore } from "./jobScout";
+import { buildSourceHealthBriefingLines } from "./jobSourceHealth";
 import { buildSourceScheduleStats } from "./jobSourceSchedule";
 import { WARMTH_LABELS } from "./labels";
 import {
@@ -156,6 +157,7 @@ export function generateWhileYouWereAway(
       `${scheduleStats.dueSources} job source${scheduleStats.dueSources === 1 ? "" : "s"} ${scheduleStats.dueSources === 1 ? "is" : "are"} due.`
     );
   }
+  detected.push(...buildSourceHealthBriefingLines(jobSources, jobSourceRuns, jobCandidates, now));
   if (scoutSignals.savedWaiting > 0) {
     detected.push(`${scoutSignals.savedWaiting} saved job candidates waiting for review.`);
   }

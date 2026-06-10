@@ -3,6 +3,7 @@ import type {
   JobCandidateOrigin,
   JobCandidateStatus,
   JobSourceCadence,
+  JobSourceHealth,
   JobSourceKind,
   JobSourceRunStatus,
   LifeArea,
@@ -86,6 +87,14 @@ export const JOB_CANDIDATE_ORIGIN_LABELS: Record<JobCandidateOrigin, string> = {
 };
 
 export const FIT_SCORE_DISCLAIMER = "Deterministic keyword match, not final judgment.";
+
+export const SOURCE_HEALTH_LABELS: Record<JobSourceHealth, string> = {
+  healthy: "Healthy",
+  weak_pass: "Weak-pass",
+  error: "Error",
+  stale: "Stale",
+  never_run: "Never run"
+};
 
 export const JOB_SOURCE_RUN_STATUS_LABELS: Record<JobSourceRunStatus, string> = {
   idle: "Idle",

@@ -1,3 +1,4 @@
+import { validatePaginationConfig } from "./jobSourcePagination";
 import type { JobSourceRequestConfig } from "./types";
 
 export const FORBIDDEN_CREDENTIAL_KEY_PATTERN =
@@ -93,6 +94,10 @@ export function validateJobSourceRequestConfig(
   }
   if (config.method === "POST" && config.bodyJson === undefined) {
     return { ok: false, error: "POST request requires a JSON body." };
+  }
+  const paginationValidation = validatePaginationConfig(config);
+  if (!paginationValidation.ok) {
+    return paginationValidation;
   }
   return { ok: true };
 }

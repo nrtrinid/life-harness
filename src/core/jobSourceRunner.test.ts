@@ -16,8 +16,10 @@ import {
   canRunJobSource,
   dedupeJobPostings,
   PREVIEW_JOB_SOURCE_ID,
+  finalizeJobSourceFromPostings,
   rebindJobSourceRunOutput,
-  runJobSourceFromRaw
+  runJobSourceFromRaw,
+  runPaginatedJobSourceFromRaw
 } from "./jobSourceRunner";
 import { GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE, WORKDAY_ZERO_LISTINGS_MESSAGE } from "./jobSourceAdapters";
 import type { JobSource } from "./types";
@@ -364,5 +366,193 @@ describe("jobSourceRunner", () => {
     const locks = checkJobScoutLocks([], [], [], []);
     expect(locks.find((lock) => lock.id === "manual-run-fetching")?.enabled).toBe(true);
     expect(locks.find((lock) => lock.id === "scheduled-fetching")?.required).toBe(5);
+  });
+});
+
+function buildWorkdayPageJson(jobCount: number, offset: number) {
+  const jobPostings = Array.from({ length: jobCount }, (_, index) => ({
+    title: `Engineer ${offset + index}`,
+    externalPath: `/en-US/External/job/Engineer-${offset + index}`,
+    locationsText: "Remote"
+  }));
+  return { total: jobCount, body: { jobPostings } };
+}
+
+const paginatedWorkdaySource: JobSource = {
+  id: "source-workday-paginated",
+  name: "Paginated Workday",
+  url: "https://example.com/wday/cxs/example/jobs",
+  kind: "workday",
+  enabled: true,
+  cadence: "manual",
+  requestConfig: {
+    method: "POST",
+    bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" },
+    pagination: { mode: "workday_offset", limit: 20, maxPages: 3, maxResults: 100 }
+  }
+};
+
+describe("runPaginatedJobSourceFromRaw", () => {
+  it("increments offset 0 → 20 → 40 across pages", async () => {
+    const offsets: number[] = [];
+    const output = await runPaginatedJobSourceFromRaw(
+      paginatedWorkdaySource,
+      [],
+      seedResumeModules,
+      async (pageSource) => {
+        const body = pageSource.requestConfig?.bodyJson as { offset?: number };
+        offsets.push(body.offset ?? 0);
+        return { ok: true, raw: buildWorkdayPageJson(20, body.offset ?? 0) };
+      }
+    );
+    expect(offsets).toEqual([0, 20, 40]);
+    expect(output.result.pagesFetched).toBe(3);
+    expect(output.result.paginationStoppedReason).toBe("max_pages");
+    expect(output.candidates.length).toBeGreaterThan(0);
+  });
+
+  it("stops when page returns fewer than limit", async () => {
+    const output = await runPaginatedJobSourceFromRaw(
+      paginatedWorkdaySource,
+      [],
+      seedResumeModules,
+      async (pageSource) => {
+        const body = pageSource.requestConfig?.bodyJson as { offset?: number };
+        const offset = body.offset ?? 0;
+        const count = offset === 0 ? 20 : 5;
+        return { ok: true, raw: buildWorkdayPageJson(count, offset) };
+      }
+    );
+    expect(output.result.pagesFetched).toBe(2);
+    expect(output.result.paginationStoppedReason).toBe("fewer_than_limit");
+  });
+
+  it("stops at maxPages", async () => {
+    const output = await runPaginatedJobSourceFromRaw(
+      {
+        ...paginatedWorkdaySource,
+        requestConfig: {
+          ...paginatedWorkdaySource.requestConfig!,
+          pagination: { mode: "workday_offset", limit: 20, maxPages: 2, maxResults: 100 }
+        }
+      },
+      [],
+      seedResumeModules,
+      async (pageSource) => {
+        const body = pageSource.requestConfig?.bodyJson as { offset?: number };
+        return { ok: true, raw: buildWorkdayPageJson(20, body.offset ?? 0) };
+      }
+    );
+    expect(output.result.pagesFetched).toBe(2);
+    expect(output.result.paginationStoppedReason).toBe("max_pages");
+  });
+
+  it("respects effectiveMaxResults as a single cap through finalize", async () => {
+    const output = await runPaginatedJobSourceFromRaw(
+      {
+        ...paginatedWorkdaySource,
+        requestConfig: {
+          ...paginatedWorkdaySource.requestConfig!,
+          pagination: { mode: "workday_offset", limit: 20, maxPages: 3, maxResults: 25 }
+        }
+      },
+      [],
+      seedResumeModules,
+      async (pageSource) => {
+        const body = pageSource.requestConfig?.bodyJson as { offset?: number };
+        return { ok: true, raw: buildWorkdayPageJson(20, body.offset ?? 0) };
+      }
+    );
+    expect(output.candidates.length).toBeLessThanOrEqual(25);
+    expect(output.result.paginationStoppedReason).toBe("max_results");
+  });
+
+  it("uses parsed page posting count for stop logic even with duplicate titles", async () => {
+    const duplicateHeavyPage = {
+      total: 20,
+      body: {
+        jobPostings: Array.from({ length: 20 }, () => ({
+          title: "Same Title",
+          externalPath: "/en-US/External/job/same",
+          locationsText: "Remote"
+        }))
+      }
+    };
+    const output = await runPaginatedJobSourceFromRaw(
+      paginatedWorkdaySource,
+      [],
+      seedResumeModules,
+      async (pageSource) => {
+        const body = pageSource.requestConfig?.bodyJson as { offset?: number };
+        if ((body.offset ?? 0) === 0) {
+          return { ok: true, raw: duplicateHeavyPage };
+        }
+        return { ok: true, raw: buildWorkdayPageJson(0, body.offset ?? 0) };
+      }
+    );
+    expect(output.result.pagesFetched).toBe(2);
+    expect(output.result.paginationStoppedReason).toBe("zero_postings");
+  });
+
+  it("dedupes duplicates across pages", async () => {
+    const sharedJob = {
+      title: "Shared Role",
+      externalPath: "/en-US/External/job/shared",
+      locationsText: "Remote"
+    };
+    const output = await runPaginatedJobSourceFromRaw(
+      paginatedWorkdaySource,
+      [],
+      seedResumeModules,
+      async (pageSource) => {
+        const body = pageSource.requestConfig?.bodyJson as { offset?: number };
+        const offset = body.offset ?? 0;
+        if (offset === 0) {
+          return {
+            ok: true,
+            raw: { total: 1, body: { jobPostings: [sharedJob] } }
+          };
+        }
+        return {
+          ok: true,
+          raw: { total: 1, body: { jobPostings: [sharedJob, ...buildWorkdayPageJson(19, offset).body.jobPostings] } }
+        };
+      }
+    );
+    const titles = output.candidates.map((candidate) => candidate.roleTitle);
+    expect(titles.filter((title) => title === "Shared Role")).toHaveLength(1);
+  });
+
+  it("does not create application cards", async () => {
+    const output = await runPaginatedJobSourceFromRaw(
+      paginatedWorkdaySource,
+      [],
+      seedResumeModules,
+      async () => ({ ok: true, raw: buildWorkdayPageJson(2, 0) })
+    );
+    const state = createState();
+    const result = applyRunJobSourceResult(state, output);
+    expect(result.state.cards).toHaveLength(state.cards.length);
+  });
+});
+
+describe("finalizeJobSourceFromPostings", () => {
+  it("does not apply a second lower source.maxResults cap when effectiveMaxResults is provided", () => {
+    const postings = Array.from({ length: 30 }, (_, index) => ({
+      roleTitle: `Role ${index}`,
+      company: "Acme",
+      sourceUrl: `https://example.com/${index}`,
+      description: "desc",
+      roleType: "software" as const
+    }));
+    const output = finalizeJobSourceFromPostings(
+      { ...paginatedWorkdaySource, maxResults: 5 },
+      postings,
+      [],
+      seedResumeModules,
+      [],
+      { effectiveMaxResults: 30 }
+    );
+    expect(output.candidates).toHaveLength(30);
   });
 });

@@ -157,27 +157,131 @@ const COMPACT_MAX_PROOF = 5;
 const COMPACT_TEXT_LIMIT = 80;
 const COLD_WARMTH: Warmth[] = ["cold", "dormant", "cooling"];
 
-/** Dev UI auto-selects Compact when full export exceeds this (compact JSON). */
-export const AUTO_COMPACT_THRESHOLD_CHARS = 10_000;
+/** Matches default `SCOUT_MAX_INPUT_CHARS` on ai-gateway. */
+export const DEFAULT_GATEWAY_MAX_INPUT_CHARS = 12_000;
+
+/** Headroom below gateway max for template drift and long user messages. */
+export const GATEWAY_PROMPT_SAFETY_MARGIN_CHARS = 250;
 
 /**
- * Target max for compact export (compact JSON). Upper bound for acceptance; gateway
- * re-indents context in the prompt (~15–25% overhead) plus template/message — compact
- * also drops resume-module cards first even when under this cap.
+ * chat_harness.md with empty context/history and placeholder mode/sensitivity/message.
+ * Keep in sync with `services/ai-gateway/app/prompts/chat_harness.md`.
  */
+export const CHAT_HARNESS_PROMPT_SHELL_CHARS = 2543;
+
+/** Reserve user-message chars when trimming context for OpenVINO prompt budget. */
+export const COMPACT_MESSAGE_RESERVE_CHARS = 400;
+
+/**
+ * Legacy minified-json heuristic for docs and coarse UI hints. Prefer
+ * `shouldAutoSelectCompactExport` / `estimateChatHarnessPromptChars` for gateway budget.
+ */
+export const AUTO_COMPACT_THRESHOLD_CHARS = 10_000;
+
+/** Legacy minified-json compact cap. Prefer `maxPromptChars` in buildCompactHarnessContext. */
 export const DEFAULT_COMPACT_MAX_CONTEXT_CHARS = 11_000;
 
 export interface CompactHarnessContextOptions {
+  /** Legacy minified JSON budget. */
   maxContextChars?: number;
+  /** Serialized OpenVINO chat-harness prompt budget (recommended). */
+  maxPromptChars?: number;
+}
+
+export interface EstimateChatHarnessPromptOptions {
+  message?: string;
+  conversationHistory?: ConversationTurn[];
 }
 
 /**
- * Compact JSON length of a HarnessContext (matches client POST serialization).
- * Gateway re-indents context in the prompt (~15–25% overhead) plus template/message —
- * use buildCompactHarnessContext for OpenVINO budget headroom, not raw 12k on this value.
+ * Minified JSON length of a HarnessContext (matches client POST body serialization).
  */
 export function estimateHarnessContextChars(context: HarnessContext): number {
   return JSON.stringify(context).length;
+}
+
+/**
+ * Approximates ai-gateway `build_chat_harness_prompt` length (indented context JSON + template).
+ */
+export function estimateChatHarnessPromptChars(
+  context: HarnessContext,
+  options: EstimateChatHarnessPromptOptions = {}
+): number {
+  const message = options.message ?? "";
+  const history = options.conversationHistory ?? [];
+  return (
+    CHAT_HARNESS_PROMPT_SHELL_CHARS +
+    JSON.stringify(context, null, 2).length +
+    JSON.stringify(history, null, 2).length +
+    message.length
+  );
+}
+
+export function shouldAutoSelectCompactExport(
+  fullContext: HarnessContext,
+  message = ""
+): boolean {
+  return (
+    estimateChatHarnessPromptChars(fullContext, { message }) >
+    DEFAULT_GATEWAY_MAX_INPUT_CHARS - GATEWAY_PROMPT_SAFETY_MARGIN_CHARS
+  );
+}
+
+function compactPromptBudget(options: CompactHarnessContextOptions): number {
+  return (
+    options.maxPromptChars ??
+    DEFAULT_GATEWAY_MAX_INPUT_CHARS - GATEWAY_PROMPT_SAFETY_MARGIN_CHARS
+  );
+}
+
+function fitsCompactPromptBudget(
+  context: HarnessContext,
+  options: CompactHarnessContextOptions,
+  messageReserve = COMPACT_MESSAGE_RESERVE_CHARS
+): boolean {
+  const reservedMessage = "m".repeat(messageReserve);
+  return (
+    estimateChatHarnessPromptChars(context, { message: reservedMessage }) <=
+    compactPromptBudget(options)
+  );
+}
+
+function fitsCompactContextBudget(
+  context: HarnessContext,
+  maxContextChars: number
+): boolean {
+  return estimateHarnessContextChars(context) <= maxContextChars;
+}
+
+function fitsCompactBudget(
+  context: HarnessContext,
+  options: CompactHarnessContextOptions
+): boolean {
+  if (options.maxContextChars !== undefined) {
+    return fitsCompactContextBudget(context, options.maxContextChars);
+  }
+
+  return fitsCompactPromptBudget(context, options);
+}
+
+export function resolveChatHarnessContextForGateway(
+  data: HarnessExportInput,
+  options: { preferredMode?: "full" | "compact"; message?: string } = {}
+): HarnessContext {
+  const message = options.message ?? "";
+  const full = buildHarnessContext(data);
+  const preferred =
+    options.preferredMode ??
+    (shouldAutoSelectCompactExport(full, message) ? "compact" : "full");
+  let context =
+    preferred === "compact" ? buildCompactHarnessContext(data) : full;
+
+  const maxPromptChars = compactPromptBudget({});
+  if (estimateChatHarnessPromptChars(context, { message }) > maxPromptChars) {
+    context = buildCompactHarnessContext(data, { maxPromptChars });
+  }
+
+  return context;
 }
 
 export function scoreCompactCardPriority(card: HarnessContextCard): number {
@@ -359,12 +463,11 @@ export function buildCompactHarnessContext(
   data: HarnessExportInput,
   options: CompactHarnessContextOptions = {}
 ): HarnessContext {
-  const maxContextChars = options.maxContextChars ?? DEFAULT_COMPACT_MAX_CONTEXT_CHARS;
   const context = cloneHarnessContext(buildHarnessContext(data));
 
   removeResumeModuleCards(context);
 
-  if (estimateHarnessContextChars(context) <= maxContextChars) {
+  if (fitsCompactBudget(context, options)) {
     return context;
   }
 
@@ -380,7 +483,7 @@ export function buildCompactHarnessContext(
   ];
 
   for (let round = 0; round < 32; round += 1) {
-    if (estimateHarnessContextChars(context) <= maxContextChars) {
+    if (fitsCompactBudget(context, options)) {
       return context;
     }
 
@@ -390,7 +493,7 @@ export function buildCompactHarnessContext(
         progress = true;
       }
 
-      if (estimateHarnessContextChars(context) <= maxContextChars) {
+      if (fitsCompactBudget(context, options)) {
         return context;
       }
     }
@@ -697,6 +800,17 @@ function buildCandidateEventLogs(candidates: JobCandidate[]): HarnessLogEntry[] 
   });
 }
 
+function resolveCareerApplicationLogTimestamp(card: LifeCard): string {
+  if (card.lastTouched) {
+    return card.lastTouched;
+  }
+  const followUpDate = card.careerApplication?.followUpDate;
+  if (followUpDate) {
+    return followUpDate.includes("T") ? followUpDate : `${followUpDate}T12:00:00.000Z`;
+  }
+  return "1970-01-01T00:00:00.000Z";
+}
+
 function buildCareerApplicationLogs(cards: LifeCard[]): HarnessLogEntry[] {
   const entries: HarnessLogEntry[] = [];
 
@@ -705,7 +819,7 @@ function buildCareerApplicationLogs(cards: LifeCard[]): HarnessLogEntry[] {
       continue;
     }
 
-    const timestamp = card.lastTouched ?? new Date().toISOString();
+    const timestamp = resolveCareerApplicationLogTimestamp(card);
     const company = card.careerApplication.company;
 
     if (card.state === "done") {

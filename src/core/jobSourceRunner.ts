@@ -3,10 +3,18 @@ import {
   isSupportedAdapterKind,
   GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
   WORKDAY_ZERO_LISTINGS_MESSAGE,
+  countWorkdayRawJobEntries,
   normalizeWithAdapter,
+  parseWorkdaySearchPayload,
   type NormalizedJobPosting
 } from "./jobSourceAdapters";
 import { createJobCandidate } from "./jobScout";
+import {
+  buildPaginatedPageSource,
+  getWorkdayPaginationStartOffset,
+  resolvePaginationDefaults,
+  type PaginationStoppedReason
+} from "./jobSourcePagination";
 import { validateJobSourceRequestConfig } from "./jobSourceRequestConfig";
 import type {
   JobCandidate,
@@ -180,15 +188,21 @@ export interface JobSourceRunOutput {
   >;
 }
 
-export function runJobSourceFromRaw(
+export interface FinalizeJobSourceMeta {
+  pagesFetched?: number;
+  paginationStoppedReason?: PaginationStoppedReason;
+}
+
+export function finalizeJobSourceFromPostings(
   source: JobSource,
-  raw: unknown,
+  normalized: NormalizedJobPosting[],
   existingCandidates: JobCandidate[],
-  resumeModules: ResumeModule[]
+  resumeModules: ResumeModule[],
+  normalizeErrors: string[] = [],
+  options?: { effectiveMaxResults?: number; meta?: FinalizeJobSourceMeta }
 ): JobSourceRunOutput {
   const fetchedAt = nowIso();
-  const maxResults = source.maxResults ?? DEFAULT_MAX_RESULTS;
-  const { postings: normalized, errors: normalizeErrors } = normalizeWithAdapter(raw, source);
+  const maxResults = options?.effectiveMaxResults ?? source.maxResults ?? DEFAULT_MAX_RESULTS;
   const capped = normalized.slice(0, maxResults);
   const { unique, skippedDuplicates } = dedupeJobPostings(capped, existingCandidates);
   const candidates = createCandidatesFromPostings(unique, source, resumeModules);
@@ -203,17 +217,21 @@ export function runJobSourceFromRaw(
   }
 
   const runStatus: JobSourceRunStatus = errors.length > 0 ? "error" : "success";
+  const paginationNote =
+    options?.meta?.pagesFetched && options.meta.pagesFetched > 1
+      ? ` Fetched ${options.meta.pagesFetched} pages.`
+      : "";
   const message = isGovernmentJobsWeakPass
     ? GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE
     : isWorkdayWeakPass
       ? WORKDAY_ZERO_LISTINGS_MESSAGE
       : errors.length > 0
-      ? errors[0]
-      : candidates.length > 0
-        ? `Found ${candidates.length} new candidate${candidates.length === 1 ? "" : "s"}. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.`
-        : skippedDuplicates > 0
-          ? `No new candidates. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.`
-          : "Run completed with no new candidates.";
+        ? errors[0]
+        : candidates.length > 0
+          ? `Found ${candidates.length} new candidate${candidates.length === 1 ? "" : "s"}. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.${paginationNote}`
+          : skippedDuplicates > 0
+            ? `No new candidates. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.${paginationNote}`
+            : `Run completed with no new candidates.${paginationNote}`;
 
   return {
     result: {
@@ -222,7 +240,9 @@ export function runJobSourceFromRaw(
       createdCandidateIds: candidates.map((candidate) => candidate.id),
       skippedDuplicates,
       errors,
-      message
+      message,
+      pagesFetched: options?.meta?.pagesFetched,
+      paginationStoppedReason: options?.meta?.paginationStoppedReason
     },
     candidates,
     updatedSource: {
@@ -233,6 +253,96 @@ export function runJobSourceFromRaw(
       lastCheckedAt: fetchedAt
     }
   };
+}
+
+export function runJobSourceFromRaw(
+  source: JobSource,
+  raw: unknown,
+  existingCandidates: JobCandidate[],
+  resumeModules: ResumeModule[]
+): JobSourceRunOutput {
+  const { postings: normalized, errors: normalizeErrors } = normalizeWithAdapter(raw, source);
+  return finalizeJobSourceFromPostings(
+    source,
+    normalized,
+    existingCandidates,
+    resumeModules,
+    normalizeErrors
+  );
+}
+
+export type PaginatedFetchPageResult =
+  | { ok: true; raw: unknown }
+  | { ok: false; error: string };
+
+export async function runPaginatedJobSourceFromRaw(
+  source: JobSource,
+  existingCandidates: JobCandidate[],
+  resumeModules: ResumeModule[],
+  fetchPage: (pageSource: JobSource) => Promise<PaginatedFetchPageResult>
+): Promise<JobSourceRunOutput> {
+  const { limit, maxPages, effectiveMaxResults } = resolvePaginationDefaults(source);
+  const startOffset = getWorkdayPaginationStartOffset(source.requestConfig?.bodyJson);
+  const accumulated: NormalizedJobPosting[] = [];
+  let accumulatedRawCount = 0;
+  let pagesFetched = 0;
+  let stoppedReason: PaginationStoppedReason = "max_pages";
+  let offset = startOffset;
+  const errors: string[] = [];
+
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    const pageSource = buildPaginatedPageSource(source, offset, limit);
+    const fetched = await fetchPage(pageSource);
+    if (!fetched.ok) {
+      stoppedReason = "fetch_error";
+      errors.push(fetched.error);
+      if (pagesFetched === 0) {
+        return buildFetchErrorRunOutput(source, fetched.error);
+      }
+      break;
+    }
+
+    pagesFetched += 1;
+    const pageRawCount = countWorkdayRawJobEntries(fetched.raw);
+    const pagePostings = parseWorkdaySearchPayload(fetched.raw, source);
+    accumulated.push(...pagePostings);
+    accumulatedRawCount += pageRawCount;
+
+    if (pageRawCount === 0) {
+      stoppedReason = "zero_postings";
+      break;
+    }
+    if (pageRawCount < limit) {
+      stoppedReason = "fewer_than_limit";
+      break;
+    }
+    if (accumulatedRawCount >= effectiveMaxResults) {
+      stoppedReason = "max_results";
+      break;
+    }
+    if (pageIndex + 1 >= maxPages) {
+      stoppedReason = "max_pages";
+      break;
+    }
+
+    offset += limit;
+  }
+
+  const dedupedWithinRun = dedupeJobPostings(accumulated, []);
+  return finalizeJobSourceFromPostings(
+    source,
+    dedupedWithinRun.unique,
+    existingCandidates,
+    resumeModules,
+    errors,
+    {
+      effectiveMaxResults,
+      meta: {
+        pagesFetched,
+        paginationStoppedReason: stoppedReason
+      }
+    }
+  );
 }
 
 export function countSuccessfulManualSourceRuns(runs: JobSourceRunResult[]): number {

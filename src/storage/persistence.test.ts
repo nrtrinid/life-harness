@@ -284,7 +284,8 @@ describe("export/import round trip", () => {
     const state = createSeedState("2026-06-09T12:00:00.000Z");
     const requestConfig = {
       method: "POST" as const,
-      bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" }
+      bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" },
+      pagination: { mode: "workday_offset" as const, limit: 20, maxPages: 3 }
     };
     state.jobSources = [
       {

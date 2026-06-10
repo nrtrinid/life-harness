@@ -327,6 +327,62 @@ describe("job-scout-runner server", () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
+  it("paginates workday_offset sources sequentially by offset", async () => {
+    function buildPage(offset: number, count: number) {
+      return JSON.stringify({
+        total: count,
+        body: {
+          jobPostings: Array.from({ length: count }, (_, index) => ({
+            title: `Role ${offset + index}`,
+            externalPath: `/job/role-${offset + index}`,
+            locationsText: "Remote"
+          }))
+        }
+      });
+    }
+
+    const fetchImpl = vi.fn().mockImplementation(async (_input: RequestInfo, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { offset?: number };
+      const offset = body.offset ?? 0;
+      const count = offset === 0 ? 20 : offset === 20 ? 5 : 0;
+      return new Response(buildPage(offset, count), { status: 200 });
+    });
+
+    const server = createServer({
+      resolveHost: async () => ["8.8.8.8"],
+      fetchImpl
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+
+    const result = await postRunSource(port, {
+      source: {
+        id: "source-workday-paginated",
+        name: "Paginated Workday",
+        url: "https://boards.example.com/wday/cxs/example/jobs",
+        kind: "workday",
+        enabled: true,
+        cadence: "manual",
+        requestConfig: {
+          method: "POST",
+          bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" },
+          pagination: { mode: "workday_offset", limit: 20, maxPages: 3 }
+        }
+      },
+      existingCandidates: [],
+      resumeModules: seedResumeModules
+    });
+
+    const body = result.body as RunSourceResponseBody;
+    expect(body.result.errors).toHaveLength(0);
+    expect(body.result.pagesFetched).toBe(2);
+    expect(body.result.paginationStoppedReason).toBe("fewer_than_limit");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(body.candidates.length).toBeGreaterThan(0);
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
   it("blocks private URL targets for POST sources", async () => {
     const server = createServer();
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

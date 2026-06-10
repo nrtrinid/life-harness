@@ -29,6 +29,13 @@ import { WORKDAY_ZERO_LISTINGS_MESSAGE } from "../src/core/jobSourceAdapters";
 import { parseJsonBodyText, validateJobSourceRequestConfig } from "../src/core/jobSourceRequestConfig";
 import type { JobSourceCadence, JobSourceKind, JobSourceRequestMethod } from "../src/core/types";
 import { SOURCE_CANDIDATE_EXAMPLES, type SourceCandidateExample } from "../src/data/sourceCandidates";
+import {
+  applyWorkdayEndpointTemplate,
+  getWorkdayEndpointTemplate,
+  isWorkdayTemplateRunnable,
+  WORKDAY_CXS_BODY_TEMPLATE,
+  WORKDAY_ENDPOINT_TEMPLATES
+} from "../src/data/workdayEndpointTemplates";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 const KIND_OPTIONS: JobSourceKind[] = [
@@ -44,12 +51,7 @@ const KIND_OPTIONS: JobSourceKind[] = [
 
 const CADENCE_OPTIONS: JobSourceCadence[] = ["manual", "daily", "weekly"];
 
-const WORKDAY_CXS_BODY_TEMPLATE = `{
-  "appliedFacets": {},
-  "limit": 20,
-  "offset": 0,
-  "searchText": ""
-}`;
+const WORKDAY_CXS_BODY_TEMPLATE_TEXT = JSON.stringify(WORKDAY_CXS_BODY_TEMPLATE, null, 2);
 
 const REQUEST_METHOD_OPTIONS: JobSourceRequestMethod[] = ["GET", "POST"];
 
@@ -84,7 +86,10 @@ export default function SourceSetupScreen() {
   const [endpointMode, setEndpointMode] = useState(false);
   const [endpointUrl, setEndpointUrl] = useState("");
   const [requestMethod, setRequestMethod] = useState<JobSourceRequestMethod>("POST");
-  const [bodyJsonText, setBodyJsonText] = useState(WORKDAY_CXS_BODY_TEMPLATE);
+  const [bodyJsonText, setBodyJsonText] = useState(WORKDAY_CXS_BODY_TEMPLATE_TEXT);
+  const [paginationEnabled, setPaginationEnabled] = useState(false);
+  const [paginationLimit, setPaginationLimit] = useState("20");
+  const [paginationMaxPages, setPaginationMaxPages] = useState("3");
 
   const activeUrl = endpointMode ? endpointUrl : form.url;
 
@@ -110,7 +115,10 @@ export default function SourceSetupScreen() {
     setEndpointMode(false);
     setEndpointUrl("");
     setRequestMethod("POST");
-    setBodyJsonText(WORKDAY_CXS_BODY_TEMPLATE);
+    setBodyJsonText(WORKDAY_CXS_BODY_TEMPLATE_TEXT);
+    setPaginationEnabled(false);
+    setPaginationLimit("20");
+    setPaginationMaxPages("3");
     setForm((current) => ({ ...current, requestConfig: undefined }));
   }
 
@@ -118,8 +126,66 @@ export default function SourceSetupScreen() {
     setEndpointMode(true);
     setEndpointUrl(seedUrl ?? form.url);
     setRequestMethod("POST");
-    setBodyJsonText(WORKDAY_CXS_BODY_TEMPLATE);
+    setBodyJsonText(WORKDAY_CXS_BODY_TEMPLATE_TEXT);
+    setPaginationEnabled(false);
+    setPaginationLimit("20");
+    setPaginationMaxPages("3");
     setForm((current) => ({ ...current, cadence: "manual", requestConfig: undefined }));
+  }
+
+  function applyWorkdayTemplate(templateId: string) {
+    const template = getWorkdayEndpointTemplate(templateId);
+    if (!template) {
+      return;
+    }
+    if (!isWorkdayTemplateRunnable(template)) {
+      setNotice({ kind: "info", message: template.notes });
+      setForm((current) => ({
+        ...current,
+        name: template.name,
+        kind: "workday",
+        url: template.pageUrl ?? current.url,
+        cadence: "manual",
+        notes: template.notes,
+        adapterNotes: template.notes
+      }));
+      return;
+    }
+    const applied = applyWorkdayEndpointTemplate(template);
+    enableEndpointMode(applied.url);
+    setForm((current) => ({
+      ...current,
+      name: applied.name ?? current.name,
+      kind: "workday",
+      url: applied.url ?? current.url,
+      cadence: "manual",
+      notes: applied.notes ?? "",
+      adapterNotes: applied.adapterNotes ?? ""
+    }));
+    setEndpointUrl(applied.url ?? "");
+    setRequestMethod(applied.requestConfig?.method ?? "POST");
+    setBodyJsonText(JSON.stringify(applied.requestConfig?.bodyJson ?? WORKDAY_CXS_BODY_TEMPLATE, null, 2));
+    const pagination = applied.requestConfig?.pagination;
+    if (pagination?.mode === "workday_offset") {
+      setPaginationEnabled(true);
+      setPaginationLimit(String(pagination.limit ?? 20));
+      setPaginationMaxPages(String(pagination.maxPages ?? 3));
+    } else {
+      setPaginationEnabled(false);
+    }
+    setPreviewOutput(null);
+    setNotice({ kind: "success", message: `Applied ${template.name} template.` });
+  }
+
+  function handleFillBodyTemplate() {
+    setBodyJsonText(WORKDAY_CXS_BODY_TEMPLATE_TEXT);
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function"
+    ) {
+      void navigator.clipboard.writeText(WORKDAY_CXS_BODY_TEMPLATE_TEXT);
+    }
   }
 
   function buildSourcePayload():
@@ -131,9 +197,18 @@ export default function SourceSetupScreen() {
       if (!parsedBody.ok) {
         return { ok: false, message: parsedBody.error };
       }
+      const limit = Number.parseInt(paginationLimit, 10);
+      const maxPages = Number.parseInt(paginationMaxPages, 10);
       requestConfig = {
         method: requestMethod,
-        bodyJson: parsedBody.value
+        bodyJson: parsedBody.value,
+        pagination: paginationEnabled
+          ? {
+              mode: "workday_offset",
+              limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+              maxPages: Number.isFinite(maxPages) && maxPages > 0 ? maxPages : 3
+            }
+          : undefined
       };
       const configValidation = validateJobSourceRequestConfig(requestConfig);
       if (!configValidation.ok) {
@@ -443,6 +518,37 @@ export default function SourceSetupScreen() {
                   </Text>
                 </Pressable>
               </View>
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.label}>Workday endpoint templates</Text>
+                <View style={styles.cardActions}>
+                  <Pressable
+                    style={styles.secondaryAction}
+                    onPress={() => applyWorkdayTemplate("northrop-workday-cxs")}
+                  >
+                    <Text style={styles.secondaryActionText}>Use Northrop endpoint template</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.secondaryAction}
+                    onPress={() => applyWorkdayTemplate("workday-endpoint-fixture")}
+                  >
+                    <Text style={styles.secondaryActionText}>Use Workday fixture template</Text>
+                  </Pressable>
+                </View>
+                {WORKDAY_ENDPOINT_TEMPLATES.filter((template) => template.endpointNeeded).map(
+                  (template) => (
+                    <View key={template.id} style={[styles.cardTile, { marginTop: 8 }]}>
+                      <Text style={styles.titleText}>{template.name}</Text>
+                      <Text style={styles.bodyText}>{template.notes}</Text>
+                      <Pressable
+                        style={styles.secondaryAction}
+                        onPress={() => applyWorkdayTemplate(template.id)}
+                      >
+                        <Text style={styles.secondaryActionText}>Show guide</Text>
+                      </Pressable>
+                    </View>
+                  )
+                )}
+              </View>
               {endpointMode ? (
                 <View style={{ marginTop: 12 }}>
                   <Text style={styles.label}>Endpoint URL</Text>
@@ -476,6 +582,9 @@ export default function SourceSetupScreen() {
                     ))}
                   </View>
                   <Text style={[styles.label, { marginTop: 12 }]}>JSON request body</Text>
+                  <Pressable style={styles.secondaryAction} onPress={handleFillBodyTemplate}>
+                    <Text style={styles.secondaryActionText}>Fill body template</Text>
+                  </Pressable>
                   <TextInput
                     style={[styles.captureInput, { minHeight: 120 }]}
                     value={bodyJsonText}
@@ -486,6 +595,40 @@ export default function SourceSetupScreen() {
                     autoCorrect={false}
                     multiline
                   />
+                  <View style={[styles.cardActions, { marginTop: 12, alignItems: "center" }]}>
+                    <Text style={styles.bodyText}>Enable bounded pagination</Text>
+                    <Switch
+                      value={paginationEnabled}
+                      onValueChange={setPaginationEnabled}
+                      disabled={requestMethod !== "POST"}
+                    />
+                  </View>
+                  {paginationEnabled ? (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={styles.label}>Page limit</Text>
+                      <TextInput
+                        style={styles.captureInput}
+                        value={paginationLimit}
+                        onChangeText={setPaginationLimit}
+                        keyboardType="number-pad"
+                        placeholder="20"
+                        placeholderTextColor={colors.inputPlaceholder}
+                      />
+                      <Text style={[styles.label, { marginTop: 8 }]}>Max pages</Text>
+                      <TextInput
+                        style={styles.captureInput}
+                        value={paginationMaxPages}
+                        onChangeText={setPaginationMaxPages}
+                        keyboardType="number-pad"
+                        placeholder="3"
+                        placeholderTextColor={colors.inputPlaceholder}
+                      />
+                      <Text style={styles.helpText}>
+                        Sequential offset pagination — bounded by limit, max pages, and effective
+                        max results.
+                      </Text>
+                    </View>
+                  ) : null}
                   <Text style={[styles.helpText, { marginTop: 8 }]}>
                     Accept: application/json{"\n"}Content-Type: application/json
                   </Text>
