@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
+import { PageHeader } from "../src/components/PageHeader";
 import { Notice } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
@@ -35,16 +35,16 @@ export default function MemoryBankScreen() {
 
   return (
     <Screen>
-      <Nav />
-      <Text style={styles.screenIntro}>
-        Durable, user-approved memories from saved chat summaries. Active items feed Ask Harness context.
-      </Text>
+      <PageHeader
+        title="Tape Archive"
+        subtitle="Durable, user-approved memories from saved chat summaries. Active items feed Companion context."
+      />
       <Notice kind="info" message="v0.1: memories come from chat summary suggestions — no blank editor yet." />
 
       {memoryItems.length === 0 ? (
-        <Section title="Memory Bank">
+        <Section title="Tape Archive">
           <Text style={styles.bodyText}>
-            No memories saved yet. Save a chat summary in Ask Harness Dev, then save suggested durable memories.
+            No memories saved yet. Save a chat summary in Companion, then save suggested durable memories.
           </Text>
         </Section>
       ) : (

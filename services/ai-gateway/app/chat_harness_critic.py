@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 DEEP_CRITIC_PASS_NOTE = "Deep mode: draft approved by structured critic."
 DEEP_CRITIC_REVISE_NOTE = "Deep mode: revised after structured critic."
+DEEP_CRITIC_SKIPPED_DRAFT_PARSE_NOTE = (
+    "Deep mode: structured critic skipped (draft parse failed)."
+)
+DEEP_CRITIC_SKIPPED_NOTE = "Deep mode: structured critic skipped."
 DEEP_REVISED_CONFIDENCE_NOTE = "Inferred — deep mode revised after critic."
 
 
@@ -76,9 +80,25 @@ def append_deep_critic_note(
     response: ChatHarnessResponse,
     *,
     revised: bool,
+    critic_ran: bool = True,
+    critic_skip_reason: str | None = None,
 ) -> ChatHarnessResponse:
-    note = DEEP_CRITIC_REVISE_NOTE if revised else DEEP_CRITIC_PASS_NOTE
     notes = list(response.confidence_notes)
+    if not critic_ran:
+        if critic_skip_reason == "draft_parse_failed":
+            skip_note = DEEP_CRITIC_SKIPPED_DRAFT_PARSE_NOTE
+        else:
+            skip_note = DEEP_CRITIC_SKIPPED_NOTE
+        if not any("structured critic skipped" in existing for existing in notes):
+            notes.append(skip_note)
+        return ChatHarnessResponse(
+            answer=response.answer,
+            used_context=response.used_context,
+            confidence_notes=notes,
+            safety_notes=list(response.safety_notes),
+        )
+
+    note = DEEP_CRITIC_REVISE_NOTE if revised else DEEP_CRITIC_PASS_NOTE
     if not any("structured critic" in existing for existing in notes):
         notes.append(note)
     if revised and not any(DEEP_REVISED_CONFIDENCE_NOTE in existing for existing in notes):

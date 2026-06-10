@@ -100,8 +100,8 @@ describe("compactRawLabThreadStateForBudget", () => {
 });
 
 describe("buildRawLabSendBundle", () => {
-  it("defaults to Raw Lab 18k cap, not Ask Harness 12k", () => {
-    expect(DEFAULT_RAW_LAB_MAX_INPUT_CHARS).toBe(18_000);
+  it("defaults to Raw Lab 32k cap, not Ask Harness 12k", () => {
+    expect(DEFAULT_RAW_LAB_MAX_INPUT_CHARS).toBe(32_000);
     expect(DEFAULT_GATEWAY_MAX_INPUT_CHARS).toBe(12_000);
     const turns = Array.from({ length: 14 }, (_, index) =>
       makeTurn(index % 2 === 0 ? "user" : "assistant", `Mid turn ${index} `.repeat(90))

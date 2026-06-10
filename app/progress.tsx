@@ -2,7 +2,6 @@ import { Link } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, Pressable, Text, TextInput, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
 import { CollapsibleSection } from "../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../src/components/Notice";
@@ -131,9 +130,8 @@ export default function ProgressScreen() {
 
   return (
     <Screen>
-      <Nav />
       <PageHeader
-        title="Progress"
+        title="Playback"
         subtitle="Proof, momentum, and recovery signals."
       />
 

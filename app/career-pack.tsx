@@ -1,8 +1,7 @@
 import { Link } from "expo-router";
 import { useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
@@ -78,7 +77,6 @@ export default function CareerPackScreen() {
 
   return (
     <Screen>
-      <Nav />
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <PageHeader
         title="Career Pack"
@@ -169,7 +167,7 @@ export default function CareerPackScreen() {
             </Pressable>
           </Link>
           <Link href="/job-candidates" asChild>
-            <Pressable style={[styles.secondaryAction, { marginTop: 8 }]}>
+            <Pressable style={StyleSheet.flatten([styles.secondaryAction, { marginTop: 8 }])}>
               <Text style={styles.secondaryActionText}>Job Candidates Queue</Text>
             </Pressable>
           </Link>

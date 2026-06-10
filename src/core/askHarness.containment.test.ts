@@ -9,6 +9,19 @@ const CONTEXT_PANEL_PATH = resolve(
   "../components/askHarness/ChatThreadContextPanel.tsx"
 );
 const ASK_SYNTHESIS_PATH = resolve(__dirname, "askHarnessSynthesis.ts");
+const ASK_DEEP_SYNTHESIS_JOB_PATH = resolve(__dirname, "askDeepSynthesisJob.ts");
+const USE_DEEP_SYNTHESIS_HOOK_PATH = resolve(
+  __dirname,
+  "../components/askHarness/useDeepSynthesisJob.ts"
+);
+const SYNTHESIS_PANEL_PATH = resolve(
+  __dirname,
+  "../components/askHarness/SynthesisJobPanel.tsx"
+);
+const SYNTHESIS_REPORT_CARD_PATH = resolve(
+  __dirname,
+  "../components/askHarness/SynthesisReportCard.tsx"
+);
 
 function readSource(path: string): string {
   return readFileSync(path, "utf8");
@@ -66,5 +79,59 @@ describe("askHarnessSynthesis containment", () => {
 
   it("does not assemble personality state in outbound requests", () => {
     expect(synthesisSource).not.toMatch(/personality/i);
+  });
+});
+
+describe("ask-harness deep synthesis containment", () => {
+  const screenSource = readSource(ASK_HARNESS_PATH);
+  const hookSource = readSource(USE_DEEP_SYNTHESIS_HOOK_PATH);
+  const jobSource = readSource(ASK_DEEP_SYNTHESIS_JOB_PATH);
+  const panelSource = readSource(SYNTHESIS_PANEL_PATH);
+  const synthesisCoreSource = `${hookSource}\n${jobSource}\n${panelSource}`;
+
+  it("exposes Deep synthesis action wiring", () => {
+    expect(screenSource).toContain("Deep synthesis");
+    expect(screenSource).toContain("useDeepSynthesisJob");
+    expect(screenSource).toContain("SynthesisJobPanel");
+    expect(hookSource).toContain("buildAskDeepSynthesisRequest");
+    expect(hookSource).toContain("runAskDeepSynthesisJob");
+  });
+
+  it("does not append synthesis results to chat thread items", () => {
+    expect(jobSource).not.toMatch(/setThread\s*\(/);
+    expect(panelSource).not.toMatch(/setThread\s*\(/);
+  });
+
+  it("does not mutate board or memory from synthesis handler", () => {
+    expect(synthesisCoreSource).not.toMatch(/\bsaveMemoryItem\s*\(/);
+    expect(synthesisCoreSource).not.toMatch(/\bsaveChatSummary\s*\(/);
+    expect(synthesisCoreSource).not.toMatch(/from\s+["'].*primaryAction/i);
+  });
+
+  it("does not import Raw Lab from synthesis UI path", () => {
+    expect(synthesisCoreSource).not.toMatch(/from\s+["'].*rawLab/i);
+  });
+});
+
+describe("SynthesisReportCard containment", () => {
+  const reportCardSource = readSource(SYNTHESIS_REPORT_CARD_PATH);
+
+  it("does not call persistence helpers", () => {
+    expect(reportCardSource).not.toMatch(/\bsaveMemoryItem\s*\(/);
+    expect(reportCardSource).not.toMatch(/\bsaveChatSummary\s*\(/);
+  });
+
+  it("does not import board mutation paths", () => {
+    expect(reportCardSource).not.toMatch(/from\s+["'].*primaryAction/i);
+    expect(reportCardSource).not.toMatch(/from\s+["'].*useLifeHarness/i);
+  });
+
+  it("does not reference personality proposals in source", () => {
+    expect(reportCardSource).not.toMatch(/personalityProposals/);
+    expect(reportCardSource).not.toMatch(/personality proposal/i);
+  });
+
+  it("does not import Raw Lab modules", () => {
+    expect(reportCardSource).not.toMatch(/from\s+["'].*rawLab/i);
   });
 });

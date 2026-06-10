@@ -6,7 +6,8 @@ import {
   isCareerToolPath,
   isNavActive,
   isSystemPath,
-  LEGACY_NAV_HREFS
+  LEGACY_NAV_HREFS,
+  NAV_GROUPS
 } from "./navRoutes";
 
 describe("navRoutes", () => {
@@ -38,9 +39,28 @@ describe("navRoutes", () => {
     expect(isCareerToolPath("/board")).toBe(false);
     expect(isSystemPath("/raw-lab")).toBe(true);
     expect(isSystemPath("/memory-bank")).toBe(true);
+    expect(isSystemPath("/source-setup")).toBe(true);
     expect(isSystemPath("/ask-harness")).toBe(false);
     expect(getNavGroupForPath("/career-intake")).toBe("careerTools");
     expect(getNavGroupForPath("/log")).toBe("system");
     expect(getNavGroupForPath("/")).toBe("primary");
+  });
+
+  it("uses lo-fi labels and keeps setup in backroom only", () => {
+    const routes = getAllNavRoutes();
+    const ask = routes.find((route) => route.href === "/ask-harness");
+    const raw = routes.find((route) => route.href === "/raw-lab");
+    const setupInCareer = NAV_GROUPS.find((group) => group.id === "careerTools")?.routes.some(
+      (route) => route.href === "/source-setup"
+    );
+    const setupInBackroom = NAV_GROUPS.find((group) => group.id === "system")?.routes.some(
+      (route) => route.href === "/source-setup"
+    );
+
+    expect(ask?.label).toBe("Companion");
+    expect(raw?.label).toBe("Raw Signal");
+    expect(setupInCareer).toBe(false);
+    expect(setupInBackroom).toBe(true);
+    expect(NAV_GROUPS.find((group) => group.id === "system")?.label).toBe("Backroom");
   });
 });

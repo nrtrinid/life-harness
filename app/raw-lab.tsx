@@ -13,8 +13,9 @@ import {
 import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/ChatComposer";
 import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { formatGatewayHost } from "../src/components/askHarness/askHarnessInspectorFormat";
-import { Nav } from "../src/components/Nav";
 import { Notice, type NoticeState } from "../src/components/Notice";
+import { PageHeader } from "../src/components/PageHeader";
+import { SafetyBanner } from "../src/components/SafetyBanner";
 import {
   CompanionSelfMemoryPanel,
   countActiveSelfMemories
@@ -42,6 +43,14 @@ import {
   streamRawLab,
   type RawLabResponse
 } from "../src/core/rawLabClient";
+import {
+  DEFAULT_RAW_LAB_MAX_INPUT_CHARS,
+  DEFAULT_GATEWAY_MAX_INPUT_CHARS
+} from "../src/core/gatewayBudget";
+import {
+  fetchGatewayHealthBudget,
+  type GatewayHealthBudget
+} from "../src/core/gatewayHealthClient";
 import type { RawLabBudgetLevel, RawLabCompactionNotice } from "../src/core/rawLabContextBudget";
 import {
   reflectOnRawLab,
@@ -96,6 +105,11 @@ function toDisplayTurns(
 
 export default function RawLabScreen() {
   const [baseUrl] = useState(DEFAULT_RAW_LAB_URL);
+  const [gatewayBudget, setGatewayBudget] = useState<GatewayHealthBudget>({
+    maxInputChars: DEFAULT_GATEWAY_MAX_INPUT_CHARS,
+    rawLabMaxInputChars: DEFAULT_RAW_LAB_MAX_INPUT_CHARS,
+    timeoutSeconds: 180
+  });
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<RawLabTurn[]>([]);
   const [responses, setResponses] = useState<Record<string, RawLabResponse>>({});
@@ -118,6 +132,18 @@ export default function RawLabScreen() {
   const [reflectionProposals, setReflectionProposals] = useState<RawLabSelfMemoryProposal[]>([]);
   const [reflecting, setReflecting] = useState(false);
   const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGatewayHealthBudget(baseUrl).then((budget) => {
+      if (!cancelled) {
+        setGatewayBudget(budget);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl]);
 
   useEffect(() => {
     setCompanionMemories(loadCompanionSelfMemories());
@@ -202,6 +228,7 @@ export default function RawLabScreen() {
         turns: priorTurns,
         threadState,
         companionSelfMemories: memoriesForSend(),
+        maxInputChars: gatewayBudget.rawLabMaxInputChars,
         signal: abortController.signal,
         onChunk: (chunk) => {
           setStreamingAnswer((previous) => previous + chunk);
@@ -389,74 +416,33 @@ export default function RawLabScreen() {
 
   return (
     <Screen>
-      <Nav />
       <View style={styles.chatPrimaryColumn}>
-        <View style={styles.checklist}>
-          <Text style={styles.sectionTitle}>Raw Lab</Text>
-          <Text style={styles.chatInspectorStatusLine}>{statusLine}</Text>
-        </View>
-
-        <View style={styles.bannerWarning}>
-          <Text style={styles.bannerWarningText}>
-            Raw Lab is an unrestricted sandbox with no Life Harness authority. It is not grounded in
-            your board, not saved, has no tools, and cannot change Life Harness. The app does not add
-            content guardrails here — only isolation from your board.
-          </Text>
-        </View>
-
-        <View style={styles.bannerInfo}>
-          <Text style={styles.bannerInfoText}>
-            Do not paste secrets or S3-style private data here (therapy logs, money/vice details,
-            deeply personal content). Raw Lab is ungrounded and not treated as a secure vault.
-          </Text>
-        </View>
-
-        <CompanionSelfMemoryPanel
-          memories={companionMemories}
-          proposals={reflectionProposals}
-          reflecting={reflecting}
-          onMemoriesChange={persistCompanionMemories}
-          onSessionOnly={handleSessionOnlyProposal}
-          onReflect={() => void handleReflect()}
-          onDismissProposal={(index) =>
-            setReflectionProposals((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
-          }
+        <PageHeader
+          title="Raw Signal"
+          subtitle="Ungrounded riffs and experiments. Nothing here changes your board."
         />
-        {selfMemoryCount > 0 || reflectionProposals.length > 0 ? (
-          <Text style={styles.helpText}>
-            {selfMemoryCount} persistent self-memor{selfMemoryCount === 1 ? "y" : "ies"}
-            {reflectionProposals.length > 0
-              ? ` · ${reflectionProposals.length} reflection proposal(s)`
-              : ""}
-          </Text>
-        ) : null}
+        <Text style={styles.chatInspectorStatusLine}>{statusLine}</Text>
 
-        <RawLabThreadMemoryPanel threadState={threadState} onThreadStateChange={setThreadState} />
-
-        <RawLabBudgetInspector
-          turns={turns}
-          threadState={threadState}
-          message={message}
-          companionSelfMemories={memoriesForSend()}
-          forceExpanded={budgetForceExpanded}
-          lastSend={lastSendStats ?? undefined}
+        <SafetyBanner
+          message="Sandbox only. Raw Signal cannot read or change your board."
+          detail="Do not paste secrets or S3-style private data here (therapy logs, money/vice details, deeply personal content). Raw Signal is ungrounded and not treated as a secure vault."
         />
 
         {showHandoffBanner ? (
           <View style={styles.bannerInfo}>
             <Text style={styles.bannerInfoText}>
-              This sounds like a board question. Use board context for grounded help from your
+              This sounds like a board question. Open in Companion for grounded help from your
               exported snapshot.
             </Text>
             <View style={styles.splitRow}>
               <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-                <Text style={styles.smallButtonText}>Use board context</Text>
+                <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
               </Pressable>
               <Pressable
                 style={styles.smallButton}
                 onPress={() => setHandoffDismissed(true)}
               >
-                <Text style={styles.smallButtonText}>Stay in Raw Lab</Text>
+                <Text style={styles.smallButtonText}>Stay in Raw Signal</Text>
               </Pressable>
             </View>
           </View>
@@ -468,7 +454,7 @@ export default function RawLabScreen() {
           </Pressable>
           {turns.length > 0 ? (
             <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-              <Text style={styles.smallButtonText}>Use board context</Text>
+              <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
             </Pressable>
           ) : null}
           {loading ? (
@@ -508,6 +494,39 @@ export default function RawLabScreen() {
             onSend={() => void handleSend()}
           />
         </View>
+
+        <CompanionSelfMemoryPanel
+          memories={companionMemories}
+          proposals={reflectionProposals}
+          reflecting={reflecting}
+          onMemoriesChange={persistCompanionMemories}
+          onSessionOnly={handleSessionOnlyProposal}
+          onReflect={() => void handleReflect()}
+          onDismissProposal={(index) =>
+            setReflectionProposals((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
+          }
+        />
+        {selfMemoryCount > 0 || reflectionProposals.length > 0 ? (
+          <Text style={styles.helpText}>
+            {selfMemoryCount} persistent self-memor{selfMemoryCount === 1 ? "y" : "ies"}
+            {reflectionProposals.length > 0
+              ? ` · ${reflectionProposals.length} reflection proposal(s)`
+              : ""}
+          </Text>
+        ) : null}
+
+        <RawLabThreadMemoryPanel threadState={threadState} onThreadStateChange={setThreadState} />
+
+        <RawLabBudgetInspector
+          turns={turns}
+          threadState={threadState}
+          message={message}
+          gatewayRawLabMaxInputChars={gatewayBudget.rawLabMaxInputChars}
+          gatewayMaxInputChars={gatewayBudget.maxInputChars}
+          companionSelfMemories={memoriesForSend()}
+          forceExpanded={budgetForceExpanded}
+          lastSend={lastSendStats ?? undefined}
+        />
       </View>
     </Screen>
   );

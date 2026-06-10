@@ -46,9 +46,8 @@ describe("raw-lab screen containment", () => {
   });
 
   it("includes containment and temporary memory copy", () => {
-    expect(screenSource).toContain("unrestricted sandbox");
-    expect(screenSource).toContain("not grounded");
-    expect(screenSource).toContain("cannot change Life Harness");
+    expect(screenSource).toContain("Sandbox only");
+    expect(screenSource).toContain("cannot read or change your board");
     expect(screenSource).toContain("Do not paste secrets or S3-style private data");
     expect(memoryPanelSource).toContain("What this chat remembers");
     expect(memoryPanelSource).toContain("Temporary to this chat");
@@ -58,8 +57,8 @@ describe("raw-lab screen containment", () => {
   });
 
   it("handoff banner does not mention personality export or Memory Bank auto-save", () => {
-    expect(screenSource).toContain("Stay in Raw Lab");
-    expect(screenSource).toContain("Use board context");
+    expect(screenSource).toContain("Stay in Raw Signal");
+    expect(screenSource).toContain("Open in Companion with board context");
     expect(screenSource).not.toMatch(/export personality/i);
     expect(screenSource).not.toMatch(/auto.?save.*memory bank/i);
   });

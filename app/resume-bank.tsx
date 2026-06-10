@@ -2,7 +2,6 @@ import { Link } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
@@ -20,7 +19,6 @@ export default function ResumeBankScreen() {
 
   return (
     <Screen>
-      <Nav />
       <PageHeader
         title="Resume Bank"
         subtitle="Structured resume modules for deterministic matching. No resume generation here."

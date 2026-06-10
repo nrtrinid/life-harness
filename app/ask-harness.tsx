@@ -15,9 +15,10 @@ import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/C
 import { ChatThreadContextPanel } from "../src/components/askHarness/ChatThreadContextPanel";
 import { ChatThread } from "../src/components/askHarness/ChatThread";
 import { HarnessReadCard } from "../src/components/askHarness/HarnessReadCard";
+import { SynthesisJobPanel } from "../src/components/askHarness/SynthesisJobPanel";
+import { useDeepSynthesisJob } from "../src/components/askHarness/useDeepSynthesisJob";
 import type { ChatThreadItem, ContextExportMode } from "../src/components/askHarness/types";
 import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
-import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
@@ -150,7 +151,7 @@ export default function AskHarnessDevScreen() {
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(isWideLayout);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [lastSentPacketSummary, setLastSentPacketSummary] = useState<string | null>(null);
 
   function buildInspectorPacket(
@@ -224,6 +225,18 @@ export default function AskHarnessDevScreen() {
     [previewPacket]
   );
   const packetSliceSummary = lastSentPacketSummary ?? previewPacketSummary;
+  const synthesis = useDeepSynthesisJob({
+    baseUrl,
+    thread,
+    threadState,
+    exportInput,
+    contextMode,
+    sensitivity,
+    mode
+  });
+  const showSynthesisAction = thread.length > 0;
+  const synthesisDisabled =
+    !synthesis.eligible || synthesis.synthesisBusy || sensitivity === "S3";
   const qualitySummary = useMemo(
     () =>
       buildContextQualitySummary(
@@ -276,6 +289,7 @@ export default function AskHarnessDevScreen() {
   }
 
   function handleClearConversation() {
+    synthesis.dismissSynthesis();
     setThread([]);
     setThreadState(createEmptySharedChatThreadState());
     setMessage("");
@@ -476,11 +490,10 @@ export default function AskHarnessDevScreen() {
 
   return (
     <Screen>
-      <Nav />
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <PageHeader
-        title="Ask Harness Dev"
-        subtitle="Dev sandbox — grounded chat with board context."
+        title="Companion"
+        subtitle="Reads your board and can suggest changes. You approve what changes."
       />
 
       <View style={isWideLayout ? styles.chatLayoutRow : undefined}>
@@ -500,8 +513,27 @@ export default function AskHarnessDevScreen() {
                 <Pressable style={styles.smallButton} onPress={handleClearConversation}>
                   <Text style={styles.smallButtonText}>Clear conversation</Text>
                 </Pressable>
+                {showSynthesisAction ? (
+                  <Pressable
+                    style={styles.smallButton}
+                    disabled={synthesisDisabled}
+                    onPress={() => void synthesis.startSynthesis()}
+                  >
+                    <Text style={styles.smallButtonText}>Deep synthesis</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
+            {!synthesis.eligible && showSynthesisAction && sensitivity !== "S3" ? (
+              <Text style={styles.helpText}>
+                Need a bit more conversation first — send another message.
+              </Text>
+            ) : null}
+            <SynthesisJobPanel
+              jobState={synthesis.jobState}
+              onDismiss={synthesis.dismissSynthesis}
+              onRetry={() => void synthesis.retrySynthesis()}
+            />
             <ChatThreadContextPanel
               threadState={threadState}
               onThreadStateChange={setThreadState}

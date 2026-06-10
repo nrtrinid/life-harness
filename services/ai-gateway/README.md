@@ -45,8 +45,9 @@ Or download to any local directory and set `SCOUT_MODEL_PATH`.
 $env:SCOUT_PROVIDER="openvino"
 $env:SCOUT_MODEL_PATH="models/qwen3-8b-int4-ov"
 $env:SCOUT_DEVICE="GPU"
-$env:SCOUT_TIMEOUT_SECONDS="120"
+$env:SCOUT_TIMEOUT_SECONDS="180"
 $env:SCOUT_MAX_INPUT_CHARS="12000"
+$env:SCOUT_RAW_LAB_MAX_INPUT_CHARS="32000"
 $env:SCOUT_TEMPERATURE="0.2"
 uvicorn app.main:app --host 127.0.0.1 --port 8111
 ```
@@ -296,9 +297,9 @@ Success: job `completed`, `critique` present, verifier-valid body, no mock-fallb
 
 Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from synthesis `SCOUT_CRITIC_RUNTIME`.
 
-**Deep mode debug trace** (dev only): `SCOUT_DEBUG_THINKING_TRACE=true` logs structured pass metadata (`draft` / `critic` / `revision` latencies, critic backend, check ids, parse/fail-soft reasons) to gateway logs. Default **off**. Does not change `ChatHarnessResponse` or expose chain-of-thought.
+**Deep mode debug trace** (dev only): `SCOUT_DEBUG_THINKING_TRACE=true` logs structured pass metadata (`draft` / `critic` / `revision` latencies, critic backend, check ids, `parse_failures`, `fail_soft_reason`) to gateway logs. Default **off**. Does not change `ChatHarnessResponse` or expose chain-of-thought. When deep draft JSON fails parse, critic is skipped and `confidence_notes` report `structured critic skipped (draft parse failed)` — not critic approval.
 
-**Manual Chat Harness deep + secondary critic smoke:** [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) and [`scripts/smoke_deep_critic.py`](scripts/smoke_deep_critic.py). Record results in [docs/phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md). `critic_small.enabled` must be set manually in `models.yaml`; llama-server is started externally. No CI GPU requirement.
+**Manual Chat Harness deep + secondary critic smoke:** [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) and [`scripts/smoke_deep_critic.py`](scripts/smoke_deep_critic.py). Record results in [docs/phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md). OpenVINO smoke requires `.\.venv\Scripts\python.exe` for the gateway. `critic_small.enabled` via local `.tmp.models.smoke.yaml` (not committed default); llama-server is started externally. CPU `llama-server` works but is slow; `SCOUT_CRITIC_SLOT=same` remains default. No CI GPU requirement.
 
 ### `POST /raw-lab`
 
@@ -398,9 +399,9 @@ Requirements: gateway and llama-server must already be running; model files are 
 | `SCOUT_WARM_SLOTS` | *(empty)* | Slots to warm on gateway lifespan (`companion_fast` when set or in `models.yaml` defaults) |
 | `SCOUT_DEVICE` | `GPU` | OpenVINO device (`GPU`, `CPU`, `NPU`) |
 | `SCOUT_MAX_NEW_TOKENS` | `1024` | Max tokens generated |
-| `SCOUT_TIMEOUT_SECONDS` | `120` | Inference timeout per request |
+| `SCOUT_TIMEOUT_SECONDS` | `180` | Inference timeout per request |
 | `SCOUT_MAX_INPUT_CHARS` | `12000` | Max input length for Ask/Chat Harness and analyze-transcript |
-| `SCOUT_RAW_LAB_MAX_INPUT_CHARS` | *(falls back to `SCOUT_MAX_INPUT_CHARS`)* | Optional Raw Lab input budget (recommended `18000`) |
+| `SCOUT_RAW_LAB_MAX_INPUT_CHARS` | `32000` | Raw Lab input budget (independent of Ask/Chat Harness) |
 | `SCOUT_TEMPERATURE` | `0.2` | Sampling temperature (scout endpoints) |
 | `SCOUT_RAW_LAB_MAX_NEW_TOKENS` | `2048` | Max tokens for Raw Lab replies |
 | `SCOUT_RAW_LAB_TEMPERATURE` | `0.7` | Sampling temperature for Raw Lab |

@@ -44,7 +44,7 @@ export type RawLabThreadState = SharedChatThreadState & {
 };
 
 export const RAW_LAB_MAX_RECENT_TURNS = 20;
-export const RAW_LAB_MAX_HISTORY_CHARS = 12_000;
+export const RAW_LAB_MAX_HISTORY_CHARS = 24_000;
 export const RAW_LAB_MAX_PINNED_FACTS = 8;
 export const RAW_LAB_MAX_DECISIONS = 8;
 export const RAW_LAB_MAX_OPEN_LOOPS = 8;

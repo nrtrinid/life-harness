@@ -189,7 +189,7 @@ describe("shared thread state", () => {
       state,
       recentUserMessages: ["How do references work?"]
     });
-    expect(digest).toContain("Raw Lab");
+    expect(digest).toContain("Raw Signal");
     expect(digest).toContain("board context");
     expect(digest.toLowerCase()).not.toContain("personality");
     expect(digest.toLowerCase()).not.toContain("voice trait");

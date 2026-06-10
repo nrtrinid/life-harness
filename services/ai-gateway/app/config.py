@@ -35,6 +35,12 @@ DEFAULT_MODELS_CONFIG_PATH = "models.yaml"
 
 DEFAULT_LLAMA_BASE_URL = "http://127.0.0.1:8120"
 
+DEFAULT_MAX_INPUT_CHARS = 12_000
+
+DEFAULT_RAW_LAB_MAX_INPUT_CHARS = 32_000
+
+DEFAULT_TIMEOUT_SECONDS = 180.0
+
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
@@ -147,13 +153,17 @@ class Settings:
 
         provider: ProviderName = "openvino" if raw_provider == "openvino" else "mock"
 
-        max_input_chars = int(os.getenv("SCOUT_MAX_INPUT_CHARS", "12000"))
+        max_input_chars = int(
+            os.getenv("SCOUT_MAX_INPUT_CHARS", str(DEFAULT_MAX_INPUT_CHARS))
+        )
 
         raw_lab_env = os.getenv("SCOUT_RAW_LAB_MAX_INPUT_CHARS")
 
         raw_lab_max_input_chars = (
 
-            int(raw_lab_env) if raw_lab_env is not None and raw_lab_env.strip() else max_input_chars
+            int(raw_lab_env)
+            if raw_lab_env is not None and raw_lab_env.strip()
+            else DEFAULT_RAW_LAB_MAX_INPUT_CHARS
 
         )
 
@@ -185,7 +195,9 @@ class Settings:
 
             max_new_tokens=int(os.getenv("SCOUT_MAX_NEW_TOKENS", "1024")),
 
-            timeout_seconds=float(os.getenv("SCOUT_TIMEOUT_SECONDS", "120")),
+            timeout_seconds=float(
+                os.getenv("SCOUT_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))
+            ),
 
             max_input_chars=max_input_chars,
 

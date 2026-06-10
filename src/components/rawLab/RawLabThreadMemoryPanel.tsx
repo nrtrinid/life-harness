@@ -69,8 +69,8 @@ export function RawLabThreadMemoryPanel({
   threadState,
   onThreadStateChange
 }: RawLabThreadMemoryPanelProps) {
-  const [memoryCollapsed, setMemoryCollapsed] = useState(false);
-  const [personalityCollapsed, setPersonalityCollapsed] = useState(false);
+  const [memoryCollapsed, setMemoryCollapsed] = useState(true);
+  const [personalityCollapsed, setPersonalityCollapsed] = useState(true);
 
   const { personality } = threadState;
 

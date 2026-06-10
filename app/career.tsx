@@ -2,7 +2,6 @@ import { Link } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
@@ -15,8 +14,7 @@ const CAREER_TOOL_LINKS = [
   { href: "/candidate-intake", label: "Paste", description: "Paste a job posting into the queue" },
   { href: "/job-candidates", label: "Queue", description: "Review and approve candidates" },
   { href: "/resume-bank", label: "Bank", description: "Resume modules for applications" },
-  { href: "/job-sources", label: "Sources", description: "Run approved job sources" },
-  { href: "/source-setup", label: "Setup", description: "Detect and save source adapters" }
+  { href: "/job-sources", label: "Sources", description: "Run approved job sources" }
 ] as const;
 
 export default function CareerScreen() {
@@ -68,11 +66,10 @@ export default function CareerScreen() {
 
   return (
     <Screen>
-      <Nav />
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <PageHeader
         title="Career"
-        subtitle="Career pipeline — review queue, sources, and applications."
+        subtitle="Contracts, resume artifacts, and application momentum."
         chips={chips}
       />
 

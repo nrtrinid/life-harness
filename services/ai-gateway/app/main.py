@@ -102,6 +102,7 @@ def get_provider() -> TranscriptProvider:
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+    settings = get_settings()
     provider = get_provider()
     ph = provider.health()
     kind = ProviderKind.mock if provider.name == "mock" else ProviderKind.openvino
@@ -113,6 +114,11 @@ def health() -> HealthResponse:
         device=ph.device,
         message=ph.message,
         slots=get_slot_manager().slot_health(),
+        budget={
+            "max_input_chars": settings.max_input_chars,
+            "raw_lab_max_input_chars": settings.raw_lab_max_input_chars,
+            "timeout_seconds": settings.timeout_seconds,
+        },
     )
 
 

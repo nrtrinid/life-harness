@@ -32,11 +32,16 @@ SCENARIOS = (
         "and every project on my board with detailed steps for each.",
     ),
     ("C_pounce_career", "What is today's one pounce?"),
-    (
-        "D_fail_soft_probe",
-        "What should I do next? (stop llama-server or disable critic_small to test fail-soft)",
-    ),
+    # Repeat of A for latency/regression checks — not a fail-soft test.
+    ("D_repeat_clean_deep", "What should I do next?"),
 )
+
+MANUAL_FAIL_SOFT_D1 = """
+Manual D1 — fail-soft (not automated by this script):
+  1. Stop llama-server OR set SCOUT_LLAMA_BASE_URL to a dead host:port
+  2. POST the same deep /chat-harness body as scenario A (fixtures below)
+  3. Expect HTTP 200 with draft kept; confidence_notes must not claim critic approval
+"""
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -141,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Gateway: {args.base_url}")
     print(f"context_packet: {packet_path.name}")
     print("Enable SCOUT_DEBUG_THINKING_TRACE=true on gateway to see trace logs.")
+    print(MANUAL_FAIL_SOFT_D1)
 
     exit_code = 0
     with httpx.Client(base_url=args.base_url, timeout=args.timeout) as client:

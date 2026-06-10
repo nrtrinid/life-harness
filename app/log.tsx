@@ -1,7 +1,6 @@
 import { Link } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
@@ -14,7 +13,6 @@ export default function LogScreen() {
 
   return (
     <Screen>
-      <Nav />
       <Text style={styles.screenIntro}>Raw mission log — every action recorded.</Text>
       <Text style={styles.helpText}>Entries are append-only in v0.1.</Text>
       <Section title="Raw History">

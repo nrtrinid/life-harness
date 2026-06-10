@@ -10,6 +10,9 @@ client = TestClient(app)
 
 def test_health_includes_companion_fast_slot_mock():
     os.environ["SCOUT_PROVIDER"] = "mock"
+    os.environ.pop("SCOUT_MAX_INPUT_CHARS", None)
+    os.environ.pop("SCOUT_RAW_LAB_MAX_INPUT_CHARS", None)
+    os.environ.pop("SCOUT_TIMEOUT_SECONDS", None)
     get_provider.cache_clear()
     response = client.get("/health")
     assert response.status_code == 200
@@ -17,6 +20,9 @@ def test_health_includes_companion_fast_slot_mock():
     assert "slots" in body
     assert body["slots"]["companion_fast"]["enabled"] is True
     assert body["slots"]["companion_fast"]["state"] == SlotHealthStatus.ready.value
+    assert body["budget"]["max_input_chars"] == 12_000
+    assert body["budget"]["raw_lab_max_input_chars"] == 32_000
+    assert body["budget"]["timeout_seconds"] == 180.0
 
 
 def test_health_slots_include_disabled_stretch_entries():

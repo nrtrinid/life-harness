@@ -2,7 +2,6 @@ import { Link } from "expo-router";
 import { Pressable, Text } from "react-native";
 
 import { ActiveLimitBanner } from "../src/components/ActiveLimitBanner";
-import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
@@ -16,8 +15,7 @@ export default function ReviewScreen() {
 
   return (
     <Screen>
-      <Nav />
-      <PageHeader title="Review" subtitle="Weekly recap from logs and card state." />
+      <PageHeader title="Replay" subtitle="Weekly recap from logs and card state." />
       <ActiveLimitBanner />
 
       <Section title="This week">

@@ -2,7 +2,6 @@ import { Link, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Linking, Platform, Pressable, Text, TextInput, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
@@ -155,7 +154,6 @@ export default function JobCandidatesScreen() {
 
   return (
     <Screen>
-      <Nav />
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <PageHeader
         title="Queue"

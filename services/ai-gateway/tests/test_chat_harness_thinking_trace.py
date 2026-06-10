@@ -184,7 +184,7 @@ def test_trace_draft_parse_failure(harness_context):
         reasoning_depth="deep",
     )
     trace = new_thinking_trace(request)
-    raw, revised = run_chat_harness_deep(
+    result = run_chat_harness_deep(
         request=request,
         prompt="base",
         draft_generate=lambda _p: "not json",
@@ -192,6 +192,10 @@ def test_trace_draft_parse_failure(harness_context):
         max_extra_passes=2,
         trace=trace,
     )
-    assert revised is False
+    assert result.revised is False
+    assert result.critic_ran is False
+    assert result.critic_skip_reason == "draft_parse_failed"
     assert "draft" in trace.parse_failures
     assert "critic" not in trace.passes
+    assert trace.fail_soft_reason == "draft_parse_failed"
+    assert trace.fallback_used is True

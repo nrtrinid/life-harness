@@ -16,34 +16,38 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/", label: "Today" },
       { href: "/board", label: "Board" },
       { href: "/career", label: "Career" },
-      { href: "/ask-harness", label: "Ask" },
-      { href: "/progress", label: "Progress" },
-      { href: "/review", label: "Review" }
+      { href: "/ask-harness", label: "Companion" },
+      { href: "/progress", label: "Playback" },
+      { href: "/review", label: "Replay" }
     ]
   },
   {
     id: "careerTools",
-    label: "Career Tools",
+    label: "Career tools",
     routes: [
       { href: "/career-intake", label: "Intake" },
       { href: "/candidate-intake", label: "Paste" },
       { href: "/job-candidates", label: "Queue" },
-      { href: "/career-pack", label: "Career Pack" },
+      { href: "/career-pack", label: "Pack" },
       { href: "/resume-bank", label: "Bank" },
-      { href: "/job-sources", label: "Sources" },
-      { href: "/source-setup", label: "Setup" }
+      { href: "/job-sources", label: "Sources" }
     ]
   },
   {
     id: "system",
-    label: "System",
+    label: "Backroom",
     routes: [
-      { href: "/memory-bank", label: "Memory" },
+      { href: "/raw-lab", label: "Raw Signal" },
+      { href: "/memory-bank", label: "Tape Archive" },
       { href: "/log", label: "Log" },
-      { href: "/raw-lab", label: "Raw Lab" }
+      { href: "/source-setup", label: "Setup" }
     ]
   }
 ];
+
+export const PRIMARY_NAV_ROUTES = NAV_GROUPS.find((group) => group.id === "primary")!.routes;
+
+export const BACKROOM_NAV_ROUTES = NAV_GROUPS.find((group) => group.id === "system")!.routes;
 
 /** Hrefs from the pre-v0.1 flat nav — used for parity checks. */
 export const LEGACY_NAV_HREFS = [

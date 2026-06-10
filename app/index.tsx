@@ -4,24 +4,29 @@ import { Pressable, Text, View } from "react-native";
 
 import { ActiveLimitBanner } from "../src/components/ActiveLimitBanner";
 import { CardTile } from "../src/components/CardTile";
-import { MvdChecklist } from "../src/components/MvdChecklist";
 import { CollapsibleSection } from "../src/components/CollapsibleSection";
-import { Nav } from "../src/components/Nav";
+import { BonusTrackCard } from "../src/components/lofi/BonusTrackCard";
+import { CompanionNote } from "../src/components/lofi/CompanionNote";
+import { RecoveryPanel } from "../src/components/lofi/RecoveryPanel";
+import { RescueRow } from "../src/components/lofi/RescueRow";
+import { TinyQuestCard } from "../src/components/lofi/TinyQuestCard";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { ProofShelf } from "../src/components/ProofShelf";
 import { ProgressBar } from "../src/components/ProgressBar";
 import { QuickCapture } from "../src/components/QuickCapture";
-import { SalvagePicker } from "../src/components/SalvagePicker";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
-import { generateWhileYouWereAway, getBriefingHighlightItems } from "../src/core/briefing";
+import { computeBonusTrack } from "../src/core/bonusTrack";
+import { generateWhileYouWereAway } from "../src/core/briefing";
+import { buildCompanionNote } from "../src/core/companionNote";
 import { computePrimaryAction } from "../src/core/primaryAction";
 import { getFollowUpsDue } from "../src/core/career";
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "../src/core/guards";
 import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
 import { computeCardProgress } from "../src/core/progress";
+import { computeRecoveryVisibility } from "../src/core/recovery";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 export default function TodayScreen() {
@@ -54,8 +59,10 @@ export default function TodayScreen() {
     careerSourcePack,
     resumeModules
   );
-  const highlights = getBriefingHighlightItems(briefing, cards, dailyState, logs, now, 5);
+  const companionNote = buildCompanionNote(briefing, cards, dailyState, logs, now);
   const primaryAction = computePrimaryAction(briefing, dailyState, cards, logs, now);
+  const bonusTrack = computeBonusTrack(briefing, primaryAction, cards);
+  const recoveryVisibility = computeRecoveryVisibility(briefing, dailyState, now);
   const activeLimit = getActiveLimitStatus(cards);
   const followUpsDue = getFollowUpsDue(cards, now);
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
@@ -95,74 +102,32 @@ export default function TodayScreen() {
 
   return (
     <Screen>
-      <Nav />
-      <PageHeader title="Today" subtitle="Daily command surface — see what matters and start one move." />
+      <PageHeader
+        title="Today's Loop"
+        subtitle="Good, you're back. One tiny quest is enough."
+      />
 
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
+
+      <CompanionNote text={companionNote} />
       <ActiveLimitBanner />
 
-      <Section title="What should I do now?">
-        <Text style={styles.titleText}>{primaryAction.title}</Text>
-        <Text style={[styles.bodyText, { marginTop: 8 }]}>{primaryAction.reason}</Text>
-        <Text style={[styles.label, { marginTop: 12 }]}>Smallest action</Text>
-        <Text style={styles.bodyText}>{primaryAction.smallestAction}</Text>
-        {primaryAction.kind === "pounce" && !primaryAction.targetRoute ? (
-          <Pressable
-            style={pounceLogged ? styles.secondaryAction : styles.primaryAction}
-            onPress={handlePounce}
-            disabled={pounceLogged}
-          >
-            <Text style={pounceLogged ? styles.secondaryActionText : styles.primaryActionText}>
-              {primaryAction.ctaLabel ?? "Start Pounce"}
-            </Text>
-          </Pressable>
-        ) : primaryAction.targetRoute ? (
-          <Link href={primaryAction.targetRoute as Href} asChild>
-            <Pressable style={styles.primaryAction}>
-              <Text style={styles.primaryActionText}>{primaryAction.ctaLabel ?? "Go"}</Text>
-            </Pressable>
-          </Link>
-        ) : primaryAction.cardId ? (
-          <Link href={`/card/${primaryAction.cardId}`} asChild>
-            <Pressable style={styles.primaryAction}>
-              <Text style={styles.primaryActionText}>{primaryAction.ctaLabel ?? "Open Card"}</Text>
-            </Pressable>
-          </Link>
-        ) : null}
-      </Section>
+      <TinyQuestCard
+        action={primaryAction}
+        pounceLogged={pounceLogged}
+        onPounce={handlePounce}
+      />
 
-      <Section title="While You Were Away">
-        {highlights.length === 0 ? (
-          <Text style={styles.emptyText}>No activity to report yet.</Text>
-        ) : (
-          highlights.map((item, idx) =>
-            item.cardId ? (
-              <Link key={idx} href={`/card/${item.cardId}`} asChild>
-                <Pressable accessibilityRole="link">
-                  <Text style={styles.listItem}>▸ {item.text}</Text>
-                </Pressable>
-              </Link>
-            ) : (
-              <Text key={idx} style={styles.listItem}>
-                ▸ {item.text}
-              </Text>
-            )
-          )
-        )}
-      </Section>
+      {bonusTrack ? <BonusTrackCard track={bonusTrack} /> : null}
 
-      <Section title="Primary Objective">
-        {mainQuest ? (
-          <Link href={`/card/${mainQuest.id}`} asChild>
-            <Pressable>
-              <Text style={styles.label}>Main Quest</Text>
-              <Text style={styles.titleText}>{mainQuest.title}</Text>
-              <ProgressBar value={computeCardProgress(mainQuest, logs, dailyState.sessionStartedAt)} />
-            </Pressable>
-          </Link>
-        ) : (
-          <Text style={styles.emptyText}>No main quest assigned yet.</Text>
-        )}
+      {recoveryVisibility.shouldPromote ? (
+        <RecoveryPanel visibility={recoveryVisibility} onNotice={showNotice} />
+      ) : (
+        <RescueRow onNotice={showNotice} />
+      )}
+
+      <Section title="Quick Capture">
+        <QuickCapture onNotice={showNotice} />
       </Section>
 
       {primaryAction.kind === "pounce" ? (
@@ -192,72 +157,36 @@ export default function TodayScreen() {
             </Pressable>
           </Link>
         </CollapsibleSection>
-      ) : (
-        <Section title="Career Pounce">
-          <Text style={styles.label}>Pounce Mission</Text>
-          <Text style={styles.titleText}>{dailyState.pounceMission}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Smallest Start</Text>
-          <Text style={styles.bodyText}>{dailyState.smallestStart}</Text>
-          <Link href="/career-intake" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>Open Career Intake</Text>
-            </Pressable>
-          </Link>
-          <Link href="/candidate-intake" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>Paste into Candidate Intake</Text>
-            </Pressable>
-          </Link>
-          <Link href="/job-candidates" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
-            </Pressable>
-          </Link>
-          <Link href="/job-sources" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>
-                {scheduleStats.dueSources > 0
-                  ? `Run Due Job Sources (${scheduleStats.dueSources})`
-                  : "Run an Approved Job Source"}
-              </Text>
-            </Pressable>
-          </Link>
-          <Pressable
-            style={pounceLogged ? styles.secondaryAction : styles.secondaryAction}
-            onPress={handlePounce}
-            disabled={pounceLogged}
-          >
-            <Text style={styles.secondaryActionText}>Pounce</Text>
-          </Pressable>
-          {pounceLogged ? (
-            <Text style={styles.helpText}>Pounce logged this session.</Text>
-          ) : null}
-        </Section>
-      )}
+      ) : null}
 
-      <Section title="Follow-ups Due">
-        {followUpsDue.length === 0 ? (
-          <Text style={styles.emptyText}>No follow-ups due right now.</Text>
-        ) : (
-          followUpsDue.map((card) => (
-            <Link key={card.id} href={`/card/${card.id}`} asChild>
-              <Pressable accessibilityRole="link">
-                <Text style={styles.listItem}>
-                  ▸ {card.title} — due {card.careerApplication?.followUpDate}
-                </Text>
-              </Pressable>
-            </Link>
-          ))
-        )}
-      </Section>
+      <CollapsibleSection title="Active threads" defaultOpen={activeCards.length > 0 && activeCards.length <= 3}>
+        {mainQuest ? (
+          <Link href={`/card/${mainQuest.id}`} asChild>
+            <Pressable style={{ marginBottom: 12 }}>
+              <Text style={styles.label}>Main quest</Text>
+              <Text style={styles.titleText}>{mainQuest.title}</Text>
+              <ProgressBar value={computeCardProgress(mainQuest, logs, dailyState.sessionStartedAt)} />
+            </Pressable>
+          </Link>
+        ) : null}
 
-      <Section title="Quick Capture">
-        <QuickCapture onNotice={showNotice} />
-      </Section>
+        {followUpsDue.length > 0 ? (
+          <View style={{ marginBottom: 12 }}>
+            <Text style={styles.label}>Follow-ups due</Text>
+            {followUpsDue.map((card) => (
+              <Link key={card.id} href={`/card/${card.id}`} asChild>
+                <Pressable accessibilityRole="link">
+                  <Text style={styles.listItem}>
+                    ▸ {card.title} — due {card.careerApplication?.followUpDate}
+                  </Text>
+                </Pressable>
+              </Link>
+            ))}
+          </View>
+        ) : null}
 
-      <Section title="Active Cards Summary">
         {activeCards.length === 0 ? (
-          <Text style={styles.emptyText}>No active cards. Capture something to get started.</Text>
+          <Text style={styles.emptyText}>No active threads. Capture something to get started.</Text>
         ) : (
           <>
             <Text style={styles.helpText}>
@@ -268,21 +197,10 @@ export default function TodayScreen() {
             ))}
           </>
         )}
-      </Section>
-
-      <Section title="Recovery Systems">
-        <View style={styles.recoveryRow}>
-          <View style={styles.recoveryItem}>
-            <MvdChecklist onNotice={showNotice} />
-          </View>
-          <View style={styles.recoveryItem}>
-            <SalvagePicker onNotice={showNotice} />
-          </View>
-        </View>
-      </Section>
+      </CollapsibleSection>
 
       <View style={proofPulse ? styles.sectionProofPulse : undefined}>
-        <Section title="Proof Shelf Preview">
+        <Section title="Recent proof">
           <ProofShelf compact limit={3} />
         </Section>
       </View>

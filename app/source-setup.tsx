@@ -2,7 +2,6 @@ import { Link } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 
-import { Nav } from "../src/components/Nav";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
@@ -363,7 +362,6 @@ export default function SourceSetupScreen() {
 
   return (
     <Screen>
-      <Nav />
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <Text style={styles.screenIntro}>
         Paste a careers or job-board URL, detect the adapter shape, test through the local runner,

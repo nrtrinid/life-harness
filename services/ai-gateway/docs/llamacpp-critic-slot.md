@@ -27,7 +27,7 @@ Check all before smoke:
 - [ ] **llama.cpp** built locally with **Intel / SYCL** support (A770 path varies by build; not in CI)
 - [ ] **Critic GGUF** on disk (see suggested models below; path is operator-specific)
 - [ ] **`llama-server` running externally** on a known host/port (default slot: `127.0.0.1:8121`)
-- [ ] **ai-gateway** running separately (`uvicorn` on `8111`)
+- [ ] **ai-gateway** running separately (`uvicorn` on `8111`) — **OpenVINO requires `.venv`** (system `python` lacks `openvino_genai` → 503)
 - [ ] **Draft model** ready if using OpenVINO (`SCOUT_PROVIDER=openvino` + Qwen3 weights), or use `mock` for critic-only routing checks
 - [ ] **`critic_small.enabled: true`** in `models.yaml` (committed default is `false`)
 - [ ] **`SCOUT_CRITIC_SLOT=secondary`**
@@ -35,10 +35,20 @@ Check all before smoke:
 
 **CLI helpers:**
 
-- [`scripts/smoke_deep_critic.py`](../scripts/smoke_deep_critic.py) — deep mode + `context_packet` smoke (four scenarios; prints latency and `confidence_notes`).
+- [`scripts/smoke_deep_critic.py`](../scripts/smoke_deep_critic.py) — deep mode + `context_packet` smoke (four scenarios; prints latency and `confidence_notes`). Scenario **D** repeats A for regression — **not** fail-soft. Run **manual D1** separately (stop `llama-server`, then POST scenario A body).
 - [`scripts/chat_harness.py`](../scripts/chat_harness.py) — non-deep only (no `reasoning_depth=deep` or `context_packet`).
 
 **Debug trace (optional):** set `SCOUT_DEBUG_THINKING_TRACE=true` on the gateway to log structured pass metadata (`chat_harness_thinking_trace` JSON in gateway logs). Default is **off**. Does not change the HTTP response schema and does not log chain-of-thought.
+
+### Observed A770 smoke (2026-06-10)
+
+| Finding | Detail |
+|---------|--------|
+| OpenVINO gateway | Must use `.\.venv\Scripts\python.exe -m uvicorn …` — not system `python` |
+| CPU `llama-server` | Works with `-ngl 0` but critic latency ~15–18 s on revised passes |
+| Fail-soft | Verified: stop `llama-server` → HTTP 200, draft kept (manual D1) |
+| Default slot | **`SCOUT_CRITIC_SLOT=same` stays default** — secondary remains manual/advanced until GPU llama.cpp smoke |
+| Draft parse skip | If deep draft JSON fails parse, critic is skipped; `confidence_notes` must not claim critic approval (see [phi4-critic-smoke-results.md](phi4-critic-smoke-results.md)) |
 
 ---
 
@@ -98,7 +108,15 @@ $env:SCOUT_DEEP_MAX_EXTRA_PASSES="2"
 # Optional structured deep-mode trace in gateway logs (not in HTTP response):
 # $env:SCOUT_DEBUG_THINKING_TRACE="true"
 
-uvicorn app.main:app --host 127.0.0.1 --port 8111
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8111
+```
+
+Use a local smoke override (do not edit committed `models.yaml` permanently):
+
+```powershell
+Copy-Item models.yaml .tmp.models.smoke.yaml
+# set critic_small.enabled: true in .tmp.models.smoke.yaml
+$env:SCOUT_MODELS_CONFIG=".tmp.models.smoke.yaml"
 ```
 
 ### Enable `critic_small` in `models.yaml`
@@ -194,7 +212,9 @@ Invoke-RestMethod -Uri $base -Method Post -ContentType "application/json" -Body 
 
 ---
 
-### D. Fail-soft — llama-server down or malformed JSON
+### D. Fail-soft — manual only (not `smoke_deep_critic.py` scenario D)
+
+`smoke_deep_critic.py` scenario **D** repeats scenario A for latency/regression. **Fail-soft is manual:**
 
 **D1 — server stopped:** Stop `llama-server`; repeat test A.
 

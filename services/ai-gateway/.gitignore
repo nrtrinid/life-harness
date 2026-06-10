@@ -12,3 +12,7 @@ docs/sample-outputs/openvino_*.json
 dist/
 build/
 bench_results/
+.tmp.models.smoke.yaml
+.smoke-*.txt
+.smoke-*.pid
+.smoke-*.log

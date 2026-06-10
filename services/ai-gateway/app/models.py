@@ -91,6 +91,12 @@ class SlotHealthEntry(StrictModel):
     state: SlotHealthStatus
 
 
+class GatewayBudgetLimits(StrictModel):
+    max_input_chars: int
+    raw_lab_max_input_chars: int
+    timeout_seconds: float
+
+
 class HealthResponse(StrictModel):
     status: HealthStatus
     provider: ProviderKind
@@ -99,6 +105,7 @@ class HealthResponse(StrictModel):
     device: str | None = None
     message: str | None = None
     slots: dict[str, SlotHealthEntry] | None = None
+    budget: GatewayBudgetLimits
 
 
 class ProviderHealth(StrictModel):

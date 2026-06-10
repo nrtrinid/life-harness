@@ -594,7 +594,7 @@ class MockProvider:
         critic = _CapturingCritic(
             get_critic_backend(settings, lambda _prompt: "{}", routing=trace)
         )
-        raw, revised = run_chat_harness_deep(
+        deep_result = run_chat_harness_deep(
             request=request,
             prompt=prompt,
             draft_generate=draft_generate,
@@ -604,8 +604,10 @@ class MockProvider:
         )
         emit_thinking_trace(settings, trace)
         response = append_deep_critic_note(
-            ChatHarnessResponse.model_validate_json(raw),
-            revised=revised,
+            ChatHarnessResponse.model_validate_json(deep_result.raw),
+            revised=deep_result.revised,
+            critic_ran=deep_result.critic_ran,
+            critic_skip_reason=deep_result.critic_skip_reason,
         )
         return self._finalize_chat_harness_mock(request, response)
 

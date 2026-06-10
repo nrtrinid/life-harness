@@ -63,6 +63,7 @@ export interface PollAiJobUntilDoneOptions extends GetAiJobInput {
   maxDurationMs?: number;
   backoffAfterMs?: number;
   maxConsecutivePollErrors?: number;
+  onPollUpdate?: (job: AiJobStatusResponse) => void;
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -201,6 +202,8 @@ export async function pollAiJobUntilDone(
     if (job.status === "cancelled") {
       throw new AiJobCancelledError();
     }
+
+    options.onPollUpdate?.(job);
 
     await sleep(pollIntervalForElapsed(elapsedMs, pollIntervalMs, backoffAfterMs));
   }

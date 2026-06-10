@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from app.chat_harness_critic import (
     build_deep_final_prompt,
@@ -21,6 +22,16 @@ logger = logging.getLogger(__name__)
 
 GenerateFn = Callable[[str], str]
 
+DRAFT_PARSE_FAIL_SOFT_REASON = "draft_parse_failed"
+
+
+@dataclass(frozen=True)
+class DeepRunResult:
+    raw: str
+    revised: bool
+    critic_ran: bool
+    critic_skip_reason: str | None = None
+
 
 def run_chat_harness_deep(
     *,
@@ -30,8 +41,8 @@ def run_chat_harness_deep(
     critic: CriticBackend,
     max_extra_passes: int,
     trace: ThinkingTrace | None = None,
-) -> tuple[str, bool]:
-    """Return raw ChatHarnessResponse JSON and whether a revision pass ran."""
+) -> DeepRunResult:
+    """Return deep-mode raw JSON, revision flag, and whether the critic pass ran."""
     draft_started = time.perf_counter()
     draft_raw = draft_generate(prompt)
     if trace is not None:
@@ -41,13 +52,28 @@ def run_chat_harness_deep(
     try:
         draft = parse_strict_json(draft_raw, ChatHarnessResponse)
     except ProviderParseError:
-        logger.warning("deep draft parse failed; skipping critic")
+        logger.warning(
+            "deep draft parse failed; critic skipped (%s)",
+            DRAFT_PARSE_FAIL_SOFT_REASON,
+        )
         if trace is not None:
             trace.parse_failures.append("draft")
-        return draft_raw, False
+            trace.fail_soft_reason = trace.fail_soft_reason or DRAFT_PARSE_FAIL_SOFT_REASON
+            trace.fallback_used = True
+        return DeepRunResult(
+            raw=draft_raw,
+            revised=False,
+            critic_ran=False,
+            critic_skip_reason=DRAFT_PARSE_FAIL_SOFT_REASON,
+        )
 
     if max_extra_passes < 1:
-        return draft_raw, False
+        return DeepRunResult(
+            raw=draft_raw,
+            revised=False,
+            critic_ran=False,
+            critic_skip_reason="deep_passes_disabled",
+        )
 
     critic_started = time.perf_counter()
     if trace is not None:
@@ -70,13 +96,13 @@ def run_chat_harness_deep(
     if verdict_passes(verdict):
         if trace is not None:
             trace.revision_applied = False
-        return draft_raw, False
+        return DeepRunResult(raw=draft_raw, revised=False, critic_ran=True)
 
     if max_extra_passes < 2:
         logger.info("deep critic requested revision but max_extra_passes < 2")
         if trace is not None:
             trace.revision_applied = False
-        return draft_raw, False
+        return DeepRunResult(raw=draft_raw, revised=False, critic_ran=True)
 
     revision_started = time.perf_counter()
     final_prompt = build_deep_final_prompt(prompt, draft_raw, verdict)
@@ -89,10 +115,12 @@ def run_chat_harness_deep(
         parse_strict_json(final_raw, ChatHarnessResponse)
         if trace is not None:
             trace.revision_applied = True
-        return final_raw, True
+        return DeepRunResult(raw=final_raw, revised=True, critic_ran=True)
     except ProviderParseError:
         logger.warning("deep final parse failed; returning draft")
         if trace is not None:
             trace.parse_failures.append("final")
             trace.revision_applied = False
-        return draft_raw, False
+            trace.fail_soft_reason = trace.fail_soft_reason or "final_parse_failed"
+            trace.fallback_used = True
+        return DeepRunResult(raw=draft_raw, revised=False, critic_ran=True)

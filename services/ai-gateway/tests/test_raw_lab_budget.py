@@ -19,10 +19,12 @@ def _settings(
         model_id="OpenVINO/Qwen3-8B-int4-ov",
         device="GPU",
         max_new_tokens=1024,
-        timeout_seconds=120,
+        timeout_seconds=180,
         max_input_chars=max_input_chars,
         raw_lab_max_input_chars=(
-            raw_lab_max_input_chars if raw_lab_max_input_chars is not None else max_input_chars
+            raw_lab_max_input_chars
+            if raw_lab_max_input_chars is not None
+            else 32_000
         ),
         temperature=0.2,
         raw_lab_max_new_tokens=2048,
@@ -118,8 +120,8 @@ def test_still_raises_when_message_alone_too_large():
 
 
 def test_raw_lab_uses_higher_limit_when_configured():
-    settings = _settings(max_input_chars=12_000, raw_lab_max_input_chars=18_000)
-    assert raw_lab_input_char_limit(settings) == 18_000
+    settings = _settings(max_input_chars=12_000, raw_lab_max_input_chars=32_000)
+    assert raw_lab_input_char_limit(settings) == 32_000
     turns = [
         RawLabTurn(
             role=ChatRole.user if index % 2 == 0 else ChatRole.assistant,
@@ -129,12 +131,26 @@ def test_raw_lab_uses_higher_limit_when_configured():
     ]
     request = RawLabRequest(message="tools?", recent_turns=turns)
     result = prepare_raw_lab_request(request, settings)
-    assert result.after_chars <= 18_000
+    assert result.after_chars <= 32_000
 
 
-def test_raw_lab_limit_falls_back_to_max_input_when_unset():
+def test_raw_lab_defaults_to_32k_when_unset():
     settings = _settings(max_input_chars=12_000)
-    assert raw_lab_input_char_limit(settings) == 12_000
+    assert raw_lab_input_char_limit(settings) == 32_000
+
+
+def test_from_env_raw_lab_defaults_to_32k_independent_of_harness_cap():
+    import os
+
+    from app.config import Settings
+
+    os.environ.pop("SCOUT_RAW_LAB_MAX_INPUT_CHARS", None)
+    os.environ.pop("SCOUT_TIMEOUT_SECONDS", None)
+    os.environ["SCOUT_MAX_INPUT_CHARS"] = "12000"
+    settings = Settings.from_env()
+    assert settings.max_input_chars == 12_000
+    assert settings.raw_lab_max_input_chars == 32_000
+    assert settings.timeout_seconds == 180.0
 
 
 def test_long_thread_short_message_fits_after_compaction():
@@ -144,5 +160,5 @@ def test_long_thread_short_message_fits_after_compaction():
     ]
     request = RawLabRequest(message="tools?", recent_turns=turns)
     result = prepare_raw_lab_request(request, _settings())
-    assert result.after_chars <= 12_000
+    assert result.after_chars <= 32_000
     assert result.request.message == "tools?"

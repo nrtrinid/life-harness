@@ -563,7 +563,7 @@ export function buildGroundedHandoffDigest(args: {
   recentUserMessages: string[];
 }): string {
   const parts: string[] = [
-    "I was exploring this in Raw Lab (ungrounded). Please help with board context:"
+    "I was exploring this in Raw Signal (ungrounded). Please help with board context:"
   ];
   if (args.state.activeGoal) {
     parts.push(`Goal: ${compactText(args.state.activeGoal, 220)}`);

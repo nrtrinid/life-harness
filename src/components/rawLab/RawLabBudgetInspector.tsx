@@ -3,10 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { styles } from "../styles";
 import type { CompanionSelfMemory } from "../../core/companionSelfMemory";
-import {
-  DEFAULT_GATEWAY_MAX_INPUT_CHARS,
-  DEFAULT_RAW_LAB_MAX_INPUT_CHARS
-} from "../../core/gatewayBudget";
+import { DEFAULT_GATEWAY_MAX_INPUT_CHARS } from "../../core/gatewayBudget";
 import {
   buildRawLabSendBundle,
   type RawLabBudgetLevel,
@@ -18,6 +15,8 @@ type RawLabBudgetInspectorProps = {
   turns: RawLabTurn[];
   threadState: RawLabThreadState;
   message: string;
+  gatewayRawLabMaxInputChars: number;
+  gatewayMaxInputChars?: number;
   companionSelfMemories?: CompanionSelfMemory[];
   forceExpanded?: boolean;
   lastSend?: {
@@ -34,6 +33,8 @@ export function RawLabBudgetInspector({
   turns,
   threadState,
   message,
+  gatewayRawLabMaxInputChars,
+  gatewayMaxInputChars = DEFAULT_GATEWAY_MAX_INPUT_CHARS,
   companionSelfMemories = [],
   forceExpanded = false,
   lastSend
@@ -58,22 +59,28 @@ export function RawLabBudgetInspector({
       message: message.trim() || "preview",
       turns,
       threadState,
-      companionSelfMemories
+      companionSelfMemories,
+      maxInputChars: gatewayRawLabMaxInputChars
     });
     setPreview({
       estimatedChars: bundle.estimatedChars,
       level: bundle.level,
       turnsSent: bundle.recentTurns.length,
       memoriesSent: bundle.companionSelfMemories.length,
-      budgetCapChars: DEFAULT_RAW_LAB_MAX_INPUT_CHARS
+      budgetCapChars: gatewayRawLabMaxInputChars
     });
   }
 
   function capLabel(cap: number): string {
-    const isRawLabCap = cap === DEFAULT_RAW_LAB_MAX_INPUT_CHARS;
-    return isRawLabCap
-      ? `${cap.toLocaleString()} (Raw Lab-specific)`
-      : `${cap.toLocaleString()} (custom)`;
+    const isRawLabCap = cap === gatewayRawLabMaxInputChars;
+    const isHarnessDefault = cap === gatewayMaxInputChars;
+    if (isRawLabCap) {
+      return `${cap.toLocaleString()} (Raw Lab-specific)`;
+    }
+    if (isHarnessDefault) {
+      return `${cap.toLocaleString()} (Ask Harness default)`;
+    }
+    return `${cap.toLocaleString()} (custom)`;
   }
 
   if (!expanded) {
@@ -92,8 +99,8 @@ export function RawLabBudgetInspector({
         <Text style={styles.sectionTitle}>Thread budget</Text>
       </Pressable>
       <Text style={styles.helpText}>
-        Raw Lab max ~{DEFAULT_RAW_LAB_MAX_INPUT_CHARS.toLocaleString()} chars (Ask Harness default{" "}
-        {DEFAULT_GATEWAY_MAX_INPUT_CHARS.toLocaleString()}).
+        Raw Lab max ~{gatewayRawLabMaxInputChars.toLocaleString()} chars (Ask Harness default{" "}
+        {gatewayMaxInputChars.toLocaleString()}).
       </Text>
       {lastSend ? (
         <>
@@ -103,8 +110,9 @@ export function RawLabBudgetInspector({
           </Text>
           <Text style={styles.helpText}>
             Budget cap used: {capLabel(lastSend.budgetCapChars)}
-            {lastSend.budgetCapChars === DEFAULT_RAW_LAB_MAX_INPUT_CHARS
-              ? " — not the Ask Harness 12k default."
+            {lastSend.budgetCapChars === gatewayRawLabMaxInputChars &&
+            gatewayRawLabMaxInputChars !== gatewayMaxInputChars
+              ? ` — not the Ask Harness ${gatewayMaxInputChars.toLocaleString()} default.`
               : ""}
           </Text>
           {lastSend.notice ? (

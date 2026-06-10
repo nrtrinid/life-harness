@@ -264,7 +264,7 @@ class OpenVinoProvider:
         trace = (
             new_thinking_trace(request) if self._settings.debug_thinking_trace else None
         )
-        raw, revised = run_chat_harness_deep(
+        deep_result = run_chat_harness_deep(
             request=request,
             prompt=prompt,
             draft_generate=self._generate,
@@ -278,8 +278,10 @@ class OpenVinoProvider:
         )
         emit_thinking_trace(self._settings, trace)
         response = append_deep_critic_note(
-            self._parse_chat_harness_raw(raw),
-            revised=revised,
+            self._parse_chat_harness_raw(deep_result.raw),
+            revised=deep_result.revised,
+            critic_ran=deep_result.critic_ran,
+            critic_skip_reason=deep_result.critic_skip_reason,
         )
         return self._apply_chat_harness_verifier(request, response)
 

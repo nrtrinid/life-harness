@@ -6,7 +6,11 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.chat_harness_critic import parse_critic_verdict, verdict_passes
+from app.chat_harness_critic import (
+    append_deep_critic_note,
+    parse_critic_verdict,
+    verdict_passes,
+)
 from app.chat_harness_deep import run_chat_harness_deep
 from app.critic_backend import MockCriticBackend, SameBackendCritic
 from app.main import app, get_provider
@@ -115,15 +119,16 @@ def test_malformed_critic_json_fails_soft(harness_context):
         calls.append(prompt)
         return draft_raw
 
-    raw, revised = run_chat_harness_deep(
+    result = run_chat_harness_deep(
         request=request,
         prompt="base prompt",
         draft_generate=draft_generate,
         critic=critic,
         max_extra_passes=2,
     )
-    assert raw == draft_raw
-    assert revised is False
+    assert result.raw == draft_raw
+    assert result.revised is False
+    assert result.critic_ran is True
     assert len(calls) == 1
 
 
@@ -137,7 +142,7 @@ def test_deep_max_extra_passes_zero_skips_critic(harness_context):
     request = _deep_request("deep-critic-too-broad probe", harness_context)
     critic = MagicMock()
 
-    raw, revised = run_chat_harness_deep(
+    result = run_chat_harness_deep(
         request=request,
         prompt="p",
         draft_generate=lambda _p: draft_raw,
@@ -145,7 +150,8 @@ def test_deep_max_extra_passes_zero_skips_critic(harness_context):
         max_extra_passes=0,
     )
     critic.critique_draft.assert_not_called()
-    assert revised is False
+    assert result.revised is False
+    assert result.critic_ran is False
 
 
 def test_deep_max_extra_passes_one_skips_final(harness_context):
@@ -158,7 +164,7 @@ def test_deep_max_extra_passes_one_skips_final(harness_context):
     request = _deep_request("deep-critic-too-broad", harness_context)
     calls: list[str] = []
 
-    raw, revised = run_chat_harness_deep(
+    result = run_chat_harness_deep(
         request=request,
         prompt="p",
         draft_generate=lambda p: calls.append(p) or draft_raw,
@@ -166,7 +172,8 @@ def test_deep_max_extra_passes_one_skips_final(harness_context):
         max_extra_passes=1,
     )
     assert len(calls) == 1
-    assert revised is False
+    assert result.revised is False
+    assert result.critic_ran is True
 
 
 def test_deep_uses_draft_critic_final_mock(client, harness_context):
@@ -355,7 +362,7 @@ def test_deep_draft_parse_failure_skips_critic(harness_context):
         return "not valid json"
 
     critic = MagicMock()
-    raw, revised = run_chat_harness_deep(
+    result = run_chat_harness_deep(
         request=request,
         prompt="base",
         draft_generate=draft_generate,
@@ -363,8 +370,29 @@ def test_deep_draft_parse_failure_skips_critic(harness_context):
         max_extra_passes=2,
     )
     critic.critique_draft.assert_not_called()
-    assert raw == "not valid json"
-    assert revised is False
+    assert result.raw == "not valid json"
+    assert result.revised is False
+    assert result.critic_ran is False
+    assert result.critic_skip_reason == "draft_parse_failed"
+
+
+def test_append_deep_critic_note_skips_approved_when_draft_parse_failed():
+    response = ChatHarnessResponse(
+        answer="One move.",
+        used_context=True,
+        confidence_notes=["Inferred — test."],
+        safety_notes=[],
+    )
+    noted = append_deep_critic_note(
+        response,
+        revised=False,
+        critic_ran=False,
+        critic_skip_reason="draft_parse_failed",
+    )
+    joined = " ".join(noted.confidence_notes)
+    assert "approved by structured critic" not in joined
+    assert "structured critic skipped (draft parse failed)" in joined
+    ChatHarnessResponse.model_validate(noted.model_dump(mode="json"))
 
 
 def test_deep_critic_flags_avoidance(client, harness_context):

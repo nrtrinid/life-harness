@@ -71,6 +71,22 @@ const spacing = {
   xxl: 24
 };
 
+// Lo-Fi Companion OS accents (additive on Field Ops base)
+const lofiColors = {
+  cassetteAmber: colors.accentPrimary,
+  dustyBlue: "#6B8FA3",
+  mossGreen: colors.accentSuccess,
+  fadedRose: "#B87A7A",
+  softViolet: "#9B8BB8",
+  cardSurface: "rgba(22, 25, 16, 0.92)",
+  cardBorder: "rgba(200, 168, 75, 0.1)"
+};
+
+const lofiTypography = {
+  fontLofiMono: "monospace" as const,
+  tapeLabelSize: typography.labelMedium
+};
+
 export const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -154,6 +170,148 @@ export const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.labelSmall,
     fontWeight: "700"
+  },
+  appShellWide: {
+    backgroundColor: colors.bgPrimary,
+    flex: 1,
+    flexDirection: "row"
+  },
+  appShellNarrow: {
+    backgroundColor: colors.bgPrimary,
+    flex: 1
+  },
+  appShellContent: {
+    flex: 1
+  },
+  sidebar: {
+    backgroundColor: colors.bgSecondary,
+    borderRightColor: colors.borderSubtle,
+    borderRightWidth: 1,
+    gap: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
+    width: 220
+  },
+  sidebarBrand: {
+    gap: spacing.xs,
+    marginBottom: spacing.sm
+  },
+  sidebarBrandTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.headingSmall,
+    fontWeight: "700"
+  },
+  sidebarBrandSubtitle: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontStyle: "italic"
+  },
+  sidebarNavStack: {
+    gap: spacing.xs
+  },
+  sidebarNavLink: {
+    borderRadius: 4,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  sidebarNavLinkActive: {
+    backgroundColor: colors.bgTertiary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 4,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  sidebarNavLinkText: {
+    color: colors.textTertiary,
+    fontSize: typography.bodyMedium,
+    fontWeight: "600"
+  },
+  sidebarNavLinkTextActive: {
+    color: colors.textPrimary,
+    fontSize: typography.bodyMedium,
+    fontWeight: "700"
+  },
+  sidebarGroupToggle: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 44,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm
+  },
+  sidebarGroupLabel: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "600"
+  },
+  navCompactBackroomToggle: {
+    alignSelf: "flex-start",
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  navCompactBackroomToggleText: {
+    color: colors.textMuted,
+    fontSize: typography.labelMedium,
+    fontWeight: "600"
+  },
+  navTopChrome: {
+    backgroundColor: colors.bgSecondary,
+    borderBottomColor: colors.borderSubtle,
+    borderBottomWidth: 1,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md
+  },
+  lofiCard: {
+    backgroundColor: lofiColors.cardSurface,
+    borderColor: lofiColors.cardBorder,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg
+  },
+  lofiCardQuiet: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  lofiCardHero: {
+    backgroundColor: colors.bgTertiary,
+    borderColor: colors.borderDefault,
+    borderLeftColor: lofiColors.cassetteAmber,
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg
+  },
+  lofiTapeLabel: {
+    color: colors.textLabel,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: lofiTypography.tapeLabelSize,
+    fontWeight: "600",
+    letterSpacing: 0.6
+  },
+  lofiCompanionNote: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyLarge,
+    fontStyle: "italic",
+    lineHeight: 24
+  },
+  lofiRescueRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
   },
   pageHeader: {
     gap: spacing.xs,
@@ -632,6 +790,7 @@ export const styles = StyleSheet.create({
   chatThreadToolbar: {
     alignItems: "flex-end",
     flexDirection: "row",
+    gap: spacing.sm,
     justifyContent: "flex-end"
   },
   chatThreadScroll: {
@@ -776,6 +935,17 @@ export const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.md
   },
+  synthesisNextPounceHero: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderAccent,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  synthesisBulletRow: {
+    paddingLeft: spacing.xs
+  },
   chatComposer: {
     backgroundColor: colors.bgSecondary,
     borderColor: colors.borderSubtle,
@@ -896,4 +1066,4 @@ export const styles = StyleSheet.create({
 });
 
 // Export color tokens for components that need dynamic styling
-export { colors, typography, spacing };
+export { colors, typography, spacing, lofiColors, lofiTypography };
