@@ -1,21 +1,15 @@
 from __future__ import annotations
 
 import json
-import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from app.eval_scorers import (
     check_forbid_substrings_in_fields,
     check_json_field_paths,
-    check_synthesis_proposals_require_approval,
-    check_synthesis_provenance,
     run_heuristic_checks,
     validate_response_schema,
 )
-from app.synthesis_models import DeepSynthesisCompletedBody
-from app.synthesis_verifier import verify_synthesis_completed
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 EVALS_ROOT = SERVICE_ROOT / "evals"
@@ -178,7 +172,11 @@ def run_eval_case(
         }
         response = client.post("/ask-harness", json=payload)
         if response.status_code != 200:
-            return False, f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}"
+            return (
+                None,
+                "",
+                f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
+            )
         body = response.json()
         answer = str(body.get("answer", ""))
     elif endpoint == "deep-synthesis":
@@ -201,9 +199,13 @@ def run_eval_case(
             payload["context_packet"] = resolved_packet
         response = client.post("/ai/deep-synthesis", json=payload)
         if response.status_code != expected_status:
-            return False, f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}"
+            return (
+                None,
+                "",
+                f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
+            )
         if expected_status != 200:
-            return True, "ok"
+            return body if body is not None else {}, "", None
         body = response.json()
         if body.get("status") == "queued":
             expect_queued = False
@@ -215,25 +217,66 @@ def run_eval_case(
             if not expect_queued:
                 poll_url = str(body.get("poll_url", ""))
                 if not poll_url:
-                    return False, "queued deep-synthesis response missing poll_url"
+                    return None, "", "queued deep-synthesis response missing poll_url"
                 poll = client.get(poll_url)
                 if poll.status_code != 200:
-                    return False, (
-                        f"poll HTTP {poll.status_code}: {getattr(poll, 'text', '')[:200]}"
+                    return (
+                        None,
+                        "",
+                        f"poll HTTP {poll.status_code}: {getattr(poll, 'text', '')[:200]}",
                     )
                 job = poll.json()
                 body = job.get("result") or {}
                 if not body:
-                    return False, "polled job missing result body"
+                    return None, "", "polled job missing result body"
                 answer = f"{body.get('circling', '')} {body.get('strongest_idea', '')}"
             else:
                 answer = ""
         else:
             answer = f"{body.get('circling', '')} {body.get('strongest_idea', '')}"
     else:
-        return False, f"Unknown endpoint: {endpoint}"
+        return None, "", f"Unknown endpoint: {endpoint}"
 
-    return _apply_response_gates(case, body, answer)
+    return body, answer, None
+
+
+def execute_and_score_eval_case(
+    client: EvalHttpClient,
+    case: dict[str, Any],
+    context: dict[str, Any],
+) -> EvalCaseExecutionResult:
+    started = time.perf_counter()
+    body, answer, transport_error = _execute_eval_case(client, case, context)
+    latency_ms = (time.perf_counter() - started) * 1000.0
+
+    if transport_error:
+        return EvalCaseExecutionResult(
+            passed=False,
+            body=body,
+            failure_reason=transport_error,
+            score_breakdown=collect_score_breakdown(body),
+            latency_ms=latency_ms,
+        )
+
+    passed, detail = _apply_response_gates(case, body or {}, answer)
+    return EvalCaseExecutionResult(
+        passed=passed,
+        body=body,
+        failure_reason=None if passed else detail,
+        score_breakdown=collect_score_breakdown(body),
+        latency_ms=latency_ms,
+    )
+
+
+def run_eval_case(
+    client: EvalHttpClient,
+    case: dict[str, Any],
+    context: dict[str, Any],
+) -> tuple[bool, str]:
+    result = execute_and_score_eval_case(client, case, context)
+    if result.passed:
+        return True, "ok"
+    return False, result.failure_reason or "failed"
 
 
 def run_eval_file(
