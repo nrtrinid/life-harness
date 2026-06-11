@@ -15,6 +15,7 @@ import {
   applyAddJobSource,
   applyClearCareerSourcePack,
   applyApproveJobCandidate,
+  applyBackfillResumeDraftPacket,
   applyCompleteAgentSessionWithEvidence,
   applyImportCareerSourcePack,
   applyCardStateChange,
@@ -65,6 +66,10 @@ import {
   applyToggleMemoryItemActive,
   applyUpdateMemoryItem
 } from "../core/harnessMemoryBank";
+import {
+  applyConfirmedAssistantAction,
+  type AssistantProposedAction
+} from "../core/assistantActionRegistry";
 import {
   applyCreateAgentSessionForCard,
   applyDeleteAgentSession,
@@ -140,6 +145,7 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   approveJobCandidate: (
     candidateId: string
   ) => { ok: boolean; message?: string; cardId?: string; candidateId?: string };
+  backfillResumeDraftPacket: (cardId: string) => { ok: boolean; message?: string };
   importCareerSourcePack: (json: string) => { ok: boolean; message?: string };
   clearCareerSourcePack: () => { ok: boolean; message?: string };
   addJobSource: (input: JobSourceInput) => { ok: boolean; message?: string };
@@ -177,6 +183,9 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     input?: HarnessAgentSessionCompleteInput
   ) => { ok: boolean; message?: string };
   deleteAgentSession: (sessionId: string) => { ok: boolean; message?: string };
+  confirmAssistantAction: (
+    action: AssistantProposedAction
+  ) => { ok: boolean; message?: string };
   isBatchRunning: boolean;
   batchRunProgress: BatchRunProgress | null;
   runOneJobSource: (
@@ -426,6 +435,17 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     [state]
   );
 
+  const backfillResumeDraftPacketAction = useCallback(
+    (cardId: string) => {
+      const result = applyBackfillResumeDraftPacket(state, cardId);
+      if (result.ok) {
+        dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
   const importCareerSourcePack = useCallback(
     (json: string) => {
       const result = applyImportCareerSourcePack(state, json);
@@ -622,6 +642,15 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     return { ok: true, message: "Agent session deleted." };
   }, []);
 
+  const confirmAssistantAction = useCallback((action: AssistantProposedAction) => {
+    const result = applyConfirmedAssistantAction(stateRef.current, action);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    dispatch({ type: "state_replaced", state: result.data });
+    return { ok: true, message: result.message };
+  }, []);
+
   const runSourceOnState = useCallback(
     async (current: LifeHarnessData, source: JobSource): Promise<{
       state: LifeHarnessData;
@@ -806,6 +835,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       saveJobCandidate: saveJobCandidateAction,
       dismissJobCandidate: dismissJobCandidateAction,
       approveJobCandidate: approveJobCandidateAction,
+      backfillResumeDraftPacket: backfillResumeDraftPacketAction,
       importCareerSourcePack,
       clearCareerSourcePack,
       addJobSource: addJobSourceAction,
@@ -828,6 +858,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       updateAgentSession,
       completeAgentSession,
       deleteAgentSession,
+      confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,
@@ -847,6 +878,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       saveJobCandidateAction,
       dismissJobCandidateAction,
       approveJobCandidateAction,
+      backfillResumeDraftPacketAction,
       importCareerSourcePack,
       clearCareerSourcePack,
       addJobSourceAction,
@@ -869,6 +901,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       updateAgentSession,
       completeAgentSession,
       deleteAgentSession,
+      confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,

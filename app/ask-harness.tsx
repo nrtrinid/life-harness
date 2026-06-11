@@ -14,6 +14,7 @@ import { AskHarnessAdvancedPanel } from "../src/components/askHarness/AskHarness
 import { CompanionBudgetSection } from "../src/components/askHarness/CompanionBudgetSection";
 import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/ChatComposer";
 import { ChatThreadContextPanel } from "../src/components/askHarness/ChatThreadContextPanel";
+import type { ProposalUiStatus } from "../src/components/assistantActions/AssistantActionProposalCard";
 import { ChatThread } from "../src/components/askHarness/ChatThread";
 import { HarnessReadCard } from "../src/components/askHarness/HarnessReadCard";
 import { SynthesisJobPanel } from "../src/components/askHarness/SynthesisJobPanel";
@@ -31,6 +32,7 @@ import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
+import { SignalStrip } from "../src/components/AlivePatterns";
 import { styles } from "../src/components/styles";
 import {
   buildCompanionStateChips,
@@ -69,6 +71,8 @@ import {
   type ChatHarnessMode,
   type HarnessExportInput
 } from "../src/core/harnessContext";
+import type { AssistantProposedAction } from "../src/core/assistantActionRegistry";
+import type { LifeHarnessData } from "../src/core/actions";
 import { createId } from "../src/core/ids";
 import {
   createMemoryItem,
@@ -132,7 +136,8 @@ export default function AskHarnessDevScreen() {
     deleteChatSummary,
     saveMemoryItem,
     deleteMemoryItem,
-    toggleMemoryItemActive
+    toggleMemoryItemActive,
+    confirmAssistantAction
   } = harnessState;
   const { height, width } = useWindowDimensions();
   const useSideBackroom = shouldUseChatBackroomSideLayout(width);
@@ -160,6 +165,40 @@ export default function AskHarnessDevScreen() {
   const [backroomOpen, setBackroomOpen] = useState(false);
   const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
   const [lastBudgetNotice, setLastBudgetNotice] = useState<string | null>(null);
+  const [proposalStatuses, setProposalStatuses] = useState<Record<string, ProposalUiStatus>>({});
+
+  const lifeHarnessData = useMemo((): LifeHarnessData => {
+    const {
+      cards,
+      logs,
+      proofItems,
+      dailyState,
+      resumeModules,
+      jobCandidates,
+      jobSources,
+      jobSourceRuns,
+      chatSummaries,
+      memoryItems,
+      projects,
+      agentSessions,
+      careerSourcePack
+    } = harnessState;
+    return {
+      cards,
+      logs,
+      proofItems,
+      dailyState,
+      resumeModules,
+      jobCandidates,
+      jobSources,
+      jobSourceRuns,
+      chatSummaries,
+      memoryItems,
+      projects,
+      agentSessions,
+      careerSourcePack
+    };
+  }, [harnessState]);
 
   function buildInspectorPacket(
     userMessage: string,
@@ -374,10 +413,25 @@ export default function AskHarnessDevScreen() {
     synthesis.dismissSynthesis();
     setThread([]);
     setThreadState(createEmptySharedChatThreadState());
+    setProposalStatuses({});
     setMessage("");
     setNotice(null);
     setLastSentPacketSummary(null);
     setLastBudgetNotice(null);
+  }
+
+  function handleApproveProposal(proposalId: string, action: AssistantProposedAction) {
+    const result = confirmAssistantAction(action);
+    if (result.ok) {
+      setProposalStatuses((previous) => ({ ...previous, [proposalId]: "approved" }));
+      setNotice({ kind: "success", message: result.message ?? "Action applied." });
+      return;
+    }
+    setNotice({ kind: "error", message: result.message ?? "Could not apply action." });
+  }
+
+  function handleDismissProposal(proposalId: string) {
+    setProposalStatuses((previous) => ({ ...previous, [proposalId]: "dismissed" }));
   }
 
   function buildCompletedChatTurns(
@@ -408,6 +462,7 @@ export default function AskHarnessDevScreen() {
       ...previous,
       { id: createId("chat-user"), kind: "user", text: trimmed, mode }
     ]);
+    setMessage("");
 
     try {
       const sendPacket = buildInspectorPacket(trimmed, threadState, contextMode);
@@ -469,11 +524,11 @@ export default function AskHarnessDevScreen() {
           showMemoryTools: false
         }
       ]);
-      setMessage("");
       if (Platform.OS === "web") {
         inputRef.current?.focus();
       }
     } catch (error) {
+      setMessage(trimmed);
       const formatted = formatSendError(error);
       setThread((previous) => [
         ...previous,
@@ -624,6 +679,8 @@ export default function AskHarnessDevScreen() {
           quickQuestions={QUICK_QUESTIONS}
           placeholder="Ask your companion…"
           inputRef={inputRef}
+          reasoningDepth={reasoningDepth}
+          onReasoningDepthChange={setReasoningDepth}
           onMessageChange={setMessage}
           onQuickQuestion={handleQuickQuestion}
           onSend={() => void handleSend()}
@@ -645,6 +702,10 @@ export default function AskHarnessDevScreen() {
         threadScrollRef={threadScrollRef}
         loading={loading}
         memoryItems={harnessState.memoryItems}
+        lifeHarnessData={lifeHarnessData}
+        proposalStatuses={proposalStatuses}
+        onApproveProposal={handleApproveProposal}
+        onDismissProposal={handleDismissProposal}
         onSelectPrompt={handleQuickQuestion}
         onToggleConfidence={(turnId) =>
           setThread((previous) =>
@@ -689,6 +750,11 @@ export default function AskHarnessDevScreen() {
       />
 
       <View style={styles.chatPrimaryColumn}>
+        <SignalStrip
+          label="Grounded"
+          tone="companion"
+          text="Uses board context for suggestions. It does not change cards unless you choose an action."
+        />
         <HarnessReadCard />
 
         <ChatStateStrip

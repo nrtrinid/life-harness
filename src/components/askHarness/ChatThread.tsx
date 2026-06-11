@@ -1,9 +1,21 @@
-import { type RefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 
+import {
+  AssistantActionProposalCard,
+  type ProposalUiStatus
+} from "../assistantActions/AssistantActionProposalCard";
 import { MessageActionMenu } from "../chat/MessageActionMenu";
 import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
 import { styles } from "../styles";
+import type { LifeHarnessData } from "../../core/actions";
+import {
+  buildAssistantProposalId,
+  parseAssistantProposedActions,
+  stripAssistantActionBlocks,
+  validateAssistantAction
+} from "../../core/assistantActionRegistry";
+import type { AssistantProposedAction } from "../../core/assistantActionRegistry";
 import { buildChatSummary } from "../../core/harnessMemory";
 import {
   buildMemoryCandidatesFromChatSummary,
@@ -23,6 +35,10 @@ interface ChatThreadProps {
   threadScrollRef?: RefObject<ScrollView | null>;
   loading?: boolean;
   memoryItems: HarnessMemoryItem[];
+  lifeHarnessData?: LifeHarnessData;
+  proposalStatuses?: Record<string, ProposalUiStatus>;
+  onApproveProposal?: (proposalId: string, action: AssistantProposedAction) => void;
+  onDismissProposal?: (proposalId: string) => void;
   onSelectPrompt?: (item: QuickQuestion) => void;
   onToggleConfidence: (turnId: string) => void;
   onToggleMemoryTools: (turnId: string) => void;
@@ -65,6 +81,10 @@ function getMemoryCandidates(
 function AssistantTurn({
   turn,
   memoryItems,
+  lifeHarnessData,
+  proposalStatuses,
+  onApproveProposal,
+  onDismissProposal,
   onToggleConfidence,
   onToggleMemoryTools,
   onToggleMemoryPreview,
@@ -74,6 +94,10 @@ function AssistantTurn({
 }: {
   turn: Extract<ChatThreadItem, { kind: "assistant" }>;
   memoryItems: HarnessMemoryItem[];
+  lifeHarnessData?: LifeHarnessData;
+  proposalStatuses?: Record<string, ProposalUiStatus>;
+  onApproveProposal?: (proposalId: string, action: AssistantProposedAction) => void;
+  onDismissProposal?: (proposalId: string) => void;
   onToggleConfidence: (turnId: string) => void;
   onToggleMemoryTools: (turnId: string) => void;
   onToggleMemoryPreview: (turnId: string) => void;
@@ -96,11 +120,47 @@ function AssistantTurn({
     safetyNotes: turn.response.safety_notes
   });
   const candidates = getMemoryCandidates(turn, memoryItems);
+  const displayAnswer = stripAssistantActionBlocks(turn.response.answer);
+  const proposedActions = useMemo(
+    () => parseAssistantProposedActions(turn.response.answer),
+    [turn.response.answer]
+  );
+  const proposalEntries = useMemo(() => {
+    if (!lifeHarnessData) {
+      return [];
+    }
+    return proposedActions.map((action, actionIndex) => {
+      const proposalId = buildAssistantProposalId(turn.id, actionIndex, action);
+      const validation = validateAssistantAction(lifeHarnessData, action);
+      return {
+        proposalId,
+        action,
+        preview: validation.ok ? validation.preview : undefined,
+        validationError: validation.ok ? undefined : validation.error,
+        status: proposalStatuses?.[proposalId] ?? "pending"
+      };
+    });
+  }, [lifeHarnessData, proposedActions, proposalStatuses, turn.id]);
 
   return (
-    <View style={styles.chatBubbleAssistant}>
+    <View style={[styles.chatBubbleAssistant, styles.chatBubbleAssistantCompanion]}>
       <Text style={styles.chatSpeakerLabel}>Harness</Text>
-      <Text style={styles.chatAnswerText}>{turn.response.answer}</Text>
+      <Text style={styles.chatAnswerText}>{displayAnswer}</Text>
+      {proposalEntries.length > 0 ? (
+        <View style={{ gap: 8, marginTop: 8 }}>
+          {proposalEntries.map((entry) => (
+            <AssistantActionProposalCard
+              key={entry.proposalId}
+              action={entry.action}
+              preview={entry.preview}
+              validationError={entry.validationError}
+              status={entry.status}
+              onApprove={() => onApproveProposal?.(entry.proposalId, entry.action)}
+              onDismiss={() => onDismissProposal?.(entry.proposalId)}
+            />
+          ))}
+        </View>
+      ) : null}
       <View style={styles.chatMetaRow}>
         <MetaPill
           label={`Context ${turn.response.used_context ? "yes" : "no"}`}
@@ -226,6 +286,10 @@ export function ChatThread({
   threadScrollRef,
   loading = false,
   memoryItems,
+  lifeHarnessData,
+  proposalStatuses,
+  onApproveProposal,
+  onDismissProposal,
   onSelectPrompt,
   onToggleConfidence,
   onToggleMemoryTools,
@@ -288,6 +352,10 @@ export function ChatThread({
             key={item.id}
             turn={item}
             memoryItems={memoryItems}
+            lifeHarnessData={lifeHarnessData}
+            proposalStatuses={proposalStatuses}
+            onApproveProposal={onApproveProposal}
+            onDismissProposal={onDismissProposal}
             onToggleConfidence={onToggleConfidence}
             onToggleMemoryTools={onToggleMemoryTools}
             onToggleMemoryPreview={onToggleMemoryPreview}
