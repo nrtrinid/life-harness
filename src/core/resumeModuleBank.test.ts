@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCandidateResumePacket,
+  buildResumeDraftPacket,
   buildResumeModuleReadinessSummary,
   groupActiveResumeModules,
   normalizeResumeModules
@@ -136,5 +137,55 @@ describe("resume module bank", () => {
     expect(packet.sectionCoverage).toEqual(["skills", "projects"]);
     expect(packet.missingEvidence.length).toBeGreaterThan(0);
     expect(packet.nextTinyAction).toBe("Patch Technical Skills: No resume bullets yet.");
+  });
+
+  it("creates a persisted draft packet snapshot with module ids and warning text", () => {
+    const candidate: Pick<
+      JobCandidate,
+      "id" | "company" | "roleTitle" | "recommendedResumeAngle" | "suggestedResumeModuleIds" | "roleType"
+    > = {
+      id: "candidate-test",
+      company: "Packet Co",
+      roleTitle: "Software Engineer",
+      recommendedResumeAngle: "Lead with TypeScript systems.",
+      suggestedResumeModuleIds: ["project-late", "skills", "project-early"],
+      roleType: "software"
+    };
+
+    const packet = buildResumeDraftPacket(
+      candidate,
+      modules,
+      "2026-06-10T12:00:00.000Z"
+    );
+
+    expect(packet).toMatchObject({
+      createdAt: "2026-06-10T12:00:00.000Z",
+      sourceCandidateId: "candidate-test",
+      company: "Packet Co",
+      roleTitle: "Software Engineer",
+      resumeAngle: "Lead with TypeScript systems.",
+      nextTinyAction: "Patch Technical Skills: No resume bullets yet."
+    });
+    expect(packet.selectedModuleIds).toEqual(["skills", "project-early", "project-late"]);
+    expect(packet.sectionCoverage).toEqual(["skills", "projects"]);
+    expect(packet.missingEvidence.map((issue) => issue.message)).toContain("No proof attached.");
+  });
+
+  it("creates an empty packet with a manual next action when no modules match", () => {
+    const packet = buildResumeDraftPacket(
+      {
+        id: "candidate-empty",
+        company: "Empty Co",
+        roleTitle: "IT Specialist",
+        suggestedResumeModuleIds: ["missing"],
+        roleType: "it"
+      },
+      modules,
+      "2026-06-10T12:00:00.000Z"
+    );
+
+    expect(packet.selectedModuleIds).toEqual([]);
+    expect(packet.sectionCoverage).toEqual([]);
+    expect(packet.nextTinyAction).toBe("Choose one active resume module for this it role.");
   });
 });

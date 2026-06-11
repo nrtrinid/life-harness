@@ -8,12 +8,13 @@ import { Section } from "../../src/components/Section";
 import { styles } from "../../src/components/styles";
 import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
 import { computeCardProgress } from "../../src/core/progress";
+import { RESUME_MODULE_SECTION_LABELS } from "../../src/core/resumeModuleBank";
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
 
 export default function CardDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { cards, logs, proofItems, dailyState } = useLifeHarness();
+  const { cards, logs, proofItems, dailyState, resumeModules } = useLifeHarness();
   const card = cards.find((item) => item.id === id);
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
@@ -33,6 +34,8 @@ export default function CardDetailScreen() {
   }
 
   const cardProof = proofItems.filter((proof) => card.proofItemIds.includes(proof.id));
+  const resumeDraftPacket = card.careerApplication?.resumeDraftPacket;
+  const moduleById = new Map(resumeModules.map((module) => [module.id, module]));
 
   return (
     <Screen>
@@ -115,6 +118,43 @@ export default function CardDetailScreen() {
           <Text style={styles.bodyText}>{card.careerApplication.projectsToEmphasize}</Text>
           <Text style={[styles.label, { marginTop: 12 }]}>Bullets / Skills to Emphasize</Text>
           <Text style={styles.bodyText}>{card.careerApplication.bulletsToEmphasize ?? "(not set)"}</Text>
+          {resumeDraftPacket ? (
+            <>
+              <Text style={[styles.label, { marginTop: 12 }]}>Resume Draft Packet</Text>
+              <Text style={styles.bodyText}>{resumeDraftPacket.nextTinyAction}</Text>
+              <Text style={[styles.label, { marginTop: 12 }]}>Selected Modules</Text>
+              {resumeDraftPacket.selectedModuleIds.length === 0 ? (
+                <Text style={styles.emptyText}>No modules selected yet.</Text>
+              ) : (
+                resumeDraftPacket.selectedModuleIds.map((moduleId) => {
+                  const module = moduleById.get(moduleId);
+                  return (
+                    <Text key={moduleId} style={styles.listItem}>
+                      - {module?.title ?? moduleId}
+                    </Text>
+                  );
+                })
+              )}
+              <Text style={[styles.label, { marginTop: 12 }]}>Section Coverage</Text>
+              <Text style={styles.bodyText}>
+                {resumeDraftPacket.sectionCoverage.length > 0
+                  ? resumeDraftPacket.sectionCoverage
+                      .map((section) => RESUME_MODULE_SECTION_LABELS[section])
+                      .join(", ")
+                  : "No sections covered yet."}
+              </Text>
+              <Text style={[styles.label, { marginTop: 12 }]}>Packet Patches</Text>
+              {resumeDraftPacket.missingEvidence.length === 0 ? (
+                <Text style={styles.emptyText}>No packet patches flagged.</Text>
+              ) : (
+                resumeDraftPacket.missingEvidence.slice(0, 5).map((issue) => (
+                  <Text key={`${issue.moduleId}-${issue.message}`} style={styles.listItem}>
+                    - {issue.moduleTitle}: {issue.message}
+                  </Text>
+                ))
+              )}
+            </>
+          ) : null}
           {card.careerApplication.followUpDate ? (
             <>
               <Text style={[styles.label, { marginTop: 12 }]}>Follow-up Date</Text>

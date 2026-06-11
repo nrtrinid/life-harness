@@ -34,6 +34,7 @@ import {
   type StoredCareerSourcePack
 } from "./careerSourcePack";
 import { matchCandidateWithCareerPack } from "./careerPackMatching";
+import { buildResumeDraftPacket } from "./resumeModuleBank";
 import type { JobSourceRunOutput } from "./jobSourceRunner";
 import { rebindJobSourceRunOutput } from "./jobSourceRunner";
 
@@ -627,6 +628,13 @@ export function applyApproveJobCandidate(state: LifeHarnessData, candidateId: st
       };
     }
   }
+  intake = {
+    ...intake,
+    resumeDraftPacket: {
+      ...buildResumeDraftPacket(candidate, state.resumeModules, nowIso()),
+      resumeAngle: intake.resumeAngle ?? candidate.recommendedResumeAngle ?? ""
+    }
+  };
   const card = createCareerApplicationCard(intake);
   card.nextTinyAction = "Tailor resume angle and submit application.";
   card.whyItMatters = "Fit found through Job Scout; applying keeps career momentum warm.";

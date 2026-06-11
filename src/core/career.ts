@@ -9,6 +9,7 @@ import type {
   JobSourceRunResult,
   LifeCard,
   LifeLogEntry,
+  ResumeDraftPacket,
   RoleType
 } from "./types";
 
@@ -24,6 +25,7 @@ export interface CareerIntakeInput {
   projectsToEmphasize?: string;
   bulletsToEmphasize?: string;
   jobCandidateId?: string;
+  resumeDraftPacket?: ResumeDraftPacket;
 }
 
 export function isApplicationCard(card: LifeCard): boolean {
@@ -58,7 +60,8 @@ export function createCareerApplicationCard(input: CareerIntakeInput): LifeCard 
     projectsToEmphasize: input.projectsToEmphasize ?? "(projects to emphasize)",
     bulletsToEmphasize: input.bulletsToEmphasize,
     followUpDate: input.followUpDate,
-    jobCandidateId: input.jobCandidateId
+    jobCandidateId: input.jobCandidateId,
+    resumeDraftPacket: input.resumeDraftPacket
   };
 
   return {

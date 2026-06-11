@@ -30,6 +30,7 @@ export interface CareerApplication {
   bulletsToEmphasize?: string;
   followUpDate?: string;
   jobCandidateId?: string;
+  resumeDraftPacket?: ResumeDraftPacket;
 }
 
 export type ResumeModuleCategory =
@@ -67,6 +68,24 @@ export interface ResumeModule {
   isActive: boolean;
   importedFromCareerPack?: boolean;
   resumePlacement?: ResumeModulePlacement;
+}
+
+export interface ResumeDraftPacketIssue {
+  moduleId: string;
+  moduleTitle: string;
+  message: string;
+}
+
+export interface ResumeDraftPacket {
+  createdAt: string;
+  sourceCandidateId: string;
+  company: string;
+  roleTitle: string;
+  resumeAngle: string;
+  selectedModuleIds: string[];
+  sectionCoverage: ResumeModuleSection[];
+  missingEvidence: ResumeDraftPacketIssue[];
+  nextTinyAction: string;
 }
 
 export type JobSourceKind =

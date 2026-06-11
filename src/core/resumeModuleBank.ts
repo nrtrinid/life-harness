@@ -1,5 +1,6 @@
 import type {
   JobCandidate,
+  ResumeDraftPacket,
   ResumeModule,
   ResumeModuleCategory,
   ResumeModulePlacement,
@@ -47,6 +48,16 @@ export interface CandidateResumePacket {
   nextTinyAction: string;
 }
 
+export type CandidateResumePacketInput = Pick<
+  JobCandidate,
+  | "id"
+  | "company"
+  | "roleTitle"
+  | "recommendedResumeAngle"
+  | "suggestedResumeModuleIds"
+  | "roleType"
+>;
+
 function defaultSectionForCategory(category: ResumeModuleCategory): ResumeModuleSection {
   if (category === "education") {
     return "education";
@@ -90,6 +101,12 @@ export function normalizeResumeModules(modules: ResumeModule[]): ResumeModule[] 
 function compareModules(a: ResumeModule, b: ResumeModule): number {
   const aPlacement = normalizeResumeModulePlacement(a, 0);
   const bPlacement = normalizeResumeModulePlacement(b, 0);
+  const sectionDelta =
+    RESUME_MODULE_SECTION_ORDER.indexOf(aPlacement.section) -
+    RESUME_MODULE_SECTION_ORDER.indexOf(bPlacement.section);
+  if (sectionDelta !== 0) {
+    return sectionDelta;
+  }
   if (aPlacement.order !== bPlacement.order) {
     return aPlacement.order - bPlacement.order;
   }
@@ -189,5 +206,25 @@ export function buildCandidateResumePacket(
     sectionCoverage,
     missingEvidence,
     nextTinyAction
+  };
+}
+
+export function buildResumeDraftPacket(
+  candidate: CandidateResumePacketInput,
+  modules: ResumeModule[],
+  createdAt: string
+): ResumeDraftPacket {
+  const preview = buildCandidateResumePacket(candidate, modules);
+
+  return {
+    createdAt,
+    sourceCandidateId: candidate.id,
+    company: candidate.company,
+    roleTitle: candidate.roleTitle,
+    resumeAngle: candidate.recommendedResumeAngle ?? `Review resume bank manually for this ${candidate.roleType} role.`,
+    selectedModuleIds: preview.modules.map((module) => module.id),
+    sectionCoverage: preview.sectionCoverage,
+    missingEvidence: preview.missingEvidence.map((issue) => ({ ...issue })),
+    nextTinyAction: preview.nextTinyAction
   };
 }

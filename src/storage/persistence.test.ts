@@ -157,6 +157,36 @@ describe("normalizeData", () => {
       order: 0
     });
   });
+
+  it("hydrates old application cards without resume draft packets", () => {
+    const normalized = normalizeData({
+      cards: [
+        {
+          id: "card-legacy-application",
+          title: "Legacy Co - Engineer",
+          area: "social_career",
+          state: "inbox",
+          progress: 0,
+          warmth: "cold",
+          nextTinyAction: "Choose resume angle.",
+          recentWins: [],
+          openLoops: [],
+          optimizationIdeas: [],
+          proofItemIds: [],
+          careerApplication: {
+            company: "Legacy Co",
+            roleTitle: "Engineer",
+            jobDescription: "Software role.",
+            roleType: "software",
+            applicationStatus: "inbox",
+            jobCandidateId: "candidate-legacy"
+          }
+        }
+      ]
+    });
+
+    expect(normalized.cards[0]?.careerApplication?.resumeDraftPacket).toBeUndefined();
+  });
 });
 
 describe("mergeSeedDefaults", () => {

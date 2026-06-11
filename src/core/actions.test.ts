@@ -196,6 +196,12 @@ describe("job candidate actions", () => {
     expect(candidate?.status).toBe("card_created");
     expect(candidate?.applicationCardId).toBe(card?.id);
     expect(card?.careerApplication?.jobCandidateId).toBe(candidateId);
+    expect(card?.careerApplication?.resumeDraftPacket).toMatchObject({
+      sourceCandidateId: candidateId,
+      company: "Approve Co",
+      roleTitle: "Security Engineer"
+    });
+    expect(card?.careerApplication?.resumeDraftPacket?.selectedModuleIds.length).toBeGreaterThan(0);
     expect(card?.nextTinyAction).toBe("Tailor resume angle and submit application.");
     expect(card?.whyItMatters).toContain("Job Scout");
   });
