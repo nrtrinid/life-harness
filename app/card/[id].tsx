@@ -11,6 +11,10 @@ import { styles } from "../../src/components/styles";
 import sampleProfile from "../../fixtures/resume/profile.sample.json";
 import { canCopyTextToClipboard, copyTextToClipboard } from "../../src/core/askHarnessSynthesis";
 import { buildApplicationResumeDocxDraft } from "../../src/core/applicationResumeExport";
+import {
+  buildAgentTaskPacket,
+  buildDefaultAgentTaskPacketInput
+} from "../../src/core/agentTaskPacket";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
 import { computeCardProgress } from "../../src/core/progress";
@@ -115,24 +119,25 @@ export default function CardDetailScreen() {
     showNotice("success", "Resume DOCX downloaded.");
   }
 
-  async function handleCopyAgentContext() {
-    const result = buildCardContextPacket(
-      {
-        cards,
-        logs,
-        proofItems,
-        dailyState,
-        resumeModules,
-        jobCandidates,
-        jobSources,
-        jobSourceRuns,
-        chatSummaries,
-        memoryItems,
-        careerSourcePack
-      },
-      card!.id
-    );
+  const lifeHarnessData = {
+    cards,
+    logs,
+    proofItems,
+    dailyState,
+    resumeModules,
+    jobCandidates,
+    jobSources,
+    jobSourceRuns,
+    chatSummaries,
+    memoryItems,
+    careerSourcePack
+  };
 
+  async function copyMarkdownToClipboard(
+    buildMarkdown: () => { ok: true; markdown: string } | { ok: false; error: string },
+    successMessage: string
+  ) {
+    const result = buildMarkdown();
     if (!result.ok) {
       showNotice("warning", result.error);
       return;
@@ -144,7 +149,21 @@ export default function CardDetailScreen() {
       return;
     }
 
-    showNotice("success", "Agent context copied.");
+    showNotice("success", successMessage);
+  }
+
+  function handleCopyAgentContext() {
+    void copyMarkdownToClipboard(
+      () => buildCardContextPacket(lifeHarnessData, card!.id),
+      "Agent context copied."
+    );
+  }
+
+  function handleCopyAgentTaskPacket() {
+    void copyMarkdownToClipboard(
+      () => buildAgentTaskPacket(lifeHarnessData, buildDefaultAgentTaskPacketInput(card!)),
+      "Agent task packet copied."
+    );
   }
 
   return (
@@ -162,6 +181,9 @@ export default function CardDetailScreen() {
           <View style={styles.cardActionsRow}>
             <Pressable style={styles.secondaryAction} onPress={handleCopyAgentContext}>
               <Text style={styles.secondaryActionText}>Copy agent context</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryAction} onPress={handleCopyAgentTaskPacket}>
+              <Text style={styles.secondaryActionText}>Copy agent task packet</Text>
             </Pressable>
           </View>
         ) : null}
