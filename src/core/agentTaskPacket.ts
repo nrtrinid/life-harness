@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "./lifeHarnessData";
+import type { LifeHarnessData } from "./actions";
 import {
   buildCardContextPacket,
   formatCardContextPacketMarkdown,
