@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import {
@@ -427,6 +427,12 @@ export function CompanionSelfMemoryPanel({
   const [addS2ConfirmPending, setAddS2ConfirmPending] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (proposals.length > 0) {
+      setCollapsed(false);
+    }
+  }, [proposals.length]);
+
   const activeMemories = memories.filter((memory) => memory.isActive);
   const inactiveMemories = memories.filter((memory) => !memory.isActive);
 
@@ -601,11 +607,11 @@ export function CompanionSelfMemoryPanel({
 
       <Pressable onPress={() => setCollapsed((value) => !value)}>
         <Text style={styles.sectionTitle}>
-          Raw Lab self-memory {collapsed ? "▸" : "▾"}
+          Signal notes {collapsed ? "▸" : "▾"}
         </Text>
       </Pressable>
       <Text style={styles.helpText}>
-        Persistent companion notes for Raw Lab. Clear chat does not clear this.
+        Persistent notes for this sandbox. Clear chat does not clear this.
       </Text>
 
       {!collapsed ? panelBody : null}

@@ -40,6 +40,8 @@ class ThinkingTrace:
     fallback_used: bool = False
     fail_soft_reason: str | None = None
     parse_failures: list[str] = field(default_factory=list)
+    draft_repair_attempted: bool = False
+    draft_repair_succeeded: bool = False
     latency_ms: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
@@ -54,6 +56,8 @@ class ThinkingTrace:
             "fallback_used": self.fallback_used,
             "fail_soft_reason": self.fail_soft_reason,
             "parse_failures": list(self.parse_failures),
+            "draft_repair_attempted": self.draft_repair_attempted,
+            "draft_repair_succeeded": self.draft_repair_succeeded,
             "latency_ms": dict(self.latency_ms),
         }
 

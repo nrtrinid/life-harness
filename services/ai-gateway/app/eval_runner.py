@@ -196,6 +196,9 @@ def _execute_eval_case(
             "thread_state": case.get("thread_state", {}),
             "reasoning_depth": case.get("reasoning_depth", "fast"),
         }
+        resolved_packet = resolve_case_context_packet(case)
+        if resolved_packet is not None:
+            payload["context_packet"] = resolved_packet
         response = client.post("/chat-harness", json=payload)
         if response.status_code != 200:
             return (

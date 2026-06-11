@@ -145,7 +145,12 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Gateway: {args.base_url}")
     print(f"context_packet: {packet_path.name}")
-    print("Enable SCOUT_DEBUG_THINKING_TRACE=true on gateway to see trace logs.")
+    print(
+        "For thinking trace JSON in gateway logs, start uvicorn with:\n"
+        "  --log-level info\n"
+        "  SCOUT_DEBUG_THINKING_TRACE=true\n"
+        "(App loggers emit trace at INFO; WARNING-only shows repair attempt line.)"
+    )
     print(MANUAL_FAIL_SOFT_D1)
 
     exit_code = 0

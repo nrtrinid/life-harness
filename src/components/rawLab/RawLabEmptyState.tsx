@@ -17,7 +17,7 @@ interface RawLabEmptyStateProps {
 export function RawLabEmptyState({ onSelectPrompt }: RawLabEmptyStateProps) {
   return (
     <View style={styles.chatEmptyState}>
-      <Text style={styles.chatEmptyStateTitle}>Raw Lab is open</Text>
+      <Text style={styles.chatEmptyStateTitle}>Raw Signal is open</Text>
       <Text style={styles.chatEmptyStateCopy}>
         Ungrounded sandbox — blunt takes, weird riffs, no board context.
       </Text>

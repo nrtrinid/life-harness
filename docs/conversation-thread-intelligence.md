@@ -30,8 +30,10 @@ UI thread → conversation_history + thread_state → POST /chat-harness → str
 ## Raw Lab flow
 
 ```text
-UI turns → recent_turns + thread_state (+ personality) → POST /raw-lab → plain text
+UI turns → recent_turns + thread_state (+ personality) + companion_self_memories → POST /raw-lab → plain text
 ```
+
+Companion Self-Memories are approved Raw Lab persona notes injected per request — not Memory Bank, not board context.
 
 ## Reasoning depth (Ask Harness)
 
@@ -47,7 +49,7 @@ Raw Lab may suggest switching to grounded Ask Harness. User must explicitly tap 
 
 - **Checks:** `services/ai-gateway/app/thread_verifier.py`
 - **Chat Harness finalize:** `services/ai-gateway/app/chat_harness_finalize.py` — all response paths (including mock history-aware shortcuts) pass through one verifier + one optional repair
-- **Raw Lab:** `ignored_steering` for shorter/concise requests when answer is too long vs prior assistant or first-turn hard cap
+- **Raw Lab:** `ignored_steering` for shorter/concise requests when answer is too long vs prior assistant or first-turn hard cap; `raw_lab_runtime_awareness` when user asks about memory/tools/access and the answer wrongly denies injected Companion Self-Memories or claims board/tool/file/internet access (capability accuracy only — not style/personality)
 
 ## Evaluations
 

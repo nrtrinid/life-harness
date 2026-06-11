@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const RAW_LAB_SCREEN_PATH = resolve(__dirname, "../../app/raw-lab.tsx");
+const ASK_HARNESS_SCREEN_PATH = resolve(__dirname, "../../app/ask-harness.tsx");
+const HARNESS_READ_CARD_PATH = resolve(__dirname, "../components/askHarness/HarnessReadCard.tsx");
 const RAW_LAB_THREAD_PATH = resolve(__dirname, "../components/rawLab/RawLabThread.tsx");
 const RAW_LAB_MEMORY_PANEL_PATH = resolve(
   __dirname,
@@ -61,5 +63,20 @@ describe("raw-lab screen containment", () => {
     expect(screenSource).toContain("Open in Companion with board context");
     expect(screenSource).not.toMatch(/export personality/i);
     expect(screenSource).not.toMatch(/auto.?save.*memory bank/i);
+  });
+});
+
+describe("companion chat safety copy", () => {
+  const harnessScreenSource = readSource(ASK_HARNESS_SCREEN_PATH);
+  const harnessReadCardSource = readSource(HARNESS_READ_CARD_PATH);
+
+  it("companion grounding states user approves board changes", () => {
+    expect(harnessReadCardSource).toContain("will not change the board");
+    expect(harnessScreenSource).toContain("You approve what changes");
+  });
+
+  it("raw signal sandbox copy denies board access", () => {
+    const screenSource = readSource(RAW_LAB_SCREEN_PATH);
+    expect(screenSource).toContain("cannot read or change your board");
   });
 });

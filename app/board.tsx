@@ -5,33 +5,41 @@ import { CardTile } from "../src/components/CardTile";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
-import { ACTIVE_CARD_LIMIT, CARD_STATE_LABELS, CARD_STATES, getActiveLimitStatus, groupCardsByState } from "../src/core/guards";
+import { CARD_STATES, groupCardsByState } from "../src/core/guards";
+import type { CardState } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
+
+const BOARD_COLUMN_LABELS: Record<CardState, string> = {
+  inbox: "Inbox",
+  active: "Active",
+  parked: "Parked / Later",
+  waiting: "Waiting",
+  done: "Done / Archive",
+  killed: "Killed"
+};
 
 export default function BoardScreen() {
   const { cards, logs } = useLifeHarness();
   const groupedCards = groupCardsByState(cards);
-  const activeLimit = getActiveLimitStatus(cards);
 
   return (
     <Screen>
       <PageHeader
         title="Board"
-        subtitle={`Inbox is safe capture. Active operations limited to ${ACTIVE_CARD_LIMIT}. Parked is saved, not failed.`}
+        subtitle="Active quests, parked threads, and next tiny actions."
       />
-      <Text style={styles.helpText}>Swipe sideways for Inbox, Parked, Waiting, and more.</Text>
       <ActiveLimitBanner />
       <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.boardRow}>
         {CARD_STATES.map((state) => (
           <View key={state} style={styles.boardColumn}>
             <Text style={styles.columnTitle}>
-              {CARD_STATE_LABELS[state]} ({groupedCards[state].length})
+              {BOARD_COLUMN_LABELS[state]} ({groupedCards[state].length})
             </Text>
             {groupedCards[state].length === 0 ? (
               <Text style={styles.emptyText}>Nothing here.</Text>
             ) : (
               groupedCards[state].map((card) => (
-                <CardTile key={card.id} card={card} logs={logs} showStateButtons />
+                <CardTile key={card.id} card={card} logs={logs} actionVariant="quest" />
               ))
             )}
           </View>

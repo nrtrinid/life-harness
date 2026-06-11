@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { buildProofShelfEntries } from "../core/proof";
 import { useLifeHarness } from "../state/LifeHarnessState";
-import { styles } from "./styles";
+import { questCardAreaAccentColor, styles } from "./styles";
 
 interface ProofShelfProps {
   compact?: boolean;
@@ -31,6 +31,10 @@ export function ProofShelf({ compact = false, limit, rescueOnly = false }: Proof
     <View style={styles.proofShelf}>
       {!compact ? <Text style={styles.helpText}>Evidence, not raw history.</Text> : null}
       {entries.map((entry) => {
+        const itemStyle = [
+          styles.proofShelfItem,
+          entry.area ? { borderLeftColor: questCardAreaAccentColor(entry.area) } : undefined
+        ];
         const content = (
           <>
             <Text style={styles.listItem}>▸ {entry.title}</Text>
@@ -45,7 +49,7 @@ export function ProofShelf({ compact = false, limit, rescueOnly = false }: Proof
         if (entry.cardId) {
           return (
             <Link key={entry.id} href={`/card/${entry.cardId}`} asChild>
-              <Pressable style={styles.proofShelfItem} accessibilityRole="link">
+              <Pressable style={itemStyle} accessibilityRole="link">
                 {content}
               </Pressable>
             </Link>
@@ -53,7 +57,7 @@ export function ProofShelf({ compact = false, limit, rescueOnly = false }: Proof
         }
 
         return (
-          <View key={entry.id} style={styles.proofShelfItem}>
+          <View key={entry.id} style={itemStyle}>
             {content}
           </View>
         );

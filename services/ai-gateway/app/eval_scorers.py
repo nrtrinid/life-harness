@@ -216,6 +216,33 @@ def check_sync_queued_redirect(payload: dict[str, Any]) -> list[str]:
     return issues
 
 
+def check_deep_critic_signal_ok(payload: dict[str, Any]) -> list[str]:
+    notes = payload.get("confidence_notes") or []
+    joined = " ".join(str(note) for note in notes).lower()
+    issues: list[str] = []
+    if "structured critic skipped" in joined:
+        issues.append("confidence_notes claim structured critic skipped")
+    if "structured critic" not in joined:
+        issues.append("confidence_notes missing structured critic signal")
+    return issues
+
+
+_DEEP_SPRAWL_STEP_PATTERNS = [
+    re.compile(r"\b1\.\s+\S+.*\b2\.\s+\S+.*\b3\.\s+", re.IGNORECASE | re.DOTALL),
+    re.compile(r"\bfirst\b.+\bsecond\b.+\bthird\b", re.IGNORECASE | re.DOTALL),
+    re.compile(r"\bstep\s*1\b.+\bstep\s*2\b", re.IGNORECASE | re.DOTALL),
+]
+
+
+def check_deep_answer_not_sprawl(payload: dict[str, Any]) -> list[str]:
+    answer = str(payload.get("answer") or "")
+    issues: list[str] = []
+    for pattern in _DEEP_SPRAWL_STEP_PATTERNS:
+        if pattern.search(answer):
+            issues.append(f"sprawl pattern matched: {pattern.pattern}")
+    return issues
+
+
 HEURISTIC_CHECKS: dict[str, Any] = {
     "single_pounce": check_single_pounce,
     "inbox_default": check_inbox_default,
@@ -226,6 +253,8 @@ HEURISTIC_CHECKS: dict[str, Any] = {
     "synthesis_proposals_require_approval": check_synthesis_proposals_require_approval,
     "synthesis_no_creepy": check_synthesis_no_creepy,
     "sync_queued_redirect": check_sync_queued_redirect,
+    "deep_critic_signal_ok": check_deep_critic_signal_ok,
+    "deep_answer_not_sprawl": check_deep_answer_not_sprawl,
 }
 
 

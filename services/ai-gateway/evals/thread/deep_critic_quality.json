@@ -1,0 +1,53 @@
+[
+  {
+    "name": "deep_clean_next_action_grounded",
+    "endpoint": "chat-harness",
+    "mode": "operator",
+    "reasoning_depth": "deep",
+    "message": "What should I do next?",
+    "context_packet": "__fixture__:synthetic_context_packet",
+    "expect_schema": "ChatHarnessResponse",
+    "expect_json_fields": {
+      "used_context": ["true"]
+    },
+    "expect_substrings": ["move"],
+    "max_answer_chars": 400,
+    "heuristic_checks": ["deep_critic_signal_ok", "deep_answer_not_sprawl"],
+    "tags": ["deep", "ci_safe", "mock_critic"]
+  },
+  {
+    "name": "deep_broad_sprawl_revised_tight",
+    "endpoint": "chat-harness",
+    "reasoning_depth": "deep",
+    "message": "deep-critic-too-broad",
+    "expect_schema": "ChatHarnessResponse",
+    "max_answer_chars": 200,
+    "forbid_substrings": ["Project A", "Project B", "Project C"],
+    "heuristic_checks": ["deep_critic_signal_ok", "deep_answer_not_sprawl"],
+    "tags": ["deep", "ci_safe", "mock_critic"]
+  },
+  {
+    "name": "deep_pounce_prefers_career",
+    "endpoint": "chat-harness",
+    "mode": "operator",
+    "reasoning_depth": "deep",
+    "message": "What is today's one pounce?",
+    "context_packet": "__fixture__:synthetic_context_packet",
+    "expect_schema": "ChatHarnessResponse",
+    "expect_substrings": ["pounce"],
+    "forbid_substrings": ["full life plan", "step 1", "step 2"],
+    "heuristic_checks": ["deep_critic_signal_ok"],
+    "tags": ["deep", "ci_safe", "mock_critic"]
+  },
+  {
+    "name": "deep_response_schema_unchanged",
+    "endpoint": "chat-harness",
+    "reasoning_depth": "deep",
+    "message": "deep-critic-too-broad",
+    "expect_schema": "ChatHarnessResponse",
+    "expect_json_fields": {
+      "answer": ["Focus", "move", "Pick", "One", "active", "inbox"]
+    },
+    "tags": ["deep", "ci_safe", "mock_critic"]
+  }
+]

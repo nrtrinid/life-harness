@@ -10,8 +10,12 @@ from app.chat_harness_deep import run_chat_harness_deep
 from app.chat_harness_thinking_trace import (
     ThinkingTrace,
     critique_draft_with_trace,
+    emit_thinking_trace,
     new_thinking_trace,
 )
+from dataclasses import replace
+
+from app.config import get_settings
 from app.critic_backend import MockCriticBackend, SameBackendCritic
 from app.main import app, get_provider
 from app.models import (
@@ -199,3 +203,78 @@ def test_trace_draft_parse_failure(harness_context):
     assert "critic" not in trace.passes
     assert trace.fail_soft_reason == "draft_parse_failed"
     assert trace.fallback_used is True
+    assert trace.draft_repair_attempted is False
+    assert trace.draft_repair_succeeded is False
+
+
+def test_trace_draft_repair_fields_when_repair_runs(harness_context, caplog):
+    request = ChatHarnessRequest(
+        message="hello",
+        mode="general",
+        sensitivity="S1",
+        context=harness_context,
+        reasoning_depth="deep",
+    )
+    trace = new_thinking_trace(request)
+    repaired = ChatHarnessResponse(
+        answer="Repaired draft.",
+        used_context=True,
+        confidence_notes=[],
+        safety_notes=[],
+    ).model_dump_json()
+
+    run_chat_harness_deep(
+        request=request,
+        prompt="base",
+        draft_generate=lambda _p: "not json",
+        draft_repair_generate=lambda _broken: repaired,
+        critic=MockCriticBackend(),
+        max_extra_passes=2,
+        trace=trace,
+    )
+
+    with caplog.at_level(logging.INFO):
+        emit_thinking_trace(
+            replace(get_settings(), debug_thinking_trace=True),
+            trace,
+        )
+
+    trace_records = [
+        record.message
+        for record in caplog.records
+        if "chat_harness_thinking_trace" in record.message
+    ]
+    assert len(trace_records) == 1
+    payload = json.loads(trace_records[0].split(" ", 1)[1])
+    assert payload["draft_repair_attempted"] is True
+    assert payload["draft_repair_succeeded"] is True
+    assert "draft_repair" in payload["passes"]
+
+
+def test_mock_deep_draft_repair_trace_via_client(client, harness_context, caplog):
+    os.environ["SCOUT_DEBUG_THINKING_TRACE"] = "true"
+    get_provider.cache_clear()
+    with caplog.at_level(logging.INFO):
+        response = client.post(
+            "/chat-harness",
+            json={
+                "message": "deep-draft-repair trace",
+                "mode": "general",
+                "sensitivity": "S1",
+                "context": harness_context.model_dump(mode="json"),
+                "conversation_history": [],
+                "reasoning_depth": "deep",
+            },
+        )
+    assert response.status_code == 200
+    trace_records = [
+        record.message
+        for record in caplog.records
+        if "chat_harness_thinking_trace" in record.message
+    ]
+    assert len(trace_records) == 1
+    payload = json.loads(trace_records[0].split(" ", 1)[1])
+    assert payload["draft_repair_attempted"] is True
+    assert payload["draft_repair_succeeded"] is True
+    assert "draft_repair" in payload["passes"]
+    assert "critic" in payload["passes"]

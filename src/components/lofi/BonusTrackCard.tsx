@@ -11,7 +11,7 @@ const bonusTrackButtonStyle = StyleSheet.flatten([
 
 export function BonusTrackCard({ track }: { track: BonusTrack }) {
   return (
-    <View style={styles.lofiCardQuiet}>
+    <View style={styles.lofiBonusTrackCard}>
       <Text style={styles.lofiTapeLabel}>Bonus track</Text>
       <Text style={styles.bodyText}>{track.title}</Text>
       <Text style={[styles.helpText, { marginTop: 6 }]}>{track.reason}</Text>

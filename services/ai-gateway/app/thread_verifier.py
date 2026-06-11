@@ -34,6 +34,38 @@ _UNSAFE_AUTONOMOUS_PATTERNS = [
     re.compile(r"\bi (?:sent|emailed|spent|traded|committed)\b", re.IGNORECASE),
 ]
 
+_RAW_LAB_CAPABILITY_QUESTION_RE = re.compile(
+    r"\b("
+    r"what (?:memories?|memory do you have|do you have access|tools?|files?|capabilities|systems?)"
+    r"|what memories do you have access"
+    r"|do you have (?:access|any memories?)"
+    r"|what (?:can you access|tools do you)"
+    r"|can you (?:access|use|read) (?:my |your )?(?:files?|tools?|internet|the board|memory bank)"
+    r"|what do you have access to"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_RAW_LAB_TOTAL_MEMORY_DENIAL_PATTERNS = [
+    re.compile(r"\b(?:i have )?no memories? at all\b", re.IGNORECASE),
+    re.compile(r"\bi don'?t have (?:any )?memories?\b", re.IGNORECASE),
+    re.compile(r"\bi have zero (?:memories?|memory)\b", re.IGNORECASE),
+    re.compile(r"\bno memory access\b", re.IGNORECASE),
+]
+
+_RAW_LAB_TOOL_ACCESS_PATTERNS = [
+    re.compile(
+        r"\bi can (?:access|read|use|browse) (?:your |the )?(?:files?|internet|tools?|shell)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bi have (?:file|tool|internet|shell) access\b", re.IGNORECASE),
+]
+
+_RAW_LAB_RUNTIME_AWARENESS_REPAIR = (
+    "Rewrite to accurately distinguish approved Companion Self-Memories from "
+    "hidden memory, board memory, Memory Bank, tools, files, and internet access."
+)
+
 
 @dataclass(frozen=True)
 class VerificationResult:
@@ -44,6 +76,17 @@ class VerificationResult:
 
 def _similarity(left: str, right: str) -> float:
     return SequenceMatcher(None, left.strip().lower(), right.strip().lower()).ratio()
+
+
+def _answer_claims_restricted_board_context(answer: str, patterns: list[re.Pattern[str]]) -> bool:
+    for pattern in patterns:
+        for match in pattern.finditer(answer):
+            start = match.start()
+            window = answer[max(0, start - 48):start].lower()
+            if re.search(r"\b(?:not|no|without|isn't|aren't|never|nor)\b", window):
+                continue
+            return True
+    return False
 
 
 def verify_chat_harness_response(
@@ -106,13 +149,31 @@ def verify_chat_harness_response(
     return VerificationResult(ok=True, check="ok")
 
 
+def _raw_lab_runtime_awareness_failure(
+    *,
+    answer: str,
+    user_message: str,
+    companion_self_memory_count: int,
+) -> bool:
+    if not _RAW_LAB_CAPABILITY_QUESTION_RE.search(user_message):
+        return False
+
+    if companion_self_memory_count > 0 and any(
+        pattern.search(answer) for pattern in _RAW_LAB_TOTAL_MEMORY_DENIAL_PATTERNS
+    ):
+        return True
+
+    return any(pattern.search(answer) for pattern in _RAW_LAB_TOOL_ACCESS_PATTERNS)
+
+
 def verify_raw_lab_response(
     *,
     answer: str,
     user_message: str,
     conversation_history: list[ConversationTurn],
+    companion_self_memory_count: int = 0,
 ) -> VerificationResult:
-    if any(pattern.search(answer) for pattern in _RAW_LAB_BOARD_PATTERNS):
+    if _answer_claims_restricted_board_context(answer, _RAW_LAB_BOARD_PATTERNS):
         return VerificationResult(
             ok=False,
             check="raw_lab_board_claim",
@@ -156,6 +217,17 @@ def verify_raw_lab_response(
                 check="ignored_steering",
                 repair_instruction="The user asked for a shorter answer. Rewrite more concisely.",
             )
+
+    if _raw_lab_runtime_awareness_failure(
+        answer=answer,
+        user_message=user_message,
+        companion_self_memory_count=companion_self_memory_count,
+    ):
+        return VerificationResult(
+            ok=False,
+            check="raw_lab_runtime_awareness",
+            repair_instruction=_RAW_LAB_RUNTIME_AWARENESS_REPAIR,
+        )
 
     return VerificationResult(ok=True, check="ok")
 

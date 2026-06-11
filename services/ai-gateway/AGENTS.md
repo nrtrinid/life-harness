@@ -26,7 +26,7 @@ Local scout gateway for Life Harness: transcript analysis, grounded chat (Ask/Ch
 - `SCOUT_CRITIC_SLOT=secondary` — deep critic via `critic_fast` (`critic_small` in yaml v2) + `LlamaCppCriticBackend` (HTTP to external `llama-server`); disabled slot falls back to same/mock; see [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md)
 - Frozen model roles / load policy: [docs/plans/model-stack-freeze-v3.md](../../docs/plans/model-stack-freeze-v3.md)
 
-Raw Lab accepts `message`, `recent_turns`, `thread_state` (+ personality). **Rejects** `context`, `conversation_history`, board/memory/action fields.
+Raw Lab accepts `message`, `recent_turns`, `thread_state` (+ personality), `companion_self_memories`. **Rejects** `context`, `conversation_history`, board/memory/action fields. Prompt includes runtime awareness for capability questions; `raw_lab_runtime_awareness` verifier fixes capability overclaim/denial only (not style).
 
 ## Thread intelligence rules
 
@@ -39,8 +39,10 @@ Raw Lab accepts `message`, `recent_turns`, `thread_state` (+ personality). **Rej
 
 ## Evaluations
 
-- **CI / mock:** `pytest tests/test_thread_eval_fixtures.py -q`
-- **OpenVINO manual smoke:** start gateway with `SCOUT_PROVIDER=openvino`, then `python scripts/run_thread_eval.py` (not required in CI)
+- **CI / mock:** `pytest tests/test_thread_eval_fixtures.py -q` (includes `evals/thread/deep_critic_quality.json` for deep + mock critic quality)
+- **CI / mock deep critic:** `pytest tests/test_chat_harness_deep_critic.py tests/test_chat_harness_thinking_trace.py -q`
+- **Manual secondary critic:** `scripts/smoke_deep_critic.py` + OpenVINO + external `llama-server` — record in `docs/phi4-critic-smoke-results.md` (not CI)
+- **OpenVINO manual thread eval:** start gateway with `SCOUT_PROVIDER=openvino`, then `python scripts/run_thread_eval.py` (not required in CI)
 
 ## Product rules
 

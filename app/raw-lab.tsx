@@ -11,6 +11,8 @@ import {
 } from "react-native";
 
 import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/ChatComposer";
+import { ChatAdvancedPanel } from "../src/components/chat/ChatAdvancedPanel";
+import { ChatSurfaceFrame } from "../src/components/chat/ChatSurfaceFrame";
 import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { formatGatewayHost } from "../src/components/askHarness/askHarnessInspectorFormat";
 import { Notice, type NoticeState } from "../src/components/Notice";
@@ -89,7 +91,7 @@ function formatSendError(error: unknown): { text: string; status?: number } {
   }
 
   return {
-    text: "Unexpected error while contacting Raw Lab. Check the gateway URL and try again."
+    text: "Unexpected error while contacting Raw Signal. Check the gateway URL and try again."
   };
 }
 
@@ -132,18 +134,17 @@ export default function RawLabScreen() {
   const [reflectionProposals, setReflectionProposals] = useState<RawLabSelfMemoryProposal[]>([]);
   const [reflecting, setReflecting] = useState(false);
   const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
+  const gatewayHealthPolledRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  function ensureGatewayBudget() {
+    if (gatewayHealthPolledRef.current) {
+      return;
+    }
+    gatewayHealthPolledRef.current = true;
     void fetchGatewayHealthBudget(baseUrl).then((budget) => {
-      if (!cancelled) {
-        setGatewayBudget(budget);
-      }
+      setGatewayBudget(budget);
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [baseUrl]);
+  }
 
   useEffect(() => {
     setCompanionMemories(loadCompanionSelfMemories());
@@ -205,6 +206,7 @@ export default function RawLabScreen() {
 
     setNotice(null);
     setLoading(true);
+    ensureGatewayBudget();
     setStreamingAnswer("");
     abortRef.current?.abort();
     const abortController = new AbortController();
@@ -410,9 +412,12 @@ export default function RawLabScreen() {
     );
   }
 
-  const statusLine = `${formatGatewayHost(baseUrl)} · Ungrounded · ephemeral`;
   const budgetForceExpanded = Boolean(lastSendStats?.notice);
   const selfMemoryCount = countActiveSelfMemories(companionMemories);
+  const backroomBadge =
+    selfMemoryCount + reflectionProposals.length > 0
+      ? `${selfMemoryCount + reflectionProposals.length} notes`
+      : undefined;
 
   return (
     <Screen>
@@ -421,52 +426,63 @@ export default function RawLabScreen() {
           title="Raw Signal"
           subtitle="Ungrounded riffs and experiments. Nothing here changes your board."
         />
-        <Text style={styles.chatInspectorStatusLine}>{statusLine}</Text>
 
         <SafetyBanner
           message="Sandbox only. Raw Signal cannot read or change your board."
           detail="Do not paste secrets or S3-style private data here (therapy logs, money/vice details, deeply personal content). Raw Signal is ungrounded and not treated as a secure vault."
+          detailCollapsed
         />
-
-        {showHandoffBanner ? (
-          <View style={styles.bannerInfo}>
-            <Text style={styles.bannerInfoText}>
-              This sounds like a board question. Open in Companion for grounded help from your
-              exported snapshot.
-            </Text>
-            <View style={styles.splitRow}>
-              <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-                <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
-              </Pressable>
-              <Pressable
-                style={styles.smallButton}
-                onPress={() => setHandoffDismissed(true)}
-              >
-                <Text style={styles.smallButtonText}>Stay in Raw Signal</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.splitRow}>
-          <Pressable style={styles.smallButton} onPress={handleClearChat}>
-            <Text style={styles.smallButtonText}>Clear chat</Text>
-          </Pressable>
-          {turns.length > 0 ? (
-            <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-              <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
-            </Pressable>
-          ) : null}
-          {loading ? (
-            <Pressable style={styles.smallButton} onPress={handleStopStream}>
-              <Text style={styles.smallButtonText}>Stop</Text>
-            </Pressable>
-          ) : null}
-        </View>
 
         {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
 
-        <View style={[styles.chatSurface, { height: chatSurfaceHeight }]}>
+        <ChatSurfaceFrame
+          variant="rawSignal"
+          height={chatSurfaceHeight}
+          toolbar={
+            <>
+              <Pressable style={styles.smallButton} onPress={handleClearChat}>
+                <Text style={styles.smallButtonText}>Clear chat</Text>
+              </Pressable>
+              {turns.length > 0 ? (
+                <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
+                  <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
+                </Pressable>
+              ) : null}
+              {loading ? (
+                <Pressable style={styles.smallButton} onPress={handleStopStream}>
+                  <Text style={styles.smallButtonText}>Stop</Text>
+                </Pressable>
+              ) : null}
+              {showHandoffBanner ? (
+                <View style={styles.bannerInfo}>
+                  <Text style={styles.bannerInfoText}>
+                    This sounds like a board question. Open in Companion for grounded help.
+                  </Text>
+                  <View style={styles.splitRow}>
+                    <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
+                      <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
+                    </Pressable>
+                    <Pressable style={styles.smallButton} onPress={() => setHandoffDismissed(true)}>
+                      <Text style={styles.smallButtonText}>Stay in Raw Signal</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          }
+          composer={
+            <ChatComposer
+              message={message}
+              loading={loading}
+              quickQuestions={QUICK_QUESTIONS}
+              placeholder="Say anything — ungrounded sandbox…"
+              inputRef={inputRef}
+              onMessageChange={setMessage}
+              onQuickQuestion={handleQuickQuestion}
+              onSend={() => void handleSend()}
+            />
+          }
+        >
           <RawLabThread
             turns={toDisplayTurns(turns, responses)}
             errors={errors}
@@ -484,49 +500,46 @@ export default function RawLabScreen() {
             onAddUserDislike={handleAddUserDislike}
             onSetCurrentStance={handleSetCurrentStance}
           />
-          <ChatComposer
-            message={message}
-            loading={loading}
-            quickQuestions={QUICK_QUESTIONS}
-            inputRef={inputRef}
-            onMessageChange={setMessage}
-            onQuickQuestion={handleQuickQuestion}
-            onSend={() => void handleSend()}
-          />
-        </View>
+        </ChatSurfaceFrame>
 
-        <CompanionSelfMemoryPanel
-          memories={companionMemories}
-          proposals={reflectionProposals}
-          reflecting={reflecting}
-          onMemoriesChange={persistCompanionMemories}
-          onSessionOnly={handleSessionOnlyProposal}
-          onReflect={() => void handleReflect()}
-          onDismissProposal={(index) =>
-            setReflectionProposals((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
-          }
-        />
-        {selfMemoryCount > 0 || reflectionProposals.length > 0 ? (
-          <Text style={styles.helpText}>
-            {selfMemoryCount} persistent self-memor{selfMemoryCount === 1 ? "y" : "ies"}
-            {reflectionProposals.length > 0
-              ? ` · ${reflectionProposals.length} reflection proposal(s)`
-              : ""}
+        <ChatAdvancedPanel
+          title="Backroom"
+          badge={backroomBadge}
+          defaultOpen={reflectionProposals.length > 0}
+          onExpandedChange={(open) => {
+            if (open) {
+              ensureGatewayBudget();
+            }
+          }}
+        >
+          <Text style={styles.chatInspectorStatusLine}>
+            {formatGatewayHost(baseUrl)} · Ungrounded · ephemeral
           </Text>
-        ) : null}
-
-        <RawLabThreadMemoryPanel threadState={threadState} onThreadStateChange={setThreadState} />
-
-        <RawLabBudgetInspector
-          turns={turns}
-          threadState={threadState}
-          message={message}
-          gatewayRawLabMaxInputChars={gatewayBudget.rawLabMaxInputChars}
-          gatewayMaxInputChars={gatewayBudget.maxInputChars}
-          companionSelfMemories={memoriesForSend()}
-          forceExpanded={budgetForceExpanded}
-          lastSend={lastSendStats ?? undefined}
-        />
+          <RawLabThreadMemoryPanel threadState={threadState} onThreadStateChange={setThreadState} />
+          <CompanionSelfMemoryPanel
+            memories={companionMemories}
+            proposals={reflectionProposals}
+            reflecting={reflecting}
+            onMemoriesChange={persistCompanionMemories}
+            onSessionOnly={handleSessionOnlyProposal}
+            onReflect={() => void handleReflect()}
+            onDismissProposal={(index) =>
+              setReflectionProposals((previous) =>
+                previous.filter((_, itemIndex) => itemIndex !== index)
+              )
+            }
+          />
+          <RawLabBudgetInspector
+            turns={turns}
+            threadState={threadState}
+            message={message}
+            gatewayRawLabMaxInputChars={gatewayBudget.rawLabMaxInputChars}
+            gatewayMaxInputChars={gatewayBudget.maxInputChars}
+            companionSelfMemories={memoriesForSend()}
+            forceExpanded={budgetForceExpanded}
+            lastSend={lastSendStats ?? undefined}
+          />
+        </ChatAdvancedPanel>
       </View>
     </Screen>
   );

@@ -673,6 +673,70 @@ export function clearSharedThreadMemory(
   };
 }
 
+export type ChatHarnessThreadStateCompactionLevel = "compact" | "minimal";
+
+function sliceListForSend<T>(list: T[], max: number): T[] {
+  return list.slice(0, max);
+}
+
+function truncateCodeBlockForSend(
+  state: SharedChatThreadState,
+  maxCodeChars: number
+): SharedChatThreadState {
+  const codeBlock = state.references.lastCodeBlock;
+  if (!codeBlock || codeBlock.code.length <= maxCodeChars) {
+    return state;
+  }
+  return {
+    ...state,
+    references: {
+      ...state.references,
+      lastCodeBlock: {
+        ...codeBlock,
+        code: compactText(codeBlock.code, maxCodeChars)
+      }
+    }
+  };
+}
+
+/** Send-time copy only — does not mutate the UI canonical thread state. */
+export function compactSharedChatThreadStateForSendBudget(
+  state: SharedChatThreadState,
+  level: ChatHarnessThreadStateCompactionLevel
+): SharedChatThreadState {
+  const isMinimal = level === "minimal";
+  const digestMax = isMinimal ? 240 : 400;
+  const goalTopicMax = isMinimal ? 120 : GOAL_TOPIC_MAX_CHARS;
+
+  let next: SharedChatThreadState = {
+    ...state,
+    recentDigest: compactText(state.recentDigest, digestMax),
+    activeGoal: compactText(state.activeGoal, goalTopicMax),
+    currentTopic: compactText(state.currentTopic, goalTopicMax),
+    openLoops: sliceListForSend(state.openLoops, isMinimal ? 2 : 4),
+    decisions: sliceListForSend(state.decisions, isMinimal ? 2 : 4),
+    pinnedFacts: sliceListForSend(state.pinnedFacts, isMinimal ? 2 : 4),
+    userSteering: sliceListForSend(state.userSteering, isMinimal ? 2 : 4),
+    doNotRepeat: sliceListForSend(state.doNotRepeat, isMinimal ? 2 : 3),
+    references: {
+      ...state.references,
+      lastOptions: sliceListForSend(state.references.lastOptions, isMinimal ? 2 : 4),
+      lastPlan: state.references.lastPlan
+        ? compactText(state.references.lastPlan, isMinimal ? 200 : 400)
+        : undefined,
+      lastNamedThing: state.references.lastNamedThing
+        ? compactText(state.references.lastNamedThing, isMinimal ? 80 : 160)
+        : undefined,
+      likelyReference: state.references.likelyReference
+        ? compactText(state.references.likelyReference, isMinimal ? 80 : 160)
+        : undefined
+    }
+  };
+
+  next = truncateCodeBlockForSend(next, isMinimal ? 600 : 1200);
+  return next;
+}
+
 export function toWireChatHarnessThreadState(
   state: SharedChatThreadState
 ): WireChatHarnessThreadState {

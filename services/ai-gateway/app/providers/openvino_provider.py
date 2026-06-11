@@ -81,20 +81,6 @@ Broken output:
 {broken}
 """
 
-_CHAT_HARNESS_REPAIR_PROMPT = """\
-The previous answer was not valid JSON for the Chat Harness schema.
-Return ONLY a corrected JSON object. No markdown fences, no commentary, no thinking tags.
-
-Required top-level fields (all must be present):
-- answer (string, 2-8 substantive sentences)
-- used_context (boolean true or false)
-- confidence_notes (array of strings — NOT a single string)
-- safety_notes (array of strings — NOT a single string)
-
-Broken output:
-{broken}
-"""
-
 _CHAT_HARNESS_CONTENT_REPAIR = """\
 The previous answer failed a content check ({check}).
 {instruction}
@@ -249,6 +235,7 @@ class OpenVinoProvider:
     def _run_chat_harness_deep(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
         from app.chat_harness_critic import append_deep_critic_note
         from app.chat_harness_deep import run_chat_harness_deep
+        from app.chat_harness_repair import build_chat_harness_draft_repair_prompt
         from app.critic_backend import get_critic_backend
 
         self._ensure_pipeline()
@@ -268,6 +255,9 @@ class OpenVinoProvider:
             request=request,
             prompt=prompt,
             draft_generate=self._generate,
+            draft_repair_generate=lambda broken: self._generate(
+                build_chat_harness_draft_repair_prompt(broken)
+            ),
             critic=get_critic_backend(
                 self._settings,
                 self._generate,
@@ -317,7 +307,9 @@ class OpenVinoProvider:
             return parse_strict_json(raw, ChatHarnessResponse)
         except ProviderParseError:
             logger.warning("openvino chat_harness parse failed; attempting one JSON repair pass")
-            repaired = self._generate(_CHAT_HARNESS_REPAIR_PROMPT.format(broken=raw[:4000]))
+            from app.chat_harness_repair import build_chat_harness_draft_repair_prompt
+
+            repaired = self._generate(build_chat_harness_draft_repair_prompt(raw))
             try:
                 return parse_strict_json(repaired, ChatHarnessResponse)
             except ProviderParseError:
@@ -427,6 +419,7 @@ class OpenVinoProvider:
             answer=answer or "",
             user_message=request.message,
             conversation_history=history,
+            companion_self_memory_count=len(request.companion_self_memories),
         )
         if answer and not verification.ok and verification.repair_instruction:
             verified_raw = self._generate_chat_repair(

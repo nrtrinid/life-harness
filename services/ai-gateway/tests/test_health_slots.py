@@ -20,7 +20,7 @@ def test_health_includes_companion_fast_slot_mock():
     assert "slots" in body
     assert body["slots"]["companion_fast"]["enabled"] is True
     assert body["slots"]["companion_fast"]["state"] == SlotHealthStatus.ready.value
-    assert body["budget"]["max_input_chars"] == 12_000
+    assert body["budget"]["max_input_chars"] == 18_000
     assert body["budget"]["raw_lab_max_input_chars"] == 32_000
     assert body["budget"]["timeout_seconds"] == 180.0
 

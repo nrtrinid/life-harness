@@ -182,7 +182,7 @@ function AssistantTurn({
 
   return (
     <View style={styles.chatBubbleAssistant}>
-      <Text style={styles.chatSpeakerLabel}>Raw Lab</Text>
+      <Text style={styles.chatSpeakerLabel}>Raw Signal</Text>
       <Text style={styles.chatAnswerText}>{content}</Text>
       <BubbleActions content={content} {...actionProps} />
       {safetyNotes.length > 0 ? (
@@ -275,7 +275,7 @@ export function RawLabThread({
       })}
       {errors.map((error) => (
         <View key={error.id} style={styles.chatBubbleError}>
-          <Text style={styles.chatSpeakerLabel}>Couldn&apos;t reach Raw Lab</Text>
+          <Text style={styles.chatSpeakerLabel}>Couldn&apos;t reach Raw Signal</Text>
           <Text style={styles.bodyText}>
             Your message is still here — check the gateway and try again.
           </Text>
@@ -284,7 +284,7 @@ export function RawLabThread({
       ))}
       {loading && streamingDraft ? (
         <View style={styles.chatBubbleAssistant}>
-          <Text style={styles.chatSpeakerLabel}>Raw Lab</Text>
+          <Text style={styles.chatSpeakerLabel}>Raw Signal</Text>
           <Text style={styles.chatAnswerText}>{streamingDraft}</Text>
         </View>
       ) : null}

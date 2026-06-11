@@ -54,6 +54,12 @@ def test_raw_lab_prompt_discourages_loops():
     assert "advance the scene" in prompt
 
 
+def test_raw_lab_prompt_no_unqualified_board_memories_denial():
+    prompt = build_raw_lab_system_prompt().lower()
+    assert "access to cards, memories, logs" not in prompt
+    assert "memory bank" in prompt
+
+
 def test_raw_lab_prompt_discourages_unsolicited_disclaimers():
     prompt = build_raw_lab_system_prompt().lower()
     assert "do not hedge" in prompt

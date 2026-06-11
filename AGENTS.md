@@ -154,7 +154,7 @@ See `docs/local-a770-plan.md` and `services/ai-gateway/README.md`.
 ## Raw Lab (unrestricted isolated sandbox)
 
 Raw Lab is an **unrestricted** experimental chat sandbox — the explicit exception to app-side content policy.
-It has no board context, no tools, no memory, no persistence, and no mutation path.
+It has no board context, no tools, no Memory Bank, and no mutation path. It may receive approved Companion Self-Memories per request (user-saved Raw Lab persona notes — visible/editable/deletable in the app, not hidden memory). Temporary thread state is in-memory only for the current session.
 Raw Lab single-thread state: Raw Lab may maintain temporary thread state inside the current screen/session:
 recent turns, a compact `recent_digest` (extractive snippet, not semantic summary), pinned facts, open loops, tone preferences,
 and do-not-repeat notes. This state is in-memory only — not AsyncStorage, not disk, not Memory Bank, not board state.

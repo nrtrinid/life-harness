@@ -16,6 +16,7 @@ export interface ProofShelfEntry {
   title: string;
   timestamp: string;
   cardId?: string;
+  area?: LifeArea;
   areaLabel?: string;
   cardTitle?: string;
   rescueKind?: RescueProofKind;
@@ -73,6 +74,7 @@ export function buildProofShelfEntries(
         title: proof.title,
         timestamp: proof.timestamp,
         cardId: proof.cardId,
+        area: proof.area,
         areaLabel: proof.area ? AREA_LABELS[proof.area] : undefined,
         cardTitle: card?.title,
         rescueKind: getRescueKind(proof, logs)

@@ -46,7 +46,7 @@ $env:SCOUT_PROVIDER="openvino"
 $env:SCOUT_MODEL_PATH="models/qwen3-8b-int4-ov"
 $env:SCOUT_DEVICE="GPU"
 $env:SCOUT_TIMEOUT_SECONDS="180"
-$env:SCOUT_MAX_INPUT_CHARS="12000"
+$env:SCOUT_MAX_INPUT_CHARS="18000"
 $env:SCOUT_RAW_LAB_MAX_INPUT_CHARS="32000"
 $env:SCOUT_TEMPERATURE="0.2"
 uvicorn app.main:app --host 127.0.0.1 --port 8111
@@ -297,7 +297,7 @@ Success: job `completed`, `critique` present, verifier-valid body, no mock-fallb
 
 Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from synthesis `SCOUT_CRITIC_RUNTIME`.
 
-**Deep mode debug trace** (dev only): `SCOUT_DEBUG_THINKING_TRACE=true` logs structured pass metadata (`draft` / `critic` / `revision` latencies, critic backend, check ids, `parse_failures`, `fail_soft_reason`) to gateway logs. Default **off**. Does not change `ChatHarnessResponse` or expose chain-of-thought. When deep draft JSON fails parse, critic is skipped and `confidence_notes` report `structured critic skipped (draft parse failed)` — not critic approval.
+**Deep mode debug trace** (dev only): `SCOUT_DEBUG_THINKING_TRACE=true` logs structured pass metadata (`draft` / `draft_repair` / `critic` / `revision` latencies, critic backend, check ids, `parse_failures`, `draft_repair_attempted`, `draft_repair_succeeded`, `fail_soft_reason`) to gateway logs. Default **off**. Does not change `ChatHarnessResponse` or expose chain-of-thought. When deep draft JSON fails parse and repair does not recover it, critic is skipped and `confidence_notes` report `structured critic skipped (draft parse failed)` — not critic approval.
 
 **Manual Chat Harness deep + secondary critic smoke:** [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) and [`scripts/smoke_deep_critic.py`](scripts/smoke_deep_critic.py). Record results in [docs/phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md). OpenVINO smoke requires `.\.venv\Scripts\python.exe` for the gateway. `critic_small.enabled` via local `.tmp.models.smoke.yaml` (not committed default); llama-server is started externally. CPU `llama-server` works but is slow; `SCOUT_CRITIC_SLOT=same` remains default. No CI GPU requirement.
 
@@ -310,7 +310,9 @@ Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from syn
 - `recent_turns`: prior user/assistant turns for this chat (not the latest `message`).
 - `thread_state`: temporary in-request thread memory (`recent_digest`, `pinned_facts`, `decisions`, `open_loops`, `tone_preferences`, `do_not_repeat`, `personality`, `updated_at`). `recent_digest` is an extractive snippet, not a semantic summary.
 - `thread_state.personality`: emergent in-session style (`voice_traits`, `conversational_instincts`, `recurring_interests`, `user_responds_well_to`, `user_dislikes`, `current_stance`, `growth_notes`, `updated_at`). Not consciousness, not persistent memory, not exported to Ask Harness.
-- `companion_self_memories`: approved persistent Raw Lab self-memories (`id`, `kind`, `subject`, `scope`, `text`, `confidence`, `sensitivity`). Not board context, not Memory Bank. Compacted on send when over budget.
+- `companion_self_memories`: approved persistent Raw Lab self-memories (`id`, `kind`, `subject`, `scope`, `text`, `confidence`, `sensitivity`). Not board context, not Memory Bank. Visible/editable/deletable in the app. Compacted on send when over budget.
+
+**Runtime awareness:** The system prompt includes a **Runtime awareness** section so capability questions ("what memories/tools do you have?") distinguish approved Companion Self-Memories from board context, Memory Bank, files, internet, and hidden memory. The prompt also shows an active self-memory count preface before the JSON block.
 
 **Response:** `{ answer, mode: "raw_lab", safety_notes, used_context: false }`
 
@@ -318,7 +320,7 @@ Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from syn
 
 **Sensitivity:** v0.1 has no `sensitivity` field. Do not paste secrets or S3-style private data into Raw Lab. If `sensitivity` is added later, `S3` must be rejected with HTTP 422 before the provider runs.
 
-**Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. Before generation, `raw_lab_budget.prepare_raw_lab_request` may deterministically compact `recent_turns` and `thread_state` when input exceeds `SCOUT_RAW_LAB_MAX_INPUT_CHARS` (falls back to `SCOUT_MAX_INPUT_CHARS` when unset; rebuilds system prompt after state compaction; logs length/count only). OpenVINO may run one internal hedging-repair pass and one anti-repeat repair pass; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
+**Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + companion self-memory preface/JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. Before generation, `raw_lab_budget.prepare_raw_lab_request` may deterministically compact `recent_turns` and `thread_state` when input exceeds `SCOUT_RAW_LAB_MAX_INPUT_CHARS` (falls back to `SCOUT_MAX_INPUT_CHARS` when unset; rebuilds system prompt after state compaction; logs length/count only). OpenVINO may run one internal hedging-repair pass, one anti-repeat repair pass, and one `raw_lab_runtime_awareness` verifier repair for capability-accuracy only; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
 
 **Provider note:** Output may still be limited by the underlying model; Raw Lab does not add Harness-side refusal layers.
 
@@ -400,7 +402,7 @@ Requirements: gateway and llama-server must already be running; model files are 
 | `SCOUT_DEVICE` | `GPU` | OpenVINO device (`GPU`, `CPU`, `NPU`) |
 | `SCOUT_MAX_NEW_TOKENS` | `1024` | Max tokens generated |
 | `SCOUT_TIMEOUT_SECONDS` | `180` | Inference timeout per request |
-| `SCOUT_MAX_INPUT_CHARS` | `12000` | Max input length for Ask/Chat Harness and analyze-transcript |
+| `SCOUT_MAX_INPUT_CHARS` | `18000` | Max input length for Ask/Chat Harness and analyze-transcript |
 | `SCOUT_RAW_LAB_MAX_INPUT_CHARS` | `32000` | Raw Lab input budget (independent of Ask/Chat Harness) |
 | `SCOUT_TEMPERATURE` | `0.2` | Sampling temperature (scout endpoints) |
 | `SCOUT_RAW_LAB_MAX_NEW_TOKENS` | `2048` | Max tokens for Raw Lab replies |

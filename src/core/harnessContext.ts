@@ -157,8 +157,9 @@ const COMPACT_MAX_PROOF = 5;
 const COMPACT_TEXT_LIMIT = 80;
 const COLD_WARMTH: Warmth[] = ["cold", "dormant", "cooling"];
 
-/** Matches default `SCOUT_MAX_INPUT_CHARS` on ai-gateway. */
-export const DEFAULT_GATEWAY_MAX_INPUT_CHARS = 12_000;
+import { DEFAULT_GATEWAY_MAX_INPUT_CHARS } from "./gatewayBudget";
+
+export { DEFAULT_GATEWAY_MAX_INPUT_CHARS };
 
 /** Headroom below gateway max for template drift and long user messages. */
 export const GATEWAY_PROMPT_SAFETY_MARGIN_CHARS = 250;

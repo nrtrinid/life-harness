@@ -1,44 +1,57 @@
 import { StyleSheet } from "react-native";
 
-// Theme 2: Field Ops
-// Colors
+import type { LifeArea } from "../core/types";
+
+// Lo-Fi Companion OS — semantic palette (charcoal base, warm text)
+const lofiColors = {
+  background: "#121214",
+  sidebar: "#18181B",
+  surface: "#1E1E22",
+  surfaceQuiet: "#1A1A1D",
+  surfaceRaised: "#242428",
+  textPrimary: "#EDE8DF",
+  textSecondary: "rgba(237,232,223,0.82)",
+  textMuted: "rgba(237,232,223,0.48)",
+  border: "rgba(237,232,223,0.08)",
+  borderStrong: "rgba(237,232,223,0.16)",
+  actionAmber: "#C8A84B",
+  warningAmber: "#B8923A",
+  softViolet: "#9B8BB8",
+  dustyBlue: "#6B8FA3",
+  mossGreen: "#7A9B6E",
+  fadedRose: "#B87A7A",
+  cassetteAmber: "#C8A84B",
+  cardSurface: "rgba(30, 30, 34, 0.92)",
+  cardBorder: "rgba(237, 232, 223, 0.08)"
+};
+
+// Legacy colors object — aliases to lofiColors for StyleSheet compatibility
 const colors = {
-  // Backgrounds
-  bgPrimary: "#0E100A",        // Deep olive black
-  bgSecondary: "#161910",      // Dark olive
-  bgTertiary: "#1C1F16",       // Medium olive
-  bgCard: "#161910",           // Card surface
-  
-  // Borders
-  borderSubtle: "rgba(200,168,75,0.08)",
-  borderDefault: "rgba(200,168,75,0.15)",
-  borderStrong: "rgba(200,168,75,0.25)",
-  borderAccent: "#C8A84B",     // Brass
-  
-  // Text
-  textPrimary: "#D4D8C8",      // Light warm gray
-  textSecondary: "rgba(212,216,200,0.85)",
-  textTertiary: "rgba(212,216,200,0.6)",
-  textMuted: "rgba(212,216,200,0.35)",
-  textLabel: "rgba(200,168,75,0.6)",
-  
-  // Accents
-  accentPrimary: "#C8A84B",    // Brass gold
-  accentDanger: "#DC5032",     // Alert red
-  accentSuccess: "#7A9B6E",    // Olive green
-  accentWarm: "rgba(200,168,75,0.3)",
-  
-  // Status
-  statusHot: "#C8A84B",
+  bgPrimary: lofiColors.background,
+  bgSecondary: lofiColors.surfaceQuiet,
+  bgTertiary: lofiColors.surfaceRaised,
+  bgCard: lofiColors.surface,
+  borderSubtle: lofiColors.border,
+  borderDefault: "rgba(237,232,223,0.12)",
+  borderStrong: lofiColors.borderStrong,
+  borderAccent: lofiColors.actionAmber,
+  textPrimary: lofiColors.textPrimary,
+  textSecondary: lofiColors.textSecondary,
+  textTertiary: "rgba(237,232,223,0.58)",
+  textMuted: lofiColors.textMuted,
+  textLabel: lofiColors.textMuted,
+  accentPrimary: lofiColors.actionAmber,
+  accentDanger: "#DC5032",
+  accentSuccess: lofiColors.mossGreen,
+  accentWarm: "rgba(200,168,75,0.25)",
+  statusHot: lofiColors.actionAmber,
   statusWarm: "#9B8755",
-  statusCool: "#7A7E68",
-  statusCold: "#5A5D52",
-  
-  // Input
-  inputBg: "#0E100A",
-  inputBorder: "rgba(200,168,75,0.12)",
-  inputText: "#D4D8C8",
-  inputPlaceholder: "rgba(212,216,200,0.3)"
+  statusCool: "#6E6E78",
+  statusCold: "#52525A",
+  inputBg: lofiColors.background,
+  inputBorder: lofiColors.border,
+  inputText: lofiColors.textPrimary,
+  inputPlaceholder: "rgba(237,232,223,0.35)"
 };
 
 // Typography scale
@@ -69,17 +82,6 @@ const spacing = {
   lg: 16,
   xl: 20,
   xxl: 24
-};
-
-// Lo-Fi Companion OS accents (additive on Field Ops base)
-const lofiColors = {
-  cassetteAmber: colors.accentPrimary,
-  dustyBlue: "#6B8FA3",
-  mossGreen: colors.accentSuccess,
-  fadedRose: "#B87A7A",
-  softViolet: "#9B8BB8",
-  cardSurface: "rgba(22, 25, 16, 0.92)",
-  cardBorder: "rgba(200, 168, 75, 0.1)"
 };
 
 const lofiTypography = {
@@ -131,14 +133,14 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing.sm
   },
   navPrimaryButtonActive: {
-    borderBottomColor: colors.accentPrimary,
+    borderBottomColor: lofiColors.actionAmber,
     borderBottomWidth: 2,
     borderRadius: 4,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm
   },
   navPrimaryButtonText: {
-    color: colors.textTertiary,
+    color: colors.textMuted,
     fontSize: typography.bodyMedium,
     fontWeight: "600"
   },
@@ -184,7 +186,7 @@ export const styles = StyleSheet.create({
     flex: 1
   },
   sidebar: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: lofiColors.sidebar,
     borderRightColor: colors.borderSubtle,
     borderRightWidth: 1,
     gap: spacing.lg,
@@ -211,6 +213,8 @@ export const styles = StyleSheet.create({
     gap: spacing.xs
   },
   sidebarNavLink: {
+    borderLeftColor: "transparent",
+    borderLeftWidth: 3,
     borderRadius: 4,
     minHeight: 44,
     justifyContent: "center",
@@ -218,17 +222,17 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing.sm
   },
   sidebarNavLinkActive: {
-    backgroundColor: colors.bgTertiary,
-    borderColor: colors.borderSubtle,
+    backgroundColor: lofiColors.surfaceRaised,
+    borderLeftColor: lofiColors.actionAmber,
+    borderLeftWidth: 3,
     borderRadius: 4,
-    borderWidth: 1,
     minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm
   },
   sidebarNavLinkText: {
-    color: colors.textTertiary,
+    color: colors.textMuted,
     fontSize: typography.bodyMedium,
     fontWeight: "600"
   },
@@ -247,8 +251,11 @@ export const styles = StyleSheet.create({
   },
   sidebarGroupLabel: {
     color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
     fontSize: typography.labelSmall,
-    fontWeight: "600"
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
   },
   navCompactBackroomToggle: {
     alignSelf: "flex-start",
@@ -258,11 +265,14 @@ export const styles = StyleSheet.create({
   },
   navCompactBackroomToggleText: {
     color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
     fontSize: typography.labelMedium,
-    fontWeight: "600"
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
   },
   navTopChrome: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: lofiColors.sidebar,
     borderBottomColor: colors.borderSubtle,
     borderBottomWidth: 1,
     gap: spacing.sm,
@@ -278,17 +288,37 @@ export const styles = StyleSheet.create({
     padding: spacing.lg
   },
   lofiCardQuiet: {
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: lofiColors.surfaceQuiet,
     borderColor: colors.borderSubtle,
     borderRadius: 6,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.md
   },
+  lofiCompanionNoteCard: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderLeftColor: lofiColors.softViolet,
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  lofiBonusTrackCard: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderLeftColor: lofiColors.dustyBlue,
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
   lofiCardHero: {
-    backgroundColor: colors.bgTertiary,
+    backgroundColor: lofiColors.surfaceRaised,
     borderColor: colors.borderDefault,
-    borderLeftColor: lofiColors.cassetteAmber,
+    borderLeftColor: lofiColors.actionAmber,
     borderLeftWidth: 3,
     borderRadius: 6,
     borderWidth: 1,
@@ -296,11 +326,12 @@ export const styles = StyleSheet.create({
     padding: spacing.lg
   },
   lofiTapeLabel: {
-    color: colors.textLabel,
+    color: colors.textMuted,
     fontFamily: lofiTypography.fontLofiMono,
     fontSize: lofiTypography.tapeLabelSize,
     fontWeight: "600",
-    letterSpacing: 0.6
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
   },
   lofiCompanionNote: {
     color: colors.textSecondary,
@@ -343,11 +374,10 @@ export const styles = StyleSheet.create({
     padding: spacing.md
   },
   sectionTitle: {
-    color: colors.textLabel,
+    color: colors.textSecondary,
     fontSize: typography.labelMedium,
     fontWeight: "700",
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
+    letterSpacing: 0.3,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
     paddingBottom: 6,
@@ -386,11 +416,10 @@ export const styles = StyleSheet.create({
     lineHeight: 20
   },
   label: {
-    color: colors.textLabel,
+    color: colors.textSecondary,
     fontSize: typography.labelMedium,
-    fontWeight: "700",
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
+    fontWeight: "600",
+    letterSpacing: 0.2,
     marginBottom: spacing.xs
   },
   listItem: {
@@ -416,8 +445,7 @@ export const styles = StyleSheet.create({
     color: colors.bgPrimary,
     fontSize: typography.labelLarge,
     fontWeight: "700",
-    letterSpacing: 1.4,
-    textTransform: "uppercase"
+    letterSpacing: 0.2
   },
   secondaryAction: {
     backgroundColor: "transparent",
@@ -430,9 +458,8 @@ export const styles = StyleSheet.create({
   secondaryActionText: {
     color: colors.textPrimary,
     fontSize: typography.labelLarge,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase"
+    fontWeight: "600",
+    letterSpacing: 0.2
   },
   captureWrap: {
     gap: spacing.sm
@@ -479,11 +506,10 @@ export const styles = StyleSheet.create({
     width: 300
   },
   columnTitle: {
-    color: colors.textLabel,
+    color: colors.textSecondary,
     fontSize: typography.labelLarge,
     fontWeight: "700",
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
+    letterSpacing: 0.3,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
     paddingBottom: spacing.xs,
@@ -508,6 +534,42 @@ export const styles = StyleSheet.create({
   cardTileCompact: {
     marginTop: 0
   },
+  questCardTile: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  questCardWarmth: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 2,
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+    overflow: "hidden",
+    paddingHorizontal: 6,
+    paddingVertical: 3
+  },
+  questCardActionsWrap: {
+    gap: spacing.xs,
+    marginTop: spacing.sm
+  },
+  questCardActionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  questCardMorePanel: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
   cardHeader: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -527,14 +589,13 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderStrong,
     borderRadius: 2,
-    color: colors.textLabel,
+    color: colors.textMuted,
     fontSize: typography.labelSmall,
-    fontWeight: "700",
-    letterSpacing: 1.2,
+    fontWeight: "600",
+    letterSpacing: 0.2,
     overflow: "hidden",
     paddingHorizontal: 6,
-    paddingVertical: 3,
-    textTransform: "uppercase"
+    paddingVertical: 3
   },
   cardMeta: {
     color: colors.textMuted,
@@ -590,11 +651,10 @@ export const styles = StyleSheet.create({
     paddingVertical: 6
   },
   smallButtonText: {
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     fontSize: typography.labelSmall,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase"
+    fontWeight: "600",
+    letterSpacing: 0.2
   },
   splitRow: {
     flexDirection: "row",
@@ -616,7 +676,7 @@ export const styles = StyleSheet.create({
     gap: spacing.sm
   },
   proofShelfItem: {
-    borderLeftColor: colors.accentPrimary,
+    borderLeftColor: lofiColors.actionAmber,
     borderLeftWidth: 3,
     gap: 3,
     paddingLeft: spacing.sm,
@@ -637,7 +697,7 @@ export const styles = StyleSheet.create({
     color: colors.accentSuccess
   },
   noticeWarningText: {
-    color: colors.accentPrimary
+    color: lofiColors.warningAmber
   },
   noticeErrorText: {
     color: colors.accentDanger
@@ -650,8 +710,8 @@ export const styles = StyleSheet.create({
     borderColor: colors.accentSuccess
   },
   noticeWarning: {
-    backgroundColor: "rgba(200,168,75,0.1)",
-    borderColor: colors.accentPrimary
+    backgroundColor: "rgba(184,146,58,0.12)",
+    borderColor: lofiColors.warningAmber
   },
   noticeError: {
     backgroundColor: "rgba(220,80,50,0.1)",
@@ -662,19 +722,20 @@ export const styles = StyleSheet.create({
     borderColor: colors.borderDefault
   },
   bannerWarning: {
-    backgroundColor: "rgba(200,168,75,0.12)",
-    borderColor: colors.accentPrimary,
+    backgroundColor: "rgba(184,146,58,0.12)",
+    borderColor: lofiColors.warningAmber,
     borderRadius: 3,
     borderWidth: 1,
     borderLeftWidth: 3,
+    borderLeftColor: lofiColors.warningAmber,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm
   },
   bannerWarningText: {
-    color: colors.accentPrimary,
+    color: lofiColors.warningAmber,
     fontSize: typography.bodyMedium,
     fontWeight: "700",
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
     lineHeight: 20
   },
   bannerInfo: {
@@ -772,9 +833,8 @@ export const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: typography.labelSmall,
     fontWeight: "600",
-    letterSpacing: 1.2,
-    marginBottom: spacing.xs,
-    textTransform: "uppercase"
+    letterSpacing: 0.3,
+    marginBottom: spacing.xs
   },
   chatInspectorStatusLine: {
     color: colors.textTertiary,
@@ -788,10 +848,11 @@ export const styles = StyleSheet.create({
     overflow: "hidden"
   },
   chatThreadToolbar: {
-    alignItems: "flex-end",
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
-    justifyContent: "flex-end"
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm
   },
   chatThreadScroll: {
     flex: 1,
@@ -845,7 +906,7 @@ export const styles = StyleSheet.create({
   },
   chatBubbleUser: {
     alignSelf: "flex-end",
-    backgroundColor: "rgba(30,32,26,0.85)",
+    backgroundColor: "rgba(36,36,40,0.92)",
     borderRadius: 8,
     gap: spacing.xs,
     maxWidth: "72%",
@@ -874,11 +935,10 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing.sm
   },
   chatSpeakerLabel: {
-    color: colors.textLabel,
+    color: colors.textMuted,
     fontSize: typography.labelSmall,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-    textTransform: "uppercase"
+    fontWeight: "600",
+    letterSpacing: 0.4
   },
   chatAnswerText: {
     color: colors.textPrimary,
@@ -898,7 +958,7 @@ export const styles = StyleSheet.create({
   },
   chatMetaPillAccent: {
     backgroundColor: "rgba(200,168,75,0.12)",
-    borderColor: colors.borderAccent,
+    borderColor: lofiColors.actionAmber,
     borderRadius: 2,
     borderWidth: 1,
     paddingHorizontal: 6,
@@ -934,6 +994,67 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.md
+  },
+  chatModeNoteCompanion: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderLeftColor: lofiColors.softViolet,
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  chatModeNoteRawSignal: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderLeftColor: lofiColors.dustyBlue,
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md
+  },
+  chatSurfaceFrameCompanion: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: "rgba(155, 139, 184, 0.45)",
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "column",
+    overflow: "hidden"
+  },
+  chatSurfaceFrameRawSignal: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: "rgba(107, 143, 163, 0.45)",
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "column",
+    overflow: "hidden"
+  },
+  chatSurfaceThreadSlot: {
+    flex: 1,
+    minHeight: 0
+  },
+  chatSurfaceComposerSlot: {
+    borderTopColor: colors.borderSubtle,
+    borderTopWidth: 1
+  },
+  chatAdvancedPanel: {
+    gap: spacing.xs,
+    marginTop: spacing.sm
+  },
+  chatAdvancedPanelToggle: {
+    alignSelf: "flex-start",
+    minHeight: 44,
+    paddingVertical: spacing.sm
+  },
+  chatAdvancedPanelToggleText: {
+    color: colors.textMuted,
+    fontSize: typography.labelMedium,
+    fontWeight: "600"
+  },
+  chatAdvancedPanelBody: {
+    gap: spacing.md
   },
   synthesisNextPounceHero: {
     backgroundColor: colors.bgSecondary,
@@ -1015,20 +1136,18 @@ export const styles = StyleSheet.create({
   chatInspectorSectionTitle: {
     color: colors.textMuted,
     fontSize: typography.labelSmall,
-    fontWeight: "700",
-    letterSpacing: 1.4,
-    textTransform: "uppercase"
+    fontWeight: "600",
+    letterSpacing: 0.2
   },
   chatInspectorToggle: {
     alignSelf: "flex-start",
     paddingVertical: 2
   },
   chatInspectorToggleText: {
-    color: colors.textLabel,
+    color: colors.textMuted,
     fontSize: typography.labelSmall,
     fontWeight: "600",
-    letterSpacing: 0.6,
-    textTransform: "uppercase"
+    letterSpacing: 0.2
   },
   chatBubbleToggle: {
     alignSelf: "flex-start",
@@ -1057,13 +1176,189 @@ export const styles = StyleSheet.create({
     paddingVertical: 3
   },
   chatBadgeText: {
-    color: colors.textLabel,
+    color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
     fontSize: typography.labelSmall,
-    fontWeight: "700",
-    letterSpacing: 1,
+    fontWeight: "600",
+    letterSpacing: 0.6,
     textTransform: "uppercase"
+  },
+  chatStateStrip: {
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  chatStateStripCompanion: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: "rgba(155, 139, 184, 0.35)"
+  },
+  chatStateStripRawSignal: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: "rgba(107, 143, 163, 0.35)"
+  },
+  chatStateChip: {
+    backgroundColor: lofiColors.surfaceRaised,
+    borderColor: colors.borderSubtle,
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4
+  },
+  chatStateChipAccent: {
+    backgroundColor: "rgba(200,168,75,0.1)",
+    borderColor: lofiColors.actionAmber,
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4
+  },
+  chatStateChipWarning: {
+    backgroundColor: "rgba(184,146,58,0.12)",
+    borderColor: lofiColors.warningAmber,
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4
+  },
+  chatStateChipActive: {
+    backgroundColor: lofiColors.surface,
+    borderColor: colors.borderStrong,
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4
+  },
+  chatStateChipText: {
+    color: colors.textSecondary,
+    fontSize: typography.labelSmall,
+    fontWeight: "600"
+  },
+  chatStateChipTextAccent: {
+    color: lofiColors.actionAmber,
+    fontSize: typography.labelSmall,
+    fontWeight: "600"
+  },
+  chatStateChipTextWarning: {
+    color: lofiColors.warningAmber,
+    fontSize: typography.labelSmall,
+    fontWeight: "600"
+  },
+  chatBackroomPanel: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    maxHeight: 420,
+    overflow: "hidden"
+  },
+  chatBackroomPanelSide: {
+    flexBasis: 320,
+    flexGrow: 0,
+    flexShrink: 0,
+    maxWidth: 340,
+    minWidth: 260
+  },
+  chatBackroomHeader: {
+    alignItems: "center",
+    borderBottomColor: colors.borderSubtle,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  chatBackroomHeaderTitle: {
+    color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  chatBackroomBody: {
+    gap: spacing.md,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.md
+  },
+  chatBackroomSection: {
+    gap: spacing.sm
+  },
+  chatBackroomSectionFocused: {
+    borderColor: colors.borderStrong,
+    borderRadius: 4,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.sm
+  },
+  memoryReviewCard: {
+    backgroundColor: lofiColors.surface,
+    borderColor: colors.borderSubtle,
+    borderRadius: 4,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.sm
+  },
+  memoryReviewCardText: {
+    color: colors.textSecondary,
+    fontSize: typography.bodySmall,
+    fontStyle: "italic",
+    lineHeight: 20
+  },
+  memoryReviewCardActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  messageActionToggle: {
+    alignSelf: "flex-start",
+    paddingVertical: 2
+  },
+  messageActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  chatBackroomChatRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.lg
+  },
+  chatBackroomChatColumn: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    gap: spacing.md,
+    minWidth: 0
   }
 });
 
 // Export color tokens for components that need dynamic styling
 export { colors, typography, spacing, lofiColors, lofiTypography };
+
+export const colorPrimaryAction = lofiColors.actionAmber;
+export const colorWarning = lofiColors.warningAmber;
+export const colorCompanion = lofiColors.softViolet;
+export const colorRawSignal = lofiColors.dustyBlue;
+export const colorProofBuild = lofiColors.actionAmber;
+export const colorProofCareer = lofiColors.fadedRose;
+export const colorProofBody = lofiColors.mossGreen;
+
+export function questCardAreaAccentColor(area: LifeArea): string {
+  switch (area) {
+    case "build":
+      return lofiColors.actionAmber;
+    case "body":
+      return lofiColors.mossGreen;
+    case "social_career":
+      return lofiColors.fadedRose;
+    case "money_independence":
+      return lofiColors.dustyBlue;
+    case "stability_vices":
+      return lofiColors.softViolet;
+  }
+}

@@ -4,6 +4,111 @@ Record A770 / SYCL manual runs here. Do not commit real personal context or mode
 
 **Procedure:** [llamacpp-critic-slot.md](llamacpp-critic-slot.md)
 
+## 2026-06-10 — GPU smoke completed (OpenVINO draft + SYCL llama.cpp critic on A770)
+
+| Field | Value |
+|-------|--------|
+| Smoke type | **completed** — `smoke_deep_critic.py` (4 scenarios) + D1 fail-soft probe |
+| Branch | `feat/lofi-companion-os-shell-v0.1` (unrelated WIP present; runtime-only work) |
+| Draft provider | `openvino` (`.venv` Python) |
+| Critic backend | **SYCL** `llamacpp_secondary` — `SYCL0` Intel Arc A770 |
+| oneAPI | Base Toolkit 2025.1.3.8 via `winget install Intel.OneAPI.BaseToolkit` |
+| llama.cpp | tag **b5377** (`24e86cae7`) — HEAD too new for oneAPI 2025.1 SYCL headers |
+| Build dir | `C:\Users\nicki\Projects\llama.cpp\build-sycl` (`cl` + `icx`, `-DLLAMA_CURL=OFF`) |
+| llama-server | `build-sycl\bin\llama-server.exe` — **must run with `setvars.bat` on PATH** (oneAPI DLLs) |
+| Critic GGUF | `C:\Users\nicki\Models\critic\Phi-4-mini-instruct-Q4_K_M.gguf` (Q4_K_M) |
+| GPU confirmation | `using device SYCL0 (Intel(R) Arc(TM) A770 Graphics) - 14700 MiB free` |
+| Command | `llama-server -m <gguf> --host 127.0.0.1 --port 8121 -ngl 99 -c 8192` |
+
+### `smoke_deep_critic.py` results (GPU)
+
+| Run | HTTP | Latency (ms) | Critic signal | Notes |
+|-----|------|--------------|---------------|-------|
+| A clean deep | 200 | 3978 | `structured critic skipped (draft parse failed)` | Hardening v0.2 note correct; gateway log `draft_parse_failed` |
+| B broad/sprawl | 200 | 6840 | `revised after structured critic` | Tightened to active cards |
+| C pounce/career | 200 | 5193 | `revised after structured critic` | Qualcomm follow-up pounce |
+| D repeat clean deep | 200 | 5138 | `revised after structured critic` | Regression repeat of A |
+
+### D1 fail-soft (llama-server stopped)
+
+| Signal | Result |
+|--------|--------|
+| HTTP | **200** |
+| Latency | 4393 ms |
+| Draft returned | **yes** |
+| `confidence_notes` | `draft approved by structured critic` (fail-soft pass; critic unreachable) |
+
+### CPU vs GPU comparison
+
+| Scenario | CPU (ms) | GPU SYCL (ms) | Speedup |
+|----------|----------|---------------|---------|
+| A clean deep | 3780 | 3978 | ~1.0× (critic skipped on A) |
+| B broad/sprawl | 17761 | 6840 | **2.6×** |
+| C pounce/career | 15466 | 5193 | **3.0×** |
+| D repeat | 14809 | 5138 | **2.9×** |
+| D1 fail-soft | 4285 | 4393 | ~1.0× |
+| Avg revised (B/C/D) | **16012** | **5724** | **2.8×** |
+
+### Summary verdict (GPU run)
+
+| Question | Answer |
+|----------|--------|
+| GPU backend confirmed? | **yes** — SYCL0 A770 in llama-server load logs |
+| Parse success | **mixed** — scenario A still hits draft parse fail + skip (same as CPU) |
+| Useful revisions? | **yes** — B/C/D revised usefully |
+| Fail-soft? | **yes** — D1 HTTP 200 with draft |
+| Interactive deep latency? | **improved** — revised passes ~5–7 s total (vs ~15–18 s CPU) |
+| Recommendation | **keep `SCOUT_CRITIC_SLOT=same` as default** for now; GPU secondary viable for manual/advanced Deep; fix draft-parse reliability before eval fixtures |
+
+### Scenario A re-smoke after deep draft JSON repair v0.1 (2026-06-10)
+
+| Field | Value |
+|-------|--------|
+| Branch | `main` (gateway repair changes; unrelated app WIP present) |
+| Change under test | `chat_harness_repair.py` + in-deep `draft_repair` before critic skip |
+| Gateway env | `SCOUT_DEBUG_THINKING_TRACE=true`, `SCOUT_DEEP_MAX_EXTRA_PASSES=2`, `SCOUT_CRITIC_SLOT=secondary` |
+| Prior A (pre-repair) | HTTP 200, 3978 ms, `structured critic skipped (draft parse failed)` |
+
+**Scenario A (`A_clean_next_action`) — full smoke run:**
+
+| Field | Result |
+|-------|--------|
+| HTTP | **200** |
+| Latency | **8068 ms** (full 4-scenario smoke); **7427 ms** (isolated repeat) |
+| `confidence_notes` | `Deep mode: revised after structured critic.` |
+| Draft repair | **succeeded** — gateway log: `deep draft parse failed; attempting draft JSON repair` (first request only) |
+| Critic ran | **yes** — revised after structured critic |
+| `revision_applied` | **yes** (inferred from revised note + full deep flow) |
+| `fail_soft_reason` | **none** |
+
+**Thinking trace** (`SCOUT_DEBUG_THINKING_TRACE=true`; uvicorn stdout captured WARNING only, INFO trace JSON not emitted to console):
+
+| Field | Expected / inferred |
+|-------|---------------------|
+| `passes` | `["draft", "draft_repair", "critic", "revision"]` |
+| `parse_failures` | `["draft"]` |
+| `draft_repair_attempted` | `true` |
+| `draft_repair_succeeded` | `true` |
+| `critic_backend` | `llamacpp_secondary` |
+| `critic_checks` | non-empty (revision requested; exact ids not captured in stdout) |
+
+**Full smoke post-repair (all scenarios):**
+
+| Run | HTTP | Latency (ms) | Critic signal |
+|-----|------|--------------|---------------|
+| A clean deep | 200 | 8068 | `revised after structured critic` |
+| B broad/sprawl | 200 | 6895 | `revised after structured critic` |
+| C pounce/career | 200 | 5303 | `revised after structured critic` |
+| D repeat clean deep | 200 | 5026 | `revised after structured critic` |
+
+**Verdict:** Draft repair v0.1 **fixes Scenario A** — draft parse still fails on raw Qwen3 output, but repair recovers JSON and the SYCL critic + revision path runs. Prior A skip is resolved.
+
+**Recommendation:** Proceed to **secondary critic eval fixtures** (GPU latency acceptable; A no longer blocked). Optional follow-up: tighten draft repair prompt to reduce repair latency on A (~8 s vs ~4 s pre-skip). Keep `SCOUT_CRITIC_SLOT=same` as default.
+
+**CI regression coverage:** mock deep/critic quality gates live in [`evals/thread/deep_critic_quality.json`](../evals/thread/deep_critic_quality.json) (`pytest tests/test_thread_eval_fixtures.py`). GPU results in this doc are manual reference only.
+
+---
+
 ## 2026-06-10 — Smoke completed (OpenVINO draft + CPU llama.cpp critic)
 
 | Field | Value |
@@ -210,10 +315,10 @@ cd C:\Users\nicki\Projects\life-harness\services\ai-gateway
 
 | Question | Answer |
 |----------|--------|
-| Ready for secondary critic eval fixtures? | **later** — smoke passed routing/fail-soft; tune parse + latency before eval fixtures |
+| Ready for secondary critic eval fixtures? | **later** — GPU smoke ~2.8× faster on revised passes; fix draft-parse skip on A first |
 | Default `SCOUT_CRITIC_SLOT` change? | **stay `same`** |
 | Prompt/schema work needed? | Unknown until real critic HTTP smoke |
-| Blockers (VRAM, latency, parse rate): | **CPU critic latency ~15–18 s**; optional SYCL/Vulkan rebuild for A770 GPU; use `.venv` for OpenVINO gateway (2026-06-10) |
+| Blockers (VRAM, latency, parse rate): | **GPU SYCL done** — revised ~5–7 s; draft-parse skip on A remains; use `.venv` + `setvars.bat` for SYCL server (2026-06-10) |
 
 ## Follow-up (from smoke)
 

@@ -376,6 +376,181 @@ def test_deep_draft_parse_failure_skips_critic(harness_context):
     assert result.critic_skip_reason == "draft_parse_failed"
 
 
+def _valid_draft_json(answer: str = "One move: ship the stub.") -> str:
+    return ChatHarnessResponse(
+        answer=answer,
+        used_context=True,
+        confidence_notes=["Inferred — test."],
+        safety_notes=[],
+    ).model_dump_json()
+
+
+def test_deep_draft_repair_succeeds_runs_critic(harness_context):
+    request = _deep_request("hello", harness_context)
+    repaired_raw = _valid_draft_json()
+    critic = MagicMock()
+    critic.name = "mock"
+    critic.critique_draft.return_value = ChatHarnessCriticVerdict(
+        needs_revision=False,
+        checks=[
+            CriticCheckEntry(
+                id=CriticCheckId.no_issue,
+                severity="info",
+                message="ok",
+            )
+        ],
+        revision_instruction="",
+    )
+
+    from app.chat_harness_thinking_trace import new_thinking_trace
+
+    trace = new_thinking_trace(request)
+
+    result = run_chat_harness_deep(
+        request=request,
+        prompt="base",
+        draft_generate=lambda _p: "not valid json",
+        draft_repair_generate=lambda _broken: repaired_raw,
+        critic=critic,
+        max_extra_passes=2,
+        trace=trace,
+    )
+    critic.critique_draft.assert_called_once()
+    assert result.critic_ran is True
+    assert result.raw == repaired_raw
+    assert trace.passes == ["draft", "draft_repair", "critic"]
+    assert trace.draft_repair_attempted is True
+    assert trace.draft_repair_succeeded is True
+    assert "draft" in trace.parse_failures
+    assert "critic" in trace.passes
+
+
+def test_deep_draft_repair_fails_skips_critic(harness_context):
+    request = _deep_request("hello", harness_context)
+    critic = MagicMock()
+
+    from app.chat_harness_thinking_trace import new_thinking_trace
+
+    trace = new_thinking_trace(request)
+
+    result = run_chat_harness_deep(
+        request=request,
+        prompt="base",
+        draft_generate=lambda _p: "not valid json",
+        draft_repair_generate=lambda _broken: "still not json",
+        critic=critic,
+        max_extra_passes=2,
+        trace=trace,
+    )
+    critic.critique_draft.assert_not_called()
+    assert result.critic_ran is False
+    assert result.critic_skip_reason == "draft_parse_failed"
+    assert trace.draft_repair_attempted is True
+    assert trace.draft_repair_succeeded is False
+    assert trace.passes == ["draft", "draft_repair"]
+    assert "critic" not in trace.passes
+    assert trace.fail_soft_reason == "draft_parse_failed"
+
+    noted = append_deep_critic_note(
+        ChatHarnessResponse(
+            answer="fallback",
+            used_context=False,
+            confidence_notes=[],
+            safety_notes=[],
+        ),
+        revised=False,
+        critic_ran=result.critic_ran,
+        critic_skip_reason=result.critic_skip_reason,
+    )
+    joined = " ".join(noted.confidence_notes)
+    assert "structured critic skipped (draft parse failed)" in joined
+
+
+def test_deep_draft_repair_succeeds_but_extra_passes_zero_skips_critic(harness_context):
+    request = _deep_request("hello", harness_context)
+    broken_raw = "not valid json"
+    repaired_raw = _valid_draft_json("Repaired draft answer.")
+    critic = MagicMock()
+
+    from app.chat_harness_thinking_trace import new_thinking_trace
+
+    trace = new_thinking_trace(request)
+
+    result = run_chat_harness_deep(
+        request=request,
+        prompt="base",
+        draft_generate=lambda _p: broken_raw,
+        draft_repair_generate=lambda _broken: repaired_raw,
+        critic=critic,
+        max_extra_passes=0,
+        trace=trace,
+    )
+    critic.critique_draft.assert_not_called()
+    assert result.critic_ran is False
+    assert result.critic_skip_reason == "deep_passes_disabled"
+    assert result.raw == repaired_raw
+    assert result.raw != broken_raw
+    assert trace.passes == ["draft", "draft_repair"]
+    assert "critic" not in trace.passes
+    assert trace.draft_repair_succeeded is True
+    ChatHarnessResponse.model_validate_json(result.raw)
+
+
+def test_deep_repair_success_confidence_notes_not_skipped(harness_context):
+    request = _deep_request("hello", harness_context)
+    repaired_raw = _valid_draft_json()
+    critic = MagicMock()
+    critic.name = "mock"
+    critic.critique_draft.return_value = ChatHarnessCriticVerdict(
+        needs_revision=False,
+        checks=[
+            CriticCheckEntry(
+                id=CriticCheckId.no_issue,
+                severity="info",
+                message="ok",
+            )
+        ],
+        revision_instruction="",
+    )
+
+    result = run_chat_harness_deep(
+        request=request,
+        prompt="base",
+        draft_generate=lambda _p: "not valid json",
+        draft_repair_generate=lambda _broken: repaired_raw,
+        critic=critic,
+        max_extra_passes=2,
+    )
+    assert result.critic_ran is True
+    noted = append_deep_critic_note(
+        ChatHarnessResponse.model_validate_json(result.raw),
+        revised=result.revised,
+        critic_ran=result.critic_ran,
+        critic_skip_reason=result.critic_skip_reason,
+    )
+    joined = " ".join(noted.confidence_notes).lower()
+    assert "structured critic" in joined
+    assert "structured critic skipped" not in joined
+
+
+def test_mock_deep_draft_repair_via_client(client, harness_context):
+    payload = {
+        "message": "deep-draft-repair probe",
+        "mode": "general",
+        "sensitivity": "S1",
+        "context": harness_context.model_dump(mode="json"),
+        "conversation_history": [],
+        "reasoning_depth": "deep",
+    }
+    response = client.post("/chat-harness", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    ChatHarnessResponse.model_validate(body)
+    joined = " ".join(body["confidence_notes"]).lower()
+    assert "structured critic" in joined
+    assert "structured critic skipped" not in joined
+
+
 def test_append_deep_critic_note_skips_approved_when_draft_parse_failed():
     response = ChatHarnessResponse(
         answer="One move.",

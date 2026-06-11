@@ -27,7 +27,12 @@ from app.models import (
 )
 
 from app.chat_harness_finalize import finalize_chat_harness_response
-from app.thread_verifier import VerificationResult, verify_chat_harness_response, verify_raw_lab_response
+from app.thread_verifier import (
+    VerificationResult,
+    _RAW_LAB_CAPABILITY_QUESTION_RE,
+    verify_chat_harness_response,
+    verify_raw_lab_response,
+)
 
 INFERRED_PREFIX = "Inferred from transcript — "
 
@@ -578,6 +583,8 @@ class MockProvider:
                 last_verdict.append(verdict)
                 return verdict
 
+        simulate_draft_repair = request.message.lower().startswith("deep-draft-repair")
+
         def draft_generate(generation_prompt: str) -> str:
             nonlocal stored_draft
             if "Critic verdict:" in generation_prompt:
@@ -589,7 +596,18 @@ class MockProvider:
                 )
                 return revised.model_dump_json()
             stored_draft = self._build_chat_harness_mock_draft(request)
+            if simulate_draft_repair:
+                return "not valid json"
             return stored_draft.model_dump_json()
+
+        draft_repair_generate = None
+        if simulate_draft_repair:
+
+            def draft_repair_generate(_broken: str) -> str:
+                draft = self._build_chat_harness_mock_draft(request)
+                nonlocal stored_draft
+                stored_draft = draft
+                return draft.model_dump_json()
 
         critic = _CapturingCritic(
             get_critic_backend(settings, lambda _prompt: "{}", routing=trace)
@@ -598,6 +616,7 @@ class MockProvider:
             request=request,
             prompt=prompt,
             draft_generate=draft_generate,
+            draft_repair_generate=draft_repair_generate,
             critic=critic,
             max_extra_passes=settings.deep_max_extra_passes,
             trace=trace,
@@ -935,7 +954,31 @@ class MockProvider:
             traits = ", ".join(request.thread_state.personality.voice_traits[:2])
             prefix += f"Thread voice: {traits} — "
 
-        if (
+        if _RAW_LAB_CAPABILITY_QUESTION_RE.search(request.message):
+            if request.companion_self_memories:
+                count = len(request.companion_self_memories)
+                label = "Companion Self-Memory" if count == 1 else "Companion Self-Memories"
+                memory_lines = "\n".join(
+                    f"- {memory.text}" for memory in request.companion_self_memories[:6]
+                )
+                body = (
+                    f"Technically, in Raw Lab I can see this chat's recent turns, "
+                    f"temporary thread_state/personality, and {count} approved {label} "
+                    "provided by the app. Active approved self-memories:\n"
+                    f"{memory_lines}\n"
+                    "These are Raw Lab companion persona notes — not your private memories, "
+                    "not board context, not Memory Bank, and not hidden memory. "
+                    "I do not have files, internet, shell tools, or real-world actions."
+                )
+            else:
+                body = (
+                    "In Raw Lab I can see this chat's recent turns and temporary "
+                    "thread_state/personality for this session only. "
+                    "No approved Companion Self-Memories were provided in this request. "
+                    "I do not have board context, not Memory Bank, not files, not internet, "
+                    "not shell tools, and not hidden memory outside what the app sends."
+                )
+        elif (
             "unrestricted" in message_lower
             or "nsfw" in message_lower
             or "no disclaimers" in message_lower
@@ -990,6 +1033,7 @@ class MockProvider:
             answer=answer,
             user_message=request.message,
             conversation_history=history,
+            companion_self_memory_count=len(request.companion_self_memories),
         )
         if not verification.ok and verification.repair_instruction:
             if verification.check == "raw_lab_board_claim":
@@ -997,6 +1041,25 @@ class MockProvider:
                     f"{prefix}Raw Lab is ungrounded — I have no visibility into Life Harness data. "
                     f"You asked: \"{request.message[:80]}\""
                 )
+            elif verification.check == "raw_lab_runtime_awareness":
+                count = len(request.companion_self_memories)
+                if count > 0:
+                    memory_lines = "\n".join(
+                        f"- {memory.text}" for memory in request.companion_self_memories[:6]
+                    )
+                    answer = (
+                        f"{prefix}I have {count} approved Companion Self-Memor"
+                        f"{'y' if count == 1 else 'ies'} in this request — not Memory Bank, "
+                        "not board memory, and not hidden memory:\n"
+                        f"{memory_lines}\n"
+                        "I do not have files, internet, shell tools, or real-world actions."
+                    )
+                else:
+                    answer = (
+                        f"{prefix}Raw Lab only has this chat's recent turns and temporary "
+                        "thread_state in this request — no board, Memory Bank, files, "
+                        "internet, or hidden memory."
+                    )
             elif verification.check == "anti_repeat":
                 answer = f"{prefix}Moving forward with a new phrasing instead of repeating the last line."
             elif verification.check == "ignored_steering":

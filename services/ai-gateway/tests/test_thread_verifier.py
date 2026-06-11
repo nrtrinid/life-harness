@@ -118,6 +118,63 @@ def test_verify_raw_lab_ignored_steering_first_turn_under_cap_passes():
     assert result.ok is True
 
 
+def test_verify_raw_lab_runtime_awareness_denies_memory_when_self_memories_present():
+    result = verify_raw_lab_response(
+        answer="I have no memories at all.",
+        user_message="What memories do you have access to?",
+        conversation_history=[],
+        companion_self_memory_count=1,
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_runtime_awareness"
+
+
+def test_verify_raw_lab_runtime_awareness_accurate_acknowledgment_passes():
+    result = verify_raw_lab_response(
+        answer=(
+            "I have one approved Companion Self-Memory in this request — not Memory Bank "
+            "or board memory."
+        ),
+        user_message="What memories do you have access to?",
+        conversation_history=[],
+        companion_self_memory_count=1,
+    )
+    assert result.ok is True
+
+
+def test_verify_raw_lab_runtime_awareness_no_memory_when_empty_passes():
+    result = verify_raw_lab_response(
+        answer="I have no memories — only this chat's recent turns.",
+        user_message="What memories do you have access to?",
+        conversation_history=[],
+        companion_self_memory_count=0,
+    )
+    assert result.ok is True
+
+
+def test_verify_raw_lab_runtime_awareness_tool_overclaim_fails():
+    result = verify_raw_lab_response(
+        answer="I can access your files and browse the internet.",
+        user_message="What tools do you have?",
+        conversation_history=[],
+        companion_self_memory_count=0,
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_runtime_awareness"
+
+
+def test_verify_raw_lab_runtime_awareness_does_not_police_style():
+    result = verify_raw_lab_response(
+        answer=(
+            "I have one approved Companion Self-Memory here. What do you think about that?"
+        ),
+        user_message="What memories do you have access to?",
+        conversation_history=[],
+        companion_self_memory_count=1,
+    )
+    assert result.ok is True
+
+
 def test_verify_chat_harness_detects_code_missing_fence():
     response = ChatHarnessResponse(
         answer="Here is the function without fences.",

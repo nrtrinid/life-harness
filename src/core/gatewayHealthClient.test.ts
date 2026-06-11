@@ -26,7 +26,7 @@ describe("gatewayHealthClient", () => {
         ok: true,
         json: async () => ({
           budget: {
-            max_input_chars: 12_000,
+            max_input_chars: 18_000,
             raw_lab_max_input_chars: 32_000,
             timeout_seconds: 180
           }
@@ -34,7 +34,7 @@ describe("gatewayHealthClient", () => {
       }) as Response;
 
     await expect(fetchGatewayHealthBudget("http://127.0.0.1:8111")).resolves.toEqual({
-      maxInputChars: 12_000,
+      maxInputChars: 18_000,
       rawLabMaxInputChars: 32_000,
       timeoutSeconds: 180
     });

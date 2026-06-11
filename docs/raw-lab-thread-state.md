@@ -7,7 +7,20 @@ Raw Lab is isolated from Life Harness board state, Memory Bank, tools, and mutat
 - **Board context** (Ask Harness): cards, logs, proof, decisions from Life Harness.
 - **Raw Lab thread**: in-memory recent turns plus temporary `thread_state` for the current chat only.
 
-Raw Lab requests send `recent_turns`, `thread_state`, and the latest `message`. The gateway injects `thread_state` into the system prompt and passes `recent_turns` as native chat history.
+Raw Lab requests send `recent_turns`, `thread_state`, `companion_self_memories`, and the latest `message`. The gateway injects `thread_state` and approved self-memories into the system prompt and passes `recent_turns` as native chat history.
+
+## Runtime awareness / Companion Self-Memories
+
+Raw Lab has **no** Life Harness board context, Memory Bank, files, internet, shell tools, or real-world actions.
+
+Raw Lab **may** receive **approved Companion Self-Memories** in each request — persistent persona notes the user saved for Raw Lab only. They are:
+
+- visible, editable, and deletable in the Raw Lab UI
+- about Raw Lab companion/persona behavior (not the user's private Memory Bank entries)
+- separate from temporary `thread_state` and in-session personality
+- not proof of consciousness or hidden memory
+
+When the user asks what memories, tools, or capabilities Raw Lab has, answers should distinguish approved Companion Self-Memories from board memory, Memory Bank, and hidden persistence. The gateway prompt includes a **Runtime awareness** section; `raw_lab_runtime_awareness` verifier corrects capability overclaim/denial only (not style).
 
 ## Thread memory vs personality
 

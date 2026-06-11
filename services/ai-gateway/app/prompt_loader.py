@@ -165,14 +165,32 @@ def _serialize_companion_self_memories(
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
+def _build_companion_self_memories_preface(count: int) -> str:
+    if count <= 0:
+        return (
+            "Active Companion Self-Memories in this request: 0\n\n"
+            "No approved companion self-memories were provided in this request."
+        )
+    noun = "memory" if count == 1 else "memories"
+    return (
+        f"Active Companion Self-Memories in this request: {count}\n\n"
+        f"These are approved self-{noun} you may reference as Raw Lab."
+    )
+
+
 def build_raw_lab_system_prompt(
     *,
     thread_state: RawLabThreadState | None = None,
     companion_self_memories: list | None = None,
 ) -> str:
     template = load_raw_lab_template()
+    memory_count = len(companion_self_memories or [])
     return (
         template.replace("{thread_state_json}", _serialize_raw_lab_thread_state(thread_state))
+        .replace(
+            "{companion_self_memories_preface}",
+            _build_companion_self_memories_preface(memory_count),
+        )
         .replace(
             "{companion_self_memories_json}",
             _serialize_companion_self_memories(companion_self_memories),

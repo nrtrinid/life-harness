@@ -75,10 +75,10 @@ export function RawLabBudgetInspector({
     const isRawLabCap = cap === gatewayRawLabMaxInputChars;
     const isHarnessDefault = cap === gatewayMaxInputChars;
     if (isRawLabCap) {
-      return `${cap.toLocaleString()} (Raw Lab-specific)`;
+      return `${cap.toLocaleString()} (Raw Signal-specific)`;
     }
     if (isHarnessDefault) {
-      return `${cap.toLocaleString()} (Ask Harness default)`;
+      return `${cap.toLocaleString()} (Companion default)`;
     }
     return `${cap.toLocaleString()} (custom)`;
   }
@@ -99,7 +99,7 @@ export function RawLabBudgetInspector({
         <Text style={styles.sectionTitle}>Thread budget</Text>
       </Pressable>
       <Text style={styles.helpText}>
-        Raw Lab max ~{gatewayRawLabMaxInputChars.toLocaleString()} chars (Ask Harness default{" "}
+        Raw Signal max ~{gatewayRawLabMaxInputChars.toLocaleString()} chars (Companion default{" "}
         {gatewayMaxInputChars.toLocaleString()}).
       </Text>
       {lastSend ? (
@@ -112,7 +112,7 @@ export function RawLabBudgetInspector({
             Budget cap used: {capLabel(lastSend.budgetCapChars)}
             {lastSend.budgetCapChars === gatewayRawLabMaxInputChars &&
             gatewayRawLabMaxInputChars !== gatewayMaxInputChars
-              ? ` — not the Ask Harness ${gatewayMaxInputChars.toLocaleString()} default.`
+              ? ` — not the Companion ${gatewayMaxInputChars.toLocaleString()} default.`
               : ""}
           </Text>
           {lastSend.notice ? (

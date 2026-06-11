@@ -233,12 +233,17 @@ describe("buildCompactHarnessContext", () => {
 
   it("auto-selects compact when full prompt exceeds gateway budget", () => {
     const full = buildHarnessContext(baseInput());
-    expect(shouldAutoSelectCompactExport(full, "What am I avoiding right now?")).toBe(true);
+    const message = "What am I avoiding right now?";
+    const history = Array.from({ length: 4 }, (_, index) => [
+      { role: "user" as const, content: `Question ${index}: ${"detail ".repeat(80)}` },
+      { role: "assistant" as const, content: `Answer ${index}: ${"context ".repeat(80)}` }
+    ]).flat();
+    expect(shouldAutoSelectCompactExport(full, message, history)).toBe(true);
     const resolved = resolveChatHarnessContextForGateway(baseInput(), {
       preferredMode: "full",
-      message: "What am I avoiding right now?"
+      message
     });
-    expect(estimateChatHarnessPromptChars(resolved, { message: "What am I avoiding right now?" })).toBeLessThanOrEqual(
+    expect(estimateChatHarnessPromptChars(resolved, { message })).toBeLessThanOrEqual(
       DEFAULT_GATEWAY_MAX_INPUT_CHARS - GATEWAY_PROMPT_SAFETY_MARGIN_CHARS
     );
   });

@@ -38,7 +38,18 @@ Check all before smoke:
 - [`scripts/smoke_deep_critic.py`](../scripts/smoke_deep_critic.py) — deep mode + `context_packet` smoke (four scenarios; prints latency and `confidence_notes`). Scenario **D** repeats A for regression — **not** fail-soft. Run **manual D1** separately (stop `llama-server`, then POST scenario A body).
 - [`scripts/chat_harness.py`](../scripts/chat_harness.py) — non-deep only (no `reasoning_depth=deep` or `context_packet`).
 
-**Debug trace (optional):** set `SCOUT_DEBUG_THINKING_TRACE=true` on the gateway to log structured pass metadata (`chat_harness_thinking_trace` JSON in gateway logs). Default is **off**. Does not change the HTTP response schema and does not log chain-of-thought.
+**Debug trace (optional):** set `SCOUT_DEBUG_THINKING_TRACE=true` on the gateway to log structured pass metadata (`chat_harness_thinking_trace` JSON in gateway logs). Default is **off**. Does not change the HTTP response schema and does not log chain-of-thought. Start uvicorn with **`--log-level info`** so app `INFO` logs (including trace JSON) appear in the console; without it you may only see `WARNING` lines such as `deep draft parse failed; attempting draft JSON repair`.
+
+### CI vs manual deep critic evals
+
+| Layer | What | Requires |
+|-------|------|----------|
+| **CI** | [`evals/thread/deep_critic_quality.json`](../evals/thread/deep_critic_quality.json) + `pytest tests/test_thread_eval_fixtures.py` | `SCOUT_PROVIDER=mock` only |
+| **CI** | `test_chat_harness_deep_critic.py`, `test_chat_harness_thinking_trace.py`, `test_critic_secondary_slot.py` | mock / patched llama |
+| **Manual** | [`scripts/smoke_deep_critic.py`](../scripts/smoke_deep_critic.py) + OpenVINO + external SYCL `llama-server` | A770 operator setup |
+| **Manual** | D1 fail-soft | stop `llama-server`, POST scenario A body |
+
+Record real secondary-critic outcomes in [phi4-critic-smoke-results.md](phi4-critic-smoke-results.md). **`SCOUT_CRITIC_SLOT=same` remains default.**
 
 ### Observed A770 smoke (2026-06-10)
 
@@ -48,7 +59,7 @@ Check all before smoke:
 | CPU `llama-server` | Works with `-ngl 0` but critic latency ~15–18 s on revised passes |
 | Fail-soft | Verified: stop `llama-server` → HTTP 200, draft kept (manual D1) |
 | Default slot | **`SCOUT_CRITIC_SLOT=same` stays default** — secondary remains manual/advanced until GPU llama.cpp smoke |
-| Draft parse skip | If deep draft JSON fails parse, critic is skipped; `confidence_notes` must not claim critic approval (see [phi4-critic-smoke-results.md](phi4-critic-smoke-results.md)) |
+| Draft parse + repair | Draft repair v0.1 runs one in-deep repair before critic skip; CI guards in `deep_critic_quality.json` (see [phi4-critic-smoke-results.md](phi4-critic-smoke-results.md) for GPU re-smoke) |
 
 ---
 
@@ -70,14 +81,30 @@ Quantization (Q4_K_M, etc.) and exact filename are **operator choice**. Update `
 
 ### Terminal A — llama-server (external)
 
+**Windows SYCL build (verified A770 2026-06-10):** use llama.cpp tag **b5377** (not bleeding-edge HEAD with oneAPI 2025.1). From repo root:
+
 ```powershell
-# Placeholder — adjust binary path, GGUF path, and GPU flags for your SYCL build
-llama-server `
-  -m C:\path\to\your\phi-4-mini-instruct-q4_k_m.gguf `
+cd C:\Users\nicki\Projects\llama.cpp
+git fetch --tags origin tag b5377
+git checkout b5377
+call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" intel64 --force
+mkdir build-sycl && cd build-sycl
+cmake -G Ninja .. -DLLAMA_CURL=OFF -DGGML_SYCL=ON -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=icx -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release -j 8
+```
+
+Run server (**oneAPI DLLs must be on PATH**):
+
+```powershell
+call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat" intel64 --force
+C:\Users\nicki\Projects\llama.cpp\build-sycl\bin\llama-server.exe `
+  -m C:\Users\nicki\Models\critic\Phi-4-mini-instruct-Q4_K_M.gguf `
   --host 127.0.0.1 `
   --port 8121 `
-  -ngl 99
+  -ngl 99 -c 8192
 ```
+
+Confirm GPU in logs: `using device SYCL0 (Intel(R) Arc(TM) A770 Graphics)`.
 
 Verify:
 
