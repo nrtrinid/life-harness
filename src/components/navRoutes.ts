@@ -29,6 +29,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Backroom",
     routes: [
       { href: "/ask-harness", label: "Companion" },
+      { href: "/agent-workbench", label: "Workbench" },
       { href: "/review", label: "Replay" },
       { href: "/raw-lab", label: "Raw Signal" },
       { href: "/memory-bank", label: "Tape Archive" },

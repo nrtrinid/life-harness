@@ -41,8 +41,9 @@ describe("navRoutes", () => {
 
     expect(hrefs.has("/career")).toBe(true);
     expect(hrefs.has("/review")).toBe(true);
+    expect(hrefs.has("/agent-workbench")).toBe(true);
     expect(hrefs.has("/career-pack")).toBe(false);
-    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length - 2);
+    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length - 1);
   });
 
   it("detects active routes including index and nested paths", () => {
@@ -58,6 +59,8 @@ describe("navRoutes", () => {
     expect(isCareerToolPath("/career")).toBe(true);
     expect(isCareerToolPath("/job-candidates")).toBe(true);
     expect(isCareerToolPath("/board")).toBe(false);
+    expect(isSystemPath("/agent-workbench")).toBe(true);
+    expect(getNavGroupForPath("/agent-workbench")).toBe("system");
     expect(isSystemPath("/raw-lab")).toBe(true);
     expect(isSystemPath("/memory-bank")).toBe(true);
     expect(isSystemPath("/source-setup")).toBe(true);
