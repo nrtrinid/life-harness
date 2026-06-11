@@ -32,7 +32,7 @@ export function ProofShelf({
   if (entries.length === 0) {
     return (
       <View>
-        <Text style={styles.emptyText}>No proof yet. Pounce, log a win, or preserve the day.</Text>
+        <Text style={styles.emptyText}>No proof yet. Capture a win on Today or preserve the day.</Text>
         {showLedgerLink ? (
           <Link href="/proof-ledger" asChild>
             <Pressable style={[styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }]}>

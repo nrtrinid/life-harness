@@ -603,9 +603,9 @@ export default function RawLabScreen() {
           <Pressable style={styles.smallButton} onPress={handleClearChat}>
             <Text style={styles.smallButtonText}>Clear chat</Text>
           </Pressable>
-          {turns.length > 0 ? (
+          {turns.length > 0 && !showHandoffBanner ? (
             <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-              <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
+              <Text style={styles.smallButtonText}>Continue in Companion</Text>
             </Pressable>
           ) : null}
           {loading ? (
@@ -640,7 +640,7 @@ export default function RawLabScreen() {
               </Text>
               <View style={styles.splitRow}>
                 <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-                  <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
+                  <Text style={styles.smallButtonText}>Continue in Companion</Text>
                 </Pressable>
                 <Pressable style={styles.smallButton} onPress={() => setHandoffDismissed(true)}>
                   <Text style={styles.smallButtonText}>Stay in Raw Signal</Text>
@@ -688,7 +688,7 @@ export default function RawLabScreen() {
       <View style={styles.chatPrimaryColumn}>
         <PageHeader
           title="Raw Signal"
-          subtitle="Ungrounded riffs and experiments. Nothing here changes your board."
+          subtitle="Lab / Backroom — exploratory chat, not board authority."
         />
 
         <SafetyBanner

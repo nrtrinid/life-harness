@@ -11,7 +11,7 @@ interface CareerNextContractCardProps {
 export function CareerNextContractCard({ action }: CareerNextContractCardProps) {
   return (
     <View style={styles.lofiCardHero}>
-      <Text style={styles.lofiTapeLabel}>Next contract</Text>
+      <Text style={styles.lofiTapeLabel}>Next outside-world move</Text>
       <Text style={styles.titleText}>{action.title}</Text>
       <Text style={styles.bodyText}>{action.reason}</Text>
       <Link href={action.href as Href} asChild>

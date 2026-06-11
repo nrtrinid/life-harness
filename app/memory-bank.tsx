@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Link } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice } from "../src/components/Notice";
@@ -36,17 +37,22 @@ export default function MemoryBankScreen() {
   return (
     <Screen>
       <PageHeader
-        title="Tape Archive"
+        title="Memory Bank"
         subtitle="Durable, user-approved memories from saved chat summaries. Active items feed Companion context."
       />
-      <Notice kind="info" message="v0.1: memories come from chat summary suggestions — no blank editor yet." />
+      <Notice kind="info" message="v0.1: save from Companion chat summaries only." />
 
       {memoryItems.length === 0 ? (
-        <Section title="Tape Archive">
+        <View style={{ gap: 12 }}>
           <Text style={styles.bodyText}>
-            No memories saved yet. Save a chat summary in Companion, then save suggested durable memories.
+            No memories saved yet. Save a Companion insight when it is reusable.
           </Text>
-        </Section>
+          <Link href="/ask-harness" asChild>
+            <Pressable style={StyleSheet.flatten([styles.primaryAction, { alignSelf: "flex-start" }])}>
+              <Text style={styles.primaryActionText}>Open Companion</Text>
+            </Pressable>
+          </Link>
+        </View>
       ) : (
         MEMORY_KIND_ORDER.map((kind) => {
           const items = grouped[kind];

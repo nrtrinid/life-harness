@@ -745,7 +745,7 @@ export default function AskHarnessDevScreen() {
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <PageHeader
         title="Companion"
-        subtitle="Reads your board and can suggest changes. You approve what changes."
+        subtitle="Ask about your board. You approve any change."
       />
 
       <View style={styles.chatPrimaryColumn}>

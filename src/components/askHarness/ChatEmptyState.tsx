@@ -19,7 +19,7 @@ export function ChatEmptyState({ onSelectPrompt }: ChatEmptyStateProps) {
     <View style={styles.chatEmptyState}>
       <Text style={styles.chatEmptyStateTitle}>Companion is ready</Text>
       <Text style={styles.chatEmptyStateCopy}>
-        Ask about your board, career momentum, projects, or patterns.
+        Ask about your next move, a card, or a pattern.
       </Text>
       <View style={styles.chatEmptyStateSuggestions}>
         {EMPTY_STATE_PROMPTS.map((item) => (

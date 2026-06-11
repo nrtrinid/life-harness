@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
+import { CollapsibleSection } from "../../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../../src/components/Notice";
 import { ProgressBar } from "../../src/components/ProgressBar";
 import { Screen } from "../../src/components/Screen";
@@ -732,7 +733,9 @@ export default function CardDetailScreen() {
 
       <Section title="Proof">
         {cardProof.length === 0 ? (
-          <Text style={styles.emptyText}>No proof linked yet.</Text>
+          <Text style={styles.emptyText}>
+            No proof linked yet. Use Quick Capture on Today after one small move.
+          </Text>
         ) : (
           cardProof.map((proof) => (
             <Text key={proof.id} style={styles.listItem}>
@@ -805,14 +808,19 @@ export default function CardDetailScreen() {
         <Section title="Agent handoff">
           <Text style={styles.helpText}>
             Copy context or a task packet for Codex/Cursor. Optional — the card move in Act is the
-            source of truth.
+            source of truth. For queue view, open Agent Workbench.
           </Text>
+          <Link href="/agent-workbench" asChild>
+            <Pressable style={StyleSheet.flatten([styles.smallButton, { marginTop: 8, alignSelf: "flex-start" }])}>
+              <Text style={styles.smallButtonText}>Open Agent Workbench</Text>
+            </Pressable>
+          </Link>
           <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
             <Pressable style={styles.secondaryAction} onPress={handleCopyAgentContext}>
-              <Text style={styles.secondaryActionText}>Copy agent context</Text>
+              <Text style={styles.secondaryActionText}>Copy context</Text>
             </Pressable>
             <Pressable style={styles.secondaryAction} onPress={handleCopyAgentTaskPacket}>
-              <Text style={styles.secondaryActionText}>Copy agent task packet</Text>
+              <Text style={styles.secondaryActionText}>Copy task packet</Text>
             </Pressable>
             <Pressable
               style={[styles.secondaryAction, isCopyLogging && { opacity: 0.5 }]}
@@ -827,6 +835,7 @@ export default function CardDetailScreen() {
         </Section>
       ) : null}
 
+      <CollapsibleSection title="Backroom — sprint & metadata" defaultOpen={false}>
       <Section title="Feature Sprint">
         <Text style={styles.helpText}>
           Manual planner → implementer → reviewer loop. ChatGPT/Codex scopes and reviews; Cursor/Codex
@@ -1165,7 +1174,9 @@ export default function CardDetailScreen() {
             ))}
           </View>
         ) : (
-          <Text style={[styles.emptyText, { marginTop: 12 }]}>No agent sessions logged yet.</Text>
+          <Text style={[styles.emptyText, { marginTop: 12 }]}>
+            Delegate from Agent Workbench or log a session here.
+          </Text>
         )}
 
         {sessionFormOpen ? (
@@ -1305,7 +1316,9 @@ export default function CardDetailScreen() {
           </View>
         ) : null}
       </Section>
+      </CollapsibleSection>
 
+      <CollapsibleSection title="Backroom — resume details" defaultOpen={false}>
       {card.resumePacket && !card.careerApplication ? (
         <Section title="Resume Packet">
           <Text style={styles.label}>Last State</Text>
@@ -1473,7 +1486,9 @@ export default function CardDetailScreen() {
           </Text>
         </Section>
       ) : null}
+      </CollapsibleSection>
 
+      <CollapsibleSection title="Backroom — history" defaultOpen={false}>
       <Section title="Older wins">
         {card.recentWins.length === 0 ? (
           <Text style={styles.emptyText}>No wins recorded yet.</Text>
@@ -1497,6 +1512,7 @@ export default function CardDetailScreen() {
           ))
         )}
       </Section>
+      </CollapsibleSection>
         </>
       )}
     </Screen>

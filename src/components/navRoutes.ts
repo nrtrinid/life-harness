@@ -34,8 +34,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/resume-bank", label: "Resume Bank" },
       { href: "/job-sources", label: "Job Sources" },
       { href: "/career-pack", label: "Career Pack" },
-      { href: "/job-candidates", label: "Queue" },
-      { href: "/candidate-intake", label: "Candidate Intake" },
+      { href: "/job-candidates", label: "Review queue" },
+      { href: "/candidate-intake", label: "Paste a job" },
       { href: "/career-intake", label: "Career Intake" },
       { href: "/source-setup", label: "Source Setup" }
     ]

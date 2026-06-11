@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ActiveLimitBanner } from "../src/components/ActiveLimitBanner";
 import { CardTile } from "../src/components/CardTile";
@@ -158,15 +158,6 @@ export default function TodayScreen() {
           />
         )}
 
-        {nextMove.primary ? (
-          <TinyQuestCard
-            action={primaryAction}
-            pounceLogged={pounceLogged}
-            onPounce={handlePounce}
-            label="Current quest"
-          />
-        ) : null}
-
         <Section title="Quick Capture">
           <Text style={styles.helpText}>Universal input — capture, log, or park without leaving the loop.</Text>
           <QuickCapture onNotice={showNotice} actMode />
@@ -180,7 +171,7 @@ export default function TodayScreen() {
 
         <View style={styles.todayRecoveryFallback}>
           <Text style={styles.todayRecoveryLabel}>Recovery fallback</Text>
-          <Text style={styles.helpText}>When work is slipping — stabilize before optimizing.</Text>
+          <Text style={styles.helpText}>When work is slipping — stabilize before pushing harder.</Text>
           {recoveryVisibility.shouldPromote ? (
             <RecoveryPanel visibility={recoveryVisibility} onNotice={showNotice} />
           ) : (
@@ -218,7 +209,16 @@ export default function TodayScreen() {
           ) : null}
 
           {activeCards.length === 0 ? (
-            <Text style={styles.emptyText}>No active threads. Capture something to get started.</Text>
+            <View>
+              <Text style={styles.emptyText}>No active threads. Capture something to get started.</Text>
+              <Link href="/board" asChild>
+                <Pressable
+                  style={StyleSheet.flatten([styles.smallButton, { marginTop: 8, alignSelf: "flex-start" }])}
+                >
+                  <Text style={styles.smallButtonText}>Open Board</Text>
+                </Pressable>
+              </Link>
+            </View>
           ) : (
             <>
               <Text style={styles.helpText}>
@@ -238,20 +238,20 @@ export default function TodayScreen() {
 
           {primaryAction.kind === "pounce" ? (
             <View style={{ gap: 8, marginTop: 8 }}>
-              <Text style={styles.label}>Career shortcuts</Text>
-              <Link href="/career-intake" asChild>
+              <Text style={styles.label}>Jobs shortcuts</Text>
+              <Link href="/career" asChild>
                 <Pressable style={styles.secondaryAction}>
-                  <Text style={styles.secondaryActionText}>Open Career Intake</Text>
+                  <Text style={styles.secondaryActionText}>Open Jobs</Text>
                 </Pressable>
               </Link>
               <Link href="/candidate-intake" asChild>
                 <Pressable style={styles.secondaryAction}>
-                  <Text style={styles.secondaryActionText}>Paste into Candidate Intake</Text>
+                  <Text style={styles.secondaryActionText}>Paste a job</Text>
                 </Pressable>
               </Link>
               <Link href="/job-candidates" asChild>
                 <Pressable style={styles.secondaryAction}>
-                  <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
+                  <Text style={styles.secondaryActionText}>Review queue</Text>
                 </Pressable>
               </Link>
               <Link href="/job-sources" asChild>

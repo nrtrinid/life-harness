@@ -47,7 +47,7 @@ export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
         returnKeyType="done"
       />
       <Pressable style={styles.secondaryAction} onPress={handleSubmit}>
-        <Text style={styles.secondaryActionText}>Log Action</Text>
+        <Text style={styles.secondaryActionText}>Capture</Text>
       </Pressable>
       <Text style={styles.helpText}>
         {actMode

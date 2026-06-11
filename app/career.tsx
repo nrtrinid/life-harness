@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { CollapsibleSection } from "../src/components/CollapsibleSection";
 import { CareerNextContractCard } from "../src/components/career/CareerNextContractCard";
 import { CareerQueuePreview } from "../src/components/career/CareerQueuePreview";
 import { CareerStatusChip } from "../src/components/career/CareerStatusChip";
@@ -95,8 +96,8 @@ export default function CareerScreen() {
     <Screen>
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <PageHeader
-        title="Career"
-        subtitle="Contracts, resume artifacts, and application momentum."
+        title="Jobs"
+        subtitle="One outside-world move first. Setup can wait."
         chips={chips}
       />
 
@@ -119,7 +120,7 @@ export default function CareerScreen() {
             Review candidates, choose the resume angle, then create the application card.
           </Text>
           <CareerQueuePreview
-            emptyText="No candidates waiting. Paste one job to start the next contract."
+            emptyText="Paste a job description or review sources."
             items={summary.queuePreview}
           />
           {summary.applicationPreview.length > 0 ? (
@@ -133,36 +134,40 @@ export default function CareerScreen() {
           ) : null}
           <Link href="/job-candidates" asChild>
             <Pressable style={StyleSheet.flatten([styles.secondaryAction, { alignSelf: "flex-start" }])}>
-              <Text style={styles.secondaryActionText}>Open application queue</Text>
+              <Text style={styles.secondaryActionText}>Review queue</Text>
             </Pressable>
           </Link>
         </View>
       </HubSection>
 
-      <Section title="Next career move">
-        <Text style={styles.titleText}>{findings.nextMove.title}</Text>
-        <Text style={styles.bodyText}>{findings.nextMove.body}</Text>
-        {findings.nextMove.kind === "review_candidate" ? (
-          <>
-            <Text style={styles.helpText}>
-              {formatFitScore(
-                findings.nextMove.candidate.fitScore,
-                findings.nextMove.candidate.fitLabel
-              )}
-              {findings.nextMove.sourceName ? ` - ${findings.nextMove.sourceName}` : ""}
-            </Text>
-            {findings.nextMove.candidate.fitReasons[0] ? (
-              <Text style={styles.listItem}>{findings.nextMove.candidate.fitReasons[0]}</Text>
-            ) : null}
-          </>
-        ) : null}
-        <Link href={findings.nextMove.targetRoute as Href} asChild>
-          <Pressable style={styles.primaryAction}>
-            <Text style={styles.primaryActionText}>{findings.nextMove.ctaLabel}</Text>
-          </Pressable>
-        </Link>
-      </Section>
+      {findings.nextMove.targetRoute !== summary.nextAction.href ||
+      findings.nextMove.ctaLabel !== summary.nextAction.ctaLabel ? (
+        <Section title="Also surfaced">
+          <Text style={styles.titleText}>{findings.nextMove.title}</Text>
+          <Text style={styles.bodyText}>{findings.nextMove.body}</Text>
+          {findings.nextMove.kind === "review_candidate" ? (
+            <>
+              <Text style={styles.helpText}>
+                {formatFitScore(
+                  findings.nextMove.candidate.fitScore,
+                  findings.nextMove.candidate.fitLabel
+                )}
+                {findings.nextMove.sourceName ? ` - ${findings.nextMove.sourceName}` : ""}
+              </Text>
+              {findings.nextMove.candidate.fitReasons[0] ? (
+                <Text style={styles.listItem}>{findings.nextMove.candidate.fitReasons[0]}</Text>
+              ) : null}
+            </>
+          ) : null}
+          <Link href={findings.nextMove.targetRoute as Href} asChild>
+            <Pressable style={StyleSheet.flatten([styles.secondaryAction, { alignSelf: "flex-start" }])}>
+              <Text style={styles.secondaryActionText}>{findings.nextMove.ctaLabel}</Text>
+            </Pressable>
+          </Link>
+        </Section>
+      ) : null}
 
+      <CollapsibleSection title="Backroom — setup & sources" defaultOpen={false}>
       <HubSection title="Start the next contract">
         <View style={styles.splitRow}>
           <SplitCell>
@@ -172,7 +177,7 @@ export default function CareerScreen() {
               description="Paste a job description into the candidate queue. Approval creates the application card later."
               href="/candidate-intake"
               ctaLabel="Paste a job"
-              meta="Primary intake path"
+              meta="Backroom path"
             />
           </SplitCell>
           <SplitCell>
@@ -307,6 +312,7 @@ export default function CareerScreen() {
           )}
         </View>
       </HubSection>
+      </CollapsibleSection>
     </Screen>
   );
 }

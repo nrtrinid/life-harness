@@ -139,7 +139,8 @@ export default function ProgressScreen() {
         <ProofShelf showLedgerLink />
       </Section>
 
-      <Section title="Recent Rescue Proof">
+      <Section title="Recovery proof">
+        <Text style={styles.helpText}>Salvage and MVD wins.</Text>
         <ProofShelf rescueOnly limit={5} />
       </Section>
 
@@ -183,7 +184,7 @@ export default function ProgressScreen() {
         )}
       </Section>
 
-      <CollapsibleSection title="Data & operator details" defaultOpen={false}>
+      <CollapsibleSection title="Backroom details" defaultOpen={false}>
       <Section title="Approved Source Fetching">
         <Text style={styles.listItem}>▸ Sources configured: {scoutStats.jobSourcesConfigured}</Text>
         <Text style={styles.listItem}>▸ Enabled sources: {scoutStats.enabledSources}</Text>

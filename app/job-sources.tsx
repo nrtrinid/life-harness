@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Alert, Platform, Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { Notice, type NoticeState } from "../src/components/Notice";
+import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
@@ -184,6 +185,15 @@ export default function JobSourcesScreen() {
   return (
     <Screen>
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
+      <PageHeader
+        title="Job Sources"
+        subtitle="Approved fetching — setup stays secondary to applying."
+      />
+      <Link href="/career" asChild>
+        <Pressable style={styles.secondaryAction}>
+          <Text style={styles.secondaryActionText}>Open Jobs</Text>
+        </Pressable>
+      </Link>
       <Section title="Approved Source Fetching">
         <Text style={styles.bodyText}>{APPROVED_SOURCE_FETCHING_BANNER}</Text>
         <Text style={styles.helpText}>
@@ -196,7 +206,7 @@ export default function JobSourcesScreen() {
         </Text>
         <Link href="/job-candidates" asChild>
           <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
+            <Text style={styles.secondaryActionText}>Review queue</Text>
           </Pressable>
         </Link>
         <Link href="/source-setup" asChild>
@@ -259,12 +269,12 @@ export default function JobSourcesScreen() {
           {KIND_OPTIONS.map((kind) => (
             <Pressable
               key={kind}
-              style={newSource.kind === kind ? styles.primaryAction : styles.secondaryAction}
+              style={newSource.kind === kind ? styles.secondaryAction : styles.smallButton}
               onPress={() => setNewSource((current) => ({ ...current, kind }))}
             >
               <Text
                 style={
-                  newSource.kind === kind ? styles.primaryActionText : styles.secondaryActionText
+                  newSource.kind === kind ? styles.secondaryActionText : styles.smallButtonText
                 }
               >
                 {JOB_SOURCE_KIND_LABELS[kind]}
@@ -278,6 +288,16 @@ export default function JobSourcesScreen() {
       </Section>
 
       <Section title="Approved Job Sources">
+        {jobSources.length === 0 ? (
+          <View style={{ gap: 12 }}>
+            <Text style={styles.emptyText}>No approved sources yet.</Text>
+            <Link href="/source-setup" asChild>
+              <Pressable style={styles.secondaryAction}>
+                <Text style={styles.secondaryActionText}>Open Source Setup</Text>
+              </Pressable>
+            </Link>
+          </View>
+        ) : null}
         {jobSources.map((source) => {
           const guard = canRunJobSource(source);
           const isRunning =

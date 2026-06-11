@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { PageHeader } from "../src/components/PageHeader";
@@ -141,15 +141,15 @@ function ReadyCardRow({
         </Link>
         {canCopy ? (
           <>
-            <Pressable style={styles.secondaryAction} onPress={onCopyTaskPacket}>
-              <Text style={styles.secondaryActionText}>Copy task packet</Text>
+            <Pressable style={styles.smallButton} onPress={onCopyTaskPacket}>
+              <Text style={styles.smallButtonText}>Copy task packet</Text>
             </Pressable>
             <Pressable
-              style={[styles.secondaryAction, isCopyLogging && { opacity: 0.5 }]}
+              style={[styles.smallButton, isCopyLogging && { opacity: 0.5 }]}
               disabled={isCopyLogging}
               onPress={onCopyAndLogSent}
             >
-              <Text style={styles.secondaryActionText}>Copy + log sent</Text>
+              <Text style={styles.smallButtonText}>Copy + log sent</Text>
             </Pressable>
           </>
         ) : null}
@@ -260,14 +260,31 @@ export default function AgentWorkbenchScreen() {
     <Screen>
       <PageHeader
         title="Agent Workbench"
-        subtitle="What agent-delegated work is in motion, and what needs your attention?"
+        subtitle="Needs review first. Open a card's Backroom to log results."
       />
 
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
 
+      {summary.needsReview[0] ? (
+        <View style={styles.lofiCardHero}>
+          <Text style={styles.lofiTapeLabel}>Needs review</Text>
+          <Text style={styles.titleText}>{summary.needsReview[0].taskName}</Text>
+          <Text style={styles.bodyText}>
+            {summary.needsReview[0].cardTitle} · {summary.needsReview[0].agent}
+          </Text>
+          <Link href={`/card/${summary.needsReview[0].cardId}`} asChild>
+            <Pressable style={StyleSheet.flatten([styles.primaryAction, { alignSelf: "flex-start" }])}>
+              <Text style={styles.primaryActionText}>Open card</Text>
+            </Pressable>
+          </Link>
+        </View>
+      ) : null}
+
       <Section title="Needs review">
         {summary.needsReview.length === 0 ? (
-          <Text style={styles.emptyText}>Nothing waiting for your review.</Text>
+          <Text style={styles.emptyText}>
+            Nothing waiting — delegate a card from Jobs or Card Backroom.
+          </Text>
         ) : (
           summary.needsReview.map((row) => <SessionRow key={row.sessionId} row={row} />)
         )}
@@ -294,7 +311,7 @@ export default function AgentWorkbenchScreen() {
       <Section title="Ready to delegate">
         {summary.readyToDelegate.length === 0 ? (
           <Text style={styles.emptyText}>
-            Add project metadata on a card to make it show here. Cards with sessions in motion are
+            Add project metadata on a card, then Copy + log sent. Cards with sessions in motion are
             excluded.
           </Text>
         ) : (

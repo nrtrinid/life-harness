@@ -71,8 +71,8 @@ describe("raw-lab screen containment", () => {
     expect(screenSource).toContain("Do not paste secrets or S3-style private data");
     expect(screenSource).toContain("Ungrounded");
     expect(screenSource).toContain("ChatStateStrip");
-    expect(screenSource).toContain("RAW_LAB_DEPTHS");
-    expect(screenSource).toContain("Deep");
+    expect(screenSource).toContain("setReasoningDepth");
+    expect(screenSource).toContain("reasoningDepth");
     expect(memoryPanelSource).toContain("This chat remembers");
     expect(memoryPanelSource).toContain("Temporary to this chat");
     expect(memoryPanelSource).toContain("Not saved to Life Harness");
@@ -96,7 +96,7 @@ describe("raw-lab screen containment", () => {
 
   it("handoff banner does not mention personality export or Memory Bank auto-save", () => {
     expect(screenSource).toContain("Stay in Raw Signal");
-    expect(screenSource).toContain("Open in Companion with board context");
+    expect(screenSource).toContain("Continue in Companion");
     expect(screenSource).not.toMatch(/export personality/i);
     expect(screenSource).not.toMatch(/auto.?save.*memory bank/i);
   });
@@ -110,7 +110,7 @@ describe("companion chat safety copy", () => {
   it("companion grounding states user approves board changes", () => {
     expect(harnessReadCardSource).toContain("will not change the board");
     expect(harnessReadCardSource).toContain("board context");
-    expect(harnessScreenSource).toContain("You approve what changes");
+    expect(harnessScreenSource).toContain("You approve any change");
     expect(harnessScreenSource).toContain("ChatStateStrip");
     expect(backroomSummarySource).toContain("Grounded");
   });

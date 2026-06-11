@@ -1,6 +1,6 @@
 import { Link } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
@@ -90,6 +90,38 @@ export default function ResumeBankScreen() {
         subtitle="Structured resume modules for deterministic matching. No resume generation here."
       />
 
+      <View style={styles.lofiCardHero}>
+        <Text style={styles.lofiTapeLabel}>Next move</Text>
+        <Text style={styles.titleText}>
+          {readiness.issues[0]?.moduleTitle ?? "Resume modules"}
+        </Text>
+        <Text style={styles.bodyText}>
+          {readiness.issues[0]?.message ??
+            (readiness.active > 0
+              ? "Modules look ready for application work."
+              : "No active modules here yet. Import Career Pack or open Jobs.")}
+        </Text>
+        {readiness.issues[0] ? (
+          <Pressable
+            style={StyleSheet.flatten([styles.primaryAction, { alignSelf: "flex-start" }])}
+            onPress={() => setExpandedId(readiness.issues[0]!.moduleId)}
+          >
+            <Text style={styles.primaryActionText}>Review first issue</Text>
+          </Pressable>
+        ) : (
+          <Link href="/career" asChild>
+            <Pressable style={StyleSheet.flatten([styles.primaryAction, { alignSelf: "flex-start" }])}>
+              <Text style={styles.primaryActionText}>Open Jobs</Text>
+            </Pressable>
+          </Link>
+        )}
+        <Link href="/career-pack" asChild>
+          <Pressable style={StyleSheet.flatten([styles.smallButton, { marginTop: 8, alignSelf: "flex-start" }])}>
+            <Text style={styles.smallButtonText}>Open Career Pack</Text>
+          </Pressable>
+        </Link>
+      </View>
+
       <Section title="Readiness">
         <Text style={styles.bodyText}>
           Active: {readiness.active} - Inactive: {readiness.inactive} - Issues:{" "}
@@ -113,7 +145,9 @@ export default function ResumeBankScreen() {
       {groups.map((group) => (
         <Section key={group.section} title={`${group.label} (${group.modules.length})`}>
           {group.modules.length === 0 ? (
-            <Text style={styles.emptyText}>No active modules here yet.</Text>
+            <Text style={styles.emptyText}>
+              No active modules here yet. Import Career Pack or open Jobs.
+            </Text>
           ) : (
             group.modules.map((module) => (
               <ModuleCard

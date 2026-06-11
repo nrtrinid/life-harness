@@ -18,6 +18,15 @@ const BOARD_COLUMN_LABELS: Record<CardState, string> = {
   killed: "Killed"
 };
 
+const BOARD_EMPTY_COPY: Record<CardState, string> = {
+  inbox: "New ideas land here first, safely outside Active.",
+  active: "Keep this lane to three. Start one tiny action, then log proof.",
+  parked: "Parked means safe, not failed.",
+  waiting: "Waiting cards stay visible without crowding Active.",
+  done: "Done work stays here for playback.",
+  killed: "Killed ideas stay out of the way."
+};
+
 export default function BoardScreen() {
   const { cards, logs } = useLifeHarness();
   const groupedCards = groupCardsByState(cards);
@@ -26,7 +35,7 @@ export default function BoardScreen() {
     <Screen>
       <PageHeader
         title="Board"
-        subtitle="Active quests, parked threads, and next tiny actions."
+        subtitle="Live lanes — decide, do, park, or wait."
       />
       <ActiveLimitBanner />
       <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.boardRow}>
@@ -36,7 +45,7 @@ export default function BoardScreen() {
               {BOARD_COLUMN_LABELS[state]} ({groupedCards[state].length})
             </Text>
             {groupedCards[state].length === 0 ? (
-              <Text style={styles.emptyText}>Nothing here.</Text>
+              <Text style={styles.emptyText}>{BOARD_EMPTY_COPY[state]}</Text>
             ) : (
               groupedCards[state].map((card) => (
                 <CardTile key={card.id} card={card} logs={logs} actionVariant="quest" />

@@ -89,12 +89,13 @@ export default function ProofLedgerScreen() {
             <Pressable
               key={option.id}
               style={StyleSheet.flatten([
-                active ? styles.primaryAction : styles.secondaryAction,
+                active ? styles.smallButton : styles.secondaryAction,
+                active ? { borderWidth: 1, borderColor: "#c9a227" } : undefined,
                 { minWidth: 72 }
               ])}
               onPress={() => setSourceFilter(option.id)}
             >
-              <Text style={active ? styles.primaryActionText : styles.secondaryActionText}>
+              <Text style={active ? styles.smallButtonText : styles.secondaryActionText}>
                 {option.label}
               </Text>
             </Pressable>
@@ -108,9 +109,16 @@ export default function ProofLedgerScreen() {
           ledger entr{summary.entries.length === 1 ? "y" : "ies"}
         </Text>
         {summary.entries.length === 0 ? (
-          <Text style={[styles.emptyText, { marginTop: 12 }]}>
-            No movement logged yet. Pounce, capture a win, or mark an agent session done.
-          </Text>
+          <View style={{ marginTop: 12, gap: 12 }}>
+            <Text style={styles.emptyText}>
+              No movement logged yet. Use Quick Capture on Today after one small move.
+            </Text>
+            <Link href="/" asChild>
+              <Pressable style={StyleSheet.flatten([styles.primaryAction, { alignSelf: "flex-start" }])}>
+                <Text style={styles.primaryActionText}>Open Today</Text>
+              </Pressable>
+            </Link>
+          </View>
         ) : (
           summary.recent.map((entry) => (
             <View key={entry.id} style={{ marginTop: 12 }}>
@@ -148,18 +156,20 @@ export default function ProofLedgerScreen() {
         ) : null}
       </Section>
 
-      <View style={styles.cardActionsRow}>
-        <Link href="/" asChild>
-          <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Today</Text>
-          </Pressable>
-        </Link>
-        <Link href="/progress" asChild>
-          <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Playback</Text>
-          </Pressable>
-        </Link>
-      </View>
+      {summary.entries.length > 0 ? (
+        <View style={styles.cardActionsRow}>
+          <Link href="/" asChild>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>Today</Text>
+            </Pressable>
+          </Link>
+          <Link href="/progress" asChild>
+            <Pressable style={styles.smallButton}>
+              <Text style={styles.smallButtonText}>Playback</Text>
+            </Pressable>
+          </Link>
+        </View>
+      ) : null}
     </Screen>
   );
 }
