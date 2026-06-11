@@ -1,5 +1,7 @@
 # Current UX Audit
 
+> **Status note (2026-06-11):** This audit is a historical snapshot from before the Today/nav consolidation. The current nav is grouped as **Primary** (Today, Board, Career, Playback), **Career Tools** (Intake, Paste, Queue, Career Pack, Bank, Sources), and **Backroom** (Companion, Replay, Raw Signal, Tape Archive, Log, Setup). Treat older references to eleven peer nav items, Ask Harness Dev in primary nav, and System/Raw Lab labels as pre-consolidation findings.
+
 **Repo:** `life-harness` (Life Harness / Momentum Board v0.1)  
 **Audit date:** 2026-06-09  
 **Method:** Design docs + screen/component code review + test/typecheck validation. No product behavior changes.  
@@ -21,13 +23,13 @@
 
 - **While You Were Away** is the right opening move: computed bullets, deep links to cards, career/scout signals, and suggested pounce/salvage lines align with “alive board” intent.
 - **Card Detail depth** (next tiny action, do/improve, resume packet, career fields) supports resumability—good foundation for agent/memory handoff later.
-- **Ask Harness Dev** already exports structured context, shows quality summary, and saves chat memories—early proof that AI can sit beside the board without owning it.
+- **Companion / Ask Harness** already exports structured context, shows quality summary, supports Deep Synthesis, and saves user-approved chat memories. It now sits in Backroom so AI can sit beside the board without owning it.
 - **Proof vs Log separation** is conceptually strong: Progress/Today emphasize evidence; Log stays append-only audit trail.
 
 ### What is currently confusing or rough?
 
-- **Today is a long scroll with no visual hierarchy for “the one move.”** Eleven nav pills, then ~10 same-weight sections; primary actions (Pounce, capture, recovery) compete with secondary career links and summaries.
-- **Career workflow is split across six top-level nav destinations** (Intake, Paste, Queue, Bank, Sources, Setup) with overlapping purposes—high cognitive load for a user who just wants to apply today.
+- **Today is still a dense command surface.** The current design has a sharper Tiny Quest / recovery / capture flow than this audit originally reviewed, but the first-screen "one move" hierarchy should remain the main dogfood question.
+- **Career workflow is grouped but still broad.** Intake, Paste, Queue, Career Pack, Bank, and Sources now sit under Career Tools instead of Primary, but the user still has several career actions to distinguish.
 - **Progress reads like an admin dashboard**, not a momentum/proof experience. Job-scout stats, locks, and export/import sit beside proof shelf with equal visual weight.
 - **Jargon is mostly unexplained in UI** (pounce, MVD, salvage, warmth, proof shelf). Copy is warm in places but assumes prior context.
 - **Pounce is initiation-only** (by design) but the UI does not make that clear; users may think tapping Pounce completes the mission.
@@ -35,7 +37,7 @@
 
 ### Biggest UX risk
 
-**Feature surface outran information architecture.** The app accumulated career scout, persistence, and Ask Harness capabilities as peer top-level destinations. A user opening the app for the first time in the morning cannot answer “what matters and what do I do next?” in under 10 seconds without reading multiple sections and choosing among similar-sounding nav items (Intake vs Paste vs Queue vs Setup).
+**Feature surface still needs discipline, but primary navigation is no longer the main failure mode.** The current risk is whether Today makes the next useful action obvious enough without opening Career Tools or Backroom.
 
 ---
 
@@ -51,8 +53,8 @@ The implemented product is a **local career command board** wrapped in a broader
 4. **Organize** via horizontal Board columns and Card Detail depth fields.
 5. **Recover** via MVD checklist and Salvage picker at the bottom of Today.
 6. **Accumulate proof** via proof items surfaced on Today (preview) and Progress (full shelf).
-7. **Operate job scout** via Sources, Setup, Queue, Bank screens and extensive Progress stats.
-8. **Experiment with AI** via Ask Harness Dev (optional gateway).
+7. **Operate job scout** via Sources, Setup, Queue, Bank screens and extensive Playback stats.
+8. **Experiment with AI** via Companion / Raw Signal in Backroom (optional ai-gateway).
 
 ### Comparison to intended loop
 
@@ -84,8 +86,8 @@ The implemented product is a **local career command board** wrapped in a broader
 | **Resume Bank** (`/resume-bank`) | Resume module library | Expandable modules | Read bullets/tags | Good structured view | Read-only; disconnected from “apply now” | No link to use module in intake | “Deterministic keyword match” disclaimer buried | `app/resume-bank.tsx` |
 | **Job Sources** (`/job-sources`) | Manual source runs | Add/edit sources, run due/all, cadence | Run source | Due badges; batch buttons | Requires external runner; errors easy | Runner-down state is message-only | Many kind labels (Greenhouse, etc.) unexplained | `app/job-sources.tsx` |
 | **Source Setup** (`/source-setup`) | URL detect + dry-run | URL paste, detect, test, save | Configure source | Power-user friendly | High complexity for v0.1 daily user | Workday registry-only edge cases | “Adapter”, “fixture” dev vocabulary | `app/source-setup.tsx` |
-| **Ask Harness Dev** (`/ask-harness`) | Local AI bridge | Gateway URL, mode/sensitivity, message, context preview, memory save | Send question | Context quality transparency; quick questions | In main nav; JSON preview; dev labels | Gateway down error only | “Ask Harness Dev” — clearly dev, but placement wrong | `app/ask-harness.tsx`, `src/core/harnessContext.ts` |
-| **Nav** (global) | Wayfinding | 11 text pills, wrap row | Jump screens | All destinations reachable | Far too many top-level items; career tools dominate | No grouping/hierarchy | “Ask Harness Dev” alongside “Today” | `src/components/Nav.tsx` |
+| **Companion** (`/ask-harness`) | Local AI bridge | Gateway URL, mode/sensitivity, message, context preview, memory save, Deep Synthesis | Ask grounded question | Context quality transparency; quick questions | Backroom surface still has dev detail | Gateway down error only | Companion vs Ask Harness naming in docs | `app/ask-harness.tsx`, `src/core/harnessContext.ts` |
+| **Nav** (global) | Wayfinding | Primary, Career Tools, and Backroom groups | Jump screens | Daily loop is focused in Primary | Career Tools and Backroom still contain many surfaces | None observed in static audit | Legacy docs may say Ask/Raw Lab/System | `src/components/navRoutes.ts` |
 
 ### Shared components (cross-cutting)
 

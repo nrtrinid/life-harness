@@ -16,9 +16,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/", label: "Today" },
       { href: "/board", label: "Board" },
       { href: "/career", label: "Career" },
-      { href: "/ask-harness", label: "Companion" },
-      { href: "/progress", label: "Playback" },
-      { href: "/review", label: "Replay" }
+      { href: "/progress", label: "Playback" }
     ]
   },
   {
@@ -37,6 +35,8 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "system",
     label: "Backroom",
     routes: [
+      { href: "/ask-harness", label: "Companion" },
+      { href: "/review", label: "Replay" },
       { href: "/raw-lab", label: "Raw Signal" },
       { href: "/memory-bank", label: "Tape Archive" },
       { href: "/log", label: "Log" },

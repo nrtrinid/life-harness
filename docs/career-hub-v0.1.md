@@ -47,7 +47,7 @@ Without the runner, Fit Finder shows a start-runner message — no browser fetch
 
 ## Navigation
 
-Career sits in the **Primary** nav group alongside Today, Board, Ask, Progress, and Review. See [`career-command-board-v0.1.md`](./career-command-board-v0.1.md) for the full grouped nav table.
+Career sits in the **Primary** nav group alongside Today, Board, and Playback. Career support screens live under **Career Tools**, while Setup lives in **Backroom**. See [`career-command-board-v0.1.md`](./career-command-board-v0.1.md) for career flow details.
 
 ## Related Job Scout docs
 

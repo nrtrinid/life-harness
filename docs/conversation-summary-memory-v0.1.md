@@ -1,13 +1,13 @@
 # Conversation Summary Memory v0.1
 
-Lightweight, **user-approved** chat memory for Ask Harness — not RAG, not autonomous AI memory, not cloud sync.
+Lightweight, **user-approved** chat memory for Companion / Ask Harness — not RAG, not autonomous AI memory, not cloud sync.
 
 ## Purpose
 
-Help Harness feel more continuous by remembering short summaries of recent Ask Harness sessions. The board stays the source of truth; chat memory is a separate scaffold that feeds the next export.
+Help Companion feel more continuous by remembering short summaries of recent Ask Harness sessions. The board stays the source of truth; chat memory is a separate scaffold that feeds the next export.
 
 ```text
-Ask → preview summary → user saves → next export includes chat memory signals
+Companion → preview summary → user saves → next export includes chat memory signals
 ```
 
 ## Why this is not RAG
@@ -20,9 +20,9 @@ Ask → preview summary → user saves → next export includes chat memory sign
 ## Why memory writes are user-approved
 
 - AI responses never auto-save
-- Ask Harness Dev shows a **Preview memory** block after each response
+- Companion shows a **Preview memory** block after each response
 - User clicks **Save chat summary to memory** to persist
-- Deleting a saved summary is supported from the dev screen
+- Deleting a saved summary is supported from the Companion screen
 
 ## What gets saved
 
@@ -60,7 +60,7 @@ Built by `buildHarnessContext` / `buildCompactHarnessContext` when `chatSummarie
 ## Dogfood
 
 1. Start ai-gateway on port 8111 (optional — save works without it; follow-up chat needs gateway)
-2. `npm run web` → **Ask Harness Dev**
+2. `npm run web` → Backroom → **Companion**
 3. Ask: *What am I avoiding right now?*
 4. Review **Preview memory** → click **Save chat summary to memory**
 5. Ask a follow-up question

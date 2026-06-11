@@ -4,7 +4,7 @@ Improve what the Momentum Board sends to Chat Harness **without** changing the m
 
 ## Purpose
 
-Ask Harness feels more alive when the scout receives a rich, deterministic snapshot of the real board — not when the LLM gets smarter on its own.
+Companion feels more alive when the scout receives a rich, deterministic snapshot of the real board — not when the LLM gets smarter on its own.
 
 ```text
 Better context  →  more grounded /chat-harness answers
@@ -42,18 +42,18 @@ Rules-only “board diagnoses” generated at export time — not LLM output. Ex
 
 Phrasing uses **signal** / **diagnosis**, not certainty.
 
-## How Ask Harness uses this
+## How Companion uses this
 
 1. `buildHarnessContext()` maps live `LifeHarnessData` → `HarnessContext`
-2. Ask Harness Dev (or CLI dogfood) POSTs to `/chat-harness`
+2. Companion (or CLI dogfood) POSTs to `/chat-harness`
 3. Gateway scout reads cards, logs, proof, analyses, and decisions in the prompt
-4. Response displays in the dev screen — **no board mutation**
+4. Response displays in Companion — **no board mutation**
 
 ## Context budget (v0.1)
 
 Full export can exceed the OpenVINO gateway prompt budget (`SCOUT_MAX_INPUT_CHARS=12000`) because ai-gateway re-indents context in the prompt plus template and message overhead.
 
-Ask Harness Dev offers two export modes:
+Companion offers two export modes:
 
 | Mode | Function | Use |
 |------|----------|-----|
@@ -80,7 +80,7 @@ Use **Compact context** for OpenVINO when the help text notes resume bank stripp
    uvicorn app.main:app --host 127.0.0.1:8111
    ```
 2. Start Expo: `npm run web`
-3. Nav → **Ask Harness Dev**
+3. Backroom → **Companion**
 4. Select **Compact context** if full exceeds budget (or when resume modules inflate export)
 5. Expand **context quality summary** — check counts, active limit, cold/dormant titles
 6. Ask: *What am I avoiding right now?*

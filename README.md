@@ -14,7 +14,9 @@ npm run web            # terminal 2
 
 Other targets: `npm run android`, `npm run ios`.
 
-Navigation is grouped into **Primary** (Today, Board, Career, Ask, Progress), **Career Tools** (Intake, Paste, Queue, Career Pack, Bank, Sources, Setup), and **System** (Memory, Log, Raw Lab) surfaces.
+Navigation is grouped into **Primary** (Today, Board, Career, Playback), **Career Tools** (Intake, Paste, Queue, Career Pack, Bank, Sources), and **Backroom** (Companion, Replay, Raw Signal, Tape Archive, Log, Setup) surfaces.
+
+The core app loop remains rules-only. Companion, Raw Signal, and Deep Synthesis are optional local ai-gateway surfaces; the board still works without starting ai-gateway.
 
 Job Scout approved-source fetching uses the local runner in v0.4. Without `npm run scout:runner`, **Sources → Run Source** shows a start-runner message (no browser fetch fallback).
 
@@ -82,12 +84,14 @@ Did this make me start, recover, or feel less scattered?
 
 **Product:** [`docs/02_v0_1_scope.md`](docs/02_v0_1_scope.md), [`docs/career-command-board-v0.1.md`](docs/career-command-board-v0.1.md), [`docs/career-hub-v0.1.md`](docs/career-hub-v0.1.md).
 
+**AI workflow map:** [`docs/ai-workflows-current.md`](docs/ai-workflows-current.md) records the current Companion, Deep Synthesis, Raw Signal, memory, and provider boundaries.
+
 **Job Scout:** foundation v0.2 through Workday pagination v0.11 — linked from the docs index.
 
 ## Dev: Ask Harness (optional)
 
-Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Ask** in the primary nav. See [`docs/ask-harness-v0.1.md`](docs/ask-harness-v0.1.md).
+Read-only bridge from the board to local ai-gateway Chat Harness. Start ai-gateway on port 8111, then open **Companion** in Backroom. See [`docs/ask-harness-v0.1.md`](docs/ask-harness-v0.1.md) and [`docs/ai-workflows-current.md`](docs/ai-workflows-current.md).
 
 ## Dev: Raw Lab (optional)
 
-Isolated unrestricted sandbox — no board context, no persistence, no mutation path. Start ai-gateway, then open **Raw Lab** in System nav. See [`docs/raw-lab-thread-state.md`](docs/raw-lab-thread-state.md) and root `AGENTS.md` Raw Lab section.
+Isolated unrestricted sandbox, labeled **Raw Signal** in the app: no board context, no board persistence, no mutation path. Start ai-gateway, then open **Raw Signal** in Backroom. See [`docs/raw-lab-thread-state.md`](docs/raw-lab-thread-state.md), [`docs/ai-workflows-current.md`](docs/ai-workflows-current.md), and root `AGENTS.md` Raw Lab section.

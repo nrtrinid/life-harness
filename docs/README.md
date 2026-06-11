@@ -13,6 +13,7 @@
 |------|-----|
 | Persistence | [`persistence-audit-v0.5.md`](persistence-audit-v0.5.md) |
 | Memory Bank | [`memory-bank-v0.1.md`](memory-bank-v0.1.md) |
+| AI workflow map | [`ai-workflows-current.md`](ai-workflows-current.md) |
 | Ask Harness | [`ask-harness-v0.1.md`](ask-harness-v0.1.md) |
 | Thread intelligence | [`conversation-thread-intelligence.md`](conversation-thread-intelligence.md) |
 | Raw Lab | [`raw-lab-thread-state.md`](raw-lab-thread-state.md) |

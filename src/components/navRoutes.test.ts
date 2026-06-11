@@ -11,6 +11,17 @@ import {
 } from "./navRoutes";
 
 describe("navRoutes", () => {
+  it("keeps the primary nav focused on the daily loop", () => {
+    const primary = NAV_GROUPS.find((group) => group.id === "primary")?.routes;
+
+    expect(primary).toEqual([
+      { href: "/", label: "Today" },
+      { href: "/board", label: "Board" },
+      { href: "/career", label: "Career" },
+      { href: "/progress", label: "Playback" }
+    ]);
+  });
+
   it("includes all legacy nav hrefs plus the career hub", () => {
     const hrefs = new Set(getAllNavRoutes().map((route) => route.href));
 
@@ -40,8 +51,11 @@ describe("navRoutes", () => {
     expect(isSystemPath("/raw-lab")).toBe(true);
     expect(isSystemPath("/memory-bank")).toBe(true);
     expect(isSystemPath("/source-setup")).toBe(true);
-    expect(isSystemPath("/ask-harness")).toBe(false);
+    expect(isSystemPath("/ask-harness")).toBe(true);
+    expect(isSystemPath("/review")).toBe(true);
     expect(getNavGroupForPath("/career-intake")).toBe("careerTools");
+    expect(getNavGroupForPath("/ask-harness")).toBe("system");
+    expect(getNavGroupForPath("/review")).toBe("system");
     expect(getNavGroupForPath("/log")).toBe("system");
     expect(getNavGroupForPath("/")).toBe("primary");
   });
@@ -49,6 +63,7 @@ describe("navRoutes", () => {
   it("uses lo-fi labels and keeps setup in backroom only", () => {
     const routes = getAllNavRoutes();
     const ask = routes.find((route) => route.href === "/ask-harness");
+    const replay = routes.find((route) => route.href === "/review");
     const raw = routes.find((route) => route.href === "/raw-lab");
     const setupInCareer = NAV_GROUPS.find((group) => group.id === "careerTools")?.routes.some(
       (route) => route.href === "/source-setup"
@@ -58,6 +73,7 @@ describe("navRoutes", () => {
     );
 
     expect(ask?.label).toBe("Companion");
+    expect(replay?.label).toBe("Replay");
     expect(raw?.label).toBe("Raw Signal");
     expect(setupInCareer).toBe(false);
     expect(setupInBackroom).toBe(true);

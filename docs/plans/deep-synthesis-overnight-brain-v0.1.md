@@ -1,5 +1,7 @@
 # Deep Synthesis + Overnight Brain v0.1
 
+> **Status note (2026-06-11):** Parts of this plan have since shipped: Deep Synthesis app clients, job polling, report UI, gateway `/ai/deep-synthesis`, `/ai/deep-synthesis-jobs`, `/ai/jobs/{id}`, verifier paths, mock/rules fallback, OpenVINO fast path, and optional llama.cpp critic support. Treat this document as historical design context; see [`../ai-workflows-current.md`](../ai-workflows-current.md) for the current implemented workflow map.
+
 > **Status:** Plan only — no runtime implementation in this slice.  
 > **Goal:** Design standalone Life Harness workflows that make the local A770 AI system feel deeper and smarter at synthesizing ideas — via deliberate multi-pass reasoning, optional stretch models, critics, ranked context, and structured reflection — without slowing normal chat or exposing model names in the UI.
 

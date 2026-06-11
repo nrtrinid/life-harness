@@ -1,5 +1,7 @@
 # Ask Deep Synthesis UI v0.1 — Planning Doc
 
+> **Status note (2026-06-11):** The Ask Deep Synthesis UI has since shipped in part: app clients, eligibility checks, job polling, and `SynthesisReportCard` are present. Treat this as historical implementation context; see [`../ai-workflows-current.md`](../ai-workflows-current.md) for the current implemented workflow map.
+
 > **Status:** Plan only — no runtime implementation in this slice.
 > **Branch:** `plan/ask-deep-synthesis-ui-v0.1`
 > **Goal:** Expose the existing gateway Deep Synthesis job API in Ask Harness as a manual, non-mutating structured report workflow.

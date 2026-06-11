@@ -1,6 +1,6 @@
 # Ask Harness v0.1
 
-Product and dev guide for the **Ask** screen — read-only Chat Harness bridge from the Momentum Board to local `services/ai-gateway`.
+Product and dev guide for the **Companion** screen (`/ask-harness`) — read-only Chat Harness bridge from the Momentum Board to local `services/ai-gateway`.
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Product and dev guide for the **Ask** screen — read-only Chat Harness bridge f
 Board state (source of truth)  →  buildHarnessContext()  →  POST /chat-harness  →  chat UI
 ```
 
-Ask helps the user think about moves in natural language. It does **not** auto-apply AI output to cards, logs, or daily state.
+Companion / Ask helps the user think about moves in natural language. It does **not** auto-apply AI output to cards, logs, or daily state.
 
 ## Setup
 
@@ -27,7 +27,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8111
 npm run web
 ```
 
-Open **Ask** in the Primary nav (`/ask-harness`). Nav label is **Ask**; page header may still say "Ask Harness Dev".
+Open **Companion** in Backroom (`/ask-harness`). The route and gateway contract still use Ask / Chat Harness names.
 
 ## Gateway URLs
 
@@ -91,4 +91,5 @@ Raw Lab is a separate unrestricted sandbox with **no board context**. Handoff to
 ## Related
 
 - [`services/ai-gateway/README.md`](../services/ai-gateway/README.md)
+- [`ai-workflows-current.md`](./ai-workflows-current.md)
 - [`local-a770-plan.md`](./local-a770-plan.md)
