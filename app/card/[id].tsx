@@ -9,7 +9,9 @@ import { Screen } from "../../src/components/Screen";
 import { Section } from "../../src/components/Section";
 import { styles } from "../../src/components/styles";
 import sampleProfile from "../../fixtures/resume/profile.sample.json";
+import { canCopyTextToClipboard, copyTextToClipboard } from "../../src/core/askHarnessSynthesis";
 import { buildApplicationResumeDocxDraft } from "../../src/core/applicationResumeExport";
+import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
 import { computeCardProgress } from "../../src/core/progress";
 import { packResumeDocxBlob, type ResumeProfile } from "../../src/core/resumeDocx";
@@ -36,6 +38,10 @@ export default function CardDetailScreen() {
     dailyState,
     resumeModules,
     jobCandidates,
+    jobSources,
+    jobSourceRuns,
+    chatSummaries,
+    memoryItems,
     careerSourcePack
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
@@ -109,6 +115,38 @@ export default function CardDetailScreen() {
     showNotice("success", "Resume DOCX downloaded.");
   }
 
+  async function handleCopyAgentContext() {
+    const result = buildCardContextPacket(
+      {
+        cards,
+        logs,
+        proofItems,
+        dailyState,
+        resumeModules,
+        jobCandidates,
+        jobSources,
+        jobSourceRuns,
+        chatSummaries,
+        memoryItems,
+        careerSourcePack
+      },
+      card!.id
+    );
+
+    if (!result.ok) {
+      showNotice("warning", result.error);
+      return;
+    }
+
+    const copied = await copyTextToClipboard(result.markdown);
+    if (!copied) {
+      showNotice("warning", "Clipboard unavailable.");
+      return;
+    }
+
+    showNotice("success", "Agent context copied.");
+  }
+
   return (
     <Screen>
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
@@ -120,6 +158,13 @@ export default function CardDetailScreen() {
         <Text style={styles.label}>Why It Matters</Text>
         <Text style={styles.bodyText}>{card.whyItMatters}</Text>
         <CardStateButtons cardId={card.id} currentState={card.state} />
+        {canCopyTextToClipboard() ? (
+          <View style={styles.cardActionsRow}>
+            <Pressable style={styles.secondaryAction} onPress={handleCopyAgentContext}>
+              <Text style={styles.secondaryActionText}>Copy agent context</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </Section>
 
       <Section title="Next Tiny Action">
