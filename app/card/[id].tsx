@@ -1,5 +1,5 @@
 import { Link, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
@@ -30,6 +30,10 @@ import {
   buildFeatureStepReviewPacket,
   getActiveFeatureSprintPlanForCard
 } from "../../src/core/featureSprintOrchestrator";
+import {
+  buildFeatureSprintDogfoodSummary,
+  type FeatureSprintDogfoodCheckStatus
+} from "../../src/core/featureSprintDogfood";
 import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintRunnerHistory";
 import {
   checkFeatureSprintRunnerHealth,
@@ -110,8 +114,49 @@ const RUNNER_PROFILE_LABELS = {
   codex_implementation: "Codex implementation"
 } as const;
 
+const DOGFOOD_STATUS_LABELS = {
+  not_ready: "not ready",
+  ready: "ready",
+  in_progress: "in progress",
+  needs_review: "needs review",
+  complete: "complete"
+} as const;
+
+const DOGFOOD_LOOP_STEPS = [
+  "1. Start runner: npm run feature-runner",
+  "2. Check runner",
+  "3. Run scoping with Codex",
+  "4. Import plan",
+  "5. Run implementation in worktree",
+  "6. Save agent output",
+  "7. Run review with Codex",
+  "8. Import verdict",
+  "9. Advance step",
+  "10. Mark feature complete"
+] as const;
+
 function formatRunnerStartedAt(iso: string): string {
   return iso.slice(0, 16).replace("T", " ");
+}
+
+function dogfoodCheckMarker(status: FeatureSprintDogfoodCheckStatus): string {
+  if (status === "ready" || status === "done") {
+    return "OK";
+  }
+  if (status === "warning") {
+    return "!";
+  }
+  return "X";
+}
+
+function dogfoodCheckColor(status: FeatureSprintDogfoodCheckStatus): string {
+  if (status === "ready" || status === "done") {
+    return colors.accentSuccess;
+  }
+  if (status === "warning") {
+    return colors.accentPrimary;
+  }
+  return colors.accentDanger;
 }
 
 function buildSessionInputFromForm(
@@ -317,6 +362,14 @@ export default function CardDetailScreen() {
     };
   }
 
+  const lifeHarnessData = lifeHarnessDataForCard();
+  const featureSprintDogfood = useMemo(
+    () =>
+      buildFeatureSprintDogfoodSummary(lifeHarnessData, card?.id ?? id ?? "", {
+        runnerHealth
+      }),
+    [lifeHarnessData, card?.id, id, runnerHealth]
+  );
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
   if (!card) {
@@ -405,7 +458,6 @@ export default function CardDetailScreen() {
     );
   }
 
-  const lifeHarnessData = lifeHarnessDataForCard();
   const activeFeatureSprintPlan = getActiveFeatureSprintPlanForCard(lifeHarnessData, card.id);
   const currentFeatureStep = activeFeatureSprintPlan?.steps.find(
     (step) => step.id === activeFeatureSprintPlan.currentStepId
@@ -978,6 +1030,62 @@ export default function CardDetailScreen() {
           Manual planner → implementer → reviewer loop. ChatGPT/Codex scopes and reviews; Cursor/Codex
           implements bounded slices.
         </Text>
+
+        <View style={[styles.cardTile, { marginTop: 12 }]}>
+          <View style={[styles.cardActionsRow, { alignItems: "center", justifyContent: "space-between" }]}>
+            <Text style={styles.label}>Builder readiness</Text>
+            <Text
+              style={[
+                styles.helpText,
+                {
+                  borderColor: colors.borderStrong,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  color:
+                    featureSprintDogfood.overallStatus === "complete"
+                      ? colors.accentSuccess
+                      : featureSprintDogfood.overallStatus === "not_ready"
+                        ? colors.accentPrimary
+                        : colors.textPrimary,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3
+                }
+              ]}
+            >
+              {DOGFOOD_STATUS_LABELS[featureSprintDogfood.overallStatus]}
+            </Text>
+          </View>
+          <Text style={[styles.titleText, { marginTop: 4 }]}>
+            Next: {featureSprintDogfood.nextAction.label}
+          </Text>
+          <Text style={styles.bodyText}>{featureSprintDogfood.nextAction.detail}</Text>
+          <View style={{ gap: 6, marginTop: 8 }}>
+            {featureSprintDogfood.checks.map((check) => (
+              <View key={check.id} style={{ gap: 2 }}>
+                <Text style={styles.bodyText}>
+                  <Text style={{ color: dogfoodCheckColor(check.status), fontWeight: "700" }}>
+                    {dogfoodCheckMarker(check.status)}
+                  </Text>{" "}
+                  {check.label}
+                </Text>
+                <Text style={styles.helpText}>{check.detail}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <CollapsibleSection title="Mock dogfood loop" defaultOpen={false}>
+          <Text style={styles.helpText}>
+            Manual mock path. Every gate below still requires an explicit click.
+          </Text>
+          <View style={{ gap: 4, marginTop: 8 }}>
+            {DOGFOOD_LOOP_STEPS.map((step) => (
+              <Text key={step} style={styles.helpText}>
+                {step}
+              </Text>
+            ))}
+          </View>
+        </CollapsibleSection>
 
         <View style={[styles.cardActionsRow, { marginTop: 12, alignItems: "center" }]}>
           <Text style={styles.helpText}>

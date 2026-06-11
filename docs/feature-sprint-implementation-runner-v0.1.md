@@ -52,7 +52,7 @@ Pair app token: `EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN=your-dev-token`
 2. Set project **repo path** on the card.
 3. **Backroom → Feature Sprint → Check runner**.
 4. **Run implementation in worktree** (or copy implementation prompt manually).
-5. Inspect agent output textarea: runner text + worktree path + branch + changed files + diff stat.
+5. Inspect agent output textarea: runner text + worktree path + branch + changed files + diff stat + verification summary (when configured).
 6. **Save agent output** manually (not auto-saved).
 7. **Run review with Codex** or copy review packet.
 8. **Import review verdict** manually.
@@ -62,7 +62,7 @@ Pair app token: `EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN=your-dev-token`
 
 - Isolated worktree only — never the original repo path as Codex cwd
 - No `git add`, `commit`, `merge`, `push`, or `clean`
-- No verification command execution in v0.1
+- Verification commands (v0.2): user-configured Project Registry only; allowlisted parser; expected read-only checks — see [feature-sprint-verification-capture-v0.2.md](./feature-sprint-verification-capture-v0.2.md)
 - No auto-save agent output, auto-import, auto-advance, or auto-complete
 - Explicit button click required for every implementation run
 - Real implementation mode is fail-closed without `ENABLE_IMPLEMENTATION=1`
@@ -82,6 +82,8 @@ Or delete files under `FEATURE_SPRINT_WORKTREE_ROOT` / system temp `life-harness
 ## History
 
 Runner history stores worktree path, branch, git status, diff stat, and changed files for implementation runs. See [feature-sprint-runner-history-v0.2.md](./feature-sprint-runner-history-v0.2.md).
+
+Card Backroom **Builder readiness** panel tracks this loop; see [feature-sprint-dogfood-checklist-v0.1.md](./feature-sprint-dogfood-checklist-v0.1.md).
 
 ## Future
 

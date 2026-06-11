@@ -84,6 +84,8 @@ See [feature-sprint-runner-history-v0.2.md](./feature-sprint-runner-history-v0.2
 
 See [feature-sprint-implementation-runner-v0.1.md](./feature-sprint-implementation-runner-v0.1.md). Adds `codex_implementation` profile with isolated git worktree execution. Still approval-gated: output fills the agent textarea only; save/review/advance remain manual.
 
+For mock-mode end-to-end walkthrough, see [feature-sprint-dogfood-checklist-v0.1.md](./feature-sprint-dogfood-checklist-v0.1.md).
+
 ## Future path
 
 - Implementation runner in isolated worktree

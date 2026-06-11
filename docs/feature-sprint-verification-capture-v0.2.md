@@ -78,6 +78,8 @@ When agent output includes `## Verification`, review packets embed it via existi
 | `FEATURE_SPRINT_VERIFY_MAX_COMMANDS` | `5` | Max commands per run |
 | `FEATURE_SPRINT_VERIFY_MAX_OUTPUT_CHARS` | `12000` | Stdout/stderr excerpt cap |
 
+See [feature-sprint-dogfood-checklist-v0.1.md](./feature-sprint-dogfood-checklist-v0.1.md) for the Backroom checklist that surfaces verification readiness.
+
 ## Future
 
 - Quoted-arg parser for `-e` one-liners
