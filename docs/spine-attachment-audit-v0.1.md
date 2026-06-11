@@ -61,7 +61,7 @@ Canonical files and link fields:
 | Agent Workbench | Copy task packet only | Clipboard | Floating | Medium | P1: nudge to log sent session |
 | **Proof Ledger** | Ledger rows | Read `buildProofLedger()` | Backroom-only | Low | Good |
 | **Memory Bank** | Active memories | `memoryItems` for Companion | Backroom-only | Low | Intentional machinery |
-| **Raw Signal** `/raw-lab` | Thread / responses | In-memory; cleared on clear/nav | Floating | High | P0: capture-as-idea or contained handoff |
+| **Raw Signal** `/raw-lab` | Thread / responses | In-memory; cleared on clear/nav | Strong (user click) | Low | **Shipped** — Capture as idea via Universal Capture (`buildRawLabIdeaCaptureText`) |
 | Raw Signal | Self-memories | Isolated `companionSelfMemories` | Backroom-only | Medium | Raw Lab only — do not export to board |
 | Raw Signal | Handoff digest | URL param → new Companion thread | Partial | Medium | User must continue explicitly |
 | **Resume Bank** | Module browse | Read `resumeModules` | Backroom-only | Low | Good |
@@ -91,7 +91,7 @@ Canonical files and link fields:
 
 High-risk (useful output does not clearly feed spine):
 
-1. **Raw Lab assistant turns** — in-memory only; no board capture path (`app/raw-lab.tsx`, containment by design).
+1. ~~**Raw Lab assistant turns** — in-memory only; no board capture path (`app/raw-lab.tsx`, containment by design).~~ **Addressed** — user-initiated Capture as idea (v0.1).
 2. **Deep Synthesis report** — display in Companion; no persist path (`SynthesisReportCard` tests avoid auto `saveMemoryItem`).
 3. **Companion chat** (default) — lost on clear unless user saves summary/memory or approves an action.
 4. **Agent clipboard-only** — task packet / context copied without `createAgentSessionForCard`.
@@ -136,7 +136,7 @@ What already feeds the spine coherently:
 | Fix | Rationale | Status |
 |-----|-----------|--------|
 | After resume DOCX download, auto log+proof on card | Export was invisible to Proof Ledger | **Addressed** — Resume Export Proof Log v0.1 (`applyResumeExportedForCard`, `logResumeExportForCard`) |
-| Raw Lab: **Capture as idea** (prefixed quick capture) or explicit **Open in Companion** + save path | High-value lab insights disappear on navigation | Open |
+| Raw Lab: **Capture as idea** (prefixed quick capture) or explicit **Open in Companion** + save path | High-value lab insights disappear on navigation | **Addressed** — Raw Lab Output Attachment v0.1 (`buildRawLabIdeaCaptureText`, assistant-turn buttons) |
 
 ### P1 — useful coherence improvement
 
@@ -196,3 +196,4 @@ npm test            # 806 tests pass (80 files, e74d0d3 worktree)
 ## Shipped since audit
 
 - **Resume Export Proof Log v0.1** — Card Detail DOCX success → `applyResumeExportedForCard`; failure paths do not log.
+- **Raw Lab Output Attachment v0.1** — Assistant-turn Capture as idea → Universal Capture inbox path; optional Save as memory (inactive) and Copy for Companion; no auto-capture on send.

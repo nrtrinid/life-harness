@@ -37,13 +37,21 @@ describe("raw-lab screen containment", () => {
   const reflectionPanelSource = readSource(RAW_LAB_REFLECTION_PANEL_PATH);
   const reflectionClientSource = readSource(RAW_LAB_REFLECTION_CLIENT_PATH);
   const combined = `${screenSource}\n${threadSource}\n${memoryPanelSource}\n${budgetInspectorSource}\n${reflectionPanelSource}\n${reflectionClientSource}`;
+  const threadCombined = `${threadSource}\n${memoryPanelSource}\n${budgetInspectorSource}\n${reflectionPanelSource}\n${reflectionClientSource}`;
 
-  it("does not import harness context or memory modules", () => {
+  it("raw lab thread components do not import harness board context", () => {
+    expect(threadCombined).not.toMatch(/from\s+["'].*harnessContext["']/);
+    expect(threadCombined).not.toMatch(/from\s+["'].*harnessMemory["']/);
+    expect(threadCombined).not.toMatch(/from\s+["'].*harnessMemoryBank["']/);
+    expect(threadCombined).not.toMatch(/from\s+["'].*useLifeHarness["']/);
+    expect(threadCombined).not.toMatch(/from\s+["'].*LifeHarnessState["']/);
+    expect(threadCombined).not.toMatch(/from\s+["'].*AskHarnessAdvancedPanel["']/);
+    expect(threadCombined).not.toMatch(/from\s+["'].*HarnessReadCard["']/);
+  });
+
+  it("does not import harness context from raw lab thread stack", () => {
     expect(combined).not.toMatch(/from\s+["'].*harnessContext["']/);
     expect(combined).not.toMatch(/from\s+["'].*harnessMemory["']/);
-    expect(combined).not.toMatch(/from\s+["'].*harnessMemoryBank["']/);
-    expect(combined).not.toMatch(/from\s+["'].*useLifeHarness["']/);
-    expect(combined).not.toMatch(/from\s+["'].*LifeHarnessState["']/);
     expect(combined).not.toMatch(/from\s+["'].*AskHarnessAdvancedPanel["']/);
     expect(combined).not.toMatch(/from\s+["'].*HarnessReadCard["']/);
   });
@@ -57,8 +65,18 @@ describe("raw-lab screen containment", () => {
     expect(combined).not.toMatch(/save personality/i);
     expect(combined).not.toMatch(/AsyncStorage/i);
     expect(combined).not.toMatch(/apply to board/i);
-    expect(combined).not.toMatch(/save.*memory bank/i);
-    expect(combined).not.toMatch(/write.*memory bank/i);
+    expect(threadCombined).not.toMatch(/save.*memory bank/i);
+    expect(threadCombined).not.toMatch(/write.*memory bank/i);
+  });
+
+  it("supports user-initiated spine attachment from the screen only", () => {
+    expect(threadSource).toContain("Capture as idea");
+    expect(screenSource).toMatch(/submitQuickCapture|handleCaptureAsIdea/);
+    expect(screenSource).toMatch(/from\s+["'].*LifeHarnessState["']/);
+
+    const sendMatch = screenSource.match(/async function handleSend\(\)[\s\S]*?\n  \}/);
+    expect(sendMatch).not.toBeNull();
+    expect(sendMatch![0]).not.toMatch(/submitQuickCapture/);
   });
 
   it("does not clear thread on unmount", () => {

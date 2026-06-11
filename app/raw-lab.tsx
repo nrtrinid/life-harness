@@ -35,6 +35,13 @@ import { RawLabThreadReflectionPanel } from "../src/components/rawLab/RawLabThre
 import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
 import { createId } from "../src/core/ids";
+import { copyTextToClipboard } from "../src/core/askHarnessSynthesis";
+import { createMemoryItem } from "../src/core/harnessMemoryBank";
+import {
+  buildRawLabCompanionHandoffPacket,
+  buildRawLabIdeaCaptureText,
+  buildRawLabMemoryInput
+} from "../src/core/rawLabOutputAttachment";
 import {
   buildRawLabStateChips,
   countRawLabPersonalityItems,
@@ -97,6 +104,7 @@ import {
   type RawLabThreadState,
   type RawLabTurn
 } from "../src/core/rawLabThreadState";
+import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 const QUICK_QUESTIONS = [
   { label: "Blunt", message: "Give me a blunt take.", mode: "general" as const },
@@ -128,6 +136,7 @@ function toDisplayTurns(
 }
 
 export default function RawLabScreen() {
+  const { submitQuickCapture, saveMemoryItem } = useLifeHarness();
   const [baseUrl] = useState(DEFAULT_RAW_LAB_URL);
   const [gatewayBudget, setGatewayBudget] = useState<GatewayHealthBudget>({
     maxInputChars: DEFAULT_GATEWAY_MAX_INPUT_CHARS,
@@ -226,6 +235,47 @@ export default function RawLabScreen() {
     if (Platform.OS === "web") {
       inputRef.current?.focus();
     }
+  }
+
+  function handleCaptureAsIdea(content: string) {
+    const captureText = buildRawLabIdeaCaptureText(content);
+    if (!captureText) {
+      setNotice({ kind: "warning", message: "Nothing to capture." });
+      return;
+    }
+
+    const result = submitQuickCapture(captureText);
+    if (result.ok) {
+      setNotice({ kind: "success", message: "Idea captured." });
+      return;
+    }
+
+    setNotice({ kind: "info", message: result.message ?? "No rule matched." });
+  }
+
+  function handleSaveAsMemory(content: string) {
+    const input = buildRawLabMemoryInput(content);
+    if (!input) {
+      setNotice({ kind: "warning", message: "Nothing to save." });
+      return;
+    }
+
+    saveMemoryItem(createMemoryItem(input));
+    setNotice({ kind: "success", message: "Saved to Memory Bank." });
+  }
+
+  async function handleCopyForCompanion(content: string) {
+    const packet = buildRawLabCompanionHandoffPacket(content);
+    if (!packet) {
+      setNotice({ kind: "warning", message: "Nothing to copy." });
+      return;
+    }
+
+    const copied = await copyTextToClipboard(packet);
+    setNotice({
+      kind: copied ? "success" : "error",
+      message: copied ? "Copied for Companion." : "Clipboard unavailable."
+    });
   }
 
   async function handleSend() {
@@ -679,6 +729,9 @@ export default function RawLabScreen() {
         onAddUserRespondsWellTo={handleAddUserRespondsWellTo}
         onAddUserDislike={handleAddUserDislike}
         onSetCurrentStance={handleSetCurrentStance}
+        onCaptureAsIdea={handleCaptureAsIdea}
+        onSaveAsMemory={handleSaveAsMemory}
+        onCopyForCompanion={(content) => void handleCopyForCompanion(content)}
       />
     </ChatSurfaceFrame>
   );

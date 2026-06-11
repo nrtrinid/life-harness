@@ -6,6 +6,7 @@ import type { QuickQuestion } from "../askHarness/ChatComposer";
 import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
 import { styles } from "../styles";
 import type { RawLabResponse } from "../../core/rawLabClient";
+import { isAttachableRawLabOutput } from "../../core/rawLabOutputAttachment";
 import type { RawLabTurn } from "../../core/rawLabThreadState";
 import { RawLabEmptyState } from "./RawLabEmptyState";
 
@@ -35,6 +36,9 @@ interface RawLabThreadProps {
   onAddUserRespondsWellTo?: (content: string) => void;
   onAddUserDislike?: (content: string) => void;
   onSetCurrentStance?: (content: string) => void;
+  onCaptureAsIdea?: (content: string) => void;
+  onSaveAsMemory?: (content: string) => void;
+  onCopyForCompanion?: (content: string) => void;
 }
 
 function BubbleActions({
@@ -133,13 +137,81 @@ function BubbleActions({
   );
 }
 
+function SpineAttachmentActions({
+  content,
+  onCaptureAsIdea,
+  onSaveAsMemory,
+  onCopyForCompanion
+}: {
+  content: string;
+  onCaptureAsIdea?: (content: string) => void;
+  onSaveAsMemory?: (content: string) => void;
+  onCopyForCompanion?: (content: string) => void;
+}) {
+  if (!onCaptureAsIdea && !onSaveAsMemory && !onCopyForCompanion) {
+    return null;
+  }
+
+  const attachable = isAttachableRawLabOutput(content);
+
+  return (
+    <View style={styles.splitRow}>
+      {onCaptureAsIdea ? (
+        <Pressable
+          style={styles.smallButton}
+          disabled={!attachable}
+          onPress={() => {
+            if (attachable) {
+              onCaptureAsIdea(content);
+            }
+          }}
+        >
+          <Text style={styles.smallButtonText}>Capture as idea</Text>
+        </Pressable>
+      ) : null}
+      {onSaveAsMemory ? (
+        <Pressable
+          style={styles.smallButton}
+          disabled={!attachable}
+          onPress={() => {
+            if (attachable) {
+              onSaveAsMemory(content);
+            }
+          }}
+        >
+          <Text style={styles.smallButtonText}>Save as memory</Text>
+        </Pressable>
+      ) : null}
+      {onCopyForCompanion ? (
+        <Pressable
+          style={styles.smallButton}
+          disabled={!attachable}
+          onPress={() => {
+            if (attachable) {
+              onCopyForCompanion(content);
+            }
+          }}
+        >
+          <Text style={styles.smallButtonText}>Copy for Companion</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function AssistantTurn({
   content,
   response,
+  onCaptureAsIdea,
+  onSaveAsMemory,
+  onCopyForCompanion,
   ...actionProps
 }: {
   content: string;
   response?: RawLabResponse;
+  onCaptureAsIdea?: (content: string) => void;
+  onSaveAsMemory?: (content: string) => void;
+  onCopyForCompanion?: (content: string) => void;
   onPin?: (content: string) => void;
   onDoNotRepeat?: (content: string) => void;
   onOpenLoop?: (content: string) => void;
@@ -157,6 +229,12 @@ function AssistantTurn({
     <View style={styles.chatBubbleAssistant}>
       <Text style={styles.chatSpeakerLabel}>Raw Signal</Text>
       <Text style={styles.chatAnswerText}>{content}</Text>
+      <SpineAttachmentActions
+        content={content}
+        onCaptureAsIdea={onCaptureAsIdea}
+        onSaveAsMemory={onSaveAsMemory}
+        onCopyForCompanion={onCopyForCompanion}
+      />
       <BubbleActions content={content} {...actionProps} />
       {safetyNotes.length > 0 ? (
         <View style={styles.checklist}>
@@ -193,7 +271,10 @@ export function RawLabThread({
   onAddRecurringInterest,
   onAddUserRespondsWellTo,
   onAddUserDislike,
-  onSetCurrentStance
+  onSetCurrentStance,
+  onCaptureAsIdea,
+  onSaveAsMemory,
+  onCopyForCompanion
 }: RawLabThreadProps) {
   const itemCount = turns.length + errors.length;
   const actionProps = {
@@ -206,6 +287,11 @@ export function RawLabThread({
     onAddUserRespondsWellTo,
     onAddUserDislike,
     onSetCurrentStance
+  };
+  const spineAttachmentProps = {
+    onCaptureAsIdea,
+    onSaveAsMemory,
+    onCopyForCompanion
   };
 
   useEffect(() => {
@@ -243,7 +329,13 @@ export function RawLabThread({
         }
 
         return (
-          <AssistantTurn key={turn.id} content={turn.content} response={response} {...actionProps} />
+          <AssistantTurn
+            key={turn.id}
+            content={turn.content}
+            response={response}
+            {...actionProps}
+            {...spineAttachmentProps}
+          />
         );
       })}
       {errors.map((error) => (

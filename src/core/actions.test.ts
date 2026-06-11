@@ -21,6 +21,7 @@ import type { LifeHarnessData } from "./lifeHarnessData";
 import { buildProofLedger } from "./proofLedger";
 import { PROOF_TITLES } from "./proof";
 import { PREVIEW_JOB_SOURCE_ID, runJobSourceFromRaw } from "./jobSourceRunner";
+import { buildRawLabIdeaCaptureText } from "./rawLabOutputAttachment";
 import { seedJobCandidates, seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";
 import type { DailyState } from "./types";
@@ -241,6 +242,21 @@ describe("applyQuickCapture", () => {
     expect(result.ok).toBe(false);
     expect(result.state).toBe(state);
     expect(result.message).toContain("No rule matched");
+  });
+
+  it("captures raw lab assistant output via buildRawLabIdeaCaptureText", () => {
+    const state = createState();
+    const captureText = buildRawLabIdeaCaptureText("Try a smaller slice first.");
+    expect(captureText).not.toBeNull();
+
+    const result = applyQuickCapture(state, captureText!);
+
+    expect(result.ok).toBe(true);
+    expect(result.state.cards.length).toBe(state.cards.length + 1);
+    expect(result.state.cards[0]?.title).toContain("Try a smaller slice first.");
+    expect(result.state.logs.length).toBe(state.logs.length + 1);
+    expect(result.state.proofItems.length).toBe(state.proofItems.length + 1);
+    expect(result.message).toContain("Idea captured");
   });
 
   it("logs follow-up without proof when no card matches", () => {
