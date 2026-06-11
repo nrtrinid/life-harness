@@ -27,7 +27,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8111
 npm run web
 ```
 
-Open **Companion** in Backroom (`/ask-harness`). The route and gateway contract still use Ask / Chat Harness names.
+Open **Companion** from primary nav (`/ask-harness`). See [`nav-backroom-cleanup-v0.1.md`](nav-backroom-cleanup-v0.1.md) and [`spine-attachment-audit-v0.1.md`](spine-attachment-audit-v0.1.md). The route and gateway contract still use Ask / Chat Harness names.
 
 ## Gateway URLs
 

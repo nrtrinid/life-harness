@@ -12,6 +12,7 @@
 | Area | Doc |
 |------|-----|
 | Nav / Backroom | [`nav-backroom-cleanup-v0.1.md`](nav-backroom-cleanup-v0.1.md) |
+| Spine attachment audit | [`spine-attachment-audit-v0.1.md`](spine-attachment-audit-v0.1.md) |
 | Persistence | [`persistence-audit-v0.5.md`](persistence-audit-v0.5.md) |
 | Memory Bank | [`memory-bank-v0.1.md`](memory-bank-v0.1.md) |
 | AI workflow map | [`ai-workflows-current.md`](ai-workflows-current.md) |
