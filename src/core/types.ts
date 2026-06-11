@@ -318,6 +318,20 @@ export interface HarnessMemoryItem {
   updatedAt: string;
 }
 
+export interface HarnessProject {
+  id: string;
+  cardId: string;
+  name: string;
+  repoPath?: string;
+  branch?: string;
+  docs?: string[];
+  likelyFiles?: string[];
+  verificationCommands?: string[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PrimaryActionKind =
   | "park"
   | "follow_up"

@@ -12,6 +12,7 @@ import {
 } from "./harnessContext";
 import { getActiveMemoryItems } from "./harnessMemoryBank";
 import { AREA_LABELS, CARD_STATE_LABELS } from "./labels";
+import { buildProjectContextForCard, type CardProjectContextSummary } from "./projectRegistry";
 import { buildApplicationResumeReadiness } from "./resumeReadiness";
 import type {
   HarnessMemoryItem,
@@ -70,6 +71,13 @@ export type HarnessContextNode =
       kind: "log_ref";
       summary: string;
       timestamp: string;
+    }
+  | {
+      id: `harness_project:${string}`;
+      kind: "harness_project";
+      name: string;
+      repoPath?: string;
+      branch?: string;
     };
 
 export type CardContextPacketKind =
@@ -123,6 +131,8 @@ export interface CardContextMemorySummary {
   summary?: string;
 }
 
+export type CardContextProjectSummary = CardProjectContextSummary;
+
 export interface CardContextPacket {
   packetVersion: "0.2";
   generatedAt: string;
@@ -138,6 +148,7 @@ export interface CardContextPacket {
   recentProof: CardContextProofSummary[];
   recentLogs: CardContextLogSummary[];
   memoryFacts: CardContextMemorySummary[];
+  projectContext?: CardContextProjectSummary;
   constraints: string[];
   verificationCommands: string[];
 }
@@ -450,6 +461,17 @@ export function buildCardContextPacket(
     });
   }
 
+  const projectContext = buildProjectContextForCard(data, card.id);
+  if (projectContext) {
+    nodes.push({
+      id: `harness_project:${projectContext.projectId}`,
+      kind: "harness_project",
+      name: projectContext.name,
+      repoPath: projectContext.repoPath,
+      branch: projectContext.branch
+    });
+  }
+
   const packet: CardContextPacket = {
     packetVersion: "0.2",
     generatedAt,
@@ -465,8 +487,9 @@ export function buildCardContextPacket(
     recentProof,
     recentLogs,
     memoryFacts,
+    projectContext,
     constraints: buildConstraints(data, card),
-    verificationCommands: []
+    verificationCommands: projectContext?.verificationCommands ?? []
   };
 
   return {
@@ -499,6 +522,25 @@ export function formatCardContextPacketMarkdown(packet: CardContextPacket): stri
     `- Next action: ${packet.nextTinyAction}`,
     ""
   ];
+
+  if (packet.projectContext) {
+    const project = packet.projectContext;
+    lines.push("## Project");
+    lines.push(`- Name: ${project.name}`);
+    if (project.repoPath) {
+      lines.push(`- Repo: ${project.repoPath}`);
+    }
+    if (project.branch) {
+      lines.push(`- Branch: ${project.branch}`);
+    }
+    if (project.docs.length > 0) {
+      lines.push(`- Docs: ${project.docs.join("; ")}`);
+    }
+    if (project.verificationCommands.length > 0) {
+      lines.push(`- Verification: ${project.verificationCommands.join("; ")}`);
+    }
+    lines.push("");
+  }
 
   if (packet.recentProof.length > 0) {
     lines.push(

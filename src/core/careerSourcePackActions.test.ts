@@ -28,6 +28,7 @@ function baseState(): LifeHarnessData {
     jobSourceRuns: [],
     chatSummaries: [],
     memoryItems: [],
+    projects: [],
     careerSourcePack: null
   };
 }

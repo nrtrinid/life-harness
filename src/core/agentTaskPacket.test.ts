@@ -252,5 +252,84 @@ describe("agentTaskPacket", () => {
     expect(input.taskName).toBe("Work on Momentum Board v0.1");
     expect(input.goal).toBe("Add card-scoped context packet.");
     expect(input.extraConstraints).toEqual(["Stay scoped to this card."]);
+    expect(input.fileHints).toBeUndefined();
+    expect(input.verificationCommands).toBeUndefined();
+  });
+
+  it("uses project likelyFiles and verificationCommands when input omits them", () => {
+    const card = fixtureBuildCard();
+    const data = baseData({
+      cards: [card],
+      projects: [
+        {
+          id: "project-target",
+          cardId: card.id,
+          name: card.title,
+          repoPath: "C:/Users/me/Projects/life-harness",
+          branch: "main",
+          likelyFiles: ["src/core/projectRegistry.ts"],
+          verificationCommands: ["npm test -- projectRegistry"],
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+
+    const result = buildAgentTaskPacket(data, {
+      cardId: card.id,
+      goal: "Ship project registry lite.",
+      now: FIXED_NOW
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.packet.fileHints).toEqual(["src/core/projectRegistry.ts"]);
+    expect(result.packet.verificationCommands).toEqual(["npm test -- projectRegistry"]);
+    expect(result.markdown).toContain("- src/core/projectRegistry.ts");
+    expect(result.markdown).toContain("- npm test -- projectRegistry");
+    expect(result.markdown).toContain("## Project context");
+    expect(result.markdown).toContain("- Repo: C:/Users/me/Projects/life-harness");
+    expect(result.markdown).toContain("- Target branch: main");
+    expect(result.packet.constraints).toContain("Work in repo: C:/Users/me/Projects/life-harness");
+    expect(result.packet.constraints).toContain("Target branch: main");
+  });
+
+  it("keeps explicit empty fileHints and verificationCommands", () => {
+    const card = fixtureBuildCard();
+    const data = baseData({
+      cards: [card],
+      projects: [
+        {
+          id: "project-target",
+          cardId: card.id,
+          name: card.title,
+          likelyFiles: ["src/core/projectRegistry.ts"],
+          verificationCommands: ["npm test -- projectRegistry"],
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+
+    const result = buildAgentTaskPacket(data, {
+      cardId: card.id,
+      goal: "Ship project registry lite.",
+      fileHints: [],
+      verificationCommands: [],
+      now: FIXED_NOW
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.packet.fileHints).toEqual([]);
+    expect(result.packet.verificationCommands).toEqual([]);
+    expect(result.markdown).toContain("## Likely files\n(not specified)");
+    expect(result.markdown).toContain("## Verification\n(not specified)");
   });
 });

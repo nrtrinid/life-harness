@@ -319,4 +319,88 @@ describe("harnessContextGraph", () => {
   it("normalizes title slugs for exact tag matching", () => {
     expect(normalizeTitleSlug("Momentum Board v0.1")).toBe("momentum-board-v0-1");
   });
+
+  it("includes project metadata only when present for the target card", () => {
+    const target = fixtureBuildCard({ id: "card-target", title: "Target Card" });
+    const other = fixtureBuildCard({ id: "card-other", title: "Other Card" });
+    const data = baseData({
+      cards: [target, other],
+      projects: [
+        {
+          id: "project-other",
+          cardId: other.id,
+          name: "Other Project",
+          repoPath: "C:/other",
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+
+    const withoutProject = buildCardContextPacket(data, target.id, { now: FIXED_NOW });
+    expect(withoutProject.ok).toBe(true);
+    if (!withoutProject.ok) {
+      return;
+    }
+    expect(withoutProject.markdown).not.toContain("## Project");
+
+    const withProject = buildCardContextPacket(
+      {
+        ...data,
+        projects: [
+          ...data.projects,
+          {
+            id: "project-target",
+            cardId: target.id,
+            name: "Target Project",
+            repoPath: "C:/target",
+            branch: "main",
+            docs: ["docs/project-registry-lite-v0.1.md"],
+            verificationCommands: ["npm test -- projectRegistry"],
+            createdAt: FIXED_NOW.toISOString(),
+            updatedAt: FIXED_NOW.toISOString()
+          }
+        ]
+      },
+      target.id,
+      { now: FIXED_NOW }
+    );
+
+    expect(withProject.ok).toBe(true);
+    if (!withProject.ok) {
+      return;
+    }
+
+    expect(withProject.packet.projectContext?.projectId).toBe("project-target");
+    expect(withProject.packet.verificationCommands).toEqual(["npm test -- projectRegistry"]);
+    expect(withProject.markdown).toContain("## Project");
+    expect(withProject.markdown).toContain("- Repo: C:/target");
+    expect(withProject.markdown).toContain("- Verification: npm test -- projectRegistry");
+    expect(withProject.markdown).not.toContain("C:/other");
+  });
+
+  it("still blocks S3 cards when project metadata exists", () => {
+    const card = fixtureBuildCard({ sensitivity: "S3" });
+    const data = baseData({
+      cards: [card],
+      projects: [
+        {
+          id: "project-s3",
+          cardId: card.id,
+          name: "Sensitive Project",
+          repoPath: "C:/secret",
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+
+    const result = buildCardContextPacket(data, card.id, { now: FIXED_NOW });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toContain("S3");
+  });
 });

@@ -42,6 +42,7 @@ function baseState(overrides: Partial<LifeHarnessData> = {}): LifeHarnessData {
     jobSourceRuns: [],
     chatSummaries: [],
     memoryItems: [],
+    projects: [],
     careerSourcePack: null,
     ...overrides
   };

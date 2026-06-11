@@ -94,6 +94,7 @@ function createState(): LifeHarnessData {
     jobSourceRuns: [],
     chatSummaries: [],
     memoryItems: [],
+    projects: [],
     careerSourcePack: null
   };
 }

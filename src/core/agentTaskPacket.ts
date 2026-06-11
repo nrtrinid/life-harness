@@ -2,7 +2,8 @@ import type { LifeHarnessData } from "./actions";
 import {
   buildCardContextPacket,
   formatCardContextPacketMarkdown,
-  type CardContextPacket
+  type CardContextPacket,
+  type CardContextProjectSummary
 } from "./harnessContextGraph";
 import type { LifeCard } from "./types";
 
@@ -27,6 +28,7 @@ export interface AgentTaskPacket {
   cardKind: string;
   cardContext: CardContextPacket;
   cardContextMarkdown: string;
+  projectContext?: CardContextProjectSummary;
   fileHints: string[];
   verificationCommands: string[];
   acceptanceCriteria: string[];
@@ -79,12 +81,21 @@ function buildAcceptanceCriteria(goal: string): string[] {
 
 function buildTaskConstraints(
   cardContext: CardContextPacket,
-  extraConstraints: string[] = []
+  extraConstraints: string[] = [],
+  projectContext?: CardContextProjectSummary
 ): string[] {
   const merged = [
     ...DEFAULT_TASK_CONSTRAINTS,
     ...extraConstraints.map((constraint) => constraint.trim()).filter(Boolean)
   ];
+
+  if (projectContext?.repoPath) {
+    merged.push(`Work in repo: ${projectContext.repoPath}`);
+  }
+
+  if (projectContext?.branch) {
+    merged.push(`Target branch: ${projectContext.branch}`);
+  }
 
   for (const constraint of cardContext.constraints) {
     if (!merged.includes(constraint)) {
@@ -108,8 +119,13 @@ export function buildAgentTaskPacket(
   const cardContextMarkdown = formatCardContextPacketMarkdown(cardContext);
   const goal = input.goal.trim();
   const taskName = input.taskName?.trim() || deriveTaskName(cardContext.title, goal);
-  const fileHints = input.fileHints ?? [];
-  const verificationCommands = input.verificationCommands ?? [];
+  const projectContext = cardContext.projectContext;
+  const fileHints =
+    input.fileHints !== undefined ? input.fileHints : projectContext?.likelyFiles ?? [];
+  const verificationCommands =
+    input.verificationCommands !== undefined
+      ? input.verificationCommands
+      : projectContext?.verificationCommands ?? [];
   const generatedAt = (input.now ?? new Date()).toISOString();
 
   const packet: AgentTaskPacket = {
@@ -123,10 +139,11 @@ export function buildAgentTaskPacket(
     cardKind: cardContext.cardKind,
     cardContext,
     cardContextMarkdown,
+    projectContext,
     fileHints,
     verificationCommands,
     acceptanceCriteria: buildAcceptanceCriteria(goal),
-    constraints: buildTaskConstraints(cardContext, input.extraConstraints)
+    constraints: buildTaskConstraints(cardContext, input.extraConstraints, projectContext)
   };
 
   return {
@@ -153,7 +170,28 @@ export function formatAgentTaskPacketMarkdown(packet: AgentTaskPacket): string {
     `- Kind: ${packet.cardKind}`,
     `- Status: ${packet.cardStatus}`,
     `- Next action: ${packet.cardContext.nextTinyAction}`,
-    "",
+    ""
+  ];
+
+  if (packet.projectContext) {
+    const project = packet.projectContext;
+    lines.push("## Project context");
+    if (project.repoPath) {
+      lines.push(`- Repo: ${project.repoPath}`);
+    }
+    if (project.branch) {
+      lines.push(`- Branch: ${project.branch}`);
+    }
+    if (project.docs.length > 0) {
+      lines.push(`- Docs: ${project.docs.join("; ")}`);
+    }
+    if (project.notes) {
+      lines.push(`- Notes: ${project.notes}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(
     "## Existing context",
     packet.cardContextMarkdown,
     "",
@@ -177,7 +215,7 @@ export function formatAgentTaskPacketMarkdown(packet: AgentTaskPacket): string {
       "## Constraints",
       packet.constraints.map((constraint) => `- ${constraint}`)
     )
-  ];
+  );
 
   return lines.join("\n").trimEnd();
 }
@@ -187,8 +225,6 @@ export function buildDefaultAgentTaskPacketInput(card: LifeCard): AgentTaskPacke
     cardId: card.id,
     taskName: `Work on ${card.title}`,
     goal: resolveDefaultTaskGoal(card),
-    fileHints: [],
-    verificationCommands: [],
     extraConstraints: ["Stay scoped to this card."]
   };
 }

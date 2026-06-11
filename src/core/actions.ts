@@ -26,7 +26,8 @@ import type {
   ProofItem,
   ResumeModule,
   HarnessChatSummary,
-  HarnessMemoryItem
+  HarnessMemoryItem,
+  HarnessProject
 } from "./types";
 import {
   parseCareerSourcePackJson,
@@ -49,6 +50,7 @@ export interface LifeHarnessData {
   jobSourceRuns: JobSourceRunResult[];
   chatSummaries: HarnessChatSummary[];
   memoryItems: HarnessMemoryItem[];
+  projects: HarnessProject[];
   careerSourcePack: StoredCareerSourcePack | null;
 }
 

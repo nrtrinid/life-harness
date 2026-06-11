@@ -64,6 +64,11 @@ import {
   applyToggleMemoryItemActive,
   applyUpdateMemoryItem
 } from "../core/harnessMemoryBank";
+import {
+  applyDeleteProjectForCard,
+  applyUpsertProjectForCard,
+  type HarnessProjectUpsertInput
+} from "../core/projectRegistry";
 import { nowIso } from "../core/ids";
 import { createSeedState } from "../data/createSeedState";
 import {
@@ -99,6 +104,8 @@ type LifeHarnessAction =
   | { type: "delete_memory_item"; itemId: string }
   | { type: "update_memory_item"; item: HarnessMemoryItem }
   | { type: "toggle_memory_item_active"; itemId: string }
+  | { type: "save_project"; input: HarnessProjectUpsertInput }
+  | { type: "delete_project"; cardId: string }
   | { type: "state_replaced"; state: LifeHarnessData };
 
 interface LifeHarnessContextValue extends LifeHarnessData {
@@ -139,6 +146,8 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   deleteMemoryItem: (itemId: string) => void;
   updateMemoryItem: (item: HarnessMemoryItem) => void;
   toggleMemoryItemActive: (itemId: string) => void;
+  saveProjectForCard: (input: HarnessProjectUpsertInput) => { ok: boolean; message?: string };
+  clearProjectForCard: (cardId: string) => { ok: boolean; message?: string };
   isBatchRunning: boolean;
   batchRunProgress: BatchRunProgress | null;
   runOneJobSource: (
@@ -228,6 +237,12 @@ function lifeHarnessReducer(state: LifeHarnessData, action: LifeHarnessAction): 
       return applyUpdateMemoryItem(state, action.item);
     case "toggle_memory_item_active":
       return applyToggleMemoryItemActive(state, action.itemId);
+    case "save_project": {
+      const result = applyUpsertProjectForCard(state, action.input);
+      return result.ok ? result.state : state;
+    }
+    case "delete_project":
+      return applyDeleteProjectForCard(state, action.cardId);
     default:
       return state;
   }
@@ -501,6 +516,20 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     dispatch({ type: "toggle_memory_item_active", itemId });
   }, []);
 
+  const saveProjectForCard = useCallback((input: HarnessProjectUpsertInput) => {
+    const card = stateRef.current.cards.find((item) => item.id === input.cardId);
+    if (!card) {
+      return { ok: false, message: `Card not found: ${input.cardId}` };
+    }
+    dispatch({ type: "save_project", input });
+    return { ok: true, message: "Project metadata saved." };
+  }, []);
+
+  const clearProjectForCard = useCallback((cardId: string) => {
+    dispatch({ type: "delete_project", cardId });
+    return { ok: true, message: "Project metadata cleared." };
+  }, []);
+
   const runSourceOnState = useCallback(
     async (current: LifeHarnessData, source: JobSource): Promise<{
       state: LifeHarnessData;
@@ -701,6 +730,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       deleteMemoryItem,
       updateMemoryItem,
       toggleMemoryItemActive,
+      saveProjectForCard,
+      clearProjectForCard,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,
@@ -736,6 +767,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       deleteMemoryItem,
       updateMemoryItem,
       toggleMemoryItemActive,
+      saveProjectForCard,
+      clearProjectForCard,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,

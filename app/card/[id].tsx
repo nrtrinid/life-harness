@@ -1,13 +1,13 @@
 import { Link, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
 import { Notice, type NoticeState } from "../../src/components/Notice";
 import { ProgressBar } from "../../src/components/ProgressBar";
 import { Screen } from "../../src/components/Screen";
 import { Section } from "../../src/components/Section";
-import { styles } from "../../src/components/styles";
+import { colors, styles } from "../../src/components/styles";
 import sampleProfile from "../../fixtures/resume/profile.sample.json";
 import { canCopyTextToClipboard, copyTextToClipboard } from "../../src/core/askHarnessSynthesis";
 import { buildApplicationResumeDocxDraft } from "../../src/core/applicationResumeExport";
@@ -16,6 +16,11 @@ import {
   buildDefaultAgentTaskPacketInput
 } from "../../src/core/agentTaskPacket";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
+import {
+  formatListField,
+  getProjectForCard,
+  parseListField
+} from "../../src/core/projectRegistry";
 import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
 import { computeCardProgress } from "../../src/core/progress";
 import { packResumeDocxBlob, type ResumeProfile } from "../../src/core/resumeDocx";
@@ -46,10 +51,64 @@ export default function CardDetailScreen() {
     jobSourceRuns,
     chatSummaries,
     memoryItems,
-    careerSourcePack
+    projects,
+    careerSourcePack,
+    saveProjectForCard,
+    clearProjectForCard
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [repoPath, setRepoPath] = useState("");
+  const [branch, setBranch] = useState("");
+  const [docsText, setDocsText] = useState("");
+  const [likelyFilesText, setLikelyFilesText] = useState("");
+  const [verificationCommandsText, setVerificationCommandsText] = useState("");
+  const [projectNotes, setProjectNotes] = useState("");
   const card = cards.find((item) => item.id === id);
+
+  useEffect(() => {
+    if (!card) {
+      return;
+    }
+
+    const project = getProjectForCard(
+      {
+        cards,
+        logs,
+        proofItems,
+        dailyState,
+        resumeModules,
+        jobCandidates,
+        jobSources,
+        jobSourceRuns,
+        chatSummaries,
+        memoryItems,
+        projects,
+        careerSourcePack
+      },
+      card.id
+    );
+
+    setRepoPath(project?.repoPath ?? "");
+    setBranch(project?.branch ?? "");
+    setDocsText(formatListField(project?.docs));
+    setLikelyFilesText(formatListField(project?.likelyFiles));
+    setVerificationCommandsText(formatListField(project?.verificationCommands));
+    setProjectNotes(project?.notes ?? "");
+  }, [
+    card,
+    cards,
+    logs,
+    proofItems,
+    dailyState,
+    resumeModules,
+    jobCandidates,
+    jobSources,
+    jobSourceRuns,
+    chatSummaries,
+    memoryItems,
+    projects,
+    careerSourcePack
+  ]);
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
   if (!card) {
@@ -130,6 +189,7 @@ export default function CardDetailScreen() {
     jobSourceRuns,
     chatSummaries,
     memoryItems,
+    projects,
     careerSourcePack
   };
 
@@ -215,6 +275,98 @@ export default function CardDetailScreen() {
         </Text>
         <Text style={[styles.label, { marginTop: 12 }]}>Obstacle Plan</Text>
         <Text style={styles.bodyText}>{card.obstaclePlan?.plan}</Text>
+      </Section>
+
+      <Section title="Project metadata">
+        <Text style={styles.helpText}>
+          Optional repo/files/verify hints for agent context and task packets on this card.
+        </Text>
+        <Text style={[styles.label, { marginTop: 12 }]}>Repo path</Text>
+        <TextInput
+          style={styles.captureInput}
+          value={repoPath}
+          onChangeText={setRepoPath}
+          placeholder="C:/Users/me/Projects/life-harness"
+          placeholderTextColor={colors.inputPlaceholder}
+        />
+        <Text style={[styles.label, { marginTop: 12 }]}>Branch</Text>
+        <TextInput
+          style={styles.captureInput}
+          value={branch}
+          onChangeText={setBranch}
+          placeholder="main"
+          placeholderTextColor={colors.inputPlaceholder}
+        />
+        <Text style={[styles.label, { marginTop: 12 }]}>Docs</Text>
+        <TextInput
+          style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+          value={docsText}
+          onChangeText={setDocsText}
+          placeholder="docs/01_final_design_doc.md"
+          placeholderTextColor={colors.inputPlaceholder}
+          multiline
+        />
+        <Text style={[styles.label, { marginTop: 12 }]}>Likely files</Text>
+        <TextInput
+          style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+          value={likelyFilesText}
+          onChangeText={setLikelyFilesText}
+          placeholder="src/core/agentTaskPacket.ts"
+          placeholderTextColor={colors.inputPlaceholder}
+          multiline
+        />
+        <Text style={[styles.label, { marginTop: 12 }]}>Verification commands</Text>
+        <TextInput
+          style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+          value={verificationCommandsText}
+          onChangeText={setVerificationCommandsText}
+          placeholder={"npm run typecheck\nnpm test -- agentTaskPacket"}
+          placeholderTextColor={colors.inputPlaceholder}
+          multiline
+        />
+        <Text style={[styles.label, { marginTop: 12 }]}>Notes</Text>
+        <TextInput
+          style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+          value={projectNotes}
+          onChangeText={setProjectNotes}
+          placeholder="Optional notes for agent packets"
+          placeholderTextColor={colors.inputPlaceholder}
+          multiline
+        />
+        <View style={styles.cardActionsRow}>
+          <Pressable
+            style={styles.secondaryAction}
+            onPress={() => {
+              const result = saveProjectForCard({
+                cardId: card.id,
+                repoPath: repoPath.trim() || undefined,
+                branch: branch.trim() || undefined,
+                docs: parseListField(docsText),
+                likelyFiles: parseListField(likelyFilesText),
+                verificationCommands: parseListField(verificationCommandsText),
+                notes: projectNotes.trim() || undefined
+              });
+              showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save project.");
+            }}
+          >
+            <Text style={styles.secondaryActionText}>Save project metadata</Text>
+          </Pressable>
+          <Pressable
+            style={styles.secondaryAction}
+            onPress={() => {
+              const result = clearProjectForCard(card.id);
+              setRepoPath("");
+              setBranch("");
+              setDocsText("");
+              setLikelyFilesText("");
+              setVerificationCommandsText("");
+              setProjectNotes("");
+              showNotice(result.ok ? "success" : "warning", result.message ?? "Could not clear project.");
+            }}
+          >
+            <Text style={styles.secondaryActionText}>Clear project metadata</Text>
+          </Pressable>
+        </View>
       </Section>
 
       {card.resumePacket && !card.careerApplication ? (
