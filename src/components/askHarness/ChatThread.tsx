@@ -164,10 +164,10 @@ function AssistantTurn({
           ) : null}
         </View>
       ) : null}
-      <View style={styles.chatMemoryTools}>
+      <MessageActionMenu>
         <Pressable style={styles.chatBubbleToggle} onPress={() => onToggleMemoryTools(turn.id)}>
           <Text style={styles.chatBubbleToggleText}>
-            {turn.showMemoryTools ? "Hide memory tools" : "Memory tools"}
+            {turn.showMemoryTools ? "Hide memory" : "Memory"}
           </Text>
         </Pressable>
         {turn.showMemoryTools ? (
@@ -216,7 +216,7 @@ function AssistantTurn({
             ) : null}
           </>
         ) : null}
-      </View>
+      </MessageActionMenu>
     </View>
   );
 }

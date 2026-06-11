@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const RAW_LAB_SCREEN_PATH = resolve(__dirname, "../../app/raw-lab.tsx");
 const ASK_HARNESS_SCREEN_PATH = resolve(__dirname, "../../app/ask-harness.tsx");
 const HARNESS_READ_CARD_PATH = resolve(__dirname, "../components/askHarness/HarnessReadCard.tsx");
+const CHAT_BACKROOM_SUMMARY_PATH = resolve(__dirname, "./chatBackroomSummary.ts");
 const RAW_LAB_THREAD_PATH = resolve(__dirname, "../components/rawLab/RawLabThread.tsx");
 const RAW_LAB_MEMORY_PANEL_PATH = resolve(
   __dirname,
@@ -51,10 +52,12 @@ describe("raw-lab screen containment", () => {
     expect(screenSource).toContain("Sandbox only");
     expect(screenSource).toContain("cannot read or change your board");
     expect(screenSource).toContain("Do not paste secrets or S3-style private data");
-    expect(memoryPanelSource).toContain("What this chat remembers");
+    expect(screenSource).toContain("Ungrounded");
+    expect(screenSource).toContain("ChatStateStrip");
+    expect(memoryPanelSource).toContain("This chat remembers");
     expect(memoryPanelSource).toContain("Temporary to this chat");
     expect(memoryPanelSource).toContain("Not saved to Life Harness");
-    expect(memoryPanelSource).toContain("Personality forming in this chat");
+    expect(memoryPanelSource).toContain("Style in this chat");
     expect(memoryPanelSource).toContain("Temporary. Not saved to Life Harness.");
   });
 
@@ -69,10 +72,14 @@ describe("raw-lab screen containment", () => {
 describe("companion chat safety copy", () => {
   const harnessScreenSource = readSource(ASK_HARNESS_SCREEN_PATH);
   const harnessReadCardSource = readSource(HARNESS_READ_CARD_PATH);
+  const backroomSummarySource = readSource(CHAT_BACKROOM_SUMMARY_PATH);
 
   it("companion grounding states user approves board changes", () => {
     expect(harnessReadCardSource).toContain("will not change the board");
+    expect(harnessReadCardSource).toContain("board context");
     expect(harnessScreenSource).toContain("You approve what changes");
+    expect(harnessScreenSource).toContain("ChatStateStrip");
+    expect(backroomSummarySource).toContain("Grounded");
   });
 
   it("raw signal sandbox copy denies board access", () => {
