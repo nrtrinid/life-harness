@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import http from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -195,6 +195,111 @@ describe("feature-sprint-runner", () => {
     expect(result.body.changedFiles?.length).toBeGreaterThan(0);
     expect(result.body.diffStat).toBeTruthy();
     expect(result.body.gitStatus).toBeTruthy();
+  });
+
+  it("runs verification commands after mock implementation and continues after failure", async () => {
+    const fixtureDir = path.join(tempRepoPath!, ".life-harness");
+    await mkdir(fixtureDir, { recursive: true });
+    await writeFile(path.join(fixtureDir, "verify-pass.js"), "process.exit(0);\n");
+    await writeFile(path.join(fixtureDir, "verify-fail.js"), "process.exit(1);\n");
+    await writeFile(path.join(fixtureDir, "verify-pass-2.js"), "process.exit(0);\n");
+    await runGit(tempRepoPath!, ["add", ".life-harness"]);
+    await runGit(tempRepoPath!, ["commit", "-m", "verification fixtures"]);
+
+    const result = await postRun(port, {
+      profile: "codex_implementation",
+      promptMarkdown: "Implement with verification.",
+      cardId: "card-build-test",
+      repoPath: tempRepoPath,
+      worktree: { enabled: true },
+      runVerification: true,
+      verificationCommands: [
+        "node .life-harness/verify-pass.js",
+        "node .life-harness/verify-fail.js",
+        "node .life-harness/verify-pass-2.js"
+      ]
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, profile: "codex_implementation" });
+    if (!("verificationResults" in result.body)) {
+      throw new Error("Expected verificationResults in response.");
+    }
+
+    expect(result.body.verificationResults).toHaveLength(3);
+    expect(result.body.verificationResults?.map((row) => row.status)).toEqual([
+      "passed",
+      "failed",
+      "passed"
+    ]);
+  });
+
+  it("rejects unsafe verification commands via parser without failing implementation", async () => {
+    const result = await postRun(port, {
+      profile: "codex_implementation",
+      promptMarkdown: "Implement with unsafe verify.",
+      repoPath: tempRepoPath,
+      worktree: { enabled: true },
+      runVerification: true,
+      verificationCommands: ["npm test | head"]
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({ ok: true });
+    if (!("verificationResults" in result.body)) {
+      throw new Error("Expected verificationResults in response.");
+    }
+
+    expect(result.body.verificationResults?.[0]?.status).toBe("failed");
+    expect(result.body.verificationResults?.[0]?.error).toContain("parser");
+  });
+
+  it("runs npm --version verification without spawn EINVAL", async () => {
+    const result = await postRun(port, {
+      profile: "codex_implementation",
+      promptMarkdown: "Implement with npm verification.",
+      repoPath: tempRepoPath,
+      worktree: { enabled: true },
+      runVerification: true,
+      verificationCommands: ["npm --version"]
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, profile: "codex_implementation" });
+    if (!("verificationResults" in result.body)) {
+      throw new Error("Expected verificationResults in response.");
+    }
+
+    expect(result.body.verificationResults).toHaveLength(1);
+    const row = result.body.verificationResults?.[0];
+    expect(row?.status).toBe("passed");
+    expect(row?.error).toBeUndefined();
+    const output = `${row?.stdoutExcerpt ?? ""}${row?.stderrExcerpt ?? ""}`;
+    expect(output).toMatch(/\d+\.\d+\.\d+/);
+  });
+
+  it("rejects verification fields on scoping profile", async () => {
+    const result = await postRun(port, {
+      profile: "codex_scoping",
+      promptMarkdown: "Scope packet",
+      runVerification: true,
+      verificationCommands: ["npm test"]
+    });
+
+    expect(result.statusCode).toBe(400);
+    expect(result.body).toMatchObject({
+      error: expect.stringContaining("codex_implementation")
+    });
+  });
+
+  it("rejects verification fields on review profile", async () => {
+    const result = await postRun(port, {
+      profile: "codex_review",
+      promptMarkdown: "Review packet",
+      verificationCommands: ["npm test"]
+    });
+
+    expect(result.statusCode).toBe(400);
   });
 
   it("rejects implementation profile when repoPath is missing", async () => {

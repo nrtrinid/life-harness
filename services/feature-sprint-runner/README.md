@@ -36,6 +36,13 @@ Mock mode fills the existing import textareas with valid fenced blocks. You stil
 | `FEATURE_SPRINT_RUNNER_MAX_OUTPUT_CHARS` | `500000` | Response cap |
 | `FEATURE_SPRINT_WORKTREE_ROOT` | temp `life-harness-feature-worktrees` | Implementation worktree parent dir |
 | `FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION` | unset | Must be `1` for real `codex_implementation` |
+| `FEATURE_SPRINT_VERIFY_TIMEOUT_MS` | `120000` | Per verification command timeout |
+| `FEATURE_SPRINT_VERIFY_MAX_COMMANDS` | `5` | Max verification commands per run |
+| `FEATURE_SPRINT_VERIFY_MAX_OUTPUT_CHARS` | `12000` | Stdout/stderr excerpt cap per command |
+
+Implementation runs accept optional `verificationCommands` + `runVerification` (user-configured in app). See [docs/feature-sprint-verification-capture-v0.2.md](../../docs/feature-sprint-verification-capture-v0.2.md).
+
+On Windows, package-manager verification commands (`npm`, `npx`, `pnpm`, `yarn`) spawn through a fixed `cmd.exe /d /s /c` shim with parsed args only — not raw shell strings.
 
 App token (optional, pair with server): `EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN`
 
