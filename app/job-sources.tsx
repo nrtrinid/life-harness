@@ -23,6 +23,12 @@ import {
   getSourceDueBadge,
   SOURCE_DUE_BADGE_LABELS
 } from "../src/core/jobSourceSchedule";
+import {
+  buildJobFindingsSummary,
+  buildJobRunFinding,
+  formatJobRunFinding,
+  getLatestJobSourceRun
+} from "../src/core/jobFindings";
 import { canRunJobSource } from "../src/core/jobSourceRunner";
 import type { JobSourceCadence, JobSourceKind } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
@@ -74,6 +80,7 @@ export default function JobSourcesScreen() {
 
   const now = new Date();
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
+  const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, now);
 
   async function handleRunSource(sourceId: string) {
     setRunningId(sourceId);
@@ -81,7 +88,9 @@ export default function JobSourcesScreen() {
     setRunningId(null);
     setNotice({
       kind: result.ok ? "success" : "warning",
-      message: result.message ?? "Source run finished."
+      message: result.outcome
+        ? `Ran ${result.outcome.sourceName}: ${result.outcome.createdCandidates} new - ${result.outcome.skippedDuplicates} duplicate${result.outcome.skippedDuplicates === 1 ? "" : "s"} - ${result.outcome.errors.length} error${result.outcome.errors.length === 1 ? "" : "s"}.`
+        : result.message ?? "Source run finished."
     });
   }
 
@@ -181,6 +190,10 @@ export default function JobSourcesScreen() {
           Run approved sources through the local Job Scout Runner on 127.0.0.1:8122. Start it
           with npm run scout:runner.
         </Text>
+        <Text style={styles.bodyText}>
+          Queue: {findings.counts.waiting} waiting - {findings.counts.newFetched} new fetched -{" "}
+          {findings.counts.savedManual} saved/manual
+        </Text>
         <Link href="/job-candidates" asChild>
           <Pressable style={styles.secondaryAction}>
             <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
@@ -222,6 +235,11 @@ export default function JobSourcesScreen() {
           Run Due uses daily/weekly cadence only. Run All includes manual cadence sources too.
           Scheduled background fetching remains locked.
         </Text>
+        {findings.latestRun ? (
+          <Text style={styles.bodyText}>
+            Last run: {findings.latestRun.sourceName} - {formatJobRunFinding(findings.latestRun)}
+          </Text>
+        ) : null}
       </Section>
 
       <Section title="Add Source">
@@ -266,6 +284,8 @@ export default function JobSourcesScreen() {
             runningId === source.id || source.runStatus === "running" || isBatchRunning;
           const dueBadge = getSourceDueBadge(source, now);
           const health = getJobSourceHealth(source, jobSourceRuns, jobCandidates, now);
+          const latestRun = getLatestJobSourceRun(jobSourceRuns, source.id);
+          const latestFinding = latestRun ? buildJobRunFinding(latestRun, jobSources) : undefined;
           return (
             <View key={source.id} style={styles.cardTile}>
               <Text style={styles.titleText}>{source.name}</Text>
@@ -290,15 +310,16 @@ export default function JobSourcesScreen() {
               <Text style={styles.helpText}>
                 Run status: {JOB_SOURCE_RUN_STATUS_LABELS[source.runStatus ?? "idle"]}
               </Text>
-              {source.lastRunAt ? (
+              {latestFinding ? (
                 <Text style={styles.helpText}>
-                  Last run: {source.lastRunAt.slice(0, 16)} · fetched {source.lastFetchedCount ?? 0}
+                  Last run: {latestFinding.fetchedAt.slice(0, 16).replace("T", " ")} -{" "}
+                  {formatJobRunFinding(latestFinding)}
                 </Text>
               ) : (
                 <Text style={styles.helpText}>Last run: never</Text>
               )}
-              {source.lastRunMessage ? (
-                <Text style={styles.bodyText}>{source.lastRunMessage}</Text>
+              {latestFinding?.message ? (
+                <Text style={styles.bodyText}>{latestFinding.message}</Text>
               ) : null}
               {source.adapterNotes ? <Text style={styles.helpText}>{source.adapterNotes}</Text> : null}
               {source.notes ? <Text style={styles.helpText}>{source.notes}</Text> : null}

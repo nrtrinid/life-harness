@@ -10,8 +10,11 @@ import { CareerToolCard } from "../src/components/career/CareerToolCard";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
+import { Section } from "../src/components/Section";
 import { colors, lofiColors, styles } from "../src/components/styles";
 import { buildCareerHubSummary } from "../src/core/careerHub";
+import { buildJobFindingsSummary, formatJobRunFinding } from "../src/core/jobFindings";
+import { formatFitScore } from "../src/core/jobScout";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 function HubSection({ title, children }: { title: string; children: ReactNode }) {
@@ -41,8 +44,13 @@ export default function CareerScreen() {
     batchRunProgress
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
-  const [lastFitResult, setLastFitResult] = useState<{ createdCount: number } | null>(null);
+  const [lastFitResult, setLastFitResult] = useState<{
+    createdCount: number;
+    skippedDuplicates: number;
+    errorCount: number;
+  } | null>(null);
 
+  const now = new Date();
   const summary = buildCareerHubSummary({
     jobCandidates,
     cards,
@@ -50,8 +58,9 @@ export default function CareerScreen() {
     jobSourceRuns,
     resumeModules,
     hasCareerPack: Boolean(careerSourcePack),
-    now: new Date()
+    now
   });
+  const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, now);
   const careerProofItems = proofItems.filter((item) => item.area === "social_career");
 
   const chips = [
@@ -67,7 +76,11 @@ export default function CareerScreen() {
 
   async function handleFindFitJobs() {
     const result = await runFitFinder();
-    setLastFitResult({ createdCount: result.createdCandidateIds.length });
+    setLastFitResult({
+      createdCount: result.createdCandidateIds.length,
+      skippedDuplicates: result.skippedDuplicates,
+      errorCount: result.errors.length
+    });
     setNotice({
       kind: result.ok ? "success" : result.runnerUnreachable ? "warning" : "info",
       message: result.message
@@ -125,6 +138,30 @@ export default function CareerScreen() {
           </Link>
         </View>
       </HubSection>
+
+      <Section title="Next career move">
+        <Text style={styles.titleText}>{findings.nextMove.title}</Text>
+        <Text style={styles.bodyText}>{findings.nextMove.body}</Text>
+        {findings.nextMove.kind === "review_candidate" ? (
+          <>
+            <Text style={styles.helpText}>
+              {formatFitScore(
+                findings.nextMove.candidate.fitScore,
+                findings.nextMove.candidate.fitLabel
+              )}
+              {findings.nextMove.sourceName ? ` - ${findings.nextMove.sourceName}` : ""}
+            </Text>
+            {findings.nextMove.candidate.fitReasons[0] ? (
+              <Text style={styles.listItem}>{findings.nextMove.candidate.fitReasons[0]}</Text>
+            ) : null}
+          </>
+        ) : null}
+        <Link href={findings.nextMove.targetRoute as Href} asChild>
+          <Pressable style={styles.primaryAction}>
+            <Text style={styles.primaryActionText}>{findings.nextMove.ctaLabel}</Text>
+          </Pressable>
+        </Link>
+      </Section>
 
       <HubSection title="Start the next contract">
         <View style={styles.splitRow}>
@@ -202,6 +239,11 @@ export default function CareerScreen() {
           ) : (
             <Text style={styles.helpText}>No source runs yet.</Text>
           )}
+          {findings.latestRun ? (
+            <Text style={styles.helpText}>
+              Latest findings: {findings.latestRun.sourceName} - {formatJobRunFinding(findings.latestRun)}
+            </Text>
+          ) : null}
           <View style={styles.cardActionsRow}>
             <Link href="/job-sources" asChild>
               <Pressable style={styles.secondaryAction}>
@@ -226,6 +268,13 @@ export default function CareerScreen() {
           <Text style={styles.helpText}>
             Find fits, then apply to one. Do not tune sources before sending an application.
           </Text>
+          {lastFitResult ? (
+            <Text style={styles.bodyText}>
+              Last find: {lastFitResult.createdCount} new - {lastFitResult.skippedDuplicates}{" "}
+              duplicate{lastFitResult.skippedDuplicates === 1 ? "" : "s"} -{" "}
+              {lastFitResult.errorCount} error{lastFitResult.errorCount === 1 ? "" : "s"}
+            </Text>
+          ) : null}
           {lastFitResult && lastFitResult.createdCount > 0 ? (
             <Link href="/job-candidates" asChild>
               <Pressable style={StyleSheet.flatten([styles.secondaryAction, { alignSelf: "flex-start" }])}>

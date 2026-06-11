@@ -22,6 +22,7 @@ import {
   JOB_CANDIDATE_ORIGIN_LABELS,
   JOB_CANDIDATE_STATUS_LABELS
 } from "../src/core/labels";
+import { buildJobFindingsSummary } from "../src/core/jobFindings";
 import { formatFitScore } from "../src/core/jobScout";
 import type { JobCandidate, JobCandidateStatus } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
@@ -64,6 +65,7 @@ export default function JobCandidatesScreen() {
   const {
     jobCandidates,
     jobSources,
+    jobSourceRuns,
     resumeModules,
     careerSourcePack,
     saveJobCandidate,
@@ -81,6 +83,7 @@ export default function JobCandidatesScreen() {
   const [sortMode, setSortMode] = useState<CareerPackSortMode>("best_fit");
 
   const pack = careerSourcePack?.pack ?? null;
+  const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, new Date());
 
   const matchesById = useMemo(() => {
     if (!pack) {
@@ -160,6 +163,65 @@ export default function JobCandidatesScreen() {
         subtitle="Job candidates stay in the queue until you approve them into an application card."
       />
       <Text style={styles.helpText}>{FIT_SCORE_DISCLAIMER}</Text>
+
+      <Section title="Findings">
+        <Text style={styles.bodyText}>
+          Waiting: {findings.counts.waiting} - New fetched: {findings.counts.newFetched} -
+          Saved/manual: {findings.counts.savedManual} - Dismissed: {findings.counts.dismissed} -
+          Application cards: {findings.counts.cardCreated}
+        </Text>
+        {findings.bestCandidate ? (
+          <View style={styles.cardTile}>
+            <Text style={styles.label}>Review next</Text>
+            <Text style={styles.titleText}>
+              {findings.bestCandidate.company} - {findings.bestCandidate.roleTitle}
+            </Text>
+            <Text style={styles.bodyText}>
+              {formatFitScore(findings.bestCandidate.fitScore, findings.bestCandidate.fitLabel)}
+              {findings.nextMove.kind === "review_candidate" && findings.nextMove.sourceName
+                ? ` - ${findings.nextMove.sourceName}`
+                : ""}
+            </Text>
+            {findings.bestCandidate.fitReasons[0] ? (
+              <Text style={styles.listItem}>
+                {truncate(findings.bestCandidate.fitReasons[0], 120)}
+              </Text>
+            ) : null}
+            {findings.bestCandidate.gaps[0] ? (
+              <Text style={styles.helpText}>
+                Gap: {truncate(findings.bestCandidate.gaps[0], 120)}
+              </Text>
+            ) : null}
+            <Text style={styles.helpText}>{findings.bestCandidate.nextTinyAction}</Text>
+            <View style={styles.cardActions}>
+              <Pressable
+                style={styles.primaryAction}
+                onPress={() => handleAction("approve", findings.bestCandidate!.id)}
+              >
+                <Text style={styles.primaryActionText}>Create Application Card</Text>
+              </Pressable>
+              {findings.bestCandidate.status !== "saved" ? (
+                <Pressable
+                  style={styles.secondaryAction}
+                  onPress={() => handleAction("save", findings.bestCandidate!.id)}
+                >
+                  <Text style={styles.secondaryActionText}>Save</Text>
+                </Pressable>
+              ) : null}
+              {findings.bestCandidate.sourceUrl ? (
+                <Pressable
+                  style={styles.secondaryAction}
+                  onPress={() => openSourceUrl(findings.bestCandidate!.sourceUrl!)}
+                >
+                  <Text style={styles.secondaryActionText}>Open source</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.helpText}>{findings.nextMove.body}</Text>
+        )}
+      </Section>
 
       {pack ? (
         <Section title="Career Pack Filters">
