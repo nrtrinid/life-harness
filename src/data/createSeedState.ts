@@ -28,6 +28,7 @@ export function createSeedState(sessionNow = nowIso()): LifeHarnessData {
     projects: [],
     agentSessions: [],
     featureSprintPlans: [],
+    featureSprintRunnerRuns: [],
     careerSourcePack: null
   };
 }

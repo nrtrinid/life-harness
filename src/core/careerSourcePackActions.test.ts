@@ -31,6 +31,7 @@ function baseState(): LifeHarnessData {
     projects: [],
     agentSessions: [],
     featureSprintPlans: [],
+    featureSprintRunnerRuns: [],
     careerSourcePack: null
   };
 }

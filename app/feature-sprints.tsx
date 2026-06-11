@@ -168,6 +168,7 @@ export default function FeatureSprintsScreen() {
     projects,
     agentSessions,
     featureSprintPlans,
+    featureSprintRunnerRuns,
     careerSourcePack
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
@@ -188,6 +189,7 @@ export default function FeatureSprintsScreen() {
         projects,
         agentSessions,
         featureSprintPlans,
+        featureSprintRunnerRuns,
         careerSourcePack
       }) satisfies LifeHarnessData,
     [
@@ -204,6 +206,7 @@ export default function FeatureSprintsScreen() {
       projects,
       agentSessions,
       featureSprintPlans,
+      featureSprintRunnerRuns,
       careerSourcePack
     ]
   );

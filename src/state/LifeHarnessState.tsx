@@ -95,6 +95,14 @@ import {
   type FeatureSprintPlanUpdateInput,
   type FeatureSprintStepUpdateInput
 } from "../core/featureSprintOrchestrator";
+import type { FeatureSprintRunnerResponse } from "../core/featureSprintRunner";
+import {
+  completeFeatureSprintRunnerRun,
+  createFeatureSprintRunnerRun,
+  markMostRecentFeatureSprintRunnerRunImported,
+  type FeatureSprintRunnerRunCreateInput,
+  type FeatureSprintRunnerRunImportMarkFilter
+} from "../core/featureSprintRunnerHistory";
 import {
   applyDeleteProjectForCard,
   applyUpsertProjectForCard,
@@ -249,6 +257,16 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     text: string,
     stepId?: string
   ) => { ok: boolean; message?: string };
+  createFeatureSprintRunnerRun: (
+    input: FeatureSprintRunnerRunCreateInput
+  ) => { ok: boolean; message?: string; runId?: string; safetyBlocked?: boolean };
+  completeFeatureSprintRunnerRun: (
+    runId: string,
+    response: FeatureSprintRunnerResponse
+  ) => { ok: boolean; message?: string };
+  markMostRecentFeatureSprintRunnerRunImported: (
+    filter: FeatureSprintRunnerRunImportMarkFilter
+  ) => { ok: boolean; message?: string; runId?: string };
   confirmAssistantAction: (
     action: AssistantProposedAction
   ) => { ok: boolean; message?: string };
@@ -832,6 +850,48 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const createFeatureSprintRunnerRunAction = useCallback(
+    (input: FeatureSprintRunnerRunCreateInput) => {
+      const result = createFeatureSprintRunnerRun(stateRef.current, input);
+      if (!result.ok) {
+        return { ok: false, message: result.error, safetyBlocked: result.safetyBlocked };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Runner history started.", runId: result.runId };
+    },
+    []
+  );
+
+  const completeFeatureSprintRunnerRunAction = useCallback(
+    (runId: string, response: FeatureSprintRunnerResponse) => {
+      const result = completeFeatureSprintRunnerRun(stateRef.current, runId, response);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Runner history updated." };
+    },
+    []
+  );
+
+  const markMostRecentFeatureSprintRunnerRunImportedAction = useCallback(
+    (filter: FeatureSprintRunnerRunImportMarkFilter) => {
+      const result = markMostRecentFeatureSprintRunnerRunImported(stateRef.current, filter);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      if (result.runId) {
+        dispatch({ type: "state_replaced", state: result.state });
+      }
+      return {
+        ok: true,
+        message: result.runId ? "Runner output marked imported." : "No matching runner run to mark.",
+        runId: result.runId
+      };
+    },
+    []
+  );
+
   const confirmAssistantAction = useCallback((action: AssistantProposedAction) => {
     const result = applyConfirmedAssistantAction(stateRef.current, action);
     if (!result.ok) {
@@ -1057,6 +1117,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       deleteFeatureSprintPlan: deleteFeatureSprintPlanAction,
       importFeatureSprintPlanForCard: importFeatureSprintPlanForCardAction,
       importFeatureReviewVerdictForPlan: importFeatureReviewVerdictForPlanAction,
+      createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
+      completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
+      markMostRecentFeatureSprintRunnerRunImported:
+        markMostRecentFeatureSprintRunnerRunImportedAction,
       confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,
@@ -1109,6 +1173,9 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       deleteFeatureSprintPlanAction,
       importFeatureSprintPlanForCardAction,
       importFeatureReviewVerdictForPlanAction,
+      createFeatureSprintRunnerRunAction,
+      completeFeatureSprintRunnerRunAction,
+      markMostRecentFeatureSprintRunnerRunImportedAction,
       confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,

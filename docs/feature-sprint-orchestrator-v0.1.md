@@ -23,8 +23,8 @@ User → approval gate
 2. **Copy scoping packet** → paste into ChatGPT or Codex (high/xhigh).
 3. Architect returns prose + `feature-sprint-plan` fenced JSON.
 4. **Import plan** — parses fenced block only; no NL parsing.
-5. **Copy implementation prompt** → send to Cursor/Codex implementation agent.
-6. Paste agent output → **Save agent output** on the current step.
+5. **Copy implementation prompt** or **Run implementation in worktree** (local runner, isolated git worktree) → send to Cursor/Codex implementation agent.
+6. Paste or receive agent output → **Save agent output** on the current step (never auto-saved).
 7. **Copy review packet** → paste into ChatGPT/Codex reviewer.
 8. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
 9. **Import review verdict** — does not auto-advance.

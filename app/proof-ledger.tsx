@@ -44,6 +44,7 @@ function harnessDataFromState(state: ReturnType<typeof useLifeHarness>): LifeHar
     projects: state.projects,
     agentSessions: state.agentSessions,
     featureSprintPlans: state.featureSprintPlans,
+    featureSprintRunnerRuns: state.featureSprintRunnerRuns,
     careerSourcePack: state.careerSourcePack
   };
 }

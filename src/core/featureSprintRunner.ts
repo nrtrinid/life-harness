@@ -1,6 +1,12 @@
-export type FeatureSprintRunnerProfile = "codex_scoping" | "codex_review";
+export type FeatureSprintRunnerProfile = "codex_scoping" | "codex_review" | "codex_implementation";
 
 export type FeatureSprintRunnerStatus = "idle" | "running" | "succeeded" | "failed";
+
+export type FeatureSprintRunnerWorktreeRequest = {
+  enabled?: boolean;
+  baseRef?: string;
+  branchName?: string;
+};
 
 export type FeatureSprintRunnerRequest = {
   profile: FeatureSprintRunnerProfile;
@@ -10,6 +16,7 @@ export type FeatureSprintRunnerRequest = {
   stepId?: string;
   repoPath?: string;
   timeoutMs?: number;
+  worktree?: FeatureSprintRunnerWorktreeRequest;
 };
 
 export type FeatureSprintRunnerResponse = {
@@ -22,11 +29,17 @@ export type FeatureSprintRunnerResponse = {
   completedAt: string;
   commandPreview?: string;
   stdoutPath?: string;
+  worktreePath?: string;
+  branchName?: string;
+  gitStatus?: string;
+  diffStat?: string;
+  changedFiles?: string[];
 };
 
 export const FEATURE_SPRINT_RUNNER_PROFILES: FeatureSprintRunnerProfile[] = [
   "codex_scoping",
-  "codex_review"
+  "codex_review",
+  "codex_implementation"
 ];
 
 export const FEATURE_SPRINT_RUNNER_DEFAULT_PORT = 8127;
@@ -34,6 +47,9 @@ export const FEATURE_SPRINT_RUNNER_DEFAULT_BASE_URL = "http://127.0.0.1:8127";
 export const FEATURE_SPRINT_RUNNER_DEFAULT_TIMEOUT_MS = 600_000;
 export const FEATURE_SPRINT_RUNNER_MAX_PROMPT_CHARS = 200_000;
 export const FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS = 3_000;
+export const FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX = 8_000;
+export const FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX = 8_000;
+export const FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX = 200;
 
 function cleanOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -41,7 +57,93 @@ function cleanOptional(value: string | undefined): string | undefined {
 }
 
 export function isFeatureSprintRunnerProfile(value: unknown): value is FeatureSprintRunnerProfile {
-  return value === "codex_scoping" || value === "codex_review";
+  return (
+    value === "codex_scoping" ||
+    value === "codex_review" ||
+    value === "codex_implementation"
+  );
+}
+
+function parseWorktreeRequest(
+  value: unknown
+): FeatureSprintRunnerWorktreeRequest | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const worktree: FeatureSprintRunnerWorktreeRequest = {};
+
+  if (record.enabled !== undefined) {
+    if (typeof record.enabled !== "boolean") {
+      return undefined;
+    }
+    worktree.enabled = record.enabled;
+  }
+
+  const baseRef = cleanOptional(typeof record.baseRef === "string" ? record.baseRef : undefined);
+  if (baseRef) {
+    worktree.baseRef = baseRef;
+  }
+
+  const branchName = cleanOptional(
+    typeof record.branchName === "string" ? record.branchName : undefined
+  );
+  if (branchName) {
+    worktree.branchName = branchName;
+  }
+
+  return worktree;
+}
+
+export function capGitMetadataFields(response: FeatureSprintRunnerResponse): FeatureSprintRunnerResponse {
+  return {
+    ...response,
+    gitStatus: response.gitStatus
+      ? response.gitStatus.slice(0, FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX)
+      : undefined,
+    diffStat: response.diffStat
+      ? response.diffStat.slice(0, FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX)
+      : undefined,
+    changedFiles: response.changedFiles
+      ? response.changedFiles.slice(0, FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX)
+      : undefined
+  };
+}
+
+export function composeImplementationRunnerOutputSummary(
+  response: FeatureSprintRunnerResponse
+): string {
+  const sections: string[] = [];
+
+  if (response.outputText?.trim()) {
+    sections.push(response.outputText.trim());
+  }
+
+  if (response.worktreePath) {
+    sections.push(`Worktree: ${response.worktreePath}`);
+  }
+
+  if (response.branchName) {
+    sections.push(`Branch: ${response.branchName}`);
+  }
+
+  if (response.changedFiles && response.changedFiles.length > 0) {
+    sections.push(`Changed files (${response.changedFiles.length}):`);
+    sections.push(response.changedFiles.map((file) => `- ${file}`).join("\n"));
+  }
+
+  if (response.diffStat?.trim()) {
+    sections.push("Diff stat:");
+    sections.push(response.diffStat.trim());
+  }
+
+  if (response.gitStatus?.trim()) {
+    sections.push("Git status:");
+    sections.push(response.gitStatus.trim());
+  }
+
+  return sections.join("\n\n");
 }
 
 export function validateFeatureSprintRunnerRequest(
@@ -79,6 +181,22 @@ export function validateFeatureSprintRunnerRequest(
     timeoutMs = Math.floor(record.timeoutMs);
   }
 
+  const repoPath = cleanOptional(typeof record.repoPath === "string" ? record.repoPath : undefined);
+  const worktree = parseWorktreeRequest(record.worktree);
+
+  if (record.worktree !== undefined && !worktree) {
+    return { ok: false, error: "worktree must be an object with optional enabled/baseRef/branchName." };
+  }
+
+  if (record.profile === "codex_implementation") {
+    if (!repoPath) {
+      return { ok: false, error: "codex_implementation requires repoPath." };
+    }
+    if (worktree?.enabled !== true) {
+      return { ok: false, error: "codex_implementation requires worktree.enabled === true." };
+    }
+  }
+
   return {
     ok: true,
     request: {
@@ -87,8 +205,9 @@ export function validateFeatureSprintRunnerRequest(
       cardId: cleanOptional(typeof record.cardId === "string" ? record.cardId : undefined),
       planId: cleanOptional(typeof record.planId === "string" ? record.planId : undefined),
       stepId: cleanOptional(typeof record.stepId === "string" ? record.stepId : undefined),
-      repoPath: cleanOptional(typeof record.repoPath === "string" ? record.repoPath : undefined),
-      timeoutMs
+      repoPath,
+      timeoutMs,
+      worktree
     }
   };
 }

@@ -84,6 +84,7 @@ function baseData(overrides: Partial<LifeHarnessData> = {}): LifeHarnessData {
       }
     ],
     featureSprintPlans: [],
+    featureSprintRunnerRuns: [],
     ...overrides
   };
 }

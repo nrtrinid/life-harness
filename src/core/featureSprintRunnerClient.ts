@@ -1,4 +1,5 @@
 import {
+  capGitMetadataFields,
   FEATURE_SPRINT_RUNNER_DEFAULT_BASE_URL,
   FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS,
   type FeatureSprintRunnerProfile,
@@ -7,6 +8,8 @@ import {
   type FeatureSprintRunnerResponse,
   validateFeatureSprintRunnerRequest
 } from "./featureSprintRunner";
+
+export { composeImplementationRunnerOutputSummary } from "./featureSprintRunner";
 
 export const FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE =
   "Local Feature Sprint Runner is not running. Start it with npm run feature-runner.";
@@ -120,7 +123,11 @@ export async function runFeatureSprintPacket(
       );
     }
 
-    return {
+    const changedFiles = Array.isArray(body.changedFiles)
+      ? body.changedFiles.filter((item): item is string => typeof item === "string")
+      : undefined;
+
+    return capGitMetadataFields({
       ok: body.ok,
       profile: body.profile,
       outputText: typeof body.outputText === "string" ? body.outputText : undefined,
@@ -129,8 +136,13 @@ export async function runFeatureSprintPacket(
       startedAt: body.startedAt,
       completedAt: body.completedAt,
       commandPreview: typeof body.commandPreview === "string" ? body.commandPreview : undefined,
-      stdoutPath: typeof body.stdoutPath === "string" ? body.stdoutPath : undefined
-    };
+      stdoutPath: typeof body.stdoutPath === "string" ? body.stdoutPath : undefined,
+      worktreePath: typeof body.worktreePath === "string" ? body.worktreePath : undefined,
+      branchName: typeof body.branchName === "string" ? body.branchName : undefined,
+      gitStatus: typeof body.gitStatus === "string" ? body.gitStatus : undefined,
+      diffStat: typeof body.diffStat === "string" ? body.diffStat : undefined,
+      changedFiles
+    });
   } catch {
     return buildFailureResponse(
       validated.request.profile,

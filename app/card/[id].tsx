@@ -30,8 +30,10 @@ import {
   buildFeatureStepReviewPacket,
   getActiveFeatureSprintPlanForCard
 } from "../../src/core/featureSprintOrchestrator";
+import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintRunnerHistory";
 import {
   checkFeatureSprintRunnerHealth,
+  composeImplementationRunnerOutputSummary,
   runFeatureSprintPacket
 } from "../../src/core/featureSprintRunnerClient";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
@@ -101,6 +103,16 @@ function buildSessionFormFromSession(session: HarnessAgentSession): SessionFormS
   };
 }
 
+const RUNNER_PROFILE_LABELS = {
+  codex_scoping: "Codex scoping",
+  codex_review: "Codex review",
+  codex_implementation: "Codex implementation"
+} as const;
+
+function formatRunnerStartedAt(iso: string): string {
+  return iso.slice(0, 16).replace("T", " ");
+}
+
 function buildSessionInputFromForm(
   cardId: string,
   form: SessionFormState
@@ -135,6 +147,7 @@ export default function CardDetailScreen() {
     projects,
     agentSessions,
     featureSprintPlans,
+    featureSprintRunnerRuns,
     careerSourcePack,
     saveProjectForCard,
     clearProjectForCard,
@@ -148,6 +161,9 @@ export default function CardDetailScreen() {
     deleteFeatureSprintPlan,
     importFeatureSprintPlanForCard,
     importFeatureReviewVerdictForPlan,
+    createFeatureSprintRunnerRun,
+    completeFeatureSprintRunnerRun,
+    markMostRecentFeatureSprintRunnerRunImported,
     logResumeExportForCard
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
@@ -178,6 +194,7 @@ export default function CardDetailScreen() {
   const [isCheckingRunner, setIsCheckingRunner] = useState(false);
   const [isRunningScoping, setIsRunningScoping] = useState(false);
   const [isRunningReview, setIsRunningReview] = useState(false);
+  const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [detailMode, setDetailMode] = useState<CardDetailMode>("act");
   const card = cards.find((item) => item.id === id);
 
@@ -201,6 +218,7 @@ export default function CardDetailScreen() {
         projects,
         agentSessions,
         featureSprintPlans,
+        featureSprintRunnerRuns,
         careerSourcePack
       },
       card.id
@@ -227,6 +245,7 @@ export default function CardDetailScreen() {
     projects,
     agentSessions,
     featureSprintPlans,
+    featureSprintRunnerRuns,
     careerSourcePack
   ]);
 
@@ -292,6 +311,7 @@ export default function CardDetailScreen() {
       projects,
       agentSessions,
       featureSprintPlans,
+      featureSprintRunnerRuns,
       careerSourcePack
     };
   }
@@ -390,6 +410,7 @@ export default function CardDetailScreen() {
     (step) => step.id === activeFeatureSprintPlan.currentStepId
   );
   const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
+  const recentRunnerRuns = getFeatureSprintRunnerRunsForCard(lifeHarnessData, card.id, 5);
   const now = new Date();
   const nextMove = buildNextMoveSummary(lifeHarnessData, { now });
   const todayMoveForCard = [nextMove.primary, nextMove.backup, ...nextMove.candidates].find(
@@ -472,6 +493,10 @@ export default function CardDetailScreen() {
       showNotice("warning", result.message ?? "Could not import plan.");
       return;
     }
+    markMostRecentFeatureSprintRunnerRunImported({
+      cardId,
+      profile: "codex_scoping"
+    });
     setPlanImportText("");
     showNotice("success", result.message ?? "Feature sprint plan imported.");
   }
@@ -506,6 +531,12 @@ export default function CardDetailScreen() {
       showNotice("warning", result.message ?? "Could not import review verdict.");
       return;
     }
+    markMostRecentFeatureSprintRunnerRunImported({
+      cardId,
+      profile: "codex_review",
+      planId: activeFeatureSprintPlan.id,
+      stepId: activeFeatureSprintPlan.currentStepId
+    });
     setReviewImportText("");
     showNotice("success", result.message ?? "Review verdict imported.");
   }
@@ -567,6 +598,18 @@ export default function CardDetailScreen() {
     }
 
     const project = getProjectForCard(lifeHarnessData, cardId);
+    const historyCreate = createFeatureSprintRunnerRun({
+      profile: "codex_scoping",
+      cardId,
+      repoPath: project?.repoPath
+    });
+    if (!historyCreate.ok) {
+      showNotice("warning", historyCreate.message ?? "Could not start runner history.");
+      if (historyCreate.safetyBlocked) {
+        return;
+      }
+    }
+
     setIsRunningScoping(true);
     try {
       const result = await runFeatureSprintPacket({
@@ -575,6 +618,10 @@ export default function CardDetailScreen() {
         cardId,
         repoPath: project?.repoPath
       });
+
+      if (historyCreate.ok && historyCreate.runId) {
+        completeFeatureSprintRunnerRun(historyCreate.runId, result);
+      }
 
       if (!result.ok || !result.outputText) {
         showNotice("warning", result.error ?? "Codex scoping run failed.");
@@ -606,6 +653,20 @@ export default function CardDetailScreen() {
     }
 
     const project = getProjectForCard(lifeHarnessData, cardId);
+    const historyCreate = createFeatureSprintRunnerRun({
+      profile: "codex_review",
+      cardId,
+      planId: activeFeatureSprintPlan.id,
+      stepId: activeFeatureSprintPlan.currentStepId,
+      repoPath: project?.repoPath
+    });
+    if (!historyCreate.ok) {
+      showNotice("warning", historyCreate.message ?? "Could not start runner history.");
+      if (historyCreate.safetyBlocked) {
+        return;
+      }
+    }
+
     setIsRunningReview(true);
     try {
       const result = await runFeatureSprintPacket({
@@ -617,6 +678,10 @@ export default function CardDetailScreen() {
         repoPath: project?.repoPath
       });
 
+      if (historyCreate.ok && historyCreate.runId) {
+        completeFeatureSprintRunnerRun(historyCreate.runId, result);
+      }
+
       if (!result.ok || !result.outputText) {
         showNotice("warning", result.error ?? "Codex review run failed.");
         return;
@@ -627,6 +692,69 @@ export default function CardDetailScreen() {
       showNotice("success", `Codex review output ready to import.${preview}`);
     } finally {
       setIsRunningReview(false);
+    }
+  }
+
+  async function handleRunImplementationInWorktree() {
+    if (!activeFeatureSprintPlan?.currentStepId || isRunningImplementation) {
+      return;
+    }
+
+    const project = getProjectForCard(lifeHarnessData, cardId);
+    if (!project?.repoPath?.trim()) {
+      showNotice("warning", "Add project repo path before running implementation.");
+      return;
+    }
+
+    const packet = buildFeatureStepImplementationPacket(
+      lifeHarnessData,
+      activeFeatureSprintPlan.id,
+      activeFeatureSprintPlan.currentStepId
+    );
+    if (!packet.ok) {
+      showNotice("warning", packet.error);
+      return;
+    }
+
+    const historyCreate = createFeatureSprintRunnerRun({
+      profile: "codex_implementation",
+      cardId,
+      planId: activeFeatureSprintPlan.id,
+      stepId: activeFeatureSprintPlan.currentStepId,
+      repoPath: project.repoPath
+    });
+    if (!historyCreate.ok) {
+      showNotice("warning", historyCreate.message ?? "Could not start runner history.");
+      if (historyCreate.safetyBlocked) {
+        return;
+      }
+    }
+
+    setIsRunningImplementation(true);
+    try {
+      const result = await runFeatureSprintPacket({
+        profile: "codex_implementation",
+        promptMarkdown: packet.markdown,
+        cardId,
+        planId: activeFeatureSprintPlan.id,
+        stepId: activeFeatureSprintPlan.currentStepId,
+        repoPath: project.repoPath,
+        worktree: { enabled: true }
+      });
+
+      if (historyCreate.ok && historyCreate.runId) {
+        completeFeatureSprintRunnerRun(historyCreate.runId, result);
+      }
+
+      if (!result.ok) {
+        showNotice("warning", result.error ?? "Implementation run failed.");
+        return;
+      }
+
+      setAgentOutputText(composeImplementationRunnerOutputSummary(result));
+      showNotice("success", "Implementation output ready to save.");
+    } finally {
+      setIsRunningImplementation(false);
     }
   }
 
@@ -862,6 +990,63 @@ export default function CardDetailScreen() {
           </Pressable>
         </View>
 
+        <View style={{ marginTop: 12 }}>
+          <Text style={styles.label}>Recent runner runs</Text>
+          {recentRunnerRuns.length === 0 ? (
+            <Text style={[styles.emptyText, { marginTop: 8 }]}>No runner history yet.</Text>
+          ) : (
+            recentRunnerRuns.map((run) => (
+              <View key={run.id} style={{ marginTop: 10 }}>
+                <Text style={styles.bodyText}>
+                  {RUNNER_PROFILE_LABELS[run.profile]} · {run.status} ·{" "}
+                  {formatRunnerStartedAt(run.startedAt)}
+                  {run.importedAt ? " · Imported" : ""}
+                </Text>
+                {run.worktreePath ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>Worktree: {run.worktreePath}</Text>
+                ) : null}
+                {run.branchName ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>Branch: {run.branchName}</Text>
+                ) : null}
+                {run.changedFiles && run.changedFiles.length > 0 ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>
+                    Changed files: {run.changedFiles.length}
+                  </Text>
+                ) : null}
+                {run.commandPreview ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>{run.commandPreview}</Text>
+                ) : null}
+                {run.status === "failed" && run.error ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>{run.error}</Text>
+                ) : null}
+                {run.status === "succeeded" && run.diffStat ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>{run.diffStat}</Text>
+                ) : null}
+                {run.status === "succeeded" && run.outputExcerpt && !run.diffStat ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>{run.outputExcerpt}</Text>
+                ) : null}
+                {canCopyTextToClipboard() && (run.outputText || run.outputExcerpt) ? (
+                  <Pressable
+                    style={[styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }]}
+                    onPress={() => {
+                      void copyTextToClipboard(run.outputText ?? run.outputExcerpt ?? "").then(
+                        (copied) => {
+                          showNotice(
+                            copied ? "success" : "warning",
+                            copied ? "Runner output copied." : "Clipboard unavailable."
+                          );
+                        }
+                      );
+                    }}
+                  >
+                    <Text style={styles.secondaryActionText}>Copy output</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))
+          )}
+        </View>
+
         {activeFeatureSprintPlan ? (
           <View style={{ marginTop: 12 }}>
             <Text style={styles.label}>Active plan</Text>
@@ -954,6 +1139,19 @@ export default function CardDetailScreen() {
                 }}
               >
                 <Text style={styles.secondaryActionText}>Copy implementation prompt</Text>
+              </Pressable>
+            ) : null}
+            {activeFeatureSprintPlan?.currentStepId ? (
+              <Pressable
+                style={[styles.secondaryAction, isRunningImplementation && { opacity: 0.5 }]}
+                disabled={isRunningImplementation}
+                onPress={() => {
+                  void handleRunImplementationInWorktree();
+                }}
+              >
+                <Text style={styles.secondaryActionText}>
+                  {isRunningImplementation ? "Running…" : "Run implementation in worktree"}
+                </Text>
               </Pressable>
             ) : null}
             {activeFeatureSprintPlan ? (

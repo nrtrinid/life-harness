@@ -4,6 +4,7 @@ import type {
   HarnessAgentSession,
   HarnessChatSummary,
   HarnessFeatureSprintPlan,
+  HarnessFeatureSprintRunnerRun,
   HarnessMemoryItem,
   HarnessProject,
   JobCandidate,
@@ -29,5 +30,6 @@ export interface LifeHarnessData {
   projects: HarnessProject[];
   agentSessions: HarnessAgentSession[];
   featureSprintPlans: HarnessFeatureSprintPlan[];
+  featureSprintRunnerRuns: HarnessFeatureSprintRunnerRun[];
   careerSourcePack: StoredCareerSourcePack | null;
 }

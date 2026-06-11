@@ -1,3 +1,5 @@
+import type { FeatureSprintRunnerProfile } from "./featureSprintRunner";
+
 export type LifeArea = "build" | "body" | "money_independence" | "social_career" | "stability_vices";
 
 export type CardState = "inbox" | "active" | "parked" | "waiting" | "done" | "killed";
@@ -400,6 +402,33 @@ export type HarnessFeatureSprintStep = {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+};
+
+export type HarnessFeatureSprintRunnerRunStatus = "running" | "succeeded" | "failed";
+
+export type HarnessFeatureSprintRunnerRun = {
+  id: string;
+  profile: FeatureSprintRunnerProfile;
+  status: HarnessFeatureSprintRunnerRunStatus;
+  cardId?: string;
+  planId?: string;
+  stepId?: string;
+  repoPath?: string;
+  commandPreview?: string;
+  outputExcerpt?: string;
+  outputText?: string;
+  error?: string;
+  exitCode?: number;
+  worktreePath?: string;
+  branchName?: string;
+  gitStatus?: string;
+  diffStat?: string;
+  changedFiles?: string[];
+  startedAt: string;
+  completedAt?: string;
+  importedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type HarnessFeatureSprintPlan = {

@@ -76,9 +76,16 @@ Runner controls live on Card Detail Backroom only — not Feature Sprint Workben
 - Bearer token when configured on the server
 - `MODE=codex` without `ENABLE_CODEX=1` is rejected
 
+## v0.2 — runner history
+
+See [feature-sprint-runner-history-v0.2.md](./feature-sprint-runner-history-v0.2.md). Card Detail Backroom now keeps persistent card-anchored runner history (recent runs, copy output, import marker). Manual import gates are unchanged.
+
+## v0.1 implementation runner
+
+See [feature-sprint-implementation-runner-v0.1.md](./feature-sprint-implementation-runner-v0.1.md). Adds `codex_implementation` profile with isolated git worktree execution. Still approval-gated: output fills the agent textarea only; save/review/advance remain manual.
+
 ## Future path
 
-- Runner job history (v0.2)
 - Implementation runner in isolated worktree
 - stdout/diff/test capture
 - Codex review gate with explicit commit approval

@@ -79,6 +79,7 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     projects: partial.projects ?? [],
     agentSessions: partial.agentSessions ?? [],
     featureSprintPlans: partial.featureSprintPlans ?? [],
+    featureSprintRunnerRuns: partial.featureSprintRunnerRuns ?? [],
     careerSourcePack: partial.careerSourcePack ?? null
   };
 }

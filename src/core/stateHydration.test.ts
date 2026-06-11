@@ -32,6 +32,7 @@ describe("normalizeData", () => {
     expect(normalized.resumeModules).toEqual([]);
     expect(normalized.careerSourcePack).toBeNull();
     expect(normalized.featureSprintPlans).toEqual([]);
+    expect(normalized.featureSprintRunnerRuns).toEqual([]);
   });
 
   it("hydrates old resume modules with default placement", () => {

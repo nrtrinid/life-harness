@@ -1,18 +1,23 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import {
+  capGitMetadataFields,
   FEATURE_SPRINT_RUNNER_DEFAULT_TIMEOUT_MS,
   type FeatureSprintRunnerRequest,
   type FeatureSprintRunnerResponse
 } from "../../../src/core/featureSprintRunner";
 import { buildCodexArgs } from "./codexArgs";
 import { resolveRunnerToken } from "./auth";
+import { captureGitMetadata } from "./gitCapture";
 import { buildMockRunnerOutput } from "./mockOutput";
+import { createFeatureWorktree } from "./worktree";
 
 export type RunnerMode = "mock" | "codex";
+
+const MOCK_IMPLEMENTATION_MARKER = ".life-harness/mock-implementation-result.md";
 
 export function resolveRunnerMode(): RunnerMode {
   const mode = process.env.FEATURE_SPRINT_RUNNER_MODE?.trim().toLowerCase();
@@ -47,21 +52,24 @@ function assertRealCodexAllowed(): string | undefined {
   return undefined;
 }
 
-async function runRealCodex(
-  request: FeatureSprintRunnerRequest,
-  startedAt: string
-): Promise<FeatureSprintRunnerResponse> {
-  const gateError = assertRealCodexAllowed();
-  if (gateError) {
-    return {
-      ok: false,
-      profile: request.profile,
-      error: gateError,
-      startedAt,
-      completedAt: new Date().toISOString()
-    };
+function assertRealImplementationAllowed(): string | undefined {
+  const codexGate = assertRealCodexAllowed();
+  if (codexGate) {
+    return codexGate;
   }
 
+  if (process.env.FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION !== "1") {
+    return "Real implementation mode requires FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION=1.";
+  }
+
+  return undefined;
+}
+
+async function spawnCodexInWorktree(
+  request: FeatureSprintRunnerRequest,
+  worktreePath: string,
+  startedAt: string
+): Promise<FeatureSprintRunnerResponse> {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "feature-sprint-runner-"));
   const promptPath = path.join(tempDir, "prompt.md");
 
@@ -89,7 +97,7 @@ async function runRealCodex(
     }>((resolve) => {
       const child = spawn(argsResult.bin, argsResult.args, {
         shell: false,
-        cwd: request.repoPath?.trim() || process.cwd(),
+        cwd: worktreePath,
         env: process.env
       });
 
@@ -182,11 +190,139 @@ async function runRealCodex(
   }
 }
 
+async function runRealCodex(
+  request: FeatureSprintRunnerRequest,
+  startedAt: string
+): Promise<FeatureSprintRunnerResponse> {
+  const gateError = assertRealCodexAllowed();
+  if (gateError) {
+    return {
+      ok: false,
+      profile: request.profile,
+      error: gateError,
+      startedAt,
+      completedAt: new Date().toISOString()
+    };
+  }
+
+  return spawnCodexInWorktree(request, request.repoPath?.trim() || process.cwd(), startedAt);
+}
+
+async function runMockImplementation(
+  request: FeatureSprintRunnerRequest,
+  startedAt: string
+): Promise<FeatureSprintRunnerResponse> {
+  const worktree = await createFeatureWorktree({
+    repoPath: request.repoPath!,
+    baseRef: request.worktree?.baseRef,
+    branchHint: request.worktree?.branchName,
+    cardId: request.cardId,
+    planId: request.planId
+  });
+
+  if (!worktree.ok) {
+    return {
+      ok: false,
+      profile: request.profile,
+      error: worktree.error,
+      startedAt,
+      completedAt: new Date().toISOString()
+    };
+  }
+
+  await mkdir(path.join(worktree.worktreePath, ".life-harness"), { recursive: true });
+  const markerPath = path.join(worktree.worktreePath, MOCK_IMPLEMENTATION_MARKER);
+  const markerBody = [
+    "# Mock implementation result",
+    "",
+    "This file was written inside an isolated git worktree by the Feature Sprint runner mock profile.",
+    "",
+    "## Prompt excerpt",
+    request.promptMarkdown.slice(0, 500)
+  ].join("\n");
+  await writeFile(markerPath, markerBody, "utf8");
+
+  const git = await captureGitMetadata(worktree.worktreePath);
+  const outputText = [
+    "Mock implementation completed inside an isolated worktree.",
+    "",
+    `Wrote ${MOCK_IMPLEMENTATION_MARKER}.`,
+    "Inspect the worktree diff before saving agent output or running review."
+  ].join("\n");
+
+  return capGitMetadataFields({
+    ok: true,
+    profile: request.profile,
+    outputText,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    commandPreview: "mock:codex_implementation",
+    worktreePath: worktree.worktreePath,
+    branchName: worktree.branchName,
+    gitStatus: git.gitStatus,
+    diffStat: git.diffStat,
+    changedFiles: git.changedFiles
+  });
+}
+
+async function runRealImplementation(
+  request: FeatureSprintRunnerRequest,
+  startedAt: string
+): Promise<FeatureSprintRunnerResponse> {
+  const gateError = assertRealImplementationAllowed();
+  if (gateError) {
+    return {
+      ok: false,
+      profile: request.profile,
+      error: gateError,
+      startedAt,
+      completedAt: new Date().toISOString()
+    };
+  }
+
+  const worktree = await createFeatureWorktree({
+    repoPath: request.repoPath!,
+    baseRef: request.worktree?.baseRef,
+    branchHint: request.worktree?.branchName,
+    cardId: request.cardId,
+    planId: request.planId
+  });
+
+  if (!worktree.ok) {
+    return {
+      ok: false,
+      profile: request.profile,
+      error: worktree.error,
+      startedAt,
+      completedAt: new Date().toISOString()
+    };
+  }
+
+  const codexResult = await spawnCodexInWorktree(request, worktree.worktreePath, startedAt);
+  const git = await captureGitMetadata(worktree.worktreePath);
+
+  return capGitMetadataFields({
+    ...codexResult,
+    worktreePath: worktree.worktreePath,
+    branchName: worktree.branchName,
+    gitStatus: git.gitStatus,
+    diffStat: git.diffStat,
+    changedFiles: git.changedFiles
+  });
+}
+
 export async function runFeatureSprintPacketOnRunner(
   request: FeatureSprintRunnerRequest
 ): Promise<FeatureSprintRunnerResponse> {
   const startedAt = new Date().toISOString();
   const mode = resolveRunnerMode();
+
+  if (request.profile === "codex_implementation") {
+    if (mode === "mock") {
+      return runMockImplementation(request, startedAt);
+    }
+    return runRealImplementation(request, startedAt);
+  }
 
   if (mode === "mock") {
     return {

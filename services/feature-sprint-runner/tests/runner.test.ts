@@ -1,15 +1,45 @@
+import { spawn } from "node:child_process";
 import http from "node:http";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { parseFeatureReviewVerdictBlock, parseFeatureSprintPlanBlock } from "../../../src/core/featureSprintOrchestrator";
 import type { FeatureSprintRunnerRequest, FeatureSprintRunnerResponse } from "../../../src/core/featureSprintRunner";
 import { createServer } from "../src/server";
+import { resolveWorktreeRoot } from "../src/worktree";
 
 const baseRequest: FeatureSprintRunnerRequest = {
   profile: "codex_scoping",
   promptMarkdown: "Scope this feature sprint."
 };
+
+function runGit(cwd: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", args, { shell: false, cwd, env: process.env });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`git ${args.join(" ")} failed with ${code}`));
+      }
+    });
+    child.on("error", reject);
+  });
+}
+
+async function createTempGitRepo(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "feature-runner-repo-"));
+  await runGit(dir, ["init"]);
+  await runGit(dir, ["config", "user.email", "runner-test@example.com"]);
+  await runGit(dir, ["config", "user.name", "Runner Test"]);
+  await writeFile(path.join(dir, "README.md"), "# fixture\n");
+  await runGit(dir, ["add", "README.md"]);
+  await runGit(dir, ["commit", "-m", "init"]);
+  return dir;
+}
 
 function postRun(
   port: number,
@@ -80,12 +110,19 @@ describe("feature-sprint-runner", () => {
   const envSnapshot = { ...process.env };
   let server: http.Server;
   let port: number;
+  let tempRepoPath: string | undefined;
+  let tempWorktreeRoot: string | undefined;
 
   beforeEach(async () => {
     process.env = { ...envSnapshot };
     delete process.env.FEATURE_SPRINT_RUNNER_MODE;
     delete process.env.FEATURE_SPRINT_RUNNER_ENABLE_CODEX;
+    delete process.env.FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION;
     delete process.env.FEATURE_SPRINT_RUNNER_TOKEN;
+
+    tempWorktreeRoot = await mkdtemp(path.join(os.tmpdir(), "feature-runner-worktrees-"));
+    process.env.FEATURE_SPRINT_WORKTREE_ROOT = tempWorktreeRoot;
+    tempRepoPath = await createTempGitRepo();
 
     server = createServer();
     await new Promise<void>((resolve) => {
@@ -102,6 +139,12 @@ describe("feature-sprint-runner", () => {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    if (tempRepoPath) {
+      await rm(tempRepoPath, { recursive: true, force: true });
+    }
+    if (tempWorktreeRoot) {
+      await rm(tempWorktreeRoot, { recursive: true, force: true });
+    }
   });
 
   it("defaults to mock mode when MODE is unset", async () => {
@@ -128,6 +171,64 @@ describe("feature-sprint-runner", () => {
     }
   });
 
+  it("returns mock implementation output with isolated worktree metadata", async () => {
+    const result = await postRun(port, {
+      profile: "codex_implementation",
+      promptMarkdown: "Implement this bounded slice.",
+      cardId: "card-build-test",
+      repoPath: tempRepoPath,
+      worktree: { enabled: true }
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({
+      ok: true,
+      profile: "codex_implementation"
+    });
+
+    if (!("worktreePath" in result.body)) {
+      throw new Error("Expected worktreePath in response.");
+    }
+
+    expect(result.body.worktreePath).toContain(resolveWorktreeRoot());
+    expect(result.body.branchName).toBeTruthy();
+    expect(result.body.changedFiles?.length).toBeGreaterThan(0);
+    expect(result.body.diffStat).toBeTruthy();
+    expect(result.body.gitStatus).toBeTruthy();
+  });
+
+  it("rejects implementation profile when repoPath is missing", async () => {
+    const result = await postRun(port, {
+      profile: "codex_implementation",
+      promptMarkdown: "Implement",
+      worktree: { enabled: true }
+    });
+    expect(result.statusCode).toBe(400);
+    expect(result.body).toMatchObject({
+      error: "codex_implementation requires repoPath."
+    });
+  });
+
+  it("rejects implementation profile when worktree is not enabled", async () => {
+    const result = await postRun(port, {
+      profile: "codex_implementation",
+      promptMarkdown: "Implement",
+      repoPath: tempRepoPath
+    });
+    expect(result.statusCode).toBe(400);
+    expect(result.body).toMatchObject({
+      error: "codex_implementation requires worktree.enabled === true."
+    });
+  });
+
+  it("rejects invalid profile", async () => {
+    const result = await postRun(port, {
+      profile: "codex_builder",
+      promptMarkdown: "nope"
+    });
+    expect(result.statusCode).toBe(400);
+  });
+
   it("rejects MODE=codex without ENABLE_CODEX=1", async () => {
     process.env.FEATURE_SPRINT_RUNNER_MODE = "codex";
 
@@ -138,12 +239,27 @@ describe("feature-sprint-runner", () => {
     });
   });
 
-  it("rejects invalid profile", async () => {
-    const result = await postRun(port, {
-      profile: "codex_implementation",
-      promptMarkdown: "nope"
+  it("rejects real implementation without ENABLE_IMPLEMENTATION=1", async () => {
+    process.env.FEATURE_SPRINT_RUNNER_MODE = "codex";
+    process.env.FEATURE_SPRINT_RUNNER_ENABLE_CODEX = "1";
+    process.env.FEATURE_SPRINT_RUNNER_TOKEN = "secret-token";
+
+    const result = await postRun(
+      port,
+      {
+        profile: "codex_implementation",
+        promptMarkdown: "Implement slice",
+        repoPath: tempRepoPath,
+        worktree: { enabled: true }
+      },
+      { Authorization: "Bearer secret-token" }
+    );
+
+    expect(result.statusCode).toBe(500);
+    expect(result.body).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION=1")
     });
-    expect(result.statusCode).toBe(400);
   });
 
   it("rejects empty prompt", async () => {
