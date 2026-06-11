@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createSeedState } from "../data/createSeedState";
-import type { LifeHarnessData } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import {
   buildAgentSessionCreateInputFromTaskPacket,
   buildAgentTaskPacket,
