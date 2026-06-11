@@ -545,4 +545,71 @@ describe("featureSprintRunnerHistory", () => {
     expect(run?.changedFiles).toEqual([".life-harness/mock-implementation-result.md"]);
     expect(run?.diffStat).toContain("mock-implementation-result");
   });
+
+  it("stores verification results without failing implementation complete", () => {
+    const created = createFeatureSprintRunnerRun(
+      baseData(),
+      {
+        profile: "codex_implementation",
+        cardId: "card-build-test",
+        repoPath: "C:/repo"
+      },
+      FIXED_NOW.toISOString()
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const verificationResults = [
+      {
+        command: "node .life-harness/verify-pass.js",
+        status: "passed" as const,
+        exitCode: 0,
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString()
+      },
+      {
+        command: "node .life-harness/verify-fail.js",
+        status: "failed" as const,
+        exitCode: 1,
+        stderrExcerpt: "verify failed",
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString()
+      },
+      {
+        command: "node .life-harness/verify-pass-2.js",
+        status: "passed" as const,
+        exitCode: 0,
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString()
+      }
+    ];
+
+    const completed = completeFeatureSprintRunnerRun(
+      created.state,
+      created.runId,
+      {
+        ok: true,
+        profile: "codex_implementation",
+        outputText: "Implemented in worktree.",
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString(),
+        verificationResults
+      },
+      FIXED_NOW.toISOString()
+    );
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) {
+      return;
+    }
+
+    const run = completed.state.featureSprintRunnerRuns[0];
+    expect(run?.status).toBe("succeeded");
+    expect(run?.verificationResults).toHaveLength(3);
+    expect(run?.verificationResults?.map((row) => row.status)).toEqual(["passed", "failed", "passed"]);
+    expect(JSON.stringify(completed.state.featureSprintPlans)).toBe(
+      JSON.stringify(created.state.featureSprintPlans)
+    );
+  });
 });

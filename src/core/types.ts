@@ -1,4 +1,4 @@
-import type { FeatureSprintRunnerProfile } from "./featureSprintRunner";
+import type { FeatureSprintRunnerProfile, FeatureSprintVerificationResult } from "./featureSprintRunner";
 
 export type LifeArea = "build" | "body" | "money_independence" | "social_career" | "stability_vices";
 
@@ -424,6 +424,7 @@ export type HarnessFeatureSprintRunnerRun = {
   gitStatus?: string;
   diffStat?: string;
   changedFiles?: string[];
+  verificationResults?: FeatureSprintVerificationResult[];
   startedAt: string;
   completedAt?: string;
   importedAt?: string;

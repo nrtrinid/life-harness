@@ -34,7 +34,8 @@ import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintR
 import {
   checkFeatureSprintRunnerHealth,
   composeImplementationRunnerOutputSummary,
-  runFeatureSprintPacket
+  runFeatureSprintPacket,
+  summarizeVerificationResults
 } from "../../src/core/featureSprintRunnerClient";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import {
@@ -739,7 +740,9 @@ export default function CardDetailScreen() {
         planId: activeFeatureSprintPlan.id,
         stepId: activeFeatureSprintPlan.currentStepId,
         repoPath: project.repoPath,
-        worktree: { enabled: true }
+        worktree: { enabled: true },
+        verificationCommands: project.verificationCommands ?? [],
+        runVerification: Boolean(project.verificationCommands?.length)
       });
 
       if (historyCreate.ok && historyCreate.runId) {
@@ -752,7 +755,13 @@ export default function CardDetailScreen() {
       }
 
       setAgentOutputText(composeImplementationRunnerOutputSummary(result));
-      showNotice("success", "Implementation output ready to save.");
+      const hasVerifyFailure = result.verificationResults?.some((row) => row.status === "failed");
+      showNotice(
+        "success",
+        hasVerifyFailure
+          ? "Implementation output ready. Verification reported failures."
+          : "Implementation output ready to save."
+      );
     } finally {
       setIsRunningImplementation(false);
     }
@@ -1013,6 +1022,24 @@ export default function CardDetailScreen() {
                     Changed files: {run.changedFiles.length}
                   </Text>
                 ) : null}
+                {run.profile === "codex_implementation" && run.verificationResults ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>
+                    Verification: {summarizeVerificationResults(run.verificationResults)}
+                  </Text>
+                ) : null}
+                {run.profile === "codex_implementation" &&
+                run.verificationResults
+                  ?.filter((row) => row.status === "failed")
+                  .slice(0, 1)
+                  .map((failed) => {
+                    const detail = failed.error ?? failed.stderrExcerpt ?? failed.stdoutExcerpt;
+                    const line = detail ? detail.split("\n")[0] : undefined;
+                    return (
+                      <Text key={`${run.id}-verify-fail`} style={[styles.helpText, { marginTop: 4 }]}>
+                        {line ? `Failed: ${failed.command} — ${line}` : `Failed: ${failed.command}`}
+                      </Text>
+                    );
+                  })}
                 {run.commandPreview ? (
                   <Text style={[styles.helpText, { marginTop: 4 }]}>{run.commandPreview}</Text>
                 ) : null}

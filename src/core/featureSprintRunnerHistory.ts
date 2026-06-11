@@ -1,6 +1,7 @@
 import { shouldIncludeCard } from "./contextPacketRedaction";
 import {
   capGitMetadataFields,
+  capVerificationResults,
   type FeatureSprintRunnerProfile,
   type FeatureSprintRunnerResponse
 } from "./featureSprintRunner";
@@ -219,6 +220,7 @@ export function completeFeatureSprintRunnerRun(
     gitStatus: cleanOptional(metadata.gitStatus),
     diffStat: cleanOptional(metadata.diffStat),
     changedFiles: metadata.changedFiles,
+    verificationResults: capVerificationResults(metadata.verificationResults),
     completedAt: response.completedAt,
     updatedAt: now
   };

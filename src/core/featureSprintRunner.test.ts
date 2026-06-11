@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  capVerificationResults,
   composeImplementationRunnerOutputSummary,
   FEATURE_SPRINT_RUNNER_DEFAULT_TIMEOUT_MS,
   FEATURE_SPRINT_RUNNER_MAX_PROMPT_CHARS,
+  FEATURE_SPRINT_VERIFY_MAX_COMMANDS,
+  summarizeVerificationResults,
   validateFeatureSprintRunnerRequest
 } from "./featureSprintRunner";
 import {
@@ -128,6 +131,136 @@ describe("featureSprintRunner validation", () => {
     expect(summary).toContain("Changed files (1):");
     expect(summary).toContain("Diff stat:");
   });
+
+  it("accepts implementation verification fields", () => {
+    const result = validateFeatureSprintRunnerRequest({
+      profile: "codex_implementation",
+      promptMarkdown: "implement slice",
+      repoPath: "C:/repo/life-harness",
+      worktree: { enabled: true },
+      verificationCommands: ["npm run typecheck", "npm test -- featureSprintRunner"],
+      runVerification: true
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.request.verificationCommands).toEqual([
+        "npm run typecheck",
+        "npm test -- featureSprintRunner"
+      ]);
+      expect(result.request.runVerification).toBe(true);
+    }
+  });
+
+  it("rejects verification fields on scoping and review profiles", () => {
+    for (const profile of ["codex_scoping", "codex_review"] as const) {
+      const withCommands = validateFeatureSprintRunnerRequest({
+        profile,
+        promptMarkdown: "packet",
+        verificationCommands: ["npm test"]
+      });
+      expect(withCommands.ok).toBe(false);
+
+      const withFlag = validateFeatureSprintRunnerRequest({
+        profile,
+        promptMarkdown: "packet",
+        runVerification: true
+      });
+      expect(withFlag.ok).toBe(false);
+    }
+  });
+
+  it("enforces max verification commands", () => {
+    const result = validateFeatureSprintRunnerRequest({
+      profile: "codex_implementation",
+      promptMarkdown: "implement",
+      repoPath: "C:/repo",
+      worktree: { enabled: true },
+      verificationCommands: Array.from({ length: FEATURE_SPRINT_VERIFY_MAX_COMMANDS + 1 }, (_, i) =>
+        `npm test -- case-${i}`
+      )
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("composes verification section in implementation summary", () => {
+    const summary = composeImplementationRunnerOutputSummary({
+      ok: true,
+      profile: "codex_implementation",
+      outputText: "Implemented slice.",
+      startedAt: "2026-06-09T12:00:00.000Z",
+      completedAt: "2026-06-09T12:00:05.000Z",
+      verificationResults: [
+        {
+          command: "npm run typecheck",
+          status: "passed",
+          exitCode: 0,
+          startedAt: "2026-06-09T12:00:01.000Z",
+          completedAt: "2026-06-09T12:00:02.000Z"
+        },
+        {
+          command: "npm test -- broken",
+          status: "failed",
+          exitCode: 1,
+          stderrExcerpt: "Assertion failed",
+          startedAt: "2026-06-09T12:00:02.000Z",
+          completedAt: "2026-06-09T12:00:03.000Z"
+        }
+      ]
+    });
+
+    expect(summary).toContain("## Verification");
+    expect(summary).toContain("npm run typecheck");
+    expect(summary).toContain("status: failed");
+  });
+
+  it("summarizes verification results", () => {
+    expect(summarizeVerificationResults(undefined)).toBe("skipped");
+    expect(
+      summarizeVerificationResults([
+        {
+          command: "npm test",
+          status: "passed",
+          startedAt: "t0",
+          completedAt: "t1"
+        },
+        {
+          command: "npm run typecheck",
+          status: "passed",
+          startedAt: "t1",
+          completedAt: "t2"
+        }
+      ])
+    ).toBe("2 passed");
+    expect(
+      summarizeVerificationResults([
+        {
+          command: "npm test",
+          status: "failed",
+          startedAt: "t0",
+          completedAt: "t1"
+        },
+        {
+          command: "npm run typecheck",
+          status: "passed",
+          startedAt: "t1",
+          completedAt: "t2"
+        }
+      ])
+    ).toBe("1 failed / 1 passed");
+  });
+
+  it("caps verification excerpt lengths", () => {
+    const capped = capVerificationResults([
+      {
+        command: "npm test",
+        status: "failed",
+        stdoutExcerpt: "x".repeat(20_000),
+        startedAt: "t0",
+        completedAt: "t1"
+      }
+    ]);
+    expect(capped?.[0]?.stdoutExcerpt?.length).toBeLessThanOrEqual(12_000);
+  });
 });
 
 describe("featureSprintRunnerClient", () => {
@@ -223,6 +356,44 @@ describe("featureSprintRunnerClient", () => {
 
     expect(result.worktreePath).toBe("/tmp/worktree");
     expect(result.changedFiles).toEqual(["src/a.ts"]);
+  });
+
+  it("forwards verification results from runner response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          profile: "codex_implementation",
+          outputText: "done",
+          startedAt: "2026-06-09T12:00:00.000Z",
+          completedAt: "2026-06-09T12:00:01.000Z",
+          verificationResults: [
+            {
+              command: "npm test",
+              status: "passed",
+              exitCode: 0,
+              startedAt: "2026-06-09T12:00:00.500Z",
+              completedAt: "2026-06-09T12:00:00.800Z"
+            }
+          ]
+        })
+      })
+    );
+
+    const result = await runFeatureSprintPacket({
+      profile: "codex_implementation",
+      promptMarkdown: "implement",
+      repoPath: "C:/repo",
+      worktree: { enabled: true },
+      runVerification: true,
+      verificationCommands: ["npm test"]
+    });
+
+    expect(result.verificationResults).toHaveLength(1);
+    expect(result.verificationResults?.[0]?.status).toBe("passed");
   });
 
   it("returns graceful failure when runner is unreachable", async () => {

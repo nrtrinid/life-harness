@@ -3,13 +3,17 @@ import {
   FEATURE_SPRINT_RUNNER_DEFAULT_BASE_URL,
   FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS,
   type FeatureSprintRunnerProfile,
+  type FeatureSprintVerificationResult,
   isFeatureSprintRunnerProfile,
   type FeatureSprintRunnerRequest,
   type FeatureSprintRunnerResponse,
   validateFeatureSprintRunnerRequest
 } from "./featureSprintRunner";
 
-export { composeImplementationRunnerOutputSummary } from "./featureSprintRunner";
+export {
+  composeImplementationRunnerOutputSummary,
+  summarizeVerificationResults
+} from "./featureSprintRunner";
 
 export const FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE =
   "Local Feature Sprint Runner is not running. Start it with npm run feature-runner.";
@@ -34,6 +38,46 @@ function resolveBaseUrl(baseUrl?: string): string {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function parseVerificationResults(value: unknown): FeatureSprintVerificationResult[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const results: FeatureSprintVerificationResult[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (typeof record.command !== "string" || typeof record.startedAt !== "string") {
+      continue;
+    }
+    if (
+      record.status !== "passed" &&
+      record.status !== "failed" &&
+      record.status !== "skipped"
+    ) {
+      continue;
+    }
+    if (typeof record.completedAt !== "string") {
+      continue;
+    }
+
+    results.push({
+      command: record.command,
+      status: record.status,
+      exitCode: typeof record.exitCode === "number" ? record.exitCode : undefined,
+      stdoutExcerpt: typeof record.stdoutExcerpt === "string" ? record.stdoutExcerpt : undefined,
+      stderrExcerpt: typeof record.stderrExcerpt === "string" ? record.stderrExcerpt : undefined,
+      startedAt: record.startedAt,
+      completedAt: record.completedAt,
+      error: typeof record.error === "string" ? record.error : undefined
+    });
+  }
+
+  return results.length > 0 ? results : undefined;
 }
 
 function buildFailureResponse(
@@ -127,6 +171,8 @@ export async function runFeatureSprintPacket(
       ? body.changedFiles.filter((item): item is string => typeof item === "string")
       : undefined;
 
+    const verificationResults = parseVerificationResults(body.verificationResults);
+
     return capGitMetadataFields({
       ok: body.ok,
       profile: body.profile,
@@ -141,7 +187,8 @@ export async function runFeatureSprintPacket(
       branchName: typeof body.branchName === "string" ? body.branchName : undefined,
       gitStatus: typeof body.gitStatus === "string" ? body.gitStatus : undefined,
       diffStat: typeof body.diffStat === "string" ? body.diffStat : undefined,
-      changedFiles
+      changedFiles,
+      verificationResults
     });
   } catch {
     return buildFailureResponse(

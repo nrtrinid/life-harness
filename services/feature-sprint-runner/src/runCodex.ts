@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -14,6 +14,7 @@ import { resolveRunnerToken } from "./auth";
 import { captureGitMetadata } from "./gitCapture";
 import { buildMockRunnerOutput } from "./mockOutput";
 import { createFeatureWorktree } from "./worktree";
+import { runVerificationCommands } from "./verification";
 
 export type RunnerMode = "mock" | "codex";
 
@@ -63,6 +64,33 @@ function assertRealImplementationAllowed(): string | undefined {
   }
 
   return undefined;
+}
+
+async function attachImplementationMetadata(
+  request: FeatureSprintRunnerRequest,
+  worktreePath: string,
+  branchName: string,
+  base: FeatureSprintRunnerResponse
+): Promise<FeatureSprintRunnerResponse> {
+  const git = await captureGitMetadata(worktreePath);
+  let verificationResults = base.verificationResults;
+
+  if (request.runVerification) {
+    verificationResults = await runVerificationCommands(
+      worktreePath,
+      request.verificationCommands ?? []
+    );
+  }
+
+  return capGitMetadataFields({
+    ...base,
+    worktreePath,
+    branchName,
+    gitStatus: git.gitStatus,
+    diffStat: git.diffStat,
+    changedFiles: git.changedFiles,
+    verificationResults
+  });
 }
 
 async function spawnCodexInWorktree(
@@ -242,7 +270,6 @@ async function runMockImplementation(
   ].join("\n");
   await writeFile(markerPath, markerBody, "utf8");
 
-  const git = await captureGitMetadata(worktree.worktreePath);
   const outputText = [
     "Mock implementation completed inside an isolated worktree.",
     "",
@@ -250,19 +277,19 @@ async function runMockImplementation(
     "Inspect the worktree diff before saving agent output or running review."
   ].join("\n");
 
-  return capGitMetadataFields({
-    ok: true,
-    profile: request.profile,
-    outputText,
-    startedAt,
-    completedAt: new Date().toISOString(),
-    commandPreview: "mock:codex_implementation",
-    worktreePath: worktree.worktreePath,
-    branchName: worktree.branchName,
-    gitStatus: git.gitStatus,
-    diffStat: git.diffStat,
-    changedFiles: git.changedFiles
-  });
+  return attachImplementationMetadata(
+    request,
+    worktree.worktreePath,
+    worktree.branchName,
+    {
+      ok: true,
+      profile: request.profile,
+      outputText,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      commandPreview: "mock:codex_implementation"
+    }
+  );
 }
 
 async function runRealImplementation(
@@ -299,16 +326,20 @@ async function runRealImplementation(
   }
 
   const codexResult = await spawnCodexInWorktree(request, worktree.worktreePath, startedAt);
-  const git = await captureGitMetadata(worktree.worktreePath);
+  if (!codexResult.ok) {
+    return capGitMetadataFields({
+      ...codexResult,
+      worktreePath: worktree.worktreePath,
+      branchName: worktree.branchName
+    });
+  }
 
-  return capGitMetadataFields({
-    ...codexResult,
-    worktreePath: worktree.worktreePath,
-    branchName: worktree.branchName,
-    gitStatus: git.gitStatus,
-    diffStat: git.diffStat,
-    changedFiles: git.changedFiles
-  });
+  return attachImplementationMetadata(
+    request,
+    worktree.worktreePath,
+    worktree.branchName,
+    codexResult
+  );
 }
 
 export async function runFeatureSprintPacketOnRunner(

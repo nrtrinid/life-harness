@@ -20,7 +20,7 @@ Key fields:
 - `status` — `running` | `succeeded` | `failed`
 - `cardId`, optional `planId` / `stepId`, optional `repoPath`
 - `commandPreview`, `error`, `exitCode`
-- implementation runs may also store `worktreePath`, `branchName`, `gitStatus`, `diffStat`, `changedFiles`
+- implementation runs may also store `worktreePath`, `branchName`, `gitStatus`, `diffStat`, `changedFiles`, `verificationResults`
 - `outputExcerpt` — short list UI field (~280 chars)
 - `outputText` — capped full output (50k max) for copy
 - `startedAt`, `completedAt`, `importedAt`
@@ -59,8 +59,7 @@ Runner output still fills textareas only. User must click Import. `importedAt` i
 
 ## Future
 
-- Worktree implementation runner
-- Diff / test capture on complete
+- Diff / test capture on complete — **verification capture shipped in v0.2** ([doc](./feature-sprint-verification-capture-v0.2.md))
 - Auto-built review packets
 - Commit gate before advance
 - Optional workbench “last runner” line

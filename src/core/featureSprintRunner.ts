@@ -8,6 +8,19 @@ export type FeatureSprintRunnerWorktreeRequest = {
   branchName?: string;
 };
 
+export type FeatureSprintVerificationStatus = "passed" | "failed" | "skipped";
+
+export type FeatureSprintVerificationResult = {
+  command: string;
+  status: FeatureSprintVerificationStatus;
+  exitCode?: number;
+  stdoutExcerpt?: string;
+  stderrExcerpt?: string;
+  startedAt: string;
+  completedAt: string;
+  error?: string;
+};
+
 export type FeatureSprintRunnerRequest = {
   profile: FeatureSprintRunnerProfile;
   promptMarkdown: string;
@@ -17,6 +30,8 @@ export type FeatureSprintRunnerRequest = {
   repoPath?: string;
   timeoutMs?: number;
   worktree?: FeatureSprintRunnerWorktreeRequest;
+  verificationCommands?: string[];
+  runVerification?: boolean;
 };
 
 export type FeatureSprintRunnerResponse = {
@@ -34,6 +49,7 @@ export type FeatureSprintRunnerResponse = {
   gitStatus?: string;
   diffStat?: string;
   changedFiles?: string[];
+  verificationResults?: FeatureSprintVerificationResult[];
 };
 
 export const FEATURE_SPRINT_RUNNER_PROFILES: FeatureSprintRunnerProfile[] = [
@@ -50,6 +66,8 @@ export const FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS = 3_000;
 export const FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX = 8_000;
 export const FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX = 8_000;
 export const FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX = 200;
+export const FEATURE_SPRINT_VERIFY_MAX_COMMANDS = 5;
+export const FEATURE_SPRINT_VERIFY_MAX_OUTPUT_CHARS = 12_000;
 
 function cleanOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -107,8 +125,68 @@ export function capGitMetadataFields(response: FeatureSprintRunnerResponse): Fea
       : undefined,
     changedFiles: response.changedFiles
       ? response.changedFiles.slice(0, FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX)
-      : undefined
+      : undefined,
+    verificationResults: capVerificationResults(response.verificationResults)
   };
+}
+
+export function capVerificationResults(
+  results: FeatureSprintVerificationResult[] | undefined
+): FeatureSprintVerificationResult[] | undefined {
+  if (!results) {
+    return undefined;
+  }
+
+  return results.map((result) => ({
+    ...result,
+    stdoutExcerpt: result.stdoutExcerpt
+      ? result.stdoutExcerpt.slice(0, FEATURE_SPRINT_VERIFY_MAX_OUTPUT_CHARS)
+      : undefined,
+    stderrExcerpt: result.stderrExcerpt
+      ? result.stderrExcerpt.slice(0, FEATURE_SPRINT_VERIFY_MAX_OUTPUT_CHARS)
+      : undefined
+  }));
+}
+
+export function summarizeVerificationResults(
+  results: FeatureSprintVerificationResult[] | undefined
+): string {
+  if (!results || results.length === 0) {
+    return "skipped";
+  }
+
+  const passed = results.filter((item) => item.status === "passed").length;
+  const failed = results.filter((item) => item.status === "failed").length;
+  const skipped = results.filter((item) => item.status === "skipped").length;
+
+  const parts: string[] = [];
+  if (failed > 0) {
+    parts.push(`${failed} failed`);
+  }
+  if (passed > 0) {
+    parts.push(`${passed} passed`);
+  }
+  if (skipped > 0) {
+    parts.push(`${skipped} skipped`);
+  }
+
+  return parts.length > 0 ? parts.join(" / ") : "skipped";
+}
+
+function formatVerificationResultLine(result: FeatureSprintVerificationResult): string {
+  const lines = [`- command: ${result.command}`, `  status: ${result.status}`];
+  if (result.exitCode !== undefined) {
+    lines.push(`  exitCode: ${result.exitCode}`);
+  }
+  if (result.error) {
+    lines.push(`  error: ${result.error}`);
+  }
+  if (result.stderrExcerpt?.trim()) {
+    lines.push(`  stderr: ${result.stderrExcerpt.trim()}`);
+  } else if (result.stdoutExcerpt?.trim()) {
+    lines.push(`  stdout: ${result.stdoutExcerpt.trim()}`);
+  }
+  return lines.join("\n");
 }
 
 export function composeImplementationRunnerOutputSummary(
@@ -143,7 +221,44 @@ export function composeImplementationRunnerOutputSummary(
     sections.push(response.gitStatus.trim());
   }
 
+  if (response.verificationResults && response.verificationResults.length > 0) {
+    sections.push("## Verification");
+    sections.push(
+      response.verificationResults.map((result) => formatVerificationResultLine(result)).join("\n")
+    );
+  }
+
   return sections.join("\n\n");
+}
+
+function parseVerificationCommands(
+  value: unknown
+): { ok: true; commands: string[] } | { ok: false; error: string } {
+  if (value === undefined) {
+    return { ok: true, commands: [] };
+  }
+
+  if (!Array.isArray(value)) {
+    return { ok: false, error: "verificationCommands must be an array of strings." };
+  }
+
+  const commands = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (commands.length !== value.length) {
+    return { ok: false, error: "verificationCommands must be an array of strings." };
+  }
+
+  if (commands.length > FEATURE_SPRINT_VERIFY_MAX_COMMANDS) {
+    return {
+      ok: false,
+      error: `verificationCommands exceeds max (${FEATURE_SPRINT_VERIFY_MAX_COMMANDS}).`
+    };
+  }
+
+  return { ok: true, commands };
 }
 
 export function validateFeatureSprintRunnerRequest(
@@ -188,6 +303,19 @@ export function validateFeatureSprintRunnerRequest(
     return { ok: false, error: "worktree must be an object with optional enabled/baseRef/branchName." };
   }
 
+  const verificationParsed = parseVerificationCommands(record.verificationCommands);
+  if (!verificationParsed.ok) {
+    return { ok: false, error: verificationParsed.error };
+  }
+
+  let runVerification = false;
+  if (record.runVerification !== undefined) {
+    if (typeof record.runVerification !== "boolean") {
+      return { ok: false, error: "runVerification must be a boolean." };
+    }
+    runVerification = record.runVerification;
+  }
+
   if (record.profile === "codex_implementation") {
     if (!repoPath) {
       return { ok: false, error: "codex_implementation requires repoPath." };
@@ -195,19 +323,32 @@ export function validateFeatureSprintRunnerRequest(
     if (worktree?.enabled !== true) {
       return { ok: false, error: "codex_implementation requires worktree.enabled === true." };
     }
+  } else if (runVerification || verificationParsed.commands.length > 0) {
+    return {
+      ok: false,
+      error: "verificationCommands and runVerification are only allowed for codex_implementation."
+    };
   }
 
-  return {
-    ok: true,
-    request: {
-      profile: record.profile,
-      promptMarkdown,
-      cardId: cleanOptional(typeof record.cardId === "string" ? record.cardId : undefined),
-      planId: cleanOptional(typeof record.planId === "string" ? record.planId : undefined),
-      stepId: cleanOptional(typeof record.stepId === "string" ? record.stepId : undefined),
-      repoPath,
-      timeoutMs,
-      worktree
-    }
+  const request: FeatureSprintRunnerRequest = {
+    profile: record.profile,
+    promptMarkdown,
+    cardId: cleanOptional(typeof record.cardId === "string" ? record.cardId : undefined),
+    planId: cleanOptional(typeof record.planId === "string" ? record.planId : undefined),
+    stepId: cleanOptional(typeof record.stepId === "string" ? record.stepId : undefined),
+    repoPath,
+    timeoutMs,
+    worktree
   };
+
+  if (record.profile === "codex_implementation") {
+    if (verificationParsed.commands.length > 0) {
+      request.verificationCommands = verificationParsed.commands;
+    }
+    if (runVerification) {
+      request.runVerification = true;
+    }
+  }
+
+  return { ok: true, request };
 }
