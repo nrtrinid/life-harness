@@ -1,13 +1,18 @@
 import { Link, useLocalSearchParams } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { useState } from "react";
+import { Platform, Pressable, Text, View } from "react-native";
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
+import { Notice, type NoticeState } from "../../src/components/Notice";
 import { ProgressBar } from "../../src/components/ProgressBar";
 import { Screen } from "../../src/components/Screen";
 import { Section } from "../../src/components/Section";
 import { styles } from "../../src/components/styles";
+import sampleProfile from "../../fixtures/resume/profile.sample.json";
+import { buildApplicationResumeDocxDraft } from "../../src/core/applicationResumeExport";
 import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
 import { computeCardProgress } from "../../src/core/progress";
+import { packResumeDocxBlob, type ResumeProfile } from "../../src/core/resumeDocx";
 import { RESUME_MODULE_SECTION_LABELS } from "../../src/core/resumeModuleBank";
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
@@ -15,6 +20,7 @@ import { useLifeHarness } from "../../src/state/LifeHarnessState";
 export default function CardDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { cards, logs, proofItems, dailyState, resumeModules } = useLifeHarness();
+  const [notice, setNotice] = useState<NoticeState | null>(null);
   const card = cards.find((item) => item.id === id);
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
@@ -37,8 +43,39 @@ export default function CardDetailScreen() {
   const resumeDraftPacket = card.careerApplication?.resumeDraftPacket;
   const moduleById = new Map(resumeModules.map((module) => [module.id, module]));
 
+  function showNotice(kind: NoticeState["kind"], message: string) {
+    setNotice({ kind, message });
+    setTimeout(() => setNotice(null), 5000);
+  }
+
+  async function handleBuildResumeDocx() {
+    if (Platform.OS !== "web" || typeof document === "undefined") {
+      showNotice("warning", "Resume DOCX export is web-only for now.");
+      return;
+    }
+    const result = buildApplicationResumeDocxDraft(
+      card!,
+      resumeModules,
+      sampleProfile as ResumeProfile
+    );
+    if (!result.ok) {
+      showNotice("warning", `Cannot export resume: ${result.errors.join(" ")}`);
+      return;
+    }
+
+    const blob = await packResumeDocxBlob(result.draft);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = result.fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    showNotice("success", "Resume DOCX downloaded.");
+  }
+
   return (
     <Screen>
+      {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
       <Section title={card.title}>
         <Text style={styles.bodyText}>
           {AREA_LABELS[card.area]} · {warmth ? WARMTH_LABELS[warmth] : "unknown"} · {card.state}
@@ -122,6 +159,9 @@ export default function CardDetailScreen() {
             <>
               <Text style={[styles.label, { marginTop: 12 }]}>Resume Draft Packet</Text>
               <Text style={styles.bodyText}>{resumeDraftPacket.nextTinyAction}</Text>
+              <Pressable style={styles.secondaryAction} onPress={handleBuildResumeDocx}>
+                <Text style={styles.secondaryActionText}>Build Resume DOCX</Text>
+              </Pressable>
               <Text style={[styles.label, { marginTop: 12 }]}>Selected Modules</Text>
               {resumeDraftPacket.selectedModuleIds.length === 0 ? (
                 <Text style={styles.emptyText}>No modules selected yet.</Text>

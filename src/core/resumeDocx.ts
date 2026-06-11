@@ -230,3 +230,7 @@ export function buildResumeDocx(draft: ResumeDocxDraft): ResumeDocxBuildResult {
 export async function packResumeDocx(draft: ResumeDocxDraft): Promise<Buffer> {
   return Packer.toBuffer(buildResumeDocx(draft).document);
 }
+
+export async function packResumeDocxBlob(draft: ResumeDocxDraft): Promise<Blob> {
+  return Packer.toBlob(buildResumeDocx(draft).document);
+}

@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "savedAt": "2026-06-10T12:00:00.000Z",
+  "data": {
+    "cards": [
+      {
+        "id": "card_sample_application",
+        "title": "Example Robotics - Software Engineer",
+        "area": "social_career",
+        "state": "inbox",
+        "progress": 0,
+        "warmth": "cold",
+        "whyItMatters": "Sample application card for deterministic resume export.",
+        "nextTinyAction": "Build sample resume DOCX.",
+        "doneForNow": "Sample resume DOCX generated.",
+        "doLane": "Build sample resume DOCX.",
+        "improveLane": "Do not automate content writing.",
+        "recentWins": [],
+        "openLoops": [
+          "Resume export"
+        ],
+        "optimizationIdeas": [],
+        "proofItemIds": [],
+        "sensitivity": "S1",
+        "careerApplication": {
+          "company": "Example Robotics",
+          "roleTitle": "Software Engineer",
+          "sourceUrl": "https://example.com/jobs/software-engineer",
+          "jobDescription": "Build TypeScript and Python tools for robotics operations.",
+          "roleType": "software",
+          "applicationStatus": "inbox",
+          "resumeAngle": "Software engineer with hands-on TypeScript, Python, product tooling, and security-aware development experience.",
+          "projectsToEmphasize": "Life Harness / Local Scout; EV Tracker / Kalshi Market Tooling",
+          "bulletsToEmphasize": "Use approved module bullets only.",
+          "jobCandidateId": "candidate_sample_application",
+          "resumeDraftPacket": {
+            "createdAt": "2026-06-10T12:00:00.000Z",
+            "sourceCandidateId": "candidate_sample_application",
+            "company": "Example Robotics",
+            "roleTitle": "Software Engineer",
+            "resumeAngle": "Software engineer with hands-on TypeScript, Python, product tooling, and security-aware development experience.",
+            "selectedModuleIds": [
+              "resume-asu",
+              "resume-tech-skills",
+              "resume-life-harness",
+              "resume-ev-tracker",
+              "resume-legoland"
+            ],
+            "sectionCoverage": [
+              "education",
+              "skills",
+              "projects",
+              "additional_experience"
+            ],
+            "missingEvidence": [
+              {
+                "moduleId": "resume-life-harness",
+                "moduleTitle": "Life Harness / A770 Local Scout",
+                "message": "No proof attached."
+              }
+            ],
+            "nextTinyAction": "Patch Life Harness / A770 Local Scout: No proof attached."
+          }
+        }
+      }
+    ],
+    "logs": [],
+    "proofItems": [],
+    "dailyState": {
+      "date": "2026-06-10",
+      "mode": "normal",
+      "pounceStarted": false,
+      "minimumViableDayCompleted": false,
+      "salvageCompleted": false
+    },
+    "resumeModules": [
+      {
+        "id": "resume-asu",
+        "title": "ASU Computer Science / Cybersecurity",
+        "category": "education",
+        "summary": "Computer science foundation with cybersecurity coursework.",
+        "tags": [
+          "computer-science",
+          "cybersecurity",
+          "education"
+        ],
+        "bullets": [
+          "Relevant Coursework: Computer Network Security, Distributed Software Development, Information Assurance, Human-Computer Interaction."
+        ],
+        "skills": [
+          "computer science",
+          "cybersecurity",
+          "security"
+        ],
+        "bestFor": [
+          "software",
+          "cybersecurity",
+          "it",
+          "full_stack"
+        ],
+        "proof": [
+          "Degree progress documented"
+        ],
+        "isActive": true,
+        "resumePlacement": {
+          "section": "education",
+          "heading": "Example State University",
+          "detail": "B.S. Computer Science (Cybersecurity)",
+          "date": "May 2026",
+          "order": 10
+        }
+      },
+      {
+        "id": "resume-tech-skills",
+        "title": "Technical Skills: Python / TypeScript / FastAPI / React / Postgres",
+        "category": "skill_cluster",
+        "summary": "Core stack for product and backend work.",
+        "tags": [
+          "python",
+          "typescript",
+          "react",
+          "fastapi",
+          "postgres"
+        ],
+        "bullets": [
+          "Built APIs with FastAPI and Postgres",
+          "Shipped React and React Native interfaces in TypeScript"
+        ],
+        "skills": [
+          "Python",
+          "TypeScript",
+          "React",
+          "FastAPI",
+          "Postgres"
+        ],
+        "bestFor": [
+          "software",
+          "full_stack",
+          "data_finance"
+        ],
+        "proof": [
+          "Project repos available"
+        ],
+        "isActive": true,
+        "resumePlacement": {
+          "section": "skills",
+          "heading": "Technical",
+          "detail": "Python, TypeScript, React, FastAPI, Postgres",
+          "order": 10
+        }
+      },
+      {
+        "id": "resume-life-harness",
+        "title": "Life Harness / A770 Local Scout",
+        "category": "project",
+        "summary": "Executive-function board and local AI gateway experimentation.",
+        "tags": [
+          "react-native",
+          "expo",
+          "product",
+          "local-ai"
+        ],
+        "bullets": [
+          "Scaffolded career-first Momentum Board v0.1",
+          "Kept local AI gateway separate from v0.1 app dependencies"
+        ],
+        "skills": [
+          "TypeScript",
+          "React",
+          "FastAPI",
+          "product design"
+        ],
+        "projects": [
+          "Life Harness"
+        ],
+        "bestFor": [
+          "software",
+          "full_stack",
+          "it"
+        ],
+        "isActive": true,
+        "resumePlacement": {
+          "section": "projects",
+          "heading": "Life Harness / Local Scout",
+          "detail": "React Native, TypeScript, FastAPI",
+          "date": "2026",
+          "order": 10
+        }
+      },
+      {
+        "id": "resume-ev-tracker",
+        "title": "EV Tracker / Kalshi",
+        "category": "project",
+        "summary": "Market analysis tooling with real decision pressure and fair-value notes.",
+        "tags": [
+          "markets",
+          "analysis",
+          "kalshi",
+          "decision-making"
+        ],
+        "bullets": [
+          "Built market review workflow with fair-value notes",
+          "Used Python to analyze market pricing signals"
+        ],
+        "skills": [
+          "Python",
+          "analysis",
+          "markets"
+        ],
+        "projects": [
+          "EV Tracker"
+        ],
+        "bestFor": [
+          "data_finance",
+          "software",
+          "full_stack"
+        ],
+        "proof": [
+          "Wrote one fair-value market note"
+        ],
+        "isActive": true,
+        "resumePlacement": {
+          "section": "projects",
+          "heading": "EV Tracker / Kalshi Market Tooling",
+          "detail": "Python, market analysis, fair-value notes",
+          "date": "2025 - 2026",
+          "order": 20
+        }
+      },
+      {
+        "id": "resume-legoland",
+        "title": "Legoland Robotics / Customer-Facing",
+        "category": "experience",
+        "summary": "Customer-facing robotics and teamwork in a high-traffic environment.",
+        "tags": [
+          "customer-service",
+          "robotics",
+          "teamwork"
+        ],
+        "bullets": [
+          "Supported guest-facing robotics experiences",
+          "Worked with team under live operational pressure"
+        ],
+        "skills": [
+          "communication",
+          "teamwork",
+          "operations"
+        ],
+        "bestFor": [
+          "it",
+          "other"
+        ],
+        "proof": [
+          "Prior role documented"
+        ],
+        "isActive": true,
+        "resumePlacement": {
+          "section": "additional_experience",
+          "heading": "Legoland Robotics / Customer-Facing Operations",
+          "detail": "Guest-facing robotics and team operations",
+          "date": "Prior Experience",
+          "order": 10
+        }
+      }
+    ],
+    "jobCandidates": [],
+    "jobSources": [],
+    "jobSourceRuns": [],
+    "chatSummaries": [],
+    "memoryItems": [],
+    "careerSourcePack": null
+  }
+}
