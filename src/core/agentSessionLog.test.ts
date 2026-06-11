@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createSeedState } from "../data/createSeedState";
 import { applyCompleteAgentSessionWithEvidence } from "./actions";
-import type { LifeHarnessData } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import {
   buildAgentSessionProofSummary,
   completeAgentSession,

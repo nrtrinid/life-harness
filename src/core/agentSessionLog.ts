@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
 import { getProjectForCard } from "./projectRegistry";
 import type { HarnessAgentKind, HarnessAgentSession, HarnessAgentSessionStatus, LifeCard } from "./types";

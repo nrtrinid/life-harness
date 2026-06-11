@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus } from "./guards";
 import { computeCardWarmth } from "./warmth";
 

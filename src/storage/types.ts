@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "../core/actions";
+import type { LifeHarnessData } from "../core/lifeHarnessData";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 

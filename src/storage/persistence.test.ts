@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { LifeHarnessData } from "../core/actions";
+import type { LifeHarnessData } from "../core/lifeHarnessData";
 import { createCareerApplicationCard } from "../core/career";
 import { applyImportCareerSourcePack } from "../core/actions";
 import { createSeedState } from "../data/createSeedState";

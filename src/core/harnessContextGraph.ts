@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { checkCareerUseBeforeImproveLocks } from "./career";
 import { isSensitiveThreadLine } from "./chatThreadState";
 import {

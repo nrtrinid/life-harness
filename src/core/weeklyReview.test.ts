@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { LifeHarnessData } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { buildWeeklyReviewSummary } from "./weeklyReview";
 import type { LifeCard, LifeLogEntry, ProofItem } from "./types";
 

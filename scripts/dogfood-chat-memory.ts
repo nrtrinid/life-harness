@@ -17,7 +17,7 @@ import {
 } from "../src/core/harnessMemoryBank";
 import { buildCompactHarnessContext, estimateHarnessContextChars } from "../src/core/harnessContext";
 import { createSeedState } from "../src/data/createSeedState";
-import type { LifeHarnessData } from "../src/core/actions";
+import type { LifeHarnessData } from "../src/core/lifeHarnessData";
 import type { HarnessContext } from "../src/core/harnessContext";
 
 const baseUrl = process.argv[2] ?? "http://127.0.0.1:8111";

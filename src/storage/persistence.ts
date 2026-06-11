@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "../core/actions";
+import type { LifeHarnessData } from "../core/lifeHarnessData";
 import { syncApplicationStatus } from "../core/career";
 import { nowIso } from "../core/ids";
 import { normalizeResumeModules } from "../core/resumeModuleBank";

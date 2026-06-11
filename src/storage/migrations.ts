@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "../core/actions";
+import type { LifeHarnessData } from "../core/lifeHarnessData";
 import { CURRENT_SCHEMA_VERSION, type PersistedEnvelope } from "./types";
 
 export function isValidEnvelope(value: unknown): value is PersistedEnvelope {

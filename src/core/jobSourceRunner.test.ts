@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyApproveJobCandidate,
-  applyRunJobSourceResult,
-  type LifeHarnessData
+  applyRunJobSourceResult
 } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { checkJobScoutLocks } from "./jobScout";
 import { seedJobCandidates, seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";

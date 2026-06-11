@@ -1,5 +1,6 @@
 import { findCardByTitleTokens } from "./cardMatching";
 import { createCareerApplicationCard, syncApplicationStatus, type CareerIntakeInput } from "./career";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
 import { canActivateCard, getActiveLimitStatus, ACTIVE_CARD_LIMIT } from "./guards";
 import { AREA_LABELS } from "./labels";
@@ -15,7 +16,6 @@ import { createProofItem, PROOF_TITLES } from "./proof";
 import { computeXP } from "./scoring";
 import type {
   CardState,
-  DailyState,
   JobCandidate,
   JobSource,
   JobSourceKind,
@@ -23,17 +23,11 @@ import type {
   LifeArea,
   LifeCard,
   LifeLogEntry,
-  ProofItem,
-  ResumeModule,
-  HarnessChatSummary,
-  HarnessMemoryItem,
-  HarnessProject,
-  HarnessAgentSession
+  ProofItem
 } from "./types";
 import {
   parseCareerSourcePackJson,
-  upsertPackResumeModules,
-  type StoredCareerSourcePack
+  upsertPackResumeModules
 } from "./careerSourcePack";
 import { matchCandidateWithCareerPack } from "./careerPackMatching";
 import { buildResumeDraftPacket } from "./resumeModuleBank";
@@ -46,21 +40,7 @@ import {
   type HarnessAgentSessionCompleteInput
 } from "./agentSessionLog";
 
-export interface LifeHarnessData {
-  cards: LifeCard[];
-  logs: LifeLogEntry[];
-  proofItems: ProofItem[];
-  dailyState: DailyState;
-  resumeModules: ResumeModule[];
-  jobCandidates: JobCandidate[];
-  jobSources: JobSource[];
-  jobSourceRuns: JobSourceRunResult[];
-  chatSummaries: HarnessChatSummary[];
-  memoryItems: HarnessMemoryItem[];
-  projects: HarnessProject[];
-  agentSessions: HarnessAgentSession[];
-  careerSourcePack: StoredCareerSourcePack | null;
-}
+export type { LifeHarnessData } from "./lifeHarnessData";
 
 export interface JobSourceInput {
   name: string;

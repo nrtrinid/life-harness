@@ -1,4 +1,4 @@
-import type { LifeHarnessData } from "../core/actions";
+import type { LifeHarnessData } from "../core/lifeHarnessData";
 import { startSession } from "../core/briefing";
 import { nowIso } from "../core/ids";
 import {

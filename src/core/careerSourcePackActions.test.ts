@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyClearCareerSourcePack,
-  applyImportCareerSourcePack,
-  type LifeHarnessData
+  applyImportCareerSourcePack
 } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { seedResumeModules } from "../data/seedJobScout";
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";
 

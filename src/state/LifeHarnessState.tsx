@@ -31,10 +31,10 @@ import {
   applyUpdateJobSource,
   withProofSuffix,
   type JobSourceInput,
-  type JobSourcePatch,
-  type LifeHarnessData
+  type JobSourcePatch
 } from "../core/actions";
 import { type CareerIntakeInput } from "../core/career";
+import type { LifeHarnessData } from "../core/lifeHarnessData";
 import { buildFitFinderResult, type FitFinderResult, type JobCandidateIntakeInput } from "../core/jobScout";
 import {
   buildRunAllSummary,

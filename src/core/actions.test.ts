@@ -13,9 +13,9 @@ import {
   applyRunJobSourceResult,
   applySalvage,
   applySaveJobCandidate,
-  applySaveJobSourceWithOptionalImport,
-  type LifeHarnessData
+  applySaveJobSourceWithOptionalImport
 } from "./actions";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import { PREVIEW_JOB_SOURCE_ID, runJobSourceFromRaw } from "./jobSourceRunner";
 import { seedJobCandidates, seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";
