@@ -1,6 +1,6 @@
 import { Link, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Platform, Pressable, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
 import { Notice, type NoticeState } from "../../src/components/Notice";
@@ -22,6 +22,7 @@ import {
   normalizeAgentKind,
   type HarnessAgentSessionCreateInput
 } from "../../src/core/agentSessionLog";
+import { getFollowUpsDue } from "../../src/core/career";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import {
   formatListField,
@@ -29,6 +30,7 @@ import {
   parseListField
 } from "../../src/core/projectRegistry";
 import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
+import { buildNextMoveSummary } from "../../src/core/nextMoveContract";
 import { computeCardProgress } from "../../src/core/progress";
 import { packResumeDocxBlob, type ResumeProfile } from "../../src/core/resumeDocx";
 import {
@@ -45,6 +47,8 @@ const READINESS_LABELS = {
   needs_patch: "Needs patch",
   ready_to_export: "Ready to export"
 } as const;
+
+type CardDetailMode = "act" | "backroom";
 
 type SessionFormState = {
   agent: string;
@@ -146,6 +150,7 @@ export default function CardDetailScreen() {
   const [verificationCommandsText, setVerificationCommandsText] = useState("");
   const [projectNotes, setProjectNotes] = useState("");
   const [isCopyLogging, setIsCopyLogging] = useState(false);
+  const [detailMode, setDetailMode] = useState<CardDetailMode>("act");
   const card = cards.find((item) => item.id === id);
 
   useEffect(() => {
@@ -331,6 +336,13 @@ export default function CardDetailScreen() {
 
   const lifeHarnessData = lifeHarnessDataForCard();
   const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
+  const now = new Date();
+  const nextMove = buildNextMoveSummary(lifeHarnessData, { now });
+  const todayMoveForCard = [nextMove.primary, nextMove.backup, ...nextMove.candidates].find(
+    (contract) => contract?.cardId === card.id
+  );
+  const followUpDue = getFollowUpsDue(cards, now).some((item) => item.id === card.id);
+  const recentWinsTeaser = card.recentWins.slice(-3);
 
   async function copyMarkdownToClipboard(
     buildMarkdown: () => { ok: true; markdown: string } | { ok: false; error: string },
@@ -403,34 +415,66 @@ export default function CardDetailScreen() {
   return (
     <Screen>
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
+
       <Section title={card.title}>
         <Text style={styles.bodyText}>
           {AREA_LABELS[card.area]} · {warmth ? WARMTH_LABELS[warmth] : "unknown"} · {card.state}
         </Text>
+      </Section>
+
+      <View style={styles.cardActionsRow}>
+        {(["act", "backroom"] as const).map((mode) => {
+          const active = detailMode === mode;
+          const label = mode === "act" ? "Act" : "Backroom";
+          return (
+            <Pressable
+              key={mode}
+              style={StyleSheet.flatten([
+                active ? styles.primaryAction : styles.secondaryAction,
+                { flex: 1, minWidth: 100 }
+              ])}
+              onPress={() => setDetailMode(mode)}
+            >
+              <Text style={active ? styles.primaryActionText : styles.secondaryActionText}>
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {detailMode === "act" ? (
+        <>
+      <Section title="Move">
         <ProgressBar value={computeCardProgress(card, logs, dailyState.sessionStartedAt)} />
         <Text style={styles.label}>Why It Matters</Text>
         <Text style={styles.bodyText}>{card.whyItMatters}</Text>
         <CardStateButtons cardId={card.id} currentState={card.state} />
-        {canCopyTextToClipboard() ? (
-          <View style={styles.cardActionsRow}>
-            <Pressable style={styles.secondaryAction} onPress={handleCopyAgentContext}>
-              <Text style={styles.secondaryActionText}>Copy agent context</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryAction} onPress={handleCopyAgentTaskPacket}>
-              <Text style={styles.secondaryActionText}>Copy agent task packet</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.secondaryAction, isCopyLogging && { opacity: 0.5 }]}
-              disabled={isCopyLogging}
-              onPress={() => {
-                void handleCopyTaskPacketAndLogSent();
-              }}
-            >
-              <Text style={styles.secondaryActionText}>Copy + log sent</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </Section>
+
+      {todayMoveForCard ? (
+        <Section title="Today's move">
+          <Text style={styles.helpText}>This card is part of today's move.</Text>
+          <Text style={[styles.bodyText, { marginTop: 8 }]}>{todayMoveForCard.pressureLabel}</Text>
+          <Text style={[styles.label, { marginTop: 8 }]}>Do</Text>
+          <Text style={styles.bodyText}>{todayMoveForCard.doAction}</Text>
+          <Text style={[styles.label, { marginTop: 8 }]}>Proof after</Text>
+          <Text style={styles.bodyText}>{todayMoveForCard.proofOnDone}</Text>
+        </Section>
+      ) : null}
+
+      <View style={styles.cardActionsRow}>
+        <Link href="/" asChild>
+          <Pressable style={styles.secondaryAction}>
+            <Text style={styles.secondaryActionText}>Today</Text>
+          </Pressable>
+        </Link>
+        <Link href="/board" asChild>
+          <Pressable style={styles.secondaryAction}>
+            <Text style={styles.secondaryActionText}>Board</Text>
+          </Pressable>
+        </Link>
+      </View>
 
       <Section title="Next Tiny Action">
         <Text style={styles.titleText}>{card.nextTinyAction}</Text>
@@ -450,6 +494,95 @@ export default function CardDetailScreen() {
           </View>
         </View>
       </Section>
+
+      <Section title="Proof">
+        {cardProof.length === 0 ? (
+          <Text style={styles.emptyText}>No proof linked yet.</Text>
+        ) : (
+          cardProof.map((proof) => (
+            <Text key={proof.id} style={styles.listItem}>
+              ▸ {proof.title}
+            </Text>
+          ))
+        )}
+      </Section>
+
+      {recentWinsTeaser.length > 0 ? (
+        <Section title="Recent wins">
+          {recentWinsTeaser.map((win) => (
+            <Text key={win} style={styles.listItem}>
+              ▸ {win}
+            </Text>
+          ))}
+        </Section>
+      ) : null}
+
+      {card.careerApplication && resumeReadiness ? (
+        <Section title="Career">
+          <Text style={styles.titleText}>
+            {card.careerApplication.company} · {card.careerApplication.roleTitle}
+          </Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Follow-up</Text>
+          <Text style={styles.bodyText}>
+            {card.careerApplication.followUpDate
+              ? `${card.careerApplication.followUpDate}${followUpDue ? " · due" : ""}`
+              : "No follow-up scheduled"}
+          </Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Resume readiness</Text>
+          <Text style={styles.bodyText}>{READINESS_LABELS[resumeReadiness.status]}</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Next resume action</Text>
+          <Text style={styles.bodyText}>{resumeReadiness.nextTinyResumeAction}</Text>
+          {resumeDraftPacket ? (
+            <Pressable
+              style={[
+                styles.secondaryAction,
+                { marginTop: 12 },
+                resumeReadiness.exportReadiness.canExportDocx === false && { opacity: 0.7 }
+              ]}
+              onPress={() => void handleBuildResumeDocx()}
+            >
+              <Text style={styles.secondaryActionText}>Build Resume DOCX</Text>
+            </Pressable>
+          ) : null}
+        </Section>
+      ) : null}
+
+      {card.resumePacket && !card.careerApplication ? (
+        <Section title="Resume re-entry">
+          <Text style={styles.label}>Last State</Text>
+          <Text style={styles.bodyText}>{card.resumePacket.lastState}</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Re-entry Action</Text>
+          <Text style={styles.bodyText}>{card.resumePacket.reentryAction}</Text>
+        </Section>
+      ) : null}
+        </>
+      ) : (
+        <>
+      {canCopyTextToClipboard() ? (
+        <Section title="Agent handoff">
+          <Text style={styles.helpText}>
+            Copy context or a task packet for Codex/Cursor. Optional — the card move in Act is the
+            source of truth.
+          </Text>
+          <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
+            <Pressable style={styles.secondaryAction} onPress={handleCopyAgentContext}>
+              <Text style={styles.secondaryActionText}>Copy agent context</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryAction} onPress={handleCopyAgentTaskPacket}>
+              <Text style={styles.secondaryActionText}>Copy agent task packet</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.secondaryAction, isCopyLogging && { opacity: 0.5 }]}
+              disabled={isCopyLogging}
+              onPress={() => {
+                void handleCopyTaskPacketAndLogSent();
+              }}
+            >
+              <Text style={styles.secondaryActionText}>Copy + log sent</Text>
+            </Pressable>
+          </View>
+        </Section>
+      ) : null}
 
       <Section title="Plans">
         <Text style={styles.label}>Trigger Plan</Text>
@@ -881,9 +1014,9 @@ export default function CardDetailScreen() {
         </Section>
       ) : null}
 
-      <Section title="Recent Wins">
+      <Section title="Older wins">
         {card.recentWins.length === 0 ? (
-          <Text style={styles.emptyText}>No recent wins recorded yet.</Text>
+          <Text style={styles.emptyText}>No wins recorded yet.</Text>
         ) : (
           card.recentWins.map((win) => (
             <Text key={win} style={styles.listItem}>
@@ -904,18 +1037,8 @@ export default function CardDetailScreen() {
           ))
         )}
       </Section>
-
-      <Section title="Proof">
-        {cardProof.length === 0 ? (
-          <Text style={styles.emptyText}>No proof linked yet.</Text>
-        ) : (
-          cardProof.map((proof) => (
-            <Text key={proof.id} style={styles.listItem}>
-              ▸ {proof.title}
-            </Text>
-          ))
-        )}
-      </Section>
+        </>
+      )}
     </Screen>
   );
 }
