@@ -11,6 +11,7 @@ import { styles } from "../styles";
 import type { LifeHarnessData } from "../../core/actions";
 import {
   buildAssistantProposalId,
+  diagnoseAssistantActionParse,
   parseAssistantProposedActions,
   stripAssistantActionBlocks,
   validateAssistantAction
@@ -121,6 +122,10 @@ function AssistantTurn({
   });
   const candidates = getMemoryCandidates(turn, memoryItems);
   const displayAnswer = stripAssistantActionBlocks(turn.response.answer);
+  const actionParseDiagnosis = useMemo(
+    () => diagnoseAssistantActionParse(turn.response.answer),
+    [turn.response.answer]
+  );
   const proposedActions = useMemo(
     () => parseAssistantProposedActions(turn.response.answer),
     [turn.response.answer]
@@ -146,6 +151,15 @@ function AssistantTurn({
     <View style={[styles.chatBubbleAssistant, styles.chatBubbleAssistantCompanion]}>
       <Text style={styles.chatSpeakerLabel}>Harness</Text>
       <Text style={styles.chatAnswerText}>{displayAnswer}</Text>
+      {actionParseDiagnosis.parsedCount > 0 ? (
+        <Text style={styles.helpText}>
+          Suggested actions: {actionParseDiagnosis.parsedCount}
+        </Text>
+      ) : actionParseDiagnosis.hasFence && actionParseDiagnosis.parsedCount === 0 ? (
+        <Text style={styles.helpText}>
+          Action block found, but no valid actions could be parsed.
+        </Text>
+      ) : null}
       {proposalEntries.length > 0 ? (
         <View style={{ gap: 8, marginTop: 8 }}>
           {proposalEntries.map((entry) => (

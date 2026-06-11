@@ -1,3 +1,4 @@
+import { buildAssistantActionSchemaHint } from "./assistantActionRegistry";
 import { generateWhileYouWereAway } from "./briefing";
 import {
   createEmptySharedChatThreadState,
@@ -320,10 +321,18 @@ export function buildAiContextPacket(
         "propose_card_update",
         "propose_log_capture",
         "propose_memory_save",
-        "navigate_route"
+        "navigate_route",
+        "quick_capture",
+        "log_win",
+        "park_card",
+        "update_next_tiny_action",
+        "create_agent_session"
       ],
       denied: [],
-      notes: ["Mutations require explicit user approval."]
+      notes: [
+        "Mutations require explicit user approval.",
+        buildAssistantActionSchemaHint()
+      ]
     },
     budget: {
       estimatedChars: 0,

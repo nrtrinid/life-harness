@@ -53,10 +53,39 @@ Here is the move.
 
 Display text uses `stripAssistantActionBlocks` so the raw fence is hidden in the chat bubble.
 
+## v0.2 — Companion prompting and diagnostics
+
+Companion now receives action-block instructions in:
+
+- [`services/ai-gateway/app/prompts/chat_harness.md`](../services/ai-gateway/app/prompts/chat_harness.md) — when to propose, exact fence label, JSON-safe placement inside `answer`
+- Context packet `tools.notes` via `buildAssistantActionSchemaHint()` — rendered as `### Proposable actions` in the gateway prompt
+
+### Dogfood prompts
+
+Primary:
+
+> Given my current board, what should I do next? If a state change would help, propose it using an assistant-actions block.
+
+Narrow test:
+
+> Reply with one valid assistant-actions block proposing a quick_capture action for testing.
+
+### What success looks like
+
+1. Companion returns normal prose plus a fenced `assistant-actions` block inside `answer`.
+2. Ask Harness **strips** the raw fence from the visible bubble text.
+3. **Suggested actions: N** appears below the message when proposals parse.
+4. Proposal cards render with Approve / Dismiss.
+5. **Approve** mutates board state; **Dismiss** marks the proposal dismissed.
+6. **No state change** happens before Approve.
+
+If a fence is present but nothing parses, you see: *Action block found, but no valid actions could be parsed.*
+
+Proposals still require explicit user approval. Companion must not claim it applied a change.
+
 ## Boundaries
 
 - **No autonomous execution** — every mutation requires explicit Approve.
-- **No ai-gateway prompt changes in v0.1** — blocks can be pasted manually for testing until a future prompt ticket.
 - **No Command Inbox, Workbench chat, PC automation, or Codex/Cursor execution bridge** in this slice.
 - **No persistent proposal inbox** — proposal UI state is session-local on the Ask Harness screen.
 

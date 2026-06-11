@@ -7,6 +7,23 @@ import type { LifeCard } from "./types";
 
 export const MAX_ASSISTANT_ACTIONS_PER_MESSAGE = 5;
 
+export const ASSISTANT_ACTIONS_FENCE_LABEL = "assistant-actions";
+
+export const ASSISTANT_ACTION_KINDS: AssistantActionKind[] = [
+  "quick_capture",
+  "log_win",
+  "park_card",
+  "update_next_tiny_action",
+  "create_agent_session"
+];
+
+export type AssistantActionParseDiagnosis = {
+  hasFence: boolean;
+  parsedCount: number;
+  fenceBlockCount: number;
+  invalidJsonBlockCount: number;
+};
+
 export type AssistantActionKind =
   | "quick_capture"
   | "log_win"
@@ -44,15 +61,55 @@ export type AssistantActionApplyResult =
   | { ok: true; data: LifeHarnessData; message: string }
   | { ok: false; error: string };
 
-const ASSISTANT_ACTION_FENCE = /```assistant-actions\s*([\s\S]*?)```/g;
+const ASSISTANT_ACTION_FENCE = new RegExp(
+  `\`\`\`${ASSISTANT_ACTIONS_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
+  "g"
+);
 
-const KNOWN_ACTION_TYPES: AssistantActionKind[] = [
-  "quick_capture",
-  "log_win",
-  "park_card",
-  "update_next_tiny_action",
-  "create_agent_session"
-];
+function scanAssistantActionFenceBodies(text: string): string[] {
+  const pattern = new RegExp(ASSISTANT_ACTION_FENCE.source, "g");
+  const bodies: string[] = [];
+  let match: RegExpExecArray | null = pattern.exec(text);
+  while (match) {
+    bodies.push(match[1]);
+    match = pattern.exec(text);
+  }
+  return bodies;
+}
+
+export function buildAssistantActionSchemaHint(): string {
+  return [
+    "Proposable board actions (user must Approve in UI; max 5 per message):",
+    `- Fence label inside answer: \`\`\`${ASSISTANT_ACTIONS_FENCE_LABEL}`,
+    "- quick_capture: { type, text }",
+    "- log_win: { type, text, cardId? }",
+    "- park_card: { type, cardId, reason? }",
+    "- update_next_tiny_action: { type, cardId, nextTinyAction }",
+    "- create_agent_session: { type, cardId, goal?, agent?, taskName? }",
+    "Do not claim an action is done until the user approves it."
+  ].join("\n");
+}
+
+export function diagnoseAssistantActionParse(text: string): AssistantActionParseDiagnosis {
+  const bodies = scanAssistantActionFenceBodies(text);
+  let invalidJsonBlockCount = 0;
+  for (const body of bodies) {
+    try {
+      const parsed = JSON.parse(body.trim());
+      if (!Array.isArray(parsed)) {
+        invalidJsonBlockCount += 1;
+      }
+    } catch {
+      invalidJsonBlockCount += 1;
+    }
+  }
+  return {
+    hasFence: bodies.length > 0,
+    fenceBlockCount: bodies.length,
+    invalidJsonBlockCount,
+    parsedCount: parseAssistantProposedActions(text).length
+  };
+}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -193,7 +250,7 @@ function parseActionItem(raw: unknown): AssistantProposedAction | null {
 
   const item = raw as Record<string, unknown>;
   const type = item.type;
-  if (typeof type !== "string" || !KNOWN_ACTION_TYPES.includes(type as AssistantActionKind)) {
+  if (typeof type !== "string" || !ASSISTANT_ACTION_KINDS.includes(type as AssistantActionKind)) {
     return null;
   }
 

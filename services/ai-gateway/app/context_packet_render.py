@@ -92,6 +92,11 @@ def render_context_packet_sections(packet: AiContextPacketWire) -> str:
         for item in packet.board.product_decisions:
             lines.append(f"- {item.summary}: {item.reason}")
 
+    if packet.tools.notes:
+        lines.extend(["", "### Proposable actions"])
+        for note in packet.tools.notes:
+            lines.append(f"- {note}")
+
     headroom = max(0, packet.budget.max_chars - packet.budget.estimated_chars)
     lines.extend(
         [

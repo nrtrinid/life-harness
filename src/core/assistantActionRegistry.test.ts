@@ -5,7 +5,11 @@ import type { LifeHarnessData } from "./actions";
 import {
   applyConfirmedAssistantAction,
   applyUpdateNextTinyAction,
+  ASSISTANT_ACTION_KINDS,
+  ASSISTANT_ACTIONS_FENCE_LABEL,
+  buildAssistantActionSchemaHint,
   buildAssistantProposalId,
+  diagnoseAssistantActionParse,
   MAX_ASSISTANT_ACTIONS_PER_MESSAGE,
   parseAssistantProposedActions,
   stripAssistantActionBlocks,
@@ -244,5 +248,85 @@ describe("stripAssistantActionBlocks", () => {
 [{ "type": "quick_capture", "text": "hidden" }]
 \`\`\``;
     expect(stripAssistantActionBlocks(text)).toBe("Visible answer.");
+  });
+
+  it("leaves prose unchanged when no fence is present", () => {
+    expect(stripAssistantActionBlocks("Just answer text.")).toBe("Just answer text.");
+  });
+});
+
+describe("buildAssistantActionSchemaHint", () => {
+  it("includes every supported action kind and fence label", () => {
+    const hint = buildAssistantActionSchemaHint();
+    expect(hint).toContain(ASSISTANT_ACTIONS_FENCE_LABEL);
+    expect(hint).toContain(String(MAX_ASSISTANT_ACTIONS_PER_MESSAGE));
+    for (const kind of ASSISTANT_ACTION_KINDS) {
+      expect(hint).toContain(kind);
+    }
+  });
+});
+
+describe("diagnoseAssistantActionParse", () => {
+  it("reports parsed actions for a valid block", () => {
+    const text = `\`\`\`assistant-actions
+[{ "type": "quick_capture", "text": "new idea: test" }]
+\`\`\``;
+    expect(diagnoseAssistantActionParse(text)).toEqual({
+      hasFence: true,
+      fenceBlockCount: 1,
+      invalidJsonBlockCount: 0,
+      parsedCount: 1
+    });
+  });
+
+  it("counts invalid JSON blocks via raw fence scan", () => {
+    const text = "```assistant-actions\nnot json\n```";
+    expect(diagnoseAssistantActionParse(text)).toEqual({
+      hasFence: true,
+      fenceBlockCount: 1,
+      invalidJsonBlockCount: 1,
+      parsedCount: 0
+    });
+  });
+});
+
+describe("dogfood fixture", () => {
+  const dogfoodText = `Here is the next move.
+
+\`\`\`assistant-actions
+[
+  {
+    "type": "quick_capture",
+    "text": "Paste one job description to restart the career thread."
+  }
+]
+\`\`\``;
+
+  it("parses one quick_capture action", () => {
+    const actions = parseAssistantProposedActions(dogfoodText);
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toEqual({
+      type: "quick_capture",
+      text: "Paste one job description to restart the career thread."
+    });
+  });
+
+  it("strips the fenced block from display text", () => {
+    expect(stripAssistantActionBlocks(dogfoodText)).toBe("Here is the next move.");
+  });
+});
+
+describe("fence label typo", () => {
+  it("does not parse assistant_action label typo", () => {
+    const text = '```assistant_action\n[{ "type": "quick_capture", "text": "x" }]\n```';
+    expect(parseAssistantProposedActions(text)).toEqual([]);
+    expect(diagnoseAssistantActionParse(text).hasFence).toBe(false);
+  });
+
+  it("does not parse text fence with assistant-actions-json label", () => {
+    const text =
+      '```text\n```assistant-actions-json\n[{ "type": "quick_capture", "text": "x" }]\n```\n```';
+    expect(parseAssistantProposedActions(text)).toEqual([]);
+    expect(diagnoseAssistantActionParse(text).hasFence).toBe(false);
   });
 });
