@@ -32,7 +32,6 @@ import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
-import { SignalStrip } from "../src/components/AlivePatterns";
 import { styles } from "../src/components/styles";
 import {
   buildCompanionStateChips,
@@ -679,8 +678,6 @@ export default function AskHarnessDevScreen() {
           quickQuestions={QUICK_QUESTIONS}
           placeholder="Ask your companion…"
           inputRef={inputRef}
-          reasoningDepth={reasoningDepth}
-          onReasoningDepthChange={setReasoningDepth}
           onMessageChange={setMessage}
           onQuickQuestion={handleQuickQuestion}
           onSend={() => void handleSend()}
@@ -750,11 +747,12 @@ export default function AskHarnessDevScreen() {
       />
 
       <View style={styles.chatPrimaryColumn}>
-        <SignalStrip
-          label="Grounded"
-          tone="companion"
-          text="Uses board context for suggestions. It does not change cards unless you choose an action."
-        />
+        <View style={styles.checklist}>
+          <Text style={styles.helpText}>Grounded</Text>
+          <Text style={styles.bodyText}>
+            Uses board context for suggestions. It does not change cards unless you choose an action.
+          </Text>
+        </View>
         <HarnessReadCard />
 
         <ChatStateStrip

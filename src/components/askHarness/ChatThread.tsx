@@ -148,7 +148,7 @@ function AssistantTurn({
   }, [lifeHarnessData, proposedActions, proposalStatuses, turn.id]);
 
   return (
-    <View style={[styles.chatBubbleAssistant, styles.chatBubbleAssistantCompanion]}>
+    <View style={styles.chatBubbleAssistant}>
       <Text style={styles.chatSpeakerLabel}>Harness</Text>
       <Text style={styles.chatAnswerText}>{displayAnswer}</Text>
       {actionParseDiagnosis.parsedCount > 0 ? (

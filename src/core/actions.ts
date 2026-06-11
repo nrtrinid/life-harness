@@ -9,6 +9,7 @@ import {
   createJobCandidate,
   dismissJobCandidate,
   saveJobCandidate,
+  scoreJobCandidate,
   type JobCandidateIntakeInput
 } from "./jobScout";
 import { parseQuickCapture } from "./parsing";
@@ -668,6 +669,77 @@ export function applyApproveJobCandidate(state: LifeHarnessData, candidateId: st
     message: withProofSuffix(`Approved ${card.title} to Inbox.`, true),
     cardId: card.id,
     candidateId: candidate.id
+  };
+}
+
+export function applyBackfillResumeDraftPacket(
+  state: LifeHarnessData,
+  cardId: string
+): ActionResult {
+  const card = state.cards.find((item) => item.id === cardId);
+  if (!card?.careerApplication) {
+    return { state, ok: false, message: "Not an application card." };
+  }
+
+  if (card.careerApplication.resumeDraftPacket) {
+    return { state, ok: true, message: "Resume draft packet already exists." };
+  }
+
+  const application = card.careerApplication;
+  const linkedCandidate = application.jobCandidateId
+    ? state.jobCandidates.find((item) => item.id === application.jobCandidateId)
+    : undefined;
+
+  let packetInput: Parameters<typeof buildResumeDraftPacket>[0];
+  let resumeAngle = application.resumeAngle;
+
+  if (linkedCandidate) {
+    packetInput = linkedCandidate;
+    resumeAngle =
+      resumeAngle ??
+      linkedCandidate.recommendedResumeAngle ??
+      `Review resume bank for this ${linkedCandidate.roleType} role.`;
+  } else {
+    const scored = scoreJobCandidate(
+      {
+        company: application.company,
+        roleTitle: application.roleTitle,
+        description: application.jobDescription,
+        roleType: application.roleType
+      },
+      state.resumeModules
+    );
+    packetInput = {
+      id: card.id,
+      company: application.company,
+      roleTitle: application.roleTitle,
+      recommendedResumeAngle: resumeAngle ?? scored.recommendedResumeAngle,
+      suggestedResumeModuleIds: scored.suggestedResumeModuleIds,
+      roleType: application.roleType
+    };
+    resumeAngle = packetInput.recommendedResumeAngle;
+  }
+
+  const packet = {
+    ...buildResumeDraftPacket(packetInput, state.resumeModules, nowIso()),
+    resumeAngle: resumeAngle ?? packetInput.recommendedResumeAngle ?? ""
+  };
+
+  const cards = updateCard(state.cards, cardId, (item) => ({
+    ...item,
+    careerApplication: item.careerApplication
+      ? {
+          ...item.careerApplication,
+          resumeDraftPacket: packet,
+          resumeAngle: packet.resumeAngle
+        }
+      : item.careerApplication
+  }));
+
+  return {
+    state: { ...state, cards },
+    ok: true,
+    message: "Resume draft packet created from current resume bank."
   };
 }
 
