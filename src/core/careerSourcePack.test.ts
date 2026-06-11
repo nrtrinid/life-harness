@@ -104,6 +104,20 @@ describe("resume module mapping", () => {
     expect(updated.find((m) => m.id === mapped.id)?.summary).toBe(mapped.summary);
   });
 
+  it("infers resume placement when pack module omits it", () => {
+    const parsed = parseCareerSourcePackJson(fixtureJson);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+    const mapped = mapPackModuleToResumeModule(parsed.pack.resumeModules[1]);
+    expect(mapped.resumePlacement).toMatchObject({
+      section: "projects",
+      heading: "Network Security Lab",
+      date: "2024-2026"
+    });
+  });
+
   it("preserves optional resume placement metadata", () => {
     const parsed = JSON.parse(fixtureJson) as Record<string, unknown>;
     const modules = parsed.resumeModules as Array<Record<string, unknown>>;

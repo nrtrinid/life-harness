@@ -150,22 +150,24 @@ export default function CardDetailScreen() {
         <Text style={styles.bodyText}>{card.obstaclePlan?.plan}</Text>
       </Section>
 
-      <Section title="Resume Packet">
-        <Text style={styles.label}>Last State</Text>
-        <Text style={styles.bodyText}>{card.resumePacket?.lastState}</Text>
-        <Text style={[styles.label, { marginTop: 12 }]}>Re-entry Action</Text>
-        <Text style={styles.bodyText}>{card.resumePacket?.reentryAction}</Text>
-        <Text style={[styles.label, { marginTop: 12 }]}>Open Loops</Text>
-        {card.resumePacket?.openLoops.length === 0 ? (
-          <Text style={styles.emptyText}>No open loops yet.</Text>
-        ) : (
-          card.resumePacket?.openLoops.map((loop) => (
-            <Text key={loop} style={styles.listItem}>
-              ▸ {loop}
-            </Text>
-          ))
-        )}
-      </Section>
+      {card.resumePacket && !card.careerApplication ? (
+        <Section title="Resume Packet">
+          <Text style={styles.label}>Last State</Text>
+          <Text style={styles.bodyText}>{card.resumePacket.lastState}</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Re-entry Action</Text>
+          <Text style={styles.bodyText}>{card.resumePacket.reentryAction}</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Open Loops</Text>
+          {card.resumePacket.openLoops.length === 0 ? (
+            <Text style={styles.emptyText}>No open loops yet.</Text>
+          ) : (
+            card.resumePacket.openLoops.map((loop) => (
+              <Text key={loop} style={styles.listItem}>
+                ▸ {loop}
+              </Text>
+            ))
+          )}
+        </Section>
+      ) : null}
 
       {card.careerApplication && resumeReadiness ? (
         <Section title="Resume Readiness / Hardening">
@@ -260,6 +262,10 @@ export default function CardDetailScreen() {
               >
                 <Text style={styles.secondaryActionText}>Build Resume DOCX</Text>
               </Pressable>
+              <Text style={[styles.helpText, { marginTop: 8 }]}>
+                v0.1 export uses the sample profile fixture for the header until resume profile
+                settings ship.
+              </Text>
               <Text style={[styles.label, { marginTop: 12 }]}>Selected Modules</Text>
               {resumeDraftPacket.selectedModuleIds.length === 0 ? (
                 <Text style={styles.emptyText}>No modules selected yet.</Text>

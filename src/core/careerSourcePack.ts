@@ -527,6 +527,39 @@ function coerceCategory(value: string): ResumeModuleCategory {
     : "project";
 }
 
+function defaultSectionForCategory(category: ResumeModuleCategory): ResumeModuleSection {
+  if (category === "education") {
+    return "education";
+  }
+  if (category === "skill_cluster") {
+    return "skills";
+  }
+  if (category === "project") {
+    return "projects";
+  }
+  return "additional_experience";
+}
+
+function inferPackModulePlacement(module: CareerPackResumeModule): ResumeModulePlacement {
+  const category = coerceCategory(module.category);
+  const section =
+    module.resumePlacement?.section &&
+    RESUME_MODULE_SECTIONS.has(module.resumePlacement.section)
+      ? module.resumePlacement.section
+      : defaultSectionForCategory(category);
+  const needsDate = section !== "skills";
+
+  return {
+    section,
+    heading: module.resumePlacement?.heading?.trim() || module.title,
+    detail: module.resumePlacement?.detail?.trim() || module.summary.trim() || undefined,
+    date: needsDate
+      ? module.resumePlacement?.date?.trim() || "2024-2026"
+      : undefined,
+    order: Number.isFinite(module.resumePlacement?.order) ? module.resumePlacement!.order : 10
+  };
+}
+
 export function mapPackModuleToResumeModule(module: CareerPackResumeModule): ResumeModule {
   const tagBestFor = module.tags
     .filter((tag) => ROLE_TYPES.has(tag))
@@ -548,7 +581,7 @@ export function mapPackModuleToResumeModule(module: CareerPackResumeModule): Res
     proof: module.proof.length > 0 ? module.proof : undefined,
     isActive: module.isActive,
     importedFromCareerPack: true,
-    resumePlacement: module.resumePlacement
+    resumePlacement: inferPackModulePlacement(module)
   };
 }
 
