@@ -172,6 +172,7 @@ export default function AgentWorkbenchScreen() {
     memoryItems,
     projects,
     agentSessions,
+    featureSprintPlans,
     careerSourcePack,
     createAgentSessionForCard
   } = useLifeHarness();
@@ -194,6 +195,7 @@ export default function AgentWorkbenchScreen() {
         memoryItems,
         projects,
         agentSessions,
+        featureSprintPlans,
         careerSourcePack
       }) satisfies LifeHarnessData,
     [
@@ -209,6 +211,7 @@ export default function AgentWorkbenchScreen() {
       memoryItems,
       projects,
       agentSessions,
+      featureSprintPlans,
       careerSourcePack
     ]
   );

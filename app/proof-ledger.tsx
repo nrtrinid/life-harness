@@ -43,6 +43,7 @@ function harnessDataFromState(state: ReturnType<typeof useLifeHarness>): LifeHar
     memoryItems: state.memoryItems,
     projects: state.projects,
     agentSessions: state.agentSessions,
+    featureSprintPlans: state.featureSprintPlans,
     careerSourcePack: state.careerSourcePack
   };
 }

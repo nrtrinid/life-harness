@@ -23,6 +23,12 @@ import {
   type HarnessAgentSessionCreateInput
 } from "../../src/core/agentSessionLog";
 import { getFollowUpsDue } from "../../src/core/career";
+import {
+  buildFeatureScopingPacket,
+  buildFeatureStepImplementationPacket,
+  buildFeatureStepReviewPacket,
+  getActiveFeatureSprintPlanForCard
+} from "../../src/core/featureSprintOrchestrator";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import {
   formatListField,
@@ -123,13 +129,20 @@ export default function CardDetailScreen() {
     memoryItems,
     projects,
     agentSessions,
+    featureSprintPlans,
     careerSourcePack,
     saveProjectForCard,
     clearProjectForCard,
     createAgentSessionForCard,
     updateAgentSession,
     completeAgentSession,
-    deleteAgentSession
+    deleteAgentSession,
+    updateFeatureSprintStep,
+    advanceFeatureSprintStep,
+    completeFeatureSprintPlan,
+    deleteFeatureSprintPlan,
+    importFeatureSprintPlanForCard,
+    importFeatureReviewVerdictForPlan
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
@@ -150,6 +163,9 @@ export default function CardDetailScreen() {
   const [verificationCommandsText, setVerificationCommandsText] = useState("");
   const [projectNotes, setProjectNotes] = useState("");
   const [isCopyLogging, setIsCopyLogging] = useState(false);
+  const [planImportText, setPlanImportText] = useState("");
+  const [reviewImportText, setReviewImportText] = useState("");
+  const [agentOutputText, setAgentOutputText] = useState("");
   const [detailMode, setDetailMode] = useState<CardDetailMode>("act");
   const card = cards.find((item) => item.id === id);
 
@@ -172,6 +188,7 @@ export default function CardDetailScreen() {
         memoryItems,
         projects,
         agentSessions,
+        featureSprintPlans,
         careerSourcePack
       },
       card.id
@@ -197,6 +214,7 @@ export default function CardDetailScreen() {
     memoryItems,
     projects,
     agentSessions,
+    featureSprintPlans,
     careerSourcePack
   ]);
 
@@ -261,6 +279,7 @@ export default function CardDetailScreen() {
       memoryItems,
       projects,
       agentSessions,
+      featureSprintPlans,
       careerSourcePack
     };
   }
@@ -282,6 +301,7 @@ export default function CardDetailScreen() {
     );
   }
 
+  const cardId = card.id;
   const cardProof = proofItems.filter((proof) => card.proofItemIds.includes(proof.id));
   const resumeDraftPacket = card.careerApplication?.resumeDraftPacket;
   const moduleById = new Map(resumeModules.map((module) => [module.id, module]));
@@ -335,6 +355,10 @@ export default function CardDetailScreen() {
   }
 
   const lifeHarnessData = lifeHarnessDataForCard();
+  const activeFeatureSprintPlan = getActiveFeatureSprintPlanForCard(lifeHarnessData, card.id);
+  const currentFeatureStep = activeFeatureSprintPlan?.steps.find(
+    (step) => step.id === activeFeatureSprintPlan.currentStepId
+  );
   const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
   const now = new Date();
   const nextMove = buildNextMoveSummary(lifeHarnessData, { now });
@@ -410,6 +434,82 @@ export default function CardDetailScreen() {
     } finally {
       setIsCopyLogging(false);
     }
+  }
+
+  function handleImportFeaturePlan() {
+    const result = importFeatureSprintPlanForCard(cardId, planImportText);
+    if (!result.ok) {
+      showNotice("warning", result.message ?? "Could not import plan.");
+      return;
+    }
+    setPlanImportText("");
+    showNotice("success", result.message ?? "Feature sprint plan imported.");
+  }
+
+  function handleSaveAgentOutput() {
+    if (!activeFeatureSprintPlan?.currentStepId) {
+      showNotice("warning", "No current step to save output on.");
+      return;
+    }
+    const result = updateFeatureSprintStep(
+      activeFeatureSprintPlan.id,
+      activeFeatureSprintPlan.currentStepId,
+      {
+        outputSummary: agentOutputText.trim() || undefined,
+        status: "sent"
+      }
+    );
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save agent output.");
+  }
+
+  function handleImportReviewVerdict() {
+    if (!activeFeatureSprintPlan) {
+      showNotice("warning", "No active feature sprint plan.");
+      return;
+    }
+    const result = importFeatureReviewVerdictForPlan(
+      activeFeatureSprintPlan.id,
+      reviewImportText,
+      activeFeatureSprintPlan.currentStepId
+    );
+    if (!result.ok) {
+      showNotice("warning", result.message ?? "Could not import review verdict.");
+      return;
+    }
+    setReviewImportText("");
+    showNotice("success", result.message ?? "Review verdict imported.");
+  }
+
+  function handleAdvanceFeatureStep() {
+    if (!activeFeatureSprintPlan?.currentStepId) {
+      showNotice("warning", "No current step to advance.");
+      return;
+    }
+    const result = advanceFeatureSprintStep(
+      activeFeatureSprintPlan.id,
+      activeFeatureSprintPlan.currentStepId
+    );
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not advance step.");
+  }
+
+  function handleCompleteFeatureSprint() {
+    if (!activeFeatureSprintPlan) {
+      showNotice("warning", "No active feature sprint plan.");
+      return;
+    }
+    const result = completeFeatureSprintPlan(activeFeatureSprintPlan.id);
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not complete feature.");
+  }
+
+  function handleDeleteFeatureSprint() {
+    if (!activeFeatureSprintPlan) {
+      return;
+    }
+    const result = deleteFeatureSprintPlan(activeFeatureSprintPlan.id);
+    setPlanImportText("");
+    setReviewImportText("");
+    setAgentOutputText("");
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not delete plan.");
   }
 
   return (
@@ -591,6 +691,179 @@ export default function CardDetailScreen() {
           </View>
         </Section>
       ) : null}
+
+      <Section title="Feature Sprint">
+        <Text style={styles.helpText}>
+          Manual planner → implementer → reviewer loop. ChatGPT/Codex scopes and reviews; Cursor/Codex
+          implements bounded slices.
+        </Text>
+
+        {activeFeatureSprintPlan ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={styles.label}>Active plan</Text>
+            <Text style={styles.titleText}>
+              {activeFeatureSprintPlan.title} · {activeFeatureSprintPlan.status}
+            </Text>
+            <Text style={[styles.bodyText, { marginTop: 8 }]}>{activeFeatureSprintPlan.goal}</Text>
+            {activeFeatureSprintPlan.whyNow ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Why now</Text>
+                <Text style={styles.bodyText}>{activeFeatureSprintPlan.whyNow}</Text>
+              </>
+            ) : null}
+            <Text style={[styles.label, { marginTop: 12 }]}>Acceptance criteria</Text>
+            {activeFeatureSprintPlan.acceptanceCriteria.map((item) => (
+              <Text key={item} style={styles.listItem}>
+                ▸ {item}
+              </Text>
+            ))}
+            {activeFeatureSprintPlan.nonGoals.length > 0 ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Non-goals</Text>
+                {activeFeatureSprintPlan.nonGoals.map((item) => (
+                  <Text key={item} style={styles.listItem}>
+                    ▸ {item}
+                  </Text>
+                ))}
+              </>
+            ) : null}
+            <Text style={[styles.label, { marginTop: 12 }]}>Steps</Text>
+            {activeFeatureSprintPlan.steps.map((step) => (
+              <Text
+                key={step.id}
+                style={[
+                  styles.listItem,
+                  step.id === activeFeatureSprintPlan.currentStepId && { color: colors.accentPrimary }
+                ]}
+              >
+                ▸ {step.title} · {step.status}
+                {step.reviewStatus ? ` · review ${step.reviewStatus}` : ""}
+              </Text>
+            ))}
+            {currentFeatureStep?.reviewVerdict ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Latest review</Text>
+                <Text style={styles.bodyText}>{currentFeatureStep.reviewVerdict}</Text>
+              </>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={[styles.emptyText, { marginTop: 12 }]}>No active feature sprint plan yet.</Text>
+        )}
+
+        {canCopyTextToClipboard() ? (
+          <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
+            <Pressable
+              style={styles.secondaryAction}
+              onPress={() => {
+                void copyMarkdownToClipboard(
+                  () => buildFeatureScopingPacket(lifeHarnessData, card.id),
+                  "Scoping packet copied."
+                );
+              }}
+            >
+              <Text style={styles.secondaryActionText}>Copy scoping packet</Text>
+            </Pressable>
+            {activeFeatureSprintPlan ? (
+              <Pressable
+                style={styles.secondaryAction}
+                onPress={() => {
+                  void copyMarkdownToClipboard(
+                    () =>
+                      buildFeatureStepImplementationPacket(
+                        lifeHarnessData,
+                        activeFeatureSprintPlan.id
+                      ),
+                    "Implementation prompt copied."
+                  );
+                }}
+              >
+                <Text style={styles.secondaryActionText}>Copy implementation prompt</Text>
+              </Pressable>
+            ) : null}
+            {activeFeatureSprintPlan ? (
+              <Pressable
+                style={styles.secondaryAction}
+                onPress={() => {
+                  void copyMarkdownToClipboard(
+                    () =>
+                      buildFeatureStepReviewPacket(
+                        lifeHarnessData,
+                        activeFeatureSprintPlan.id,
+                        undefined,
+                        agentOutputText
+                      ),
+                    "Review packet copied."
+                  );
+                }}
+              >
+                <Text style={styles.secondaryActionText}>Copy review packet</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        <Text style={[styles.label, { marginTop: 12 }]}>Import plan (ChatGPT/Codex output)</Text>
+        <TextInput
+          style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
+          value={planImportText}
+          onChangeText={setPlanImportText}
+          placeholder="Paste output with a feature-sprint-plan fenced block"
+          placeholderTextColor={colors.inputPlaceholder}
+          multiline
+        />
+        <Pressable style={[styles.secondaryAction, { marginTop: 12 }]} onPress={handleImportFeaturePlan}>
+          <Text style={styles.secondaryActionText}>Import plan</Text>
+        </Pressable>
+
+        {activeFeatureSprintPlan ? (
+          <>
+            <Text style={[styles.label, { marginTop: 12 }]}>Agent output</Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
+              value={agentOutputText}
+              onChangeText={setAgentOutputText}
+              placeholder="Paste implementation agent output"
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Pressable
+              style={[styles.secondaryAction, { marginTop: 12 }]}
+              onPress={handleSaveAgentOutput}
+            >
+              <Text style={styles.secondaryActionText}>Save agent output</Text>
+            </Pressable>
+
+            <Text style={[styles.label, { marginTop: 12 }]}>Import review verdict</Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
+              value={reviewImportText}
+              onChangeText={setReviewImportText}
+              placeholder="Paste reviewer output with feature-review-verdict block"
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Pressable
+              style={[styles.secondaryAction, { marginTop: 12 }]}
+              onPress={handleImportReviewVerdict}
+            >
+              <Text style={styles.secondaryActionText}>Import review verdict</Text>
+            </Pressable>
+
+            <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
+              <Pressable style={styles.secondaryAction} onPress={handleAdvanceFeatureStep}>
+                <Text style={styles.secondaryActionText}>Advance step</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryAction} onPress={handleCompleteFeatureSprint}>
+                <Text style={styles.secondaryActionText}>Mark feature complete</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryAction} onPress={handleDeleteFeatureSprint}>
+                <Text style={styles.secondaryActionText}>Delete plan</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+      </Section>
 
       <Section title="Plans">
         <Text style={styles.label}>Trigger Plan</Text>

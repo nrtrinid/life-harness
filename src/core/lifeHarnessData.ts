@@ -3,6 +3,7 @@ import type {
   DailyState,
   HarnessAgentSession,
   HarnessChatSummary,
+  HarnessFeatureSprintPlan,
   HarnessMemoryItem,
   HarnessProject,
   JobCandidate,
@@ -27,5 +28,6 @@ export interface LifeHarnessData {
   memoryItems: HarnessMemoryItem[];
   projects: HarnessProject[];
   agentSessions: HarnessAgentSession[];
+  featureSprintPlans: HarnessFeatureSprintPlan[];
   careerSourcePack: StoredCareerSourcePack | null;
 }

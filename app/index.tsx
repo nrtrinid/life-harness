@@ -46,6 +46,7 @@ export default function TodayScreen() {
     resumeModules,
     projects,
     agentSessions,
+    featureSprintPlans,
     chatSummaries,
     memoryItems
   } = useLifeHarness();
@@ -88,6 +89,7 @@ export default function TodayScreen() {
       memoryItems,
       projects,
       agentSessions,
+      featureSprintPlans,
       careerSourcePack
     },
     { now }

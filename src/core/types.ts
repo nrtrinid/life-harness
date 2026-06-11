@@ -364,6 +364,66 @@ export interface HarnessAgentSession {
   evidenceProofItemId?: string;
 }
 
+export type HarnessFeatureSprintStatus =
+  | "planning"
+  | "in_progress"
+  | "reviewing"
+  | "done"
+  | "parked";
+
+export type HarnessFeatureSprintStepStatus =
+  | "planned"
+  | "ready"
+  | "sent"
+  | "reviewing"
+  | "done"
+  | "blocked"
+  | "parked";
+
+export type HarnessFeatureSprintReviewStatus =
+  | "pending"
+  | "accepted"
+  | "needs_changes"
+  | "blocked";
+
+export type HarnessFeatureSprintStep = {
+  id: string;
+  title: string;
+  goal: string;
+  status: HarnessFeatureSprintStepStatus;
+  acceptanceCriteria: string[];
+  suggestedPrompt?: string;
+  agentSessionId?: string;
+  outputSummary?: string;
+  reviewVerdict?: string;
+  reviewStatus?: HarnessFeatureSprintReviewStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+};
+
+export type HarnessFeatureSprintPlan = {
+  id: string;
+  cardId: string;
+  projectId?: string;
+  title: string;
+  goal: string;
+  status: HarnessFeatureSprintStatus;
+  whyNow?: string;
+  acceptanceCriteria: string[];
+  nonGoals: string[];
+  constraints: string[];
+  steps: HarnessFeatureSprintStep[];
+  currentStepId?: string;
+  latestReviewVerdict?: string;
+  latestReviewStatus?: HarnessFeatureSprintReviewStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  evidenceLogId?: string;
+  evidenceProofItemId?: string;
+};
+
 export type PrimaryActionKind =
   | "park"
   | "follow_up"

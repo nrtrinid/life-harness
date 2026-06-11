@@ -30,6 +30,7 @@ function baseState(): LifeHarnessData {
     memoryItems: [],
     projects: [],
     agentSessions: [],
+    featureSprintPlans: [],
     careerSourcePack: null
   };
 }

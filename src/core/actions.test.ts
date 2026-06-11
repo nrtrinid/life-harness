@@ -36,6 +36,7 @@ function createState(dailyStateOverrides: Partial<DailyState> = {}): LifeHarness
     memoryItems: [],
     projects: [],
     agentSessions: [],
+    featureSprintPlans: [],
     careerSourcePack: null
   };
 }

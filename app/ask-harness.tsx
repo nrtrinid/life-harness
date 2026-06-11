@@ -180,6 +180,7 @@ export default function AskHarnessDevScreen() {
       memoryItems,
       projects,
       agentSessions,
+      featureSprintPlans,
       careerSourcePack
     } = harnessState;
     return {
@@ -195,6 +196,7 @@ export default function AskHarnessDevScreen() {
       memoryItems,
       projects,
       agentSessions,
+      featureSprintPlans,
       careerSourcePack
     };
   }, [harnessState]);

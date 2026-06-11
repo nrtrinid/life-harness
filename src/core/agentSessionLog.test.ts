@@ -13,7 +13,7 @@ import {
   sessionAlreadyHasEvidence,
   updateAgentSession
 } from "./agentSessionLog";
-import { normalizeData } from "../storage/persistence";
+import { normalizeData } from "./stateHydration";
 import type { LifeCard } from "./types";
 
 const FIXED_NOW = "2026-06-09T12:00:00.000Z";

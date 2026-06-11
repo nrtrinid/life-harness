@@ -79,6 +79,22 @@ import {
   type HarnessAgentSessionUpdateInput
 } from "../core/agentSessionLog";
 import {
+  applyAdvanceFeatureSprintStep,
+  applyCompleteFeatureSprintPlan,
+  applyCreateFeatureSprintPlanForCard,
+  applyDeleteFeatureSprintPlan,
+  applyUpdateFeatureSprintPlan,
+  applyUpdateFeatureSprintStep,
+  createFeatureSprintPlanForCard,
+  deleteFeatureSprintPlan,
+  importFeatureReviewVerdictFromText,
+  importFeatureSprintPlanFromText,
+  updateFeatureSprintPlan,
+  type FeatureSprintPlanCreateInput,
+  type FeatureSprintPlanUpdateInput,
+  type FeatureSprintStepUpdateInput
+} from "../core/featureSprintOrchestrator";
+import {
   applyDeleteProjectForCard,
   applyUpsertProjectForCard,
   type HarnessProjectUpsertInput
@@ -128,6 +144,21 @@ type LifeHarnessAction =
       input: HarnessAgentSessionCompleteInput;
     }
   | { type: "delete_agent_session"; sessionId: string }
+  | { type: "create_feature_sprint_plan"; input: FeatureSprintPlanCreateInput }
+  | { type: "update_feature_sprint_plan"; planId: string; patch: FeatureSprintPlanUpdateInput }
+  | {
+      type: "update_feature_sprint_step";
+      planId: string;
+      stepId: string;
+      patch: FeatureSprintStepUpdateInput;
+    }
+  | { type: "advance_feature_sprint_step"; planId: string; stepId: string }
+  | {
+      type: "complete_feature_sprint_plan";
+      planId: string;
+      input?: { proofText?: string };
+    }
+  | { type: "delete_feature_sprint_plan"; planId: string }
   | { type: "state_replaced"; state: LifeHarnessData };
 
 interface LifeHarnessContextValue extends LifeHarnessData {
@@ -183,6 +214,36 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     input?: HarnessAgentSessionCompleteInput
   ) => { ok: boolean; message?: string };
   deleteAgentSession: (sessionId: string) => { ok: boolean; message?: string };
+  createFeatureSprintPlanForCard: (
+    input: FeatureSprintPlanCreateInput
+  ) => { ok: boolean; message?: string; planId?: string };
+  updateFeatureSprintPlan: (
+    planId: string,
+    patch: FeatureSprintPlanUpdateInput
+  ) => { ok: boolean; message?: string };
+  updateFeatureSprintStep: (
+    planId: string,
+    stepId: string,
+    patch: FeatureSprintStepUpdateInput
+  ) => { ok: boolean; message?: string };
+  advanceFeatureSprintStep: (
+    planId: string,
+    stepId: string
+  ) => { ok: boolean; message?: string };
+  completeFeatureSprintPlan: (
+    planId: string,
+    input?: { proofText?: string }
+  ) => { ok: boolean; message?: string };
+  deleteFeatureSprintPlan: (planId: string) => { ok: boolean; message?: string };
+  importFeatureSprintPlanForCard: (
+    cardId: string,
+    text: string
+  ) => { ok: boolean; message?: string; planId?: string };
+  importFeatureReviewVerdictForPlan: (
+    planId: string,
+    text: string,
+    stepId?: string
+  ) => { ok: boolean; message?: string };
   confirmAssistantAction: (
     action: AssistantProposedAction
   ) => { ok: boolean; message?: string };
@@ -293,6 +354,23 @@ function lifeHarnessReducer(state: LifeHarnessData, action: LifeHarnessAction): 
       return applyCompleteAgentSessionWithEvidence(state, action.sessionId, action.input).state;
     case "delete_agent_session":
       return applyDeleteAgentSession(state, action.sessionId);
+    case "create_feature_sprint_plan":
+      return applyCreateFeatureSprintPlanForCard(state, action.input);
+    case "update_feature_sprint_plan":
+      return applyUpdateFeatureSprintPlan(state, action.planId, action.patch);
+    case "update_feature_sprint_step":
+      return applyUpdateFeatureSprintStep(
+        state,
+        action.planId,
+        action.stepId,
+        action.patch
+      );
+    case "advance_feature_sprint_step":
+      return applyAdvanceFeatureSprintStep(state, action.planId, action.stepId);
+    case "complete_feature_sprint_plan":
+      return applyCompleteFeatureSprintPlan(state, action.planId, action.input);
+    case "delete_feature_sprint_plan":
+      return applyDeleteFeatureSprintPlan(state, action.planId);
     default:
       return state;
   }
@@ -642,6 +720,102 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     return { ok: true, message: "Agent session deleted." };
   }, []);
 
+  const createFeatureSprintPlanForCardAction = useCallback(
+    (input: FeatureSprintPlanCreateInput) => {
+      const result = createFeatureSprintPlanForCard(stateRef.current, input);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Feature sprint plan created.", planId: result.planId };
+    },
+    []
+  );
+
+  const updateFeatureSprintPlanAction = useCallback(
+    (planId: string, patch: FeatureSprintPlanUpdateInput) => {
+      const result = updateFeatureSprintPlan(stateRef.current, planId, patch);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Feature sprint plan updated." };
+    },
+    []
+  );
+
+  const updateFeatureSprintStepAction = useCallback(
+    (planId: string, stepId: string, patch: FeatureSprintStepUpdateInput) => {
+      const existing = stateRef.current.featureSprintPlans.find((plan) => plan.id === planId);
+      if (!existing) {
+        return { ok: false, message: "Plan not found." };
+      }
+      dispatch({ type: "update_feature_sprint_step", planId, stepId, patch });
+      return { ok: true, message: "Feature sprint step updated." };
+    },
+    []
+  );
+
+  const advanceFeatureSprintStepAction = useCallback((planId: string, stepId: string) => {
+    const existing = stateRef.current.featureSprintPlans.find((plan) => plan.id === planId);
+    if (!existing) {
+      return { ok: false, message: "Plan not found." };
+    }
+    dispatch({ type: "advance_feature_sprint_step", planId, stepId });
+    return { ok: true, message: "Feature sprint step advanced." };
+  }, []);
+
+  const completeFeatureSprintPlanAction = useCallback(
+    (planId: string, input?: { proofText?: string }) => {
+      const existing = stateRef.current.featureSprintPlans.find((plan) => plan.id === planId);
+      if (!existing) {
+        return { ok: false, message: "Plan not found." };
+      }
+      const hadEvidence = !!(existing.evidenceLogId || existing.evidenceProofItemId);
+      dispatch({ type: "complete_feature_sprint_plan", planId, input });
+      return {
+        ok: true,
+        message: hadEvidence ? "Feature sprint marked complete." : "Feature sprint complete · Proof updated."
+      };
+    },
+    []
+  );
+
+  const deleteFeatureSprintPlanAction = useCallback((planId: string) => {
+    const result = deleteFeatureSprintPlan(stateRef.current, planId);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    dispatch({ type: "state_replaced", state: result.state });
+    return { ok: true, message: "Feature sprint plan deleted." };
+  }, []);
+
+  const importFeatureSprintPlanForCardAction = useCallback((cardId: string, text: string) => {
+    const result = importFeatureSprintPlanFromText(stateRef.current, cardId, text);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    dispatch({ type: "state_replaced", state: result.state });
+    return { ok: true, message: "Feature sprint plan imported.", planId: result.planId };
+  }, []);
+
+  const importFeatureReviewVerdictForPlanAction = useCallback(
+    (planId: string, text: string, stepId?: string) => {
+      const result = importFeatureReviewVerdictFromText(
+        stateRef.current,
+        planId,
+        text,
+        stepId
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Review verdict imported." };
+    },
+    []
+  );
+
   const confirmAssistantAction = useCallback((action: AssistantProposedAction) => {
     const result = applyConfirmedAssistantAction(stateRef.current, action);
     if (!result.ok) {
@@ -858,6 +1032,14 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       updateAgentSession,
       completeAgentSession,
       deleteAgentSession,
+      createFeatureSprintPlanForCard: createFeatureSprintPlanForCardAction,
+      updateFeatureSprintPlan: updateFeatureSprintPlanAction,
+      updateFeatureSprintStep: updateFeatureSprintStepAction,
+      advanceFeatureSprintStep: advanceFeatureSprintStepAction,
+      completeFeatureSprintPlan: completeFeatureSprintPlanAction,
+      deleteFeatureSprintPlan: deleteFeatureSprintPlanAction,
+      importFeatureSprintPlanForCard: importFeatureSprintPlanForCardAction,
+      importFeatureReviewVerdictForPlan: importFeatureReviewVerdictForPlanAction,
       confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,
@@ -901,6 +1083,14 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       updateAgentSession,
       completeAgentSession,
       deleteAgentSession,
+      createFeatureSprintPlanForCardAction,
+      updateFeatureSprintPlanAction,
+      updateFeatureSprintStepAction,
+      advanceFeatureSprintStepAction,
+      completeFeatureSprintPlanAction,
+      deleteFeatureSprintPlanAction,
+      importFeatureSprintPlanForCardAction,
+      importFeatureReviewVerdictForPlanAction,
       confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,

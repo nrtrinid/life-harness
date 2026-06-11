@@ -96,6 +96,7 @@ function createState(): LifeHarnessData {
     memoryItems: [],
     projects: [],
     agentSessions: [],
+    featureSprintPlans: [],
     careerSourcePack: null
   };
 }
