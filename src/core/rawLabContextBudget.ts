@@ -8,9 +8,11 @@ import { DEFAULT_RAW_LAB_MAX_INPUT_CHARS } from "./gatewayBudget";
 import {
   compactText,
   createEmptyRawLabThreadState,
+  createEmptyRawLabSmartCompactedContext,
   toWireThreadState,
   toWireTurns,
   trimRawLabRecentTurns,
+  type RawLabSmartCompactedContext,
   type RawLabThreadState,
   type RawLabTurn,
   type RawLabWireTurn
@@ -39,6 +41,7 @@ export type RawLabSendBundle = {
   notice?: RawLabCompactionNotice;
   estimatedChars: number;
   level: RawLabBudgetLevel;
+  smartCompactedContext: RawLabSmartCompactedContext;
 };
 
 export const RAW_LAB_PROMPT_SHELL_CHARS = 7500;
@@ -88,6 +91,13 @@ function sliceList<T>(list: T[], max: number): T[] {
   return list.slice(0, max);
 }
 
+function sliceLatestList<T>(list: T[], max: number): T[] {
+  if (max <= 0) {
+    return [];
+  }
+  return list.slice(-max);
+}
+
 function truncateCodeBlock(
   state: RawLabThreadState,
   maxCodeChars: number
@@ -108,9 +118,123 @@ function truncateCodeBlock(
   };
 }
 
+function hasSmartCompactedContext(context: RawLabSmartCompactedContext): boolean {
+  return (
+    context.activeOpenLoops.length > 0 ||
+    context.questionsToRevisit.length > 0 ||
+    context.userSteering.length > 0 ||
+    context.doNotRepeat.length > 0 ||
+    context.recurringTopics.length > 0 ||
+    context.provisionalStances.length > 0 ||
+    context.selfObservations.length > 0 ||
+    context.importantRecentMoments.length > 0 ||
+    Boolean(context.currentTension) ||
+    Boolean(context.discardedNoiseSummary)
+  );
+}
+
+function detectCurrentTension(turns: RawLabTurn[], state: RawLabThreadState): string {
+  const recentUserText = turns
+    .filter((turn) => turn.role === "user")
+    .slice(-4)
+    .map((turn) => turn.content)
+    .join(" ")
+    .toLowerCase();
+
+  if (/\bavoid|avoiding|stuck|pushback|call me out\b/.test(recentUserText)) {
+    return "The live tension is whether the user is building directly or circling avoidance.";
+  }
+  if (/\bhang out|chill|just talk|no productivity\b/.test(recentUserText)) {
+    return "The live tension is staying present without turning the chat into productivity advice.";
+  }
+  if (/\bentity|personality|conscious|alive|selfhood\b/.test(recentUserText)) {
+    return "The live tension is making Raw Lab feel coherent without implying consciousness or durable selfhood.";
+  }
+  if (state.openLoops.length > 0 || state.questionsToRevisit.length > 0) {
+    return "The live tension is carrying forward the unresolved thread instead of resetting.";
+  }
+  return "";
+}
+
+function importantRecentMoments(turns: RawLabTurn[], maxItems: number): string[] {
+  const patterns = [
+    /\bdon(?:'|')?t\b/i,
+    /\bstop\b/i,
+    /\bactually\b/i,
+    /\btrying to build\b/i,
+    /\bavoid/i,
+    /\bpushback\b/i,
+    /\bhang out\b/i,
+    /\bwhat were we circling\b/i,
+    /\bremember\b/i,
+    /\?$/
+  ];
+  return turns
+    .filter((turn) => turn.role === "user")
+    .filter((turn) => patterns.some((pattern) => pattern.test(turn.content.trim())))
+    .slice(-maxItems)
+    .map((turn) => compactText(`user: ${turn.content}`, 160));
+}
+
+export function buildRawLabSmartCompactedContext(args: {
+  state: RawLabThreadState;
+  turns: RawLabTurn[];
+  level: Exclude<RawLabBudgetLevel, "none" | "trim_history">;
+  turnsBefore: number;
+}): RawLabSmartCompactedContext {
+  const isAggressive = args.level === "aggressive";
+  const activeOpenLoops = sliceList(args.state.openLoops, isAggressive ? 2 : 4);
+  const questionsToRevisit = sliceList(
+    args.state.questionsToRevisit,
+    isAggressive ? 2 : 3
+  );
+  const userSteering = sliceLatestList(args.state.userSteering, isAggressive ? 2 : 4);
+  const doNotRepeat = sliceLatestList(args.state.doNotRepeat, isAggressive ? 2 : 3);
+  const moments = importantRecentMoments(args.turns, isAggressive ? 2 : 3);
+  const sourceTurnIds = args.turns
+    .filter((turn) => turn.role === "user")
+    .filter((turn) =>
+      moments.some((moment) => moment.includes(turn.content.trim().slice(0, 24)))
+    )
+    .map((turn) => turn.id)
+    .filter(Boolean)
+    .slice(-moments.length);
+
+  const context: RawLabSmartCompactedContext = {
+    activeOpenLoops,
+    questionsToRevisit,
+    userSteering,
+    doNotRepeat,
+    recurringTopics: sliceList(args.state.recurringTopics, isAggressive ? 2 : 3),
+    provisionalStances: sliceList(args.state.provisionalStances, isAggressive ? 1 : 2),
+    selfObservations: sliceList(args.state.selfObservations, isAggressive ? 1 : 2),
+    importantRecentMoments: moments,
+    currentTension: compactText(detectCurrentTension(args.turns, args.state), 180),
+    discardedNoiseSummary:
+      args.turnsBefore > args.turns.length
+        ? compactText(
+            `${args.turnsBefore - args.turns.length} older Raw Lab turns were dropped; lower-priority style flavor and repeated summaries should not dominate this reply.`,
+            220
+          )
+        : "",
+    sourceTurnIds,
+    confidence:
+      activeOpenLoops.length + questionsToRevisit.length + userSteering.length + doNotRepeat.length >
+      0
+        ? 0.8
+        : moments.length > 0
+          ? 0.65
+          : 0.35
+  };
+
+  return hasSmartCompactedContext(context) ? context : createEmptyRawLabSmartCompactedContext();
+}
+
 export function compactRawLabThreadStateForBudget(args: {
   state: RawLabThreadState;
   level: Exclude<RawLabBudgetLevel, "none" | "trim_history">;
+  turns?: RawLabTurn[];
+  turnsBefore?: number;
 }): RawLabThreadState {
   const { state, level } = args;
   const isAggressive = level === "aggressive";
@@ -118,6 +242,7 @@ export function compactRawLabThreadStateForBudget(args: {
   const digestMax = isAggressive ? 240 : 400;
   const goalTopicMax = isAggressive ? 120 : 220;
   const stanceMax = isAggressive ? 120 : 180;
+  const vibeMax = isAggressive ? 90 : 140;
 
   let next: RawLabThreadState = {
     ...state,
@@ -127,8 +252,19 @@ export function compactRawLabThreadStateForBudget(args: {
     openLoops: sliceList(state.openLoops, isAggressive ? 2 : 4),
     decisions: sliceList(state.decisions, isAggressive ? 2 : 4),
     pinnedFacts: sliceList(state.pinnedFacts, isAggressive ? 2 : 4),
-    userSteering: sliceList(state.userSteering, isAggressive ? 2 : 4),
-    doNotRepeat: sliceList(state.doNotRepeat, isAggressive ? 2 : 3),
+    userSteering: sliceLatestList(state.userSteering, isAggressive ? 2 : 4),
+    doNotRepeat: sliceLatestList(state.doNotRepeat, isAggressive ? 2 : 3),
+    recurringTopics: sliceList(state.recurringTopics, isAggressive ? 2 : 4),
+    currentVibe: compactText(state.currentVibe, vibeMax),
+    provisionalStances: sliceList(state.provisionalStances, isAggressive ? 1 : 3),
+    selfObservations: sliceList(state.selfObservations, isAggressive ? 1 : 3),
+    questionsToRevisit: sliceList(state.questionsToRevisit, isAggressive ? 2 : 3),
+    smartCompactedContext: buildRawLabSmartCompactedContext({
+      state,
+      turns: args.turns ?? [],
+      level,
+      turnsBefore: args.turnsBefore ?? args.turns?.length ?? 0
+    }),
     references: {
       ...state.references,
       lastOptions: sliceList(state.references.lastOptions, isAggressive ? 2 : 4),
@@ -206,12 +342,16 @@ function buildCandidate(args: {
   if (args.stateLevel === "compact_state") {
     threadState = compactRawLabThreadStateForBudget({
       state: args.threadState,
-      level: "compact_state"
+      level: "compact_state",
+      turns: args.turns,
+      turnsBefore: args.turns.length
     });
   } else if (args.stateLevel === "aggressive") {
     threadState = compactRawLabThreadStateForBudget({
       state: args.threadState,
-      level: "aggressive"
+      level: "aggressive",
+      turns: args.turns,
+      turnsBefore: args.turns.length
     });
   }
 
@@ -233,6 +373,18 @@ function buildCandidate(args: {
     maxInputChars: args.maxInputChars,
     maxTurns: args.maxTurns
   });
+
+  if (args.stateLevel === "compact_state" || args.stateLevel === "aggressive") {
+    threadState = {
+      ...threadState,
+      smartCompactedContext: buildRawLabSmartCompactedContext({
+        state: threadState,
+        turns,
+        level: args.stateLevel,
+        turnsBefore: args.turns.length
+      })
+    };
+  }
 
   return { turns, threadState, companionSelfMemories: wireMemories, level: args.stateLevel };
 }
@@ -304,6 +456,7 @@ export function buildRawLabSendBundle(args: {
       companionSelfMemories: forced.companionSelfMemories,
       estimatedChars: afterChars,
       level: "aggressive",
+      smartCompactedContext: forced.threadState.smartCompactedContext,
       notice: {
         level: "aggressive",
         message: COMPACTION_NOTICE_MESSAGE,
@@ -384,7 +537,8 @@ export function buildRawLabSendBundle(args: {
     threadState: best.threadState,
     companionSelfMemories: best.companionSelfMemories,
     estimatedChars: afterChars,
-    level: bestLevel
+    level: bestLevel,
+    smartCompactedContext: best.threadState.smartCompactedContext
   };
 
   if (bestLevel !== "none" || best.turns.length < turnsBefore) {

@@ -9,7 +9,11 @@ import {
   type RawLabBudgetLevel,
   type RawLabCompactionNotice
 } from "../../core/rawLabContextBudget";
-import type { RawLabThreadState, RawLabTurn } from "../../core/rawLabThreadState";
+import type {
+  RawLabSmartCompactedContext,
+  RawLabThreadState,
+  RawLabTurn
+} from "../../core/rawLabThreadState";
 
 type RawLabBudgetInspectorProps = {
   turns: RawLabTurn[];
@@ -27,7 +31,9 @@ type RawLabBudgetInspectorProps = {
     memoriesSent: number;
     budgetCapChars: number;
     notice?: RawLabCompactionNotice;
+    smartCompactedContext?: RawLabSmartCompactedContext;
   };
+  onDismissCompactedContext?: () => void;
 };
 
 export function RawLabBudgetInspector({
@@ -39,7 +45,8 @@ export function RawLabBudgetInspector({
   companionSelfMemories = [],
   forceExpanded = false,
   embeddedInBackroom = false,
-  lastSend
+  lastSend,
+  onDismissCompactedContext
 }: RawLabBudgetInspectorProps) {
   const [expanded, setExpanded] = useState(embeddedInBackroom);
   const [preview, setPreview] = useState<{
@@ -48,6 +55,7 @@ export function RawLabBudgetInspector({
     turnsSent: number;
     memoriesSent: number;
     budgetCapChars: number;
+    smartCompactedContext: RawLabSmartCompactedContext;
   } | null>(null);
 
   useEffect(() => {
@@ -69,8 +77,93 @@ export function RawLabBudgetInspector({
       level: bundle.level,
       turnsSent: bundle.recentTurns.length,
       memoriesSent: bundle.companionSelfMemories.length,
-      budgetCapChars: gatewayRawLabMaxInputChars
+      budgetCapChars: gatewayRawLabMaxInputChars,
+      smartCompactedContext: bundle.smartCompactedContext
     });
+  }
+
+  function hasSmartCompactedContext(context?: RawLabSmartCompactedContext): boolean {
+    if (!context) {
+      return false;
+    }
+    return (
+      context.activeOpenLoops.length > 0 ||
+      context.questionsToRevisit.length > 0 ||
+      context.userSteering.length > 0 ||
+      context.doNotRepeat.length > 0 ||
+      context.recurringTopics.length > 0 ||
+      context.provisionalStances.length > 0 ||
+      context.selfObservations.length > 0 ||
+      context.importantRecentMoments.length > 0 ||
+      Boolean(context.currentTension) ||
+      Boolean(context.discardedNoiseSummary)
+    );
+  }
+
+  function renderContextList(label: string, items: string[]) {
+    if (items.length === 0) {
+      return null;
+    }
+    return (
+      <>
+        <Text style={styles.chatInspectorHeader}>{label}</Text>
+        {items.map((item, index) => (
+          <Text key={`${label}-${index}`} style={styles.helpText}>
+            - {item}
+          </Text>
+        ))}
+      </>
+    );
+  }
+
+  function renderSmartCompactedContext(
+    context: RawLabSmartCompactedContext | undefined,
+    label: string,
+    dismissible: boolean
+  ) {
+    if (!hasSmartCompactedContext(context)) {
+      return null;
+    }
+    return (
+      <View style={styles.chatBackroomSection}>
+        <Text style={styles.sectionTitle}>{label}</Text>
+        <Text style={styles.helpText}>
+          Temporary working memory for this send. Not saved to Life Harness, not board context,
+          not Memory Bank.
+        </Text>
+        {renderContextList("Do not repeat", context?.doNotRepeat ?? [])}
+        {renderContextList("User steering", context?.userSteering ?? [])}
+        {renderContextList("Open loops", context?.activeOpenLoops ?? [])}
+        {renderContextList("Questions to revisit", context?.questionsToRevisit ?? [])}
+        {context?.currentTension ? (
+          <>
+            <Text style={styles.chatInspectorHeader}>Current tension</Text>
+            <Text style={styles.helpText}>{context.currentTension}</Text>
+          </>
+        ) : null}
+        {renderContextList("Important recent moments", context?.importantRecentMoments ?? [])}
+        {renderContextList("Provisional stances", context?.provisionalStances ?? [])}
+        {renderContextList("Self-observations", context?.selfObservations ?? [])}
+        {renderContextList("Recurring topics", context?.recurringTopics ?? [])}
+        {context?.discardedNoiseSummary ? (
+          <>
+            <Text style={styles.chatInspectorHeader}>Discarded noise</Text>
+            <Text style={styles.helpText}>{context.discardedNoiseSummary}</Text>
+          </>
+        ) : null}
+        <Text style={styles.helpText}>
+          Confidence {Math.round((context?.confidence ?? 0) * 100)}%
+          {(context?.sourceTurnIds.length ?? 0) > 0
+            ? ` · source turns ${context?.sourceTurnIds.join(", ")}`
+            : ""}
+        </Text>
+        {dismissible && onDismissCompactedContext ? (
+          <Pressable onPress={onDismissCompactedContext} style={styles.smallButton}>
+            <Text style={styles.smallButtonText}>Dismiss compacted working memory</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
   }
 
   function capLabel(cap: number): string {
@@ -123,6 +216,11 @@ export function RawLabBudgetInspector({
           {lastSend.notice ? (
             <Text style={styles.bannerWarningText}>{lastSend.notice.message}</Text>
           ) : null}
+          {renderSmartCompactedContext(
+            lastSend.smartCompactedContext,
+            "Smart compacted working memory",
+            true
+          )}
         </>
       ) : (
         <Text style={styles.helpText}>No sends yet this session.</Text>
@@ -134,6 +232,11 @@ export function RawLabBudgetInspector({
             turns, {preview.memoriesSent} self-memories, level {preview.level}.
           </Text>
           <Text style={styles.helpText}>Preview cap: {capLabel(preview.budgetCapChars)}</Text>
+          {renderSmartCompactedContext(
+            preview.smartCompactedContext,
+            "Preview compacted working memory",
+            false
+          )}
         </>
       ) : null}
       <Pressable onPress={handlePreviewCompact} style={styles.smallButton}>

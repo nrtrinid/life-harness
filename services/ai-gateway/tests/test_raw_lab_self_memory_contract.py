@@ -62,6 +62,8 @@ def test_build_raw_lab_system_prompt_self_memory_count_nonzero():
     prompt = build_raw_lab_system_prompt(companion_self_memories=memories)
     assert "Active Companion Self-Memories in this request: 2" in prompt
     assert "These are approved self-memories you may reference as Raw Lab." in prompt
+    assert "user-approved persistent Raw Lab persona notes" in prompt
+    assert "separate from temporary thread mind and provisional `self_observations`" in prompt
     assert DIRECTION_SELF_MEMORY_TEXT in prompt
 
 

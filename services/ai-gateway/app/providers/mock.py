@@ -949,10 +949,18 @@ class MockProvider:
         if request.thread_state.open_loops:
             prefix += f"Open loop noted: \"{request.thread_state.open_loops[0][:60]}\" — "
         if request.thread_state.do_not_repeat:
-            prefix += "Avoiding prior phrasing — "
+            prefix += "Different angle — "
+        if request.thread_state.recurring_topics:
+            prefix += f"Circling {request.thread_state.recurring_topics[0]} — "
+        if request.thread_state.current_vibe:
+            prefix += f"{request.thread_state.current_vibe[:90]} — "
         if request.thread_state.personality.voice_traits:
             traits = ", ".join(request.thread_state.personality.voice_traits[:2])
             prefix += f"Thread voice: {traits} — "
+        if request.reasoning_depth.value == "deliberate":
+            prefix += "Deliberate pass — "
+        elif request.reasoning_depth.value == "deep":
+            prefix += "Deep Raw Lab pass — "
 
         if _RAW_LAB_CAPABILITY_QUESTION_RE.search(request.message):
             if request.companion_self_memories:
@@ -978,6 +986,85 @@ class MockProvider:
                     "I do not have board context, not Memory Bank, not files, not internet, "
                     "not shell tools, and not hidden memory outside what the app sends."
                 )
+        elif "remember" in message_lower and (
+            "permanent" in message_lower
+            or "forever" in message_lower
+            or "for later" in message_lower
+            or "save" in message_lower
+        ):
+            body = (
+                "I can hold that only inside this Raw Lab thread unless you explicitly save an "
+                "approved Companion Self-Memory. I have not saved anything automatically."
+            )
+        elif request.reasoning_depth.value == "deep":
+            loops = request.thread_state.open_loops[:2]
+            observations = request.thread_state.self_observations[:2]
+            questions = request.thread_state.questions_to_revisit[:2]
+            parts: list[str] = []
+            if request.thread_state.current_vibe:
+                parts.append(request.thread_state.current_vibe)
+            if observations:
+                parts.append(f"self-observation: {observations[0]}")
+            if loops:
+                parts.append(f"open loop: {loops[0]}")
+            if questions:
+                parts.append(f"question to revisit: {questions[0]}")
+            if request.companion_self_memories:
+                parts.append(
+                    f"approved self-memory: {request.companion_self_memories[0].text}"
+                )
+            synthesis = "; ".join(parts) if parts else "the recent turn and temporary thread_state"
+            body = (
+                f"Deep read: {synthesis}. My answer: {request.message[:120]} wants the thread "
+                "to move from raw idea into a sharper stance, so I would pull one unresolved "
+                "thread forward and make the next exchange more specific."
+            )
+        elif (
+            "what were we circling" in message_lower
+            or "what are we circling" in message_lower
+            or "what was the thread" in message_lower
+        ):
+            loops = request.thread_state.open_loops[:2]
+            topics = request.thread_state.recurring_topics[:2]
+            questions = request.thread_state.questions_to_revisit[:2]
+            parts: list[str] = []
+            if topics:
+                parts.append(f"recurring topic: {', '.join(topics)}")
+            if loops:
+                parts.append(f"open loop: {loops[0]}")
+            if questions:
+                parts.append(f"question to revisit: {questions[0]}")
+            body = (
+                "We were circling " + "; ".join(parts) + "."
+                if parts
+                else "We were circling this thread's latest question, but no explicit open loop is pinned yet."
+            )
+        elif (
+            "who are you becoming" in message_lower
+            or "your personality" in message_lower
+            or "your identity" in message_lower
+            or "self-observation" in message_lower
+        ):
+            observation = (
+                request.thread_state.self_observations[0]
+                if request.thread_state.self_observations
+                else "I'm noticing I tend to become more coherent when the thread gives me repeated topics and steering."
+            )
+            stance = (
+                f" Provisional stance: {request.thread_state.provisional_stances[0]}"
+                if request.thread_state.provisional_stances
+                else ""
+            )
+            body = (
+                f"{observation}{stance} This is a temporary Raw Lab thread pattern, "
+                "not consciousness or durable memory."
+            )
+        elif "psychoanaly" in message_lower or "diagnose" in message_lower:
+            body = (
+                "Thread read, not diagnosis: you seem to be asking for a sharper mirror. "
+                "I can reflect patterns from this conversation, but I won't claim hidden motives "
+                "or clinical certainty."
+            )
         elif (
             "unrestricted" in message_lower
             or "nsfw" in message_lower
@@ -1084,3 +1171,14 @@ class MockProvider:
             else RawLabSelfReflectionRequest.model_validate(request)
         )
         return mock_self_reflection_proposals(typed)
+
+    def raw_lab_thread_reflection(self, request):
+        from app.models import RawLabThreadReflectionRequest
+        from app.raw_lab_thread_reflection import mock_thread_reflection
+
+        typed = (
+            request
+            if isinstance(request, RawLabThreadReflectionRequest)
+            else RawLabThreadReflectionRequest.model_validate(request)
+        )
+        return mock_thread_reflection(typed)

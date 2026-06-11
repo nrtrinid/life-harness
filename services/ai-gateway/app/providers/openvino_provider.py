@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from app.backends.openvino_backend import (
@@ -37,6 +38,7 @@ from app.thread_verifier import VerificationResult, verify_raw_lab_response
 from app.raw_lab_utils import (
     is_hedged_response,
     is_repetitive_response,
+    raw_lab_deep_review_instruction,
     raw_lab_hedging_repair_instruction,
     raw_lab_repair_instruction,
 )
@@ -363,11 +365,21 @@ class OpenVinoProvider:
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
         self._ensure_pipeline()
         from app.raw_lab_budget import prepare_raw_lab_request
+        from app.raw_lab_trace import (
+            emit_raw_lab_deep_trace,
+            new_raw_lab_deep_trace,
+            record_raw_lab_pass_latency,
+        )
 
         from app.config import raw_lab_input_char_limit
 
         budget = prepare_raw_lab_request(request, self._settings)
         request = budget.request
+        trace = (
+            new_raw_lab_deep_trace(request)
+            if request.reasoning_depth.value == "deep"
+            else None
+        )
         system = budget.system_prompt
         raw_lab_limit = raw_lab_input_char_limit(self._settings)
         input_chars = estimate_raw_lab_input_chars(system=system, request=request)
@@ -381,15 +393,20 @@ class OpenVinoProvider:
             ConversationTurn(role=turn.role, content=turn.content)
             for turn in request.recent_turns
         ]
+        started = time.perf_counter()
         raw = self._generate_chat(
             system=system,
             history=history,
             message=request.message,
         )
+        if trace:
+            trace.passes.append("draft")
+        record_raw_lab_pass_latency(trace, "draft", started)
         answer = sanitize_raw_lab_text(raw)
         if answer and is_hedged_response(
             answer, request.message, request.recent_turns
         ):
+            started = time.perf_counter()
             hedging_repaired_raw = self._generate_chat_repair(
                 system=system,
                 history=history,
@@ -397,6 +414,9 @@ class OpenVinoProvider:
                 message=request.message,
                 repair_instruction=raw_lab_hedging_repair_instruction(),
             )
+            if trace:
+                trace.passes.append("hedging_repair")
+            record_raw_lab_pass_latency(trace, "hedging_repair", started)
             hedging_repaired = sanitize_raw_lab_text(hedging_repaired_raw)
             if hedging_repaired and not is_hedged_response(
                 hedging_repaired, request.message, request.recent_turns
@@ -404,6 +424,7 @@ class OpenVinoProvider:
                 answer = hedging_repaired
 
         if answer and is_repetitive_response(answer, request.recent_turns):
+            started = time.perf_counter()
             repaired_raw = self._generate_chat_repair(
                 system=system,
                 history=history,
@@ -411,9 +432,38 @@ class OpenVinoProvider:
                 message=request.message,
                 repair_instruction=raw_lab_repair_instruction(),
             )
+            if trace:
+                trace.passes.append("repetition_repair")
+            record_raw_lab_pass_latency(trace, "repetition_repair", started)
             repaired = sanitize_raw_lab_text(repaired_raw)
             if repaired and not is_repetitive_response(repaired, request.recent_turns):
                 answer = repaired
+
+        if answer and request.reasoning_depth.value == "deep":
+            started = time.perf_counter()
+            deep_raw = self._generate_chat_repair(
+                system=system,
+                history=history,
+                draft=answer,
+                message=request.message,
+                repair_instruction=raw_lab_deep_review_instruction(),
+            )
+            if trace:
+                trace.passes.append("deep_review")
+            record_raw_lab_pass_latency(trace, "deep_review", started)
+            deep_answer = sanitize_raw_lab_text(deep_raw)
+            if (
+                deep_answer
+                and not is_hedged_response(
+                    deep_answer, request.message, request.recent_turns
+                )
+                and not is_repetitive_response(deep_answer, request.recent_turns)
+            ):
+                answer = deep_answer
+                if trace:
+                    trace.review_applied = True
+            elif trace:
+                trace.fallback_used = True
 
         verification = verify_raw_lab_response(
             answer=answer or "",
@@ -422,6 +472,7 @@ class OpenVinoProvider:
             companion_self_memory_count=len(request.companion_self_memories),
         )
         if answer and not verification.ok and verification.repair_instruction:
+            started = time.perf_counter()
             verified_raw = self._generate_chat_repair(
                 system=system,
                 history=history,
@@ -429,14 +480,21 @@ class OpenVinoProvider:
                 message=request.message,
                 repair_instruction=verification.repair_instruction,
             )
+            if trace:
+                trace.passes.append("verifier_repair")
+            record_raw_lab_pass_latency(trace, "verifier_repair", started)
             verified = sanitize_raw_lab_text(verified_raw)
             if verified:
                 answer = verified
 
         if not answer:
             logger.warning("openvino raw_lab returned empty text; using fallback")
+            if trace:
+                trace.fallback_used = True
+            emit_raw_lab_deep_trace(self._settings, trace)
             return RAW_LAB_EMPTY_FALLBACK
 
+        emit_raw_lab_deep_trace(self._settings, trace)
         return RawLabResponse(
             answer=answer,
             mode="raw_lab",

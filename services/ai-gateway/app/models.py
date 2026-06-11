@@ -361,6 +361,21 @@ class RawLabPersonalityState(StrictModel):
     updated_at: str | None = None
 
 
+class RawLabSmartCompactedContext(StrictModel):
+    active_open_loops: list[str] = Field(default_factory=list)
+    questions_to_revisit: list[str] = Field(default_factory=list)
+    user_steering: list[str] = Field(default_factory=list)
+    do_not_repeat: list[str] = Field(default_factory=list)
+    recurring_topics: list[str] = Field(default_factory=list)
+    provisional_stances: list[str] = Field(default_factory=list)
+    self_observations: list[str] = Field(default_factory=list)
+    important_recent_moments: list[str] = Field(default_factory=list)
+    current_tension: str = ""
+    discarded_noise_summary: str = ""
+    source_turn_ids: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class RawLabThreadState(StrictModel):
     recent_digest: str = ""
     active_goal: str = ""
@@ -372,6 +387,14 @@ class RawLabThreadState(StrictModel):
     user_steering: list[str] = Field(default_factory=list)
     tone_preferences: list[str] = Field(default_factory=list)
     do_not_repeat: list[str] = Field(default_factory=list)
+    recurring_topics: list[str] = Field(default_factory=list)
+    current_vibe: str = ""
+    provisional_stances: list[str] = Field(default_factory=list)
+    self_observations: list[str] = Field(default_factory=list)
+    questions_to_revisit: list[str] = Field(default_factory=list)
+    smart_compacted_context: RawLabSmartCompactedContext = Field(
+        default_factory=RawLabSmartCompactedContext
+    )
     references: ChatHarnessThreadReferenceState = Field(
         default_factory=ChatHarnessThreadReferenceState
     )
@@ -394,6 +417,7 @@ class RawLabRequest(StrictModel):
     recent_turns: list[RawLabTurn] = Field(default_factory=list)
     thread_state: RawLabThreadState = Field(default_factory=RawLabThreadState)
     companion_self_memories: list[RawLabCompanionSelfMemory] = Field(default_factory=list)
+    reasoning_depth: ReasoningDepth = ReasoningDepth.fast
 
 
 class RawLabResponse(StrictModel):
@@ -422,6 +446,29 @@ class RawLabSelfMemoryProposal(StrictModel):
 
 class RawLabSelfReflectionResponse(StrictModel):
     proposals: list[RawLabSelfMemoryProposal] = Field(default_factory=list)
+    safety_notes: list[str] = Field(default_factory=list)
+    used_context: Literal[False] = False
+
+
+class RawLabThreadReflectionRequest(StrictModel):
+    recent_turns: list[RawLabTurn] = Field(default_factory=list)
+    thread_state: RawLabThreadState = Field(default_factory=RawLabThreadState)
+    companion_self_memories: list[RawLabCompanionSelfMemory] = Field(default_factory=list)
+
+
+class RawLabThreadReflectionProposal(StrictModel):
+    self_observations: list[str] = Field(default_factory=list)
+    questions_to_revisit: list[str] = Field(default_factory=list)
+    provisional_stances: list[str] = Field(default_factory=list)
+    current_vibe: str = ""
+    do_not_repeat: list[str] = Field(default_factory=list)
+    user_steering: list[str] = Field(default_factory=list)
+
+
+class RawLabThreadReflectionResponse(StrictModel):
+    proposals: RawLabThreadReflectionProposal = Field(
+        default_factory=RawLabThreadReflectionProposal
+    )
     safety_notes: list[str] = Field(default_factory=list)
     used_context: Literal[False] = False
 

@@ -8,8 +8,10 @@ from app.models import (
     RawLabCompanionSelfMemory,
     RawLabPersonalityState,
     RawLabRequest,
+    RawLabSmartCompactedContext,
     RawLabThreadState,
     RawLabTurn,
+    ReasoningDepth,
 )
 from app.prompt_loader import build_raw_lab_system_prompt, estimate_raw_lab_input_chars
 
@@ -48,14 +50,158 @@ def _slice_list(items: list[str], max_items: int) -> list[str]:
     return items[:max_items]
 
 
+def _slice_latest_list(items: list[str], max_items: int) -> list[str]:
+    if max_items <= 0:
+        return []
+    return items[-max_items:]
+
+
+def _has_smart_compacted_context(context: RawLabSmartCompactedContext) -> bool:
+    return bool(
+        context.active_open_loops
+        or context.questions_to_revisit
+        or context.user_steering
+        or context.do_not_repeat
+        or context.recurring_topics
+        or context.provisional_stances
+        or context.self_observations
+        or context.important_recent_moments
+        or context.current_tension
+        or context.discarded_noise_summary
+    )
+
+
+def _detect_current_tension(
+    turns: list[RawLabTurn], state: RawLabThreadState
+) -> str:
+    recent_user_text = " ".join(
+        turn.content for turn in turns[-8:] if turn.role == "user"
+    ).lower()
+    if any(
+        token in recent_user_text
+        for token in ["avoid", "avoiding", "stuck", "pushback", "call me out"]
+    ):
+        return (
+            "The live tension is whether the user is building directly or "
+            "circling avoidance."
+        )
+    if any(
+        token in recent_user_text
+        for token in ["hang out", "chill", "just talk", "no productivity"]
+    ):
+        return (
+            "The live tension is staying present without turning the chat into "
+            "productivity advice."
+        )
+    if any(
+        token in recent_user_text
+        for token in ["entity", "personality", "conscious", "alive", "selfhood"]
+    ):
+        return (
+            "The live tension is making Raw Lab feel coherent without implying "
+            "consciousness or durable selfhood."
+        )
+    if state.open_loops or state.questions_to_revisit:
+        return "The live tension is carrying forward the unresolved thread instead of resetting."
+    return ""
+
+
+def _important_recent_moments(
+    turns: list[RawLabTurn], max_items: int
+) -> list[str]:
+    markers = [
+        "don't",
+        "dont",
+        "stop",
+        "actually",
+        "trying to build",
+        "avoid",
+        "pushback",
+        "hang out",
+        "what were we circling",
+        "remember",
+        "?",
+    ]
+    moments: list[str] = []
+    for turn in turns:
+        if turn.role != "user":
+            continue
+        lowered = turn.content.lower()
+        if any(marker in lowered for marker in markers):
+            moments.append(_compact_text(f"user: {turn.content}", 160))
+    return moments[-max_items:]
+
+
+def _build_smart_compacted_context(
+    *,
+    state: RawLabThreadState,
+    turns: list[RawLabTurn],
+    aggressive: bool,
+    turns_before: int,
+) -> RawLabSmartCompactedContext:
+    active_open_loops = _slice_list(state.open_loops, 2 if aggressive else 4)
+    questions_to_revisit = _slice_list(
+        state.questions_to_revisit, 2 if aggressive else 3
+    )
+    user_steering = _slice_latest_list(state.user_steering, 2 if aggressive else 4)
+    do_not_repeat = _slice_latest_list(state.do_not_repeat, 2 if aggressive else 3)
+    moments = _important_recent_moments(turns, 2 if aggressive else 3)
+    source_turn_ids = [
+        f"recent_turn_{index}"
+        for index, turn in enumerate(turns)
+        if turn.role == "user"
+        and any(turn.content.strip()[:24] in moment for moment in moments)
+    ][-len(moments) :]
+    context = RawLabSmartCompactedContext(
+        active_open_loops=active_open_loops,
+        questions_to_revisit=questions_to_revisit,
+        user_steering=user_steering,
+        do_not_repeat=do_not_repeat,
+        recurring_topics=_slice_list(state.recurring_topics, 2 if aggressive else 3),
+        provisional_stances=_slice_list(
+            state.provisional_stances, 1 if aggressive else 2
+        ),
+        self_observations=_slice_list(
+            state.self_observations, 1 if aggressive else 2
+        ),
+        important_recent_moments=moments,
+        current_tension=_compact_text(_detect_current_tension(turns, state), 180),
+        discarded_noise_summary=(
+            _compact_text(
+                f"{turns_before - len(turns)} older Raw Lab turns were dropped; "
+                "lower-priority style flavor and repeated summaries should not "
+                "dominate this reply.",
+                220,
+            )
+            if turns_before > len(turns)
+            else ""
+        ),
+        source_turn_ids=source_turn_ids,
+        confidence=(
+            0.8
+            if active_open_loops
+            or questions_to_revisit
+            or user_steering
+            or do_not_repeat
+            else 0.65
+            if moments
+            else 0.35
+        ),
+    )
+    return context if _has_smart_compacted_context(context) else RawLabSmartCompactedContext()
+
+
 def _compact_thread_state(
     state: RawLabThreadState,
     *,
     aggressive: bool,
+    turns: list[RawLabTurn] | None = None,
+    turns_before: int | None = None,
 ) -> RawLabThreadState:
     digest_max = 240 if aggressive else 400
     goal_topic_max = 120 if aggressive else 220
     stance_max = 120 if aggressive else 180
+    vibe_max = 90 if aggressive else 140
 
     references = state.references.model_copy(deep=True)
     references.last_options = _slice_list(
@@ -114,9 +260,26 @@ def _compact_thread_state(
             "open_loops": _slice_list(state.open_loops, 2 if aggressive else 4),
             "decisions": _slice_list(state.decisions, 2 if aggressive else 4),
             "pinned_facts": _slice_list(state.pinned_facts, 2 if aggressive else 4),
-            "user_steering": _slice_list(state.user_steering, 2 if aggressive else 4),
+            "user_steering": _slice_latest_list(state.user_steering, 2 if aggressive else 4),
             "tone_preferences": _slice_list(state.tone_preferences, 2 if aggressive else 4),
-            "do_not_repeat": _slice_list(state.do_not_repeat, 2 if aggressive else 3),
+            "do_not_repeat": _slice_latest_list(state.do_not_repeat, 2 if aggressive else 3),
+            "recurring_topics": _slice_list(state.recurring_topics, 2 if aggressive else 4),
+            "current_vibe": _compact_text(state.current_vibe, vibe_max),
+            "provisional_stances": _slice_list(
+                state.provisional_stances, 1 if aggressive else 3
+            ),
+            "self_observations": _slice_list(
+                state.self_observations, 1 if aggressive else 3
+            ),
+            "questions_to_revisit": _slice_list(
+                state.questions_to_revisit, 2 if aggressive else 3
+            ),
+            "smart_compacted_context": _build_smart_compacted_context(
+                state=state,
+                turns=turns or [],
+                aggressive=aggressive,
+                turns_before=turns_before if turns_before is not None else len(turns or []),
+            ),
             "references": references,
             "personality": personality,
         }
@@ -150,6 +313,7 @@ def _trim_turns(
     message: str,
     thread_state: RawLabThreadState,
     companion_self_memories: list[RawLabCompanionSelfMemory],
+    reasoning_depth: ReasoningDepth,
     system_prompt: str,
     max_chars: int,
 ) -> list[RawLabTurn]:
@@ -160,6 +324,7 @@ def _trim_turns(
             recent_turns=trimmed,
             thread_state=thread_state,
             companion_self_memories=companion_self_memories,
+            reasoning_depth=reasoning_depth,
         )
         if (
             estimate_raw_lab_input_chars(system=system_prompt, request=candidate)
@@ -181,7 +346,12 @@ def _build_candidate(
 ) -> tuple[RawLabRequest, str]:
     thread_state = request.thread_state
     if compact_state:
-        thread_state = _compact_thread_state(thread_state, aggressive=aggressive)
+        thread_state = _compact_thread_state(
+            thread_state,
+            aggressive=aggressive,
+            turns=list(request.recent_turns),
+            turns_before=len(request.recent_turns),
+        )
 
     memory_level = "aggressive" if aggressive else ("compact_state" if compact_state else level)
     sliced_memories = _slice_self_memories(
@@ -191,6 +361,7 @@ def _build_candidate(
     system_prompt = build_raw_lab_system_prompt(
         thread_state=thread_state,
         companion_self_memories=sliced_memories,
+        reasoning_depth=request.reasoning_depth.value,
     )
     trimmed_turns = _trim_turns(
         list(request.recent_turns),
@@ -198,9 +369,22 @@ def _build_candidate(
         message=request.message,
         thread_state=thread_state,
         companion_self_memories=sliced_memories,
+        reasoning_depth=request.reasoning_depth,
         system_prompt=system_prompt,
         max_chars=max_chars,
     )
+
+    if compact_state:
+        thread_state = thread_state.model_copy(
+            update={
+                "smart_compacted_context": _build_smart_compacted_context(
+                    state=thread_state,
+                    turns=trimmed_turns,
+                    aggressive=aggressive,
+                    turns_before=len(request.recent_turns),
+                )
+            }
+        )
 
     compacted = request.model_copy(
         update={
@@ -212,6 +396,7 @@ def _build_candidate(
     system_prompt = build_raw_lab_system_prompt(
         thread_state=compacted.thread_state,
         companion_self_memories=compacted.companion_self_memories,
+        reasoning_depth=compacted.reasoning_depth.value,
     )
     return compacted, system_prompt
 
@@ -225,6 +410,7 @@ def compact_raw_lab_request_for_budget(
     system_prompt = build_raw_lab_system_prompt(
         thread_state=request.thread_state,
         companion_self_memories=request.companion_self_memories,
+        reasoning_depth=request.reasoning_depth.value,
     )
     before_chars = estimate_raw_lab_input_chars(system=system_prompt, request=request)
 

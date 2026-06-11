@@ -12,6 +12,18 @@ const RAW_LAB_MEMORY_PANEL_PATH = resolve(
   __dirname,
   "../components/rawLab/RawLabThreadMemoryPanel.tsx"
 );
+const RAW_LAB_BUDGET_INSPECTOR_PATH = resolve(
+  __dirname,
+  "../components/rawLab/RawLabBudgetInspector.tsx"
+);
+const RAW_LAB_REFLECTION_PANEL_PATH = resolve(
+  __dirname,
+  "../components/rawLab/RawLabThreadReflectionPanel.tsx"
+);
+const RAW_LAB_REFLECTION_CLIENT_PATH = resolve(
+  __dirname,
+  "./rawLabThreadReflectionClient.ts"
+);
 
 function readSource(path: string): string {
   return readFileSync(path, "utf8");
@@ -21,7 +33,10 @@ describe("raw-lab screen containment", () => {
   const screenSource = readSource(RAW_LAB_SCREEN_PATH);
   const threadSource = readSource(RAW_LAB_THREAD_PATH);
   const memoryPanelSource = readSource(RAW_LAB_MEMORY_PANEL_PATH);
-  const combined = `${screenSource}\n${threadSource}\n${memoryPanelSource}`;
+  const budgetInspectorSource = readSource(RAW_LAB_BUDGET_INSPECTOR_PATH);
+  const reflectionPanelSource = readSource(RAW_LAB_REFLECTION_PANEL_PATH);
+  const reflectionClientSource = readSource(RAW_LAB_REFLECTION_CLIENT_PATH);
+  const combined = `${screenSource}\n${threadSource}\n${memoryPanelSource}\n${budgetInspectorSource}\n${reflectionPanelSource}\n${reflectionClientSource}`;
 
   it("does not import harness context or memory modules", () => {
     expect(combined).not.toMatch(/from\s+["'].*harnessContext["']/);
@@ -42,6 +57,8 @@ describe("raw-lab screen containment", () => {
     expect(combined).not.toMatch(/save personality/i);
     expect(combined).not.toMatch(/AsyncStorage/i);
     expect(combined).not.toMatch(/apply to board/i);
+    expect(combined).not.toMatch(/save.*memory bank/i);
+    expect(combined).not.toMatch(/write.*memory bank/i);
   });
 
   it("does not clear thread on unmount", () => {
@@ -54,11 +71,27 @@ describe("raw-lab screen containment", () => {
     expect(screenSource).toContain("Do not paste secrets or S3-style private data");
     expect(screenSource).toContain("Ungrounded");
     expect(screenSource).toContain("ChatStateStrip");
+    expect(screenSource).toContain("RAW_LAB_DEPTHS");
+    expect(screenSource).toContain("Deep");
     expect(memoryPanelSource).toContain("This chat remembers");
     expect(memoryPanelSource).toContain("Temporary to this chat");
     expect(memoryPanelSource).toContain("Not saved to Life Harness");
+    expect(memoryPanelSource).toContain("recurringTopics");
+    expect(memoryPanelSource).toContain("currentVibe");
+    expect(memoryPanelSource).toContain("selfObservations");
+    expect(memoryPanelSource).toContain("questionsToRevisit");
     expect(memoryPanelSource).toContain("Style in this chat");
     expect(memoryPanelSource).toContain("Temporary. Not saved to Life Harness.");
+    expect(budgetInspectorSource).toContain("Smart compacted working memory");
+    expect(budgetInspectorSource).toContain("Temporary working memory for this send");
+    expect(budgetInspectorSource).toContain("Not saved to Life Harness");
+    expect(budgetInspectorSource).toContain("not board context");
+    expect(budgetInspectorSource).toContain("not Memory Bank");
+    expect(budgetInspectorSource).toContain("Dismiss compacted working memory");
+    expect(reflectionPanelSource).toContain("Reflect on thread");
+    expect(reflectionPanelSource).toContain("Apply to this chat");
+    expect(reflectionPanelSource).toContain("Temporary to this chat");
+    expect(reflectionPanelSource).toContain("Not saved to Life Harness");
   });
 
   it("handoff banner does not mention personality export or Memory Bank auto-save", () => {

@@ -3,7 +3,11 @@ import logging
 from app.config import Settings, raw_lab_input_char_limit
 from app.models import RawLabPersonalityState, RawLabRequest, RawLabThreadState, RawLabTurn
 from app.prompt_loader import build_raw_lab_system_prompt, estimate_raw_lab_input_chars
-from app.raw_lab_budget import compact_raw_lab_request_for_budget, prepare_raw_lab_request
+from app.raw_lab_budget import (
+    _compact_thread_state,
+    compact_raw_lab_request_for_budget,
+    prepare_raw_lab_request,
+)
 from app.models import ChatRole
 
 
@@ -88,6 +92,61 @@ def test_compact_trims_personality_growth_notes():
     result = compact_raw_lab_request_for_budget(request=request, max_chars=7_000)
     assert len(result.request.thread_state.personality.growth_notes) <= 2
     assert result.level in {"compact_state", "aggressive"}
+
+
+def test_aggressive_compaction_preserves_latest_steering_and_core_loops():
+    state = RawLabThreadState(
+        open_loops=["loop-a", "loop-b", "loop-c"],
+        user_steering=["old steering", "middle steering", "latest steering"],
+        do_not_repeat=["old phrase", "middle phrase", "latest phrase"],
+        questions_to_revisit=["question-a", "question-b", "question-c"],
+        self_observations=["obs-a", "obs-b", "obs-c"],
+        personality=RawLabPersonalityState(
+            voice_traits=["voice-a", "voice-b", "voice-c"],
+            growth_notes=["growth-a", "growth-b", "growth-c"],
+        ),
+    )
+    original = state.model_copy(deep=True)
+
+    turns = [
+        RawLabTurn(role=ChatRole.user, content="I want pushback on whether I am avoiding."),
+        RawLabTurn(role=ChatRole.assistant, content="Reply"),
+        RawLabTurn(role=ChatRole.user, content="Don't keep saying little scout."),
+    ]
+
+    compacted = _compact_thread_state(
+        state,
+        aggressive=True,
+        turns=turns,
+        turns_before=10,
+    )
+
+    assert compacted.user_steering == ["middle steering", "latest steering"]
+    assert compacted.do_not_repeat == ["middle phrase", "latest phrase"]
+    assert compacted.open_loops == ["loop-a", "loop-b"]
+    assert compacted.questions_to_revisit == ["question-a", "question-b"]
+    assert len(compacted.self_observations) == 1
+    assert len(compacted.personality.growth_notes) == 1
+    assert compacted.smart_compacted_context.do_not_repeat == [
+        "middle phrase",
+        "latest phrase",
+    ]
+    assert compacted.smart_compacted_context.user_steering == [
+        "middle steering",
+        "latest steering",
+    ]
+    assert compacted.smart_compacted_context.active_open_loops == ["loop-a", "loop-b"]
+    assert compacted.smart_compacted_context.questions_to_revisit == [
+        "question-a",
+        "question-b",
+    ]
+    assert "avoidance" in compacted.smart_compacted_context.current_tension
+    assert "7 older Raw Lab turns" in compacted.smart_compacted_context.discarded_noise_summary
+    assert compacted.smart_compacted_context.important_recent_moments == [
+        "user: I want pushback on whether I am avoiding.",
+        "user: Don't keep saying little scout.",
+    ]
+    assert state == original
 
 
 def test_prepare_logs_counts_not_raw_text(caplog):

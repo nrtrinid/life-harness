@@ -10,6 +10,7 @@ import {
 } from "./companionSelfMemory";
 import {
   buildRawLabSendBundle,
+  buildRawLabSmartCompactedContext,
   compactRawLabThreadStateForBudget,
   estimateRawLabSerializedInputChars,
   RAW_LAB_PROMPT_SHELL_CHARS,
@@ -77,6 +78,11 @@ describe("estimateRawLabSerializedInputChars", () => {
 describe("compactRawLabThreadStateForBudget", () => {
   it("caps personality and growth notes at aggressive level", () => {
     const state = createEmptyRawLabThreadState();
+    state.recurringTopics = ["a", "b", "c", "d"];
+    state.currentVibe = "Current vibe ".repeat(40);
+    state.provisionalStances = ["s1", "s2", "s3"];
+    state.selfObservations = ["o1", "o2", "o3"];
+    state.questionsToRevisit = ["q1", "q2", "q3"];
     state.personality = {
       ...createEmptyRawLabPersonalityState(),
       voiceTraits: ["a", "b", "c", "d"],
@@ -86,6 +92,11 @@ describe("compactRawLabThreadStateForBudget", () => {
       state,
       level: "aggressive"
     });
+    expect(compacted.recurringTopics.length).toBeLessThanOrEqual(2);
+    expect(compacted.currentVibe.length).toBeLessThanOrEqual(90);
+    expect(compacted.provisionalStances.length).toBeLessThanOrEqual(1);
+    expect(compacted.selfObservations.length).toBeLessThanOrEqual(1);
+    expect(compacted.questionsToRevisit.length).toBeLessThanOrEqual(2);
     expect(compacted.personality.voiceTraits.length).toBeLessThanOrEqual(2);
     expect(compacted.personality.growthNotes.length).toBeLessThanOrEqual(1);
   });
@@ -96,6 +107,74 @@ describe("compactRawLabThreadStateForBudget", () => {
     const before = [...state.openLoops];
     compactRawLabThreadStateForBudget({ state, level: "compact_state" });
     expect(state.openLoops).toEqual(before);
+  });
+
+  it("preserves latest steering and core loops before personality flavor", () => {
+    const state = createEmptyRawLabThreadState();
+    state.openLoops = ["loop-a", "loop-b", "loop-c"];
+    state.userSteering = ["old steering", "middle steering", "latest steering"];
+    state.doNotRepeat = ["old phrase", "middle phrase", "latest phrase"];
+    state.questionsToRevisit = ["question-a", "question-b", "question-c"];
+    state.selfObservations = ["obs-a", "obs-b", "obs-c"];
+    state.personality = {
+      ...createEmptyRawLabPersonalityState(),
+      voiceTraits: ["voice-a", "voice-b", "voice-c"],
+      growthNotes: ["growth-a", "growth-b", "growth-c"]
+    };
+    const originalSteering = [...state.userSteering];
+
+    const compacted = compactRawLabThreadStateForBudget({
+      state,
+      level: "aggressive"
+    });
+
+    expect(compacted.userSteering).toEqual(["middle steering", "latest steering"]);
+    expect(compacted.doNotRepeat).toEqual(["middle phrase", "latest phrase"]);
+    expect(compacted.openLoops).toEqual(["loop-a", "loop-b"]);
+    expect(compacted.questionsToRevisit).toEqual(["question-a", "question-b"]);
+    expect(compacted.selfObservations).toEqual(["obs-a"]);
+    expect(compacted.personality.growthNotes).toEqual(["growth-a"]);
+    expect(state.userSteering).toEqual(originalSteering);
+  });
+
+  it("builds deterministic smart compacted context from priority fields and recent turns", () => {
+    const state = createEmptyRawLabThreadState();
+    state.openLoops = ["loop-a", "loop-b", "loop-c"];
+    state.questionsToRevisit = ["question-a", "question-b", "question-c"];
+    state.userSteering = ["old steering", "middle steering", "latest steering"];
+    state.doNotRepeat = ["old phrase", "middle phrase", "latest phrase"];
+    state.recurringTopics = ["Raw Lab", "identity", "runtime"];
+    state.provisionalStances = ["stance-a", "stance-b"];
+    state.selfObservations = ["obs-a", "obs-b"];
+
+    const turns = [
+      makeTurn("user", "I want pushback on whether I am avoiding."),
+      makeTurn("assistant", "Reply"),
+      makeTurn("user", "Don't keep saying little scout.")
+    ];
+
+    const context = buildRawLabSmartCompactedContext({
+      state,
+      turns,
+      level: "aggressive",
+      turnsBefore: 10
+    });
+
+    expect(context.doNotRepeat).toEqual(["middle phrase", "latest phrase"]);
+    expect(context.userSteering).toEqual(["middle steering", "latest steering"]);
+    expect(context.activeOpenLoops).toEqual(["loop-a", "loop-b"]);
+    expect(context.questionsToRevisit).toEqual(["question-a", "question-b"]);
+    expect(context.recurringTopics).toEqual(["Raw Lab", "identity"]);
+    expect(context.provisionalStances).toEqual(["stance-a"]);
+    expect(context.selfObservations).toEqual(["obs-a"]);
+    expect(context.importantRecentMoments).toEqual([
+      "user: I want pushback on whether I am avoiding.",
+      "user: Don't keep saying little scout."
+    ]);
+    expect(context.currentTension).toContain("avoidance");
+    expect(context.discardedNoiseSummary).toContain("7 older Raw Lab turns");
+    expect(context.sourceTurnIds).toEqual(["turn-I want p", "turn-Don't ke"]);
+    expect(context.confidence).toBe(0.8);
   });
 });
 
@@ -190,6 +269,7 @@ describe("buildRawLabSendBundle", () => {
   it("compacts thread state when still over budget after trim", () => {
     const state = createEmptyRawLabThreadState();
     state.openLoops = ["a", "b", "c", "d", "e", "f", "g"];
+    state.recurringTopics = ["r1", "r2", "r3", "r4", "r5"];
     state.personality.growthNotes = ["n1", "n2", "n3", "n4"];
     const turns = Array.from({ length: 18 }, (_, index) =>
       makeTurn("assistant", `Chunk ${index} `.repeat(150))
@@ -202,6 +282,11 @@ describe("buildRawLabSendBundle", () => {
     });
     expect(bundle.level === "compact_state" || bundle.level === "aggressive").toBe(true);
     expect(bundle.threadState.openLoops.length).toBeLessThanOrEqual(4);
+    expect(bundle.threadState.recurringTopics.length).toBeLessThanOrEqual(4);
+    expect(bundle.smartCompactedContext.activeOpenLoops.length).toBeGreaterThan(0);
+    expect(bundle.threadState.smartCompactedContext.activeOpenLoops).toEqual(
+      bundle.smartCompactedContext.activeOpenLoops
+    );
     expect(bundle.notice?.beforeChars).toBeGreaterThan(bundle.notice?.afterChars ?? 0);
   });
 });

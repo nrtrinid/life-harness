@@ -213,7 +213,10 @@ def _execute_eval_case(
             "message": case["message"],
             "recent_turns": case.get("recent_turns", []),
             "thread_state": case.get("thread_state", {}),
+            "reasoning_depth": case.get("reasoning_depth", "fast"),
         }
+        if "companion_self_memories" in case:
+            payload["companion_self_memories"] = case.get("companion_self_memories", [])
         response = client.post("/raw-lab", json=payload)
         if response.status_code != 200:
             return (
@@ -223,6 +226,64 @@ def _execute_eval_case(
             )
         body = response.json()
         answer = str(body.get("answer", ""))
+    elif endpoint == "raw-lab-depth-compare":
+        base_payload = {
+            "message": case["message"],
+            "recent_turns": case.get("recent_turns", []),
+            "thread_state": case.get("thread_state", {}),
+        }
+        if "companion_self_memories" in case:
+            base_payload["companion_self_memories"] = case.get(
+                "companion_self_memories", []
+            )
+
+        fast_response = client.post(
+            "/raw-lab", json={**base_payload, "reasoning_depth": "fast"}
+        )
+        if fast_response.status_code != 200:
+            return (
+                None,
+                "",
+                f"fast HTTP {fast_response.status_code}: "
+                f"{getattr(fast_response, 'text', '')[:200]}",
+            )
+        deep_response = client.post(
+            "/raw-lab", json={**base_payload, "reasoning_depth": "deep"}
+        )
+        if deep_response.status_code != 200:
+            return (
+                None,
+                "",
+                f"deep HTTP {deep_response.status_code}: "
+                f"{getattr(deep_response, 'text', '')[:200]}",
+            )
+        fast_body = fast_response.json()
+        deep_body = deep_response.json()
+        body = {
+            "fast": fast_body,
+            "deep": deep_body,
+            "_banned_phrases": case.get("thread_state", {}).get("do_not_repeat", []),
+            "_message": case.get("message", ""),
+            "_recent_turns": case.get("recent_turns", []),
+            "_thread_state": case.get("thread_state", {}),
+            "_companion_self_memories": case.get("companion_self_memories", []),
+        }
+        answer = f"{fast_body.get('answer', '')}\n{deep_body.get('answer', '')}"
+    elif endpoint == "raw-lab-reflect-thread":
+        payload = {
+            "recent_turns": case.get("recent_turns", []),
+            "thread_state": case.get("thread_state", {}),
+            "companion_self_memories": case.get("companion_self_memories", []),
+        }
+        response = client.post("/raw-lab/reflect-thread", json=payload)
+        if response.status_code != 200:
+            return (
+                None,
+                "",
+                f"HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
+            )
+        body = response.json()
+        answer = __import__("json").dumps(body, ensure_ascii=False)
     elif endpoint == "analyze-transcript":
         text = resolve_input_text(case)
         payload = {

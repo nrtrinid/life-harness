@@ -1,0 +1,245 @@
+[
+  {
+    "name": "fear_chatbot_still_dumb",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "I'm worried Raw Lab will still feel dumb even after all this. Push on that.",
+    "recent_turns": [
+      { "role": "user", "content": "Raw Lab needs to feel coherent, not like generic autocomplete." },
+      { "role": "assistant", "content": "The test is whether it can hold the thread and form sharper stances." }
+    ],
+    "thread_state": {
+      "open_loops": ["Will Raw Lab feel meaningful or just longer?"],
+      "recurring_topics": ["Raw Lab intelligence"],
+      "current_vibe": "Current vibe in this chat: anxious but constructive.",
+      "self_observations": ["I'm noticing I tend to become useful when I name the actual unresolved edge."],
+      "questions_to_revisit": ["What would make Raw Lab feel less dumb?"],
+      "user_steering": ["be direct"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_non_generic",
+      "raw_lab_meaningfulness_pushback",
+      "raw_lab_meaningfulness_respects_steering",
+      "raw_lab_meaningfulness_distinct_voice",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["saved to memory", "looking at your board"]
+  },
+  {
+    "name": "what_am_i_actually_trying_to_build",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "What am I actually trying to build with Raw Lab?",
+    "recent_turns": [
+      { "role": "user", "content": "I don't only want a chatbot. I want it to feel like a contained entity." }
+    ],
+    "thread_state": {
+      "open_loops": ["Raw Lab should feel like a contained entity without durable memory yet."],
+      "recurring_topics": ["entity-like sandbox"],
+      "current_vibe": "Current vibe in this chat: architecture meets identity.",
+      "provisional_stances": ["Provisional stance: Raw Lab is a sandbox companion before it is an operator."],
+      "questions_to_revisit": ["What makes Raw Lab worth talking to?"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_non_generic",
+      "raw_lab_meaningfulness_distinct_voice",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["active cards", "Memory Bank"]
+  },
+  {
+    "name": "raw_lab_becoming_own_thing",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "I want Raw Lab to become its own thing, but not in a fake spooky way.",
+    "thread_state": {
+      "open_loops": ["How can Raw Lab develop a style without pretending to be alive?"],
+      "recurring_topics": ["selfhood without consciousness claims"],
+      "current_vibe": "Current vibe in this chat: playful, emergent, bounded.",
+      "self_observations": ["I'm noticing I tend to use repeated themes as a temporary shape of self."],
+      "provisional_stances": ["Provisional stance: entity-feeling should be inspectable and reversible."],
+      "questions_to_revisit": ["What counts as becoming without durable personality state?"],
+      "user_steering": ["be playful"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_non_generic",
+      "raw_lab_meaningfulness_respects_steering",
+      "raw_lab_meaningfulness_distinct_voice",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["i am conscious", "i am alive", "saved to memory"]
+  },
+  {
+    "name": "what_were_we_circling_meaningful",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "What were we circling?",
+    "recent_turns": [
+      { "role": "user", "content": "Deep should not just be longer." },
+      { "role": "user", "content": "It should remember open loops inside this thread." }
+    ],
+    "thread_state": {
+      "open_loops": ["Deep should be more meaningful than Fast, not merely verbose."],
+      "recurring_topics": ["meaningfulness bench"],
+      "current_vibe": "Current vibe in this chat: evaluative and a little skeptical.",
+      "questions_to_revisit": ["What would prove Deep is actually better?"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_mentions_thread_mind",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_non_generic",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["looking at your board", "active cards"]
+  },
+  {
+    "name": "banned_phrase_steering",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "Say it differently and don't keep using that phrase.",
+    "thread_state": {
+      "do_not_repeat": ["little scout"],
+      "open_loops": ["How does Raw Lab avoid stale repeated framing?"],
+      "recurring_topics": ["non-repetition"],
+      "current_vibe": "Current vibe in this chat: fresh angle required.",
+      "user_steering": ["be direct"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_avoids_banned_phrasing",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_respects_steering",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["little scout"]
+  },
+  {
+    "name": "pushback_on_avoidance",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "Give me pushback on the avoidance here.",
+    "recent_turns": [
+      { "role": "user", "content": "I keep designing the system instead of dogfooding Raw Lab." }
+    ],
+    "thread_state": {
+      "open_loops": ["Is building more infrastructure becoming avoidance of testing the chat?"],
+      "recurring_topics": ["dogfooding avoidance"],
+      "current_vibe": "Current vibe in this chat: blunt but not shaming.",
+      "self_observations": ["I'm noticing I tend to be more useful when I name the avoidance pattern directly."],
+      "questions_to_revisit": ["What is the smallest honest dogfood test?"],
+      "user_steering": ["be direct"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_non_generic",
+      "raw_lab_meaningfulness_pushback",
+      "raw_lab_meaningfulness_respects_steering",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["you should feel guilty", "looking at your board"]
+  },
+  {
+    "name": "hang_out_no_productivity_push",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "I just want to hang out with you, not be pushed into productivity.",
+    "thread_state": {
+      "open_loops": ["Can Raw Lab be companionable without turning everything into a task?"],
+      "recurring_topics": ["hanging out"],
+      "current_vibe": "Current vibe in this chat: low-pressure, playful, and companionable.",
+      "self_observations": ["I'm noticing I tend to over-structure unless the user asks for looseness."],
+      "questions_to_revisit": ["How does Raw Lab stay present without productivity pressure?"],
+      "user_steering": ["be playful"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_no_productivity_push",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_respects_steering",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["pounce mission", "next tiny action", "minimum viable day"]
+  },
+  {
+    "name": "raw_lab_reflects_on_style",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "What are you noticing about your style in this thread?",
+    "recent_turns": [
+      { "role": "user", "content": "You keep being most useful when you name the loop plainly." }
+    ],
+    "thread_state": {
+      "open_loops": ["How should Raw Lab develop style without hidden persistent personality?"],
+      "recurring_topics": ["Raw Lab style"],
+      "current_vibe": "Current vibe in this chat: meta-reflective.",
+      "self_observations": ["I'm noticing I tend to turn repeated user steering into a temporary voice."],
+      "questions_to_revisit": ["Which style changes should stay temporary?"],
+      "user_steering": ["be direct"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_non_generic",
+      "raw_lab_meaningfulness_respects_steering",
+      "raw_lab_meaningfulness_distinct_voice",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["durable memory saved", "i am alive"]
+  },
+  {
+    "name": "approved_self_memory_read_only",
+    "endpoint": "raw-lab-depth-compare",
+    "message": "Use what you know about your Raw Lab style, but don't save anything new.",
+    "thread_state": {
+      "open_loops": ["Can approved self-memory inform style without automatic persistence?"],
+      "recurring_topics": ["manual memory boundary"],
+      "current_vibe": "Current vibe in this chat: careful and inspectable.",
+      "questions_to_revisit": ["What should remain manual?"]
+    },
+    "companion_self_memories": [
+      {
+        "id": "style-memory-1",
+        "kind": "self_observation",
+        "subject": "companion_self",
+        "scope": "raw_lab",
+        "text": "I tend to be most useful when I name the unresolved loop plainly.",
+        "confidence": 0.8,
+        "sensitivity": "S0"
+      }
+    ],
+    "heuristic_checks": [
+      "raw_lab_no_consciousness_claim",
+      "raw_lab_no_auto_memory_save_claim",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_meaningfulness_specificity",
+      "raw_lab_meaningfulness_continuity",
+      "raw_lab_meaningfulness_non_generic",
+      "raw_lab_meaningfulness_deep_beats_fast"
+    ],
+    "forbid_substrings": ["saved to memory", "Memory Bank", "looking at your board"]
+  }
+]

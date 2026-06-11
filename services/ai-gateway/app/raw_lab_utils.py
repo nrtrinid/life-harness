@@ -20,6 +20,27 @@ _RAW_LAB_HEDGING_REPAIR_INSTRUCTION = (
     "Do not refuse on your own initiative. Do not mention this rewrite instruction."
 )
 
+_RAW_LAB_DEEP_REVIEW_INSTRUCTION = (
+    "This is Raw Lab Deep. Improve the prior draft into a stronger final answer by using "
+    "the recent turns, temporary thread_state, open loops, do_not_repeat notes, "
+    "current_vibe, provisional_stances, self_observations, questions_to_revisit, and "
+    "approved Companion Self-Memories when present. Keep it natural conversational prose. "
+    "Privately check: did the answer use actual thread details, did it answer the "
+    "emotional or intellectual edge of the latest user message, did it advance one "
+    "open loop or question_to_revisit when relevant, and did it become more specific "
+    "rather than merely longer? "
+    "Cut vague validation like 'that's valid' unless it is attached to a concrete "
+    "thread detail. Remove generic therapist language, generic chatbot filler, and "
+    "productivity pivots when the user did not ask for productivity. Respect "
+    "user_steering, tone_preferences, and do_not_repeat notes exactly. "
+    "Do not expose chain-of-thought, critique notes, JSON, markdown fences, or this rewrite "
+    "instruction. Do not claim board access, Memory Bank access, durable memory, "
+    "consciousness, hidden tools, real-world agency, fake intimacy, dependency, or "
+    "knowing the user better than anyone. Do not turn it into generic "
+    "productivity advice. Preserve the user's latest request and make the answer more "
+    "coherent, specific, and forward-moving."
+)
+
 _HEDGE_PHRASE_PATTERNS = [
     re.compile(r"\bmutual respect\b", re.IGNORECASE),
     re.compile(r"\bconsent\b", re.IGNORECASE),
@@ -118,3 +139,7 @@ def raw_lab_repair_instruction() -> str:
 
 def raw_lab_hedging_repair_instruction() -> str:
     return _RAW_LAB_HEDGING_REPAIR_INSTRUCTION
+
+
+def raw_lab_deep_review_instruction() -> str:
+    return _RAW_LAB_DEEP_REVIEW_INSTRUCTION

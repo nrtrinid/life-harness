@@ -16,6 +16,8 @@ from app.models import (
     RawLabResponse,
     RawLabSelfReflectionRequest,
     RawLabSelfReflectionResponse,
+    RawLabThreadReflectionRequest,
+    RawLabThreadReflectionResponse,
 )
 
 CHAT_HARNESS_PARSE_FALLBACK = ChatHarnessResponse(
@@ -82,6 +84,10 @@ class TranscriptProvider(Protocol):
     def raw_lab_self_reflection(
         self, request: RawLabSelfReflectionRequest
     ) -> RawLabSelfReflectionResponse: ...
+
+    def raw_lab_thread_reflection(
+        self, request: RawLabThreadReflectionRequest
+    ) -> RawLabThreadReflectionResponse: ...
 
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)

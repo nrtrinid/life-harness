@@ -41,7 +41,14 @@ export function countRawLabThreadMemoryItems(threadState: RawLabThreadState): nu
   count += threadState.openLoops.length;
   count += threadState.userSteering.length;
   count += threadState.doNotRepeat.length;
+  count += threadState.recurringTopics.length;
+  count += threadState.provisionalStances.length;
+  count += threadState.selfObservations.length;
+  count += threadState.questionsToRevisit.length;
   if (threadState.recentDigest) {
+    count += 1;
+  }
+  if (threadState.currentVibe) {
     count += 1;
   }
   return count;

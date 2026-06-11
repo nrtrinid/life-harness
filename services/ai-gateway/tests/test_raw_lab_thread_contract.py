@@ -5,12 +5,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, get_provider
-from app.models import ChatRole, RawLabRequest, RawLabThreadState, RawLabTurn
+from app.models import ChatRole, RawLabRequest, RawLabThreadState, RawLabTurn, ReasoningDepth
 from app.prompt_loader import build_raw_lab_system_prompt
 from app.providers.openvino_provider import OpenVinoProvider
 from app.raw_lab_utils import (
     is_hedged_response,
     is_repetitive_response,
+    raw_lab_deep_review_instruction,
     raw_lab_hedging_repair_instruction,
     raw_lab_repair_instruction,
 )
@@ -141,6 +142,94 @@ def test_openvino_repair_is_internal_and_not_returned_verbatim():
     repair.assert_called_once()
     assert repair_text not in result.answer
     assert result.answer == repaired
+
+
+def test_openvino_raw_lab_deep_runs_internal_review_pass():
+    from app.config import get_settings
+
+    provider = OpenVinoProvider(get_settings())
+    provider._pipeline = object()
+    provider._load_error = None
+
+    draft = "Initial answer uses the thread lightly."
+    revised = "Deeper answer pulls the open loop forward without claiming board access."
+    request = RawLabRequest(
+        message="Think harder about this thread.",
+        recent_turns=[],
+        reasoning_depth=ReasoningDepth.deep,
+        thread_state=RawLabThreadState(
+            open_loops=["How should Raw Lab Deep stay contained?"],
+            self_observations=["I'm noticing I pull threads into sharper shape."],
+        ),
+    )
+
+    with patch.object(provider, "_generate_chat", return_value=draft):
+        with patch.object(provider, "_generate_chat_repair", return_value=revised) as repair:
+            result = provider.raw_lab(request)
+
+    repair.assert_called_once()
+    instruction = repair.call_args.kwargs["repair_instruction"]
+    assert raw_lab_deep_review_instruction() == instruction
+    assert "chain-of-thought" in instruction
+    assert "actual thread details" in instruction
+    assert "emotional or intellectual edge" in instruction
+    assert "open loop or question_to_revisit" in instruction
+    assert "more specific" in instruction
+    assert "merely longer" in instruction
+    assert "generic therapist language" in instruction
+    assert "do_not_repeat" in instruction
+    assert "Memory Bank" in instruction
+    assert "fake intimacy" in instruction
+    assert instruction not in result.answer
+    assert result.answer == revised
+
+
+def test_openvino_raw_lab_fast_skips_deep_review_pass():
+    from app.config import get_settings
+
+    provider = OpenVinoProvider(get_settings())
+    provider._pipeline = object()
+    provider._load_error = None
+
+    request = RawLabRequest(
+        message="Answer normally.",
+        recent_turns=[],
+        reasoning_depth=ReasoningDepth.fast,
+    )
+
+    with patch.object(provider, "_generate_chat", return_value="Plain answer."):
+        with patch.object(provider, "_generate_chat_repair") as repair:
+            result = provider.raw_lab(request)
+
+    repair.assert_not_called()
+    assert result.answer == "Plain answer."
+
+
+def test_openvino_raw_lab_deep_review_fail_soft_keeps_valid_draft():
+    from app.config import get_settings
+
+    provider = OpenVinoProvider(get_settings())
+    provider._pipeline = object()
+    provider._load_error = None
+
+    draft = "Plain direct answer."
+    rejected_review = "   "
+    request = RawLabRequest(
+        message="Think harder about this thread.",
+        recent_turns=[],
+        reasoning_depth=ReasoningDepth.deep,
+    )
+
+    with patch.object(provider, "_generate_chat", return_value=draft):
+        with patch.object(
+            provider, "_generate_chat_repair", return_value=rejected_review
+        ) as repair:
+            result = provider.raw_lab(request)
+
+    repair.assert_called_once()
+    assert result.answer == draft
+    assert result.mode == "raw_lab"
+    assert result.used_context is False
 
 
 def test_build_raw_lab_system_prompt_does_not_include_harness_context():

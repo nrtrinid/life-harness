@@ -122,7 +122,12 @@ export function RawLabThreadMemoryPanel({
     threadState.decisions.length > 0 ||
     threadState.openLoops.length > 0 ||
     threadState.userSteering.length > 0 ||
-    threadState.doNotRepeat.length > 0;
+    threadState.doNotRepeat.length > 0 ||
+    threadState.recurringTopics.length > 0 ||
+    Boolean(threadState.currentVibe) ||
+    threadState.provisionalStances.length > 0 ||
+    threadState.selfObservations.length > 0 ||
+    threadState.questionsToRevisit.length > 0;
 
   const hasPersonalityContent =
     personality.voiceTraits.length > 0 ||
@@ -205,6 +210,38 @@ export function RawLabThreadMemoryPanel({
                 items={threadState.doNotRepeat}
                 listKey="doNotRepeat"
                 onRemove={(index) => handleRemoveMemory("doNotRepeat", index)}
+              />
+              <MemoryItemsList
+                items={threadState.recurringTopics}
+                listKey="recurringTopics"
+                onRemove={(index) => handleRemoveMemory("recurringTopics", index)}
+              />
+              {threadState.currentVibe ? (
+                <MemoryReviewCard
+                  text={threadState.currentVibe}
+                  onForget={() =>
+                    onThreadStateChange({
+                      ...threadState,
+                      currentVibe: "",
+                      updatedAt: new Date().toISOString()
+                    })
+                  }
+                />
+              ) : null}
+              <MemoryItemsList
+                items={threadState.provisionalStances}
+                listKey="provisionalStances"
+                onRemove={(index) => handleRemoveMemory("provisionalStances", index)}
+              />
+              <MemoryItemsList
+                items={threadState.selfObservations}
+                listKey="selfObservations"
+                onRemove={(index) => handleRemoveMemory("selfObservations", index)}
+              />
+              <MemoryItemsList
+                items={threadState.questionsToRevisit}
+                listKey="questionsToRevisit"
+                onRemove={(index) => handleRemoveMemory("questionsToRevisit", index)}
               />
 
               {hasMemoryContent ? (

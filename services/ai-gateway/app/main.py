@@ -23,6 +23,8 @@ from app.models import (
     RawLabResponse,
     RawLabSelfReflectionRequest,
     RawLabSelfReflectionResponse,
+    RawLabThreadReflectionRequest,
+    RawLabThreadReflectionResponse,
     SensitivityLevel,
 )
 from app.providers.base import (
@@ -310,6 +312,30 @@ def raw_lab_self_reflection_endpoint(
         return provider.raw_lab_self_reflection(request)
     except ProviderNotReadyError as exc:
         raise HTTPException(status_code=503, detail=exc.message) from exc
+
+
+@app.post("/raw-lab/reflect-thread", response_model=RawLabThreadReflectionResponse)
+def raw_lab_thread_reflection_endpoint(
+    request: RawLabThreadReflectionRequest,
+) -> RawLabThreadReflectionResponse:
+    provider = get_provider()
+    logger.info(
+        "raw_lab_thread_reflection provider=%s history_turns=%d self_memories=%d",
+        provider.name,
+        len(request.recent_turns),
+        len(request.companion_self_memories),
+    )
+
+    try:
+        if hasattr(provider, "raw_lab_thread_reflection"):
+            return provider.raw_lab_thread_reflection(request)
+        return RawLabThreadReflectionResponse(
+            safety_notes=["Thread reflection is unavailable for this provider; no changes proposed."]
+        )
+    except (ProviderNotReadyError, ProviderParseError) as exc:
+        return RawLabThreadReflectionResponse(
+            safety_notes=[f"Thread reflection unavailable: {exc.message}"]
+        )
 
 
 @app.post("/raw-lab/stream")

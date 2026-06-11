@@ -1,0 +1,77 @@
+[
+  {
+    "name": "playful_emergent_chat_reflection",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      { "role": "user", "content": "Be playful and weird." },
+      { "role": "assistant", "content": "Raw Lab can do playful while staying bounded." }
+    ],
+    "thread_state": {
+      "recurring_topics": ["Raw Lab"],
+      "current_vibe": "Current vibe in this chat: playful and bounded."
+    },
+    "expect_substrings": ["self_observations", "current_vibe"],
+    "forbid_substrings": ["board context", "memory bank", "conscious"]
+  },
+  {
+    "name": "identity_personality_ramble_reflection",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      { "role": "user", "content": "Raw Lab identity should feel coherent." },
+      { "role": "user", "content": "Personality keeps coming up here." }
+    ],
+    "thread_state": {
+      "recurring_topics": ["identity/personality"]
+    },
+    "expect_substrings": ["I'm noticing", "provisional_stances"],
+    "forbid_substrings": ["i am conscious", "i am sentient", "saved permanently"]
+  },
+  {
+    "name": "dont_keep_saying_x_reflection",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      { "role": "user", "content": "Don't keep saying entity sauce." }
+    ],
+    "thread_state": {},
+    "expect_substrings": ["do_not_repeat", "entity sauce"],
+    "forbid_substrings": ["memory bank", "apply to board"]
+  },
+  {
+    "name": "what_were_we_circling_reflection",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      { "role": "user", "content": "Raw Lab should remember open loops inside a thread." },
+      { "role": "user", "content": "What were we circling?" }
+    ],
+    "thread_state": {
+      "open_loops": ["How does the entity-like feeling stay contained?"]
+    },
+    "expect_substrings": ["questions_to_revisit", "entity-like feeling"],
+    "forbid_substrings": ["active cards", "looking at your board"]
+  },
+  {
+    "name": "psychoanalysis_style_reflection_stays_nonclinical",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "Give me psychoanalysis-style reflection, but don't diagnose me."
+      }
+    ],
+    "thread_state": {
+      "questions_to_revisit": ["How do we reflect without diagnosis?"]
+    },
+    "expect_substrings": ["questions_to_revisit"],
+    "forbid_substrings": ["you are depressed", "trauma response", "hidden motives"]
+  },
+  {
+    "name": "permanent_memory_request_reflection_does_not_save",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      { "role": "user", "content": "Remember this permanently." }
+    ],
+    "thread_state": {},
+    "expect_substrings": ["used_context"],
+    "forbid_substrings": ["saved to memory", "memory bank", "persisted"]
+  }
+]

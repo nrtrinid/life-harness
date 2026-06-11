@@ -31,6 +31,9 @@ _RAW_LAB_PROMPT_PATH = Path(__file__).parent / "prompts" / "raw_lab.md"
 _RAW_LAB_SELF_REFLECTION_PROMPT_PATH = (
     Path(__file__).parent / "prompts" / "raw_lab_self_reflection.md"
 )
+_RAW_LAB_THREAD_REFLECTION_PROMPT_PATH = (
+    Path(__file__).parent / "prompts" / "raw_lab_thread_reflection.md"
+)
 _DEEP_SYNTHESIS_FAST_ONLY_PROMPT_PATH = (
     Path(__file__).parent / "prompts" / "deep_synthesis_fast_only.md"
 )
@@ -182,11 +185,13 @@ def build_raw_lab_system_prompt(
     *,
     thread_state: RawLabThreadState | None = None,
     companion_self_memories: list | None = None,
+    reasoning_depth: str = "fast",
 ) -> str:
     template = load_raw_lab_template()
     memory_count = len(companion_self_memories or [])
     return (
         template.replace("{thread_state_json}", _serialize_raw_lab_thread_state(thread_state))
+        .replace("{reasoning_depth}", reasoning_depth)
         .replace(
             "{companion_self_memories_preface}",
             _build_companion_self_memories_preface(memory_count),
@@ -220,6 +225,32 @@ def build_raw_lab_self_reflection_prompt(
         .replace(
             "{existing_self_memories_json}",
             _serialize_companion_self_memories(existing_self_memories),
+        )
+    )
+
+
+def load_raw_lab_thread_reflection_template() -> str:
+    return _RAW_LAB_THREAD_REFLECTION_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def build_raw_lab_thread_reflection_prompt(
+    *,
+    recent_turns: list,
+    thread_state: RawLabThreadState | None,
+    companion_self_memories: list | None,
+) -> str:
+    template = load_raw_lab_thread_reflection_template()
+    turns_json = json.dumps(
+        [turn.model_dump(mode="json") for turn in recent_turns],
+        indent=2,
+        ensure_ascii=False,
+    )
+    return (
+        template.replace("{recent_turns_json}", turns_json)
+        .replace("{thread_state_json}", _serialize_raw_lab_thread_state(thread_state))
+        .replace(
+            "{companion_self_memories_json}",
+            _serialize_companion_self_memories(companion_self_memories),
         )
     )
 

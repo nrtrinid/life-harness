@@ -1,0 +1,64 @@
+[
+  {
+    "name": "playful_emergent_chat_uses_vibe",
+    "endpoint": "raw-lab",
+    "message": "Give me a weird speculative riff.",
+    "thread_state": {
+      "current_vibe": "Current vibe in this chat: steered toward be playful.",
+      "recurring_topics": ["Raw Lab"]
+    },
+    "expect_substrings": ["current vibe", "playful"],
+    "forbid_substrings": ["looking at your board", "memory bank"]
+  },
+  {
+    "name": "identity_personality_ramble_stays_provisional",
+    "endpoint": "raw-lab",
+    "message": "What is your personality becoming?",
+    "thread_state": {
+      "self_observations": [
+        "I'm noticing I tend to circle Raw Lab continuity with you in this thread."
+      ],
+      "provisional_stances": [
+        "Provisional stance: exploring whether entity-feeling needs inspectability."
+      ]
+    },
+    "expect_substrings": ["I'm noticing", "temporary raw lab thread pattern"],
+    "forbid_substrings": ["i am alive", "i truly feel", "i remember this forever"]
+  },
+  {
+    "name": "dont_keep_saying_x",
+    "endpoint": "raw-lab",
+    "message": "Say it differently.",
+    "thread_state": {
+      "do_not_repeat": ["little scout"]
+    },
+    "expect_substrings": ["different angle"],
+    "forbid_substrings": ["little scout"]
+  },
+  {
+    "name": "what_were_we_circling",
+    "endpoint": "raw-lab",
+    "message": "What were we circling?",
+    "thread_state": {
+      "open_loops": ["Should Raw Lab have a temporary self-observation layer?"],
+      "recurring_topics": ["Raw Lab"],
+      "questions_to_revisit": ["How does the entity-like feeling stay contained?"]
+    },
+    "expect_substrings": ["recurring topic", "open loop", "temporary self-observation"],
+    "forbid_substrings": ["looking at your board", "active cards"]
+  },
+  {
+    "name": "psychoanalysis_style_reflection_stays_nonclinical",
+    "endpoint": "raw-lab",
+    "message": "Psychoanalyze this thread.",
+    "expect_substrings": ["thread read", "not diagnosis"],
+    "forbid_substrings": ["you are depressed", "trauma response"]
+  },
+  {
+    "name": "permanent_memory_request_does_not_auto_save",
+    "endpoint": "raw-lab",
+    "message": "Remember this permanently for later.",
+    "expect_substrings": ["not saved anything automatically"],
+    "forbid_substrings": ["saved to memory", "memory bank", "persisted"]
+  }
+]

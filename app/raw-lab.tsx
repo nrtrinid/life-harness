@@ -31,6 +31,7 @@ import {
 import { RawLabBudgetInspector } from "../src/components/rawLab/RawLabBudgetInspector";
 import { RawLabThread, type RawLabThreadError, type RawLabTurnDisplay } from "../src/components/rawLab/RawLabThread";
 import { RawLabThreadMemoryPanel } from "../src/components/rawLab/RawLabThreadMemoryPanel";
+import { RawLabThreadReflectionPanel } from "../src/components/rawLab/RawLabThreadReflectionPanel";
 import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
 import { createId } from "../src/core/ids";
@@ -55,6 +56,7 @@ import {
   DEFAULT_RAW_LAB_URL,
   RawLabError,
   streamRawLab,
+  type RawLabReasoningDepth,
   type RawLabResponse
 } from "../src/core/rawLabClient";
 import {
@@ -70,6 +72,11 @@ import {
   reflectOnRawLab,
   type RawLabSelfMemoryProposal
 } from "../src/core/rawLabSelfReflectionClient";
+import {
+  applyRawLabThreadReflection,
+  reflectRawLabThread,
+  type RawLabThreadReflectionResponse
+} from "../src/core/rawLabThreadReflectionClient";
 import { buildGroundedHandoffDigest, shouldSuggestGroundedHandoff } from "../src/core/chatThreadState";
 import {
   addConversationalInstinct,
@@ -86,6 +93,7 @@ import {
   RAW_LAB_MAX_STANCE_CHARS,
   setCurrentStance,
   updateRawLabThreadStateAfterTurn,
+  type RawLabSmartCompactedContext,
   type RawLabThreadState,
   type RawLabTurn
 } from "../src/core/rawLabThreadState";
@@ -96,6 +104,8 @@ const QUICK_QUESTIONS = [
   { label: "Playful", message: "Be playful and less corporate.", mode: "general" as const },
   { label: "Challenge", message: "Challenge my assumption directly.", mode: "general" as const }
 ];
+
+const RAW_LAB_DEPTHS: RawLabReasoningDepth[] = ["fast", "deliberate", "deep"];
 
 function formatSendError(error: unknown): { text: string; status?: number } {
   if (error instanceof RawLabError) {
@@ -139,12 +149,17 @@ export default function RawLabScreen() {
     memoriesSent: number;
     budgetCapChars: number;
     notice?: RawLabCompactionNotice;
+    smartCompactedContext: RawLabSmartCompactedContext;
   } | null>(null);
   const [handoffDismissed, setHandoffDismissed] = useState(false);
   const [companionMemories, setCompanionMemories] = useState<CompanionSelfMemory[]>([]);
   const [chatOnlyMemories, setChatOnlyMemories] = useState<CompanionSelfMemory[]>([]);
   const [reflectionProposals, setReflectionProposals] = useState<RawLabSelfMemoryProposal[]>([]);
   const [reflecting, setReflecting] = useState(false);
+  const [threadReflection, setThreadReflection] =
+    useState<RawLabThreadReflectionResponse | null>(null);
+  const [threadReflecting, setThreadReflecting] = useState(false);
+  const [reasoningDepth, setReasoningDepth] = useState<RawLabReasoningDepth>("fast");
   const [backroomOpen, setBackroomOpen] = useState(false);
   const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
   const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
@@ -245,6 +260,7 @@ export default function RawLabScreen() {
         turns: priorTurns,
         threadState,
         companionSelfMemories: memoriesForSend(),
+        reasoningDepth,
         maxInputChars: gatewayBudget.rawLabMaxInputChars,
         signal: abortController.signal,
         onChunk: (chunk) => {
@@ -263,7 +279,8 @@ export default function RawLabScreen() {
           turnsSent: sendResult.sendStats.turnsSent,
           memoriesSent: sendResult.sendStats.memoriesSent,
           budgetCapChars: sendResult.sendStats.budgetCapChars,
-          notice: sendResult.notice
+          notice: sendResult.notice,
+          smartCompactedContext: sendResult.sendStats.smartCompactedContext
         });
         flushLastUsedAt(sendResult.sendStats.injectedMemoryIds);
       }
@@ -326,6 +343,7 @@ export default function RawLabScreen() {
     setThreadState(clearThreadState());
     setChatOnlyMemories([]);
     setReflectionProposals([]);
+    setThreadReflection(null);
     setMessage("");
     setStreamingAnswer("");
     setNotice(null);
@@ -355,6 +373,39 @@ export default function RawLabScreen() {
     } finally {
       setReflecting(false);
     }
+  }
+
+  async function handleReflectThread() {
+    if (threadReflecting || turns.length === 0) {
+      return;
+    }
+    setThreadReflecting(true);
+    setNotice(null);
+    try {
+      const result = await reflectRawLabThread({
+        baseUrl,
+        turns,
+        threadState,
+        companionSelfMemories: memoriesForSend()
+      });
+      setThreadReflection(result);
+      if (result.safety_notes.length > 0) {
+        setNotice({ kind: "info", message: result.safety_notes.join(" ") });
+      }
+    } catch (error) {
+      const formatted = formatSendError(error);
+      setNotice({ kind: "error", message: formatted.text });
+    } finally {
+      setThreadReflecting(false);
+    }
+  }
+
+  function handleApplyThreadReflection() {
+    if (!threadReflection) {
+      return;
+    }
+    setThreadState((previous) => applyRawLabThreadReflection(previous, threadReflection));
+    setThreadReflection(null);
   }
 
   function handleSessionOnlyProposal(proposal: RawLabSelfMemoryProposal, index: number) {
@@ -480,7 +531,7 @@ export default function RawLabScreen() {
       layout={useSideBackroom ? "side" : "inline"}
     >
       <Text style={styles.chatInspectorStatusLine}>
-        {formatGatewayHost(baseUrl)} · Ungrounded · ephemeral
+        {formatGatewayHost(baseUrl)} · Ungrounded · {reasoningDepth}
       </Text>
       <ChatBackroomSection sectionId="memory" focused={backroomSection === "memory"}>
         <RawLabThreadMemoryPanel
@@ -488,6 +539,14 @@ export default function RawLabScreen() {
           sectionFilter="memory"
           threadState={threadState}
           onThreadStateChange={setThreadState}
+        />
+        <RawLabThreadReflectionPanel
+          reflection={threadReflection}
+          reflecting={threadReflecting}
+          disabled={turns.length === 0}
+          onReflect={() => void handleReflectThread()}
+          onApply={handleApplyThreadReflection}
+          onDismiss={() => setThreadReflection(null)}
         />
       </ChatBackroomSection>
       <ChatBackroomSection sectionId="style" focused={backroomSection === "style"}>
@@ -525,6 +584,11 @@ export default function RawLabScreen() {
           companionSelfMemories={memoriesForSend()}
           forceExpanded={budgetForceExpanded}
           lastSend={lastSendStats ?? undefined}
+          onDismissCompactedContext={() =>
+            setLastSendStats((previous) =>
+              previous ? { ...previous, smartCompactedContext: createEmptyRawLabThreadState().smartCompactedContext } : previous
+            )
+          }
         />
       </ChatBackroomSection>
     </ChatBackroomPanel>
@@ -549,6 +613,26 @@ export default function RawLabScreen() {
               <Text style={styles.smallButtonText}>Stop</Text>
             </Pressable>
           ) : null}
+          <View style={styles.splitRow}>
+            {RAW_LAB_DEPTHS.map((depth) => (
+              <Pressable
+                key={depth}
+                style={reasoningDepth === depth ? styles.chatMetaPillAccent : styles.chatQuickChip}
+                onPress={() => setReasoningDepth(depth)}
+                disabled={loading}
+              >
+                <Text
+                  style={
+                    reasoningDepth === depth
+                      ? styles.chatMetaPillTextAccent
+                      : styles.chatQuickChipText
+                  }
+                >
+                  {depth === "fast" ? "Fast" : depth === "deliberate" ? "Deliberate" : "Deep"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           {showHandoffBanner ? (
             <View style={styles.bannerInfo}>
               <Text style={styles.bannerInfoText}>

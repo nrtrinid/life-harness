@@ -15,6 +15,10 @@ import {
   RAW_LAB_MAX_DO_NOT_REPEAT,
   RAW_LAB_MAX_OPEN_LOOPS,
   RAW_LAB_MAX_PINNED_FACTS,
+  RAW_LAB_MAX_PROVISIONAL_STANCES,
+  RAW_LAB_MAX_QUESTIONS_TO_REVISIT,
+  RAW_LAB_MAX_RECURRING_TOPICS,
+  RAW_LAB_MAX_SELF_OBSERVATIONS,
   RAW_LAB_MAX_RECENT_TURNS,
   RAW_LAB_MAX_STANCE_CHARS,
   removeThreadStateItem,
@@ -51,6 +55,25 @@ describe("rawLabThreadState", () => {
     expect(state.pinnedFacts).toEqual([]);
     expect(state.openLoops).toEqual([]);
     expect(state.userSteering).toEqual([]);
+    expect(state.recurringTopics).toEqual([]);
+    expect(state.currentVibe).toBe("");
+    expect(state.provisionalStances).toEqual([]);
+    expect(state.selfObservations).toEqual([]);
+    expect(state.questionsToRevisit).toEqual([]);
+    expect(state.smartCompactedContext).toEqual({
+      activeOpenLoops: [],
+      questionsToRevisit: [],
+      userSteering: [],
+      doNotRepeat: [],
+      recurringTopics: [],
+      provisionalStances: [],
+      selfObservations: [],
+      importantRecentMoments: [],
+      currentTension: "",
+      discardedNoiseSummary: "",
+      sourceTurnIds: [],
+      confidence: 0
+    });
     expect(state.taskMode).toBe("casual");
     expect(state.references.lastOptions).toEqual([]);
     expect(state.personality).toEqual(emptyPersonality);
@@ -80,7 +103,7 @@ describe("rawLabThreadState", () => {
     expect(trimmed.length).toBeGreaterThan(0);
   });
 
-  it("enforces caps on pinned facts, open loops, and do-not-repeat", () => {
+  it("enforces caps on pinned facts, open loops, do-not-repeat, and mind fields", () => {
     let state = createEmptyRawLabThreadState();
     for (let index = 0; index < RAW_LAB_MAX_PINNED_FACTS + 2; index += 1) {
       state = pinFact(state, `fact ${index}`);
@@ -96,6 +119,32 @@ describe("rawLabThreadState", () => {
       state = addDoNotRepeat(state, `repeat ${index}`);
     }
     expect(state.doNotRepeat).toHaveLength(RAW_LAB_MAX_DO_NOT_REPEAT);
+
+    for (let index = 0; index < RAW_LAB_MAX_RECURRING_TOPICS + 2; index += 1) {
+      state.recurringTopics = [`topic ${index}`, ...state.recurringTopics].slice(
+        0,
+        RAW_LAB_MAX_RECURRING_TOPICS
+      );
+    }
+    expect(state.recurringTopics).toHaveLength(RAW_LAB_MAX_RECURRING_TOPICS);
+
+    state.provisionalStances = Array.from(
+      { length: RAW_LAB_MAX_PROVISIONAL_STANCES + 2 },
+      (_, index) => `stance ${index}`
+    ).slice(0, RAW_LAB_MAX_PROVISIONAL_STANCES);
+    expect(state.provisionalStances).toHaveLength(RAW_LAB_MAX_PROVISIONAL_STANCES);
+
+    state.selfObservations = Array.from(
+      { length: RAW_LAB_MAX_SELF_OBSERVATIONS + 2 },
+      (_, index) => `observation ${index}`
+    ).slice(0, RAW_LAB_MAX_SELF_OBSERVATIONS);
+    expect(state.selfObservations).toHaveLength(RAW_LAB_MAX_SELF_OBSERVATIONS);
+
+    state.questionsToRevisit = Array.from(
+      { length: RAW_LAB_MAX_QUESTIONS_TO_REVISIT + 2 },
+      (_, index) => `question ${index}`
+    ).slice(0, RAW_LAB_MAX_QUESTIONS_TO_REVISIT);
+    expect(state.questionsToRevisit).toHaveLength(RAW_LAB_MAX_QUESTIONS_TO_REVISIT);
   });
 
   it("detects explicit tone preferences", () => {
@@ -154,6 +203,25 @@ describe("rawLabThreadState", () => {
     expect(payload.recent_turns).toEqual([{ role: "user", content: "Hi" }]);
     expect(payload.thread_state.recent_digest).toBe("user: Hi");
     expect(payload.thread_state.personality.voice_traits).toEqual(["blunt"]);
+    expect(payload.thread_state.recurring_topics).toEqual([]);
+    expect(payload.thread_state.current_vibe).toBe("");
+    expect(payload.thread_state.provisional_stances).toEqual([]);
+    expect(payload.thread_state.self_observations).toEqual([]);
+    expect(payload.thread_state.questions_to_revisit).toEqual([]);
+    expect(payload.thread_state.smart_compacted_context).toEqual({
+      active_open_loops: [],
+      questions_to_revisit: [],
+      user_steering: [],
+      do_not_repeat: [],
+      recurring_topics: [],
+      provisional_stances: [],
+      self_observations: [],
+      important_recent_moments: [],
+      current_tension: "",
+      discarded_noise_summary: "",
+      source_turn_ids: [],
+      confidence: 0
+    });
   });
 
   it("removes thread state items and clears state", () => {
@@ -162,10 +230,62 @@ describe("rawLabThreadState", () => {
     state = removeThreadStateItem(state, "pinnedFacts", 0);
     expect(state.pinnedFacts).toEqual(["one"]);
 
+    state = {
+      ...state,
+      recurringTopics: ["Raw Lab", "memory"]
+    };
+    state = removeThreadStateItem(state, "recurringTopics", 0);
+    expect(state.recurringTopics).toEqual(["memory"]);
+
     const cleared = clearThreadState("2026-06-01T00:00:00Z");
     expect(cleared.pinnedFacts).toEqual([]);
+    expect(cleared.recurringTopics).toEqual([]);
     expect(cleared.personality.voiceTraits).toEqual([]);
     expect(cleared.updatedAt).toBe("2026-06-01T00:00:00Z");
+  });
+
+  it("detects do-not-repeat commands from user steering", () => {
+    const next = updateRawLabThreadStateAfterTurn({
+      previous: createEmptyRawLabThreadState(),
+      userMessage: "Don't keep saying little scout.",
+      assistantAnswer: "Got it.",
+      turns: [makeTurn("user", "Don't keep saying little scout.", 0)]
+    });
+    expect(next.doNotRepeat).toContain("little scout");
+  });
+
+  it("detects recurring topics, vibe, provisional stances, and revisit questions", () => {
+    const turns = [
+      makeTurn("user", "Raw Lab personality needs continuity.", 0),
+      makeTurn("assistant", "Yes.", 1),
+      makeTurn("user", "I think Raw Lab personality should form provisional stances?", 2)
+    ];
+    const next = updateRawLabThreadStateAfterTurn({
+      previous: createEmptyRawLabThreadState(),
+      userMessage: "I think Raw Lab personality should form provisional stances?",
+      assistantAnswer: "Yes.",
+      turns
+    });
+    expect(next.recurringTopics).toContain("Raw Lab");
+    expect(next.currentVibe).toContain("Raw Lab");
+    expect(next.provisionalStances[0]).toContain("Provisional stance");
+    expect(next.questionsToRevisit[0]).toContain("Raw Lab personality");
+    expect(next.selfObservations.some((item) => item.includes("I'm noticing"))).toBe(true);
+  });
+
+  it("does not create self-observations from assistant-only style", () => {
+    const turns = [
+      makeTurn("user", "ok", 0),
+      makeTurn("assistant", "I am now a flamboyant comet of style.", 1)
+    ];
+    const next = updateRawLabThreadStateAfterTurn({
+      previous: createEmptyRawLabThreadState(),
+      userMessage: "ok",
+      assistantAnswer: "I am now a flamboyant comet of style.",
+      turns
+    });
+    expect(next.selfObservations).toEqual([]);
+    expect(next.recurringTopics).toEqual([]);
   });
 });
 

@@ -28,7 +28,12 @@ describe("buildRawLabRequestBody", () => {
       threadState: {
         ...createEmptyRawLabThreadState(),
         recentDigest: "user: Earlier",
-        pinnedFacts: ["note"]
+        pinnedFacts: ["note"],
+        recurringTopics: ["Raw Lab"],
+        currentVibe: "Current vibe in this chat: direct.",
+        provisionalStances: ["Provisional stance: exploring whether Raw Lab can cohere"],
+        selfObservations: ["I'm noticing I tend to circle continuity."],
+        questionsToRevisit: ["What were we circling?"]
       }
     });
 
@@ -36,6 +41,25 @@ describe("buildRawLabRequestBody", () => {
     expect(body.recent_turns).toEqual([{ role: "user", content: "Earlier" }]);
     expect(body.thread_state.recent_digest).toBe("user: Earlier");
     expect(body.thread_state.pinned_facts).toEqual(["note"]);
+    expect(body.thread_state.recurring_topics).toEqual(["Raw Lab"]);
+    expect(body.thread_state.current_vibe).toBe("Current vibe in this chat: direct.");
+    expect(body.thread_state.provisional_stances).toEqual([
+      "Provisional stance: exploring whether Raw Lab can cohere"
+    ]);
+    expect(body.thread_state.self_observations).toEqual([
+      "I'm noticing I tend to circle continuity."
+    ]);
+    expect(body.thread_state.questions_to_revisit).toEqual(["What were we circling?"]);
+    expect(body.thread_state.smart_compacted_context).toMatchObject({
+      active_open_loops: [],
+      questions_to_revisit: [],
+      user_steering: [],
+      do_not_repeat: [],
+      important_recent_moments: [],
+      current_tension: "",
+      confidence: 0
+    });
+    expect(body.reasoning_depth).toBe("fast");
     expect(body).not.toHaveProperty("context");
     expect(body).not.toHaveProperty("board_context");
     expect(body).not.toHaveProperty("memory_context");
@@ -64,6 +88,16 @@ describe("buildRawLabRequestBody", () => {
     expect(body.companion_self_memories).toHaveLength(1);
     expect(body.companion_self_memories[0]?.text).toBe("Initiative pattern");
     expect(body.companion_self_memories[0]?.subject).toBe("companion_self");
+  });
+
+  it("sends Raw Lab reasoning depth when selected", () => {
+    const body = buildRawLabRequestBody({
+      message: "Think harder.",
+      turns: [],
+      threadState: createEmptyRawLabThreadState(),
+      reasoningDepth: "deep"
+    });
+    expect(body.reasoning_depth).toBe("deep");
   });
 
   it("maps personality fields to snake_case and compacts long notes", () => {

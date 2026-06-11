@@ -10,6 +10,7 @@ import {
   createEmptyRawLabThreadState,
   toWireThreadState,
   toWireTurns,
+  type RawLabSmartCompactedContext,
   type RawLabThreadState,
   type RawLabTurn,
   type RawLabWireThreadState,
@@ -20,6 +21,8 @@ export const DEFAULT_RAW_LAB_URL = "http://127.0.0.1:8111";
 
 export type { RawLabRole, RawLabThreadState, RawLabTurn } from "./rawLabThreadState";
 export type { RawLabCompactionNotice } from "./rawLabContextBudget";
+
+export type RawLabReasoningDepth = "fast" | "deliberate" | "deep";
 
 export interface RawLabResponse {
   answer: string;
@@ -38,6 +41,7 @@ export type RawLabSendResult = {
     memoriesSent: number;
     budgetCapChars: number;
     injectedMemoryIds: string[];
+    smartCompactedContext: RawLabSmartCompactedContext;
   };
 };
 
@@ -57,6 +61,7 @@ export interface AskRawLabInput {
   turns?: RawLabTurn[];
   threadState?: RawLabThreadState;
   companionSelfMemories?: CompanionSelfMemory[];
+  reasoningDepth?: RawLabReasoningDepth;
   signal?: AbortSignal;
   maxInputChars?: number;
 }
@@ -74,6 +79,7 @@ export interface RawLabRequestBody {
     confidence: number;
     sensitivity: string;
   }>;
+  reasoning_depth: RawLabReasoningDepth;
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -118,12 +124,16 @@ export function rawLabFetchFailureMessage(baseUrl: string, error: unknown): stri
   return `Local ai-gateway is not reachable at ${baseUrl}.`;
 }
 
-export function bundleToRequestBody(bundle: RawLabSendBundle): RawLabRequestBody {
+export function bundleToRequestBody(
+  bundle: RawLabSendBundle,
+  reasoningDepth: RawLabReasoningDepth = "fast"
+): RawLabRequestBody {
   return {
     message: bundle.message,
     recent_turns: toWireTurns(bundle.recentTurns),
     thread_state: toWireThreadState(bundle.threadState),
-    companion_self_memories: bundle.companionSelfMemories
+    companion_self_memories: bundle.companionSelfMemories,
+    reasoning_depth: reasoningDepth
   };
 }
 
@@ -132,6 +142,7 @@ export function buildRawLabRequestBody(args: {
   turns: RawLabTurn[];
   threadState: RawLabThreadState;
   companionSelfMemories?: CompanionSelfMemory[];
+  reasoningDepth?: RawLabReasoningDepth;
   maxInputChars?: number;
 }): RawLabRequestBody {
   const bundle = buildRawLabSendBundle({
@@ -141,7 +152,7 @@ export function buildRawLabRequestBody(args: {
     companionSelfMemories: args.companionSelfMemories,
     maxInputChars: args.maxInputChars
   });
-  return bundleToRequestBody(bundle);
+  return bundleToRequestBody(bundle, args.reasoningDepth ?? "fast");
 }
 
 export function parseRawLabResponse(payload: unknown): RawLabResponse {
@@ -206,7 +217,8 @@ function sendStatsFromBundle(
     turnsSent: bundle.recentTurns.length,
     memoriesSent: bundle.companionSelfMemories.length,
     budgetCapChars,
-    injectedMemoryIds: bundle.companionSelfMemories.map((memory) => memory.id)
+    injectedMemoryIds: bundle.companionSelfMemories.map((memory) => memory.id),
+    smartCompactedContext: bundle.smartCompactedContext
   };
 }
 
@@ -217,6 +229,7 @@ async function postRawLabWithBudget(args: {
   turns: RawLabTurn[];
   threadState: RawLabThreadState;
   companionSelfMemories?: CompanionSelfMemory[];
+  reasoningDepth?: RawLabReasoningDepth;
   signal?: AbortSignal;
   maxInputChars?: number;
 }): Promise<RawLabSendResult> {
@@ -229,7 +242,8 @@ async function postRawLabWithBudget(args: {
     maxInputChars: budgetCapChars
   });
 
-  let body = bundleToRequestBody(bundle);
+  const reasoningDepth = args.reasoningDepth ?? "fast";
+  let body = bundleToRequestBody(bundle, reasoningDepth);
   let result = await postRawLabJson({
     baseUrl: args.baseUrl,
     path: args.path,
@@ -253,7 +267,7 @@ async function postRawLabWithBudget(args: {
         maxInputChars: args.maxInputChars,
         forceAggressive: true
       });
-      body = bundleToRequestBody(bundle);
+      body = bundleToRequestBody(bundle, reasoningDepth);
       result = await postRawLabJson({
         baseUrl: args.baseUrl,
         path: args.path,
@@ -295,6 +309,7 @@ export async function askRawLab(input: AskRawLabInput): Promise<RawLabSendResult
     turns: input.turns ?? [],
     threadState: input.threadState ?? createEmptyRawLabThreadState(),
     companionSelfMemories: input.companionSelfMemories,
+    reasoningDepth: input.reasoningDepth,
     signal: input.signal,
     maxInputChars: input.maxInputChars
   });
@@ -335,7 +350,8 @@ export async function streamRawLab(
     companionSelfMemories,
     maxInputChars: budgetCapChars
   });
-  let body = bundleToRequestBody(bundle);
+  const reasoningDepth = input.reasoningDepth ?? "fast";
+  let body = bundleToRequestBody(bundle, reasoningDepth);
 
   async function runStream(requestBody: RawLabRequestBody): Promise<RawLabSendResult | null> {
     const url = `${baseUrl}/raw-lab/stream`;
@@ -431,7 +447,7 @@ export async function streamRawLab(
         maxInputChars: input.maxInputChars,
         forceAggressive: true
       });
-      body = bundleToRequestBody(bundle);
+      body = bundleToRequestBody(bundle, reasoningDepth);
       const retried = await runStream(body);
       if (retried) {
         return retried;

@@ -39,7 +39,28 @@ export type RawLabPersonalityState = {
   updatedAt: string;
 };
 
+export type RawLabSmartCompactedContext = {
+  activeOpenLoops: string[];
+  questionsToRevisit: string[];
+  userSteering: string[];
+  doNotRepeat: string[];
+  recurringTopics: string[];
+  provisionalStances: string[];
+  selfObservations: string[];
+  importantRecentMoments: string[];
+  currentTension: string;
+  discardedNoiseSummary: string;
+  sourceTurnIds: string[];
+  confidence: number;
+};
+
 export type RawLabThreadState = SharedChatThreadState & {
+  recurringTopics: string[];
+  currentVibe: string;
+  provisionalStances: string[];
+  selfObservations: string[];
+  questionsToRevisit: string[];
+  smartCompactedContext: RawLabSmartCompactedContext;
   personality: RawLabPersonalityState;
 };
 
@@ -50,6 +71,11 @@ export const RAW_LAB_MAX_DECISIONS = 8;
 export const RAW_LAB_MAX_OPEN_LOOPS = 8;
 export const RAW_LAB_MAX_DO_NOT_REPEAT = 6;
 export const RAW_LAB_MAX_TONE_PREFERENCES = 8;
+export const RAW_LAB_MAX_RECURRING_TOPICS = 8;
+export const RAW_LAB_MAX_CURRENT_VIBE_CHARS = 180;
+export const RAW_LAB_MAX_PROVISIONAL_STANCES = 6;
+export const RAW_LAB_MAX_SELF_OBSERVATIONS = 6;
+export const RAW_LAB_MAX_QUESTIONS_TO_REVISIT = 6;
 export const RAW_LAB_MAX_VOICE_TRAITS = 8;
 export const RAW_LAB_MAX_CONVERSATIONAL_INSTINCTS = 8;
 export const RAW_LAB_MAX_RECURRING_INTERESTS = 8;
@@ -68,6 +94,7 @@ export const RAW_LAB_DO_NOT_REPEAT_SNIPPET_CHARS = 100;
 
 export const RAW_LAB_PERSONALITY_TURN_SCAN_COUNT = 12;
 export const RAW_LAB_RECURRING_INTEREST_MIN_USER_MENTIONS = 2;
+export const RAW_LAB_RECURRING_TOPIC_MIN_USER_MENTIONS = 2;
 export const RAW_LAB_INSTINCT_MIN_USER_SIGNALS = 2;
 
 export type RawLabWireTurn = {
@@ -86,11 +113,32 @@ export type RawLabWirePersonalityState = {
   updated_at: string | null;
 };
 
+export type RawLabWireSmartCompactedContext = {
+  active_open_loops: string[];
+  questions_to_revisit: string[];
+  user_steering: string[];
+  do_not_repeat: string[];
+  recurring_topics: string[];
+  provisional_stances: string[];
+  self_observations: string[];
+  important_recent_moments: string[];
+  current_tension: string;
+  discarded_noise_summary: string;
+  source_turn_ids: string[];
+  confidence: number;
+};
+
 export type RawLabWireThreadState = Omit<
   ReturnType<typeof toWireChatHarnessThreadState>,
   "updated_at"
 > & {
   tone_preferences: string[];
+  recurring_topics: string[];
+  current_vibe: string;
+  provisional_stances: string[];
+  self_observations: string[];
+  questions_to_revisit: string[];
+  smart_compacted_context: RawLabWireSmartCompactedContext;
   personality: RawLabWirePersonalityState;
   updated_at: string | null;
 };
@@ -179,6 +227,45 @@ const RECURRING_INTEREST_TOPICS: { pattern: RegExp; label: string }[] = [
   { pattern: /\bcontainment\b/i, label: "containment boundaries" }
 ];
 
+const RECURRING_THREAD_TOPICS: { pattern: RegExp; label: string }[] = [
+  ...RECURRING_INTEREST_TOPICS,
+  { pattern: /\bidentity\b/i, label: "identity/personality" },
+  { pattern: /\bself[- ]?observation\b/i, label: "self-observation" },
+  { pattern: /\bopen loops?\b/i, label: "open loops" },
+  { pattern: /\breflection\b/i, label: "reflection" },
+  { pattern: /\bpsychoanaly/i, label: "psychoanalysis-style reflection" }
+];
+
+const QUESTION_TO_REVISIT_PATTERNS = [
+  /\?$/,
+  /\bcome back to\b/i,
+  /\brevisit\b/i,
+  /\bcircle back\b/i,
+  /\bwhat were we circling\b/i,
+  /\bwhat are we circling\b/i,
+  /\bwhat should we revisit\b/i
+];
+
+const THREAD_CIRCLING_PATTERNS = [
+  /\bwhat were we circling\b/i,
+  /\bwhat are we circling\b/i,
+  /\bwhat was the thread\b/i,
+  /\bwhat thread were we on\b/i
+];
+
+const DO_NOT_REPEAT_COMMAND_PATTERNS = [
+  /\bdon(?:'|')?t keep (?:saying|calling it|framing it as)\s+["“”']?([^"“”'\n.?!]{3,100})/i,
+  /\bstop (?:saying|calling it|using)\s+["“”']?([^"“”'\n.?!]{3,100})/i,
+  /\bdon(?:'|')?t say\s+["“”']?([^"“”'\n.?!]{3,100})/i
+];
+
+const PROVISIONAL_STANCE_PATTERNS = [
+  /\bi think(?: that)?\s+([^.!?\n]{12,180})/i,
+  /\bmaybe\s+([^.!?\n]{12,180})/i,
+  /\bwhat if\s+([^.!?\n]{12,180})/i,
+  /\bthe idea is\s+([^.!?\n]{12,180})/i
+];
+
 const INSTINCT_SIGNALS: {
   pattern: RegExp;
   instinct: string;
@@ -227,9 +314,32 @@ export function createEmptyRawLabPersonalityState(
   };
 }
 
+export function createEmptyRawLabSmartCompactedContext(): RawLabSmartCompactedContext {
+  return {
+    activeOpenLoops: [],
+    questionsToRevisit: [],
+    userSteering: [],
+    doNotRepeat: [],
+    recurringTopics: [],
+    provisionalStances: [],
+    selfObservations: [],
+    importantRecentMoments: [],
+    currentTension: "",
+    discardedNoiseSummary: "",
+    sourceTurnIds: [],
+    confidence: 0
+  };
+}
+
 export function createEmptyRawLabThreadState(now: string = new Date().toISOString()): RawLabThreadState {
   return {
     ...createEmptySharedChatThreadState(now),
+    recurringTopics: [],
+    currentVibe: "",
+    provisionalStances: [],
+    selfObservations: [],
+    questionsToRevisit: [],
+    smartCompactedContext: createEmptyRawLabSmartCompactedContext(),
     personality: createEmptyRawLabPersonalityState(now)
   };
 }
@@ -278,11 +388,38 @@ export function toWirePersonalityState(state: RawLabPersonalityState): RawLabWir
   };
 }
 
+export function toWireSmartCompactedContext(
+  context: RawLabSmartCompactedContext
+): RawLabWireSmartCompactedContext {
+  return {
+    active_open_loops: context.activeOpenLoops,
+    questions_to_revisit: context.questionsToRevisit,
+    user_steering: context.userSteering,
+    do_not_repeat: context.doNotRepeat,
+    recurring_topics: context.recurringTopics,
+    provisional_stances: context.provisionalStances,
+    self_observations: context.selfObservations,
+    important_recent_moments: context.importantRecentMoments,
+    current_tension: compactText(context.currentTension, 180),
+    discarded_noise_summary: compactText(context.discardedNoiseSummary, 220),
+    source_turn_ids: context.sourceTurnIds,
+    confidence: Math.max(0, Math.min(1, context.confidence))
+  };
+}
+
 export function toWireThreadState(state: RawLabThreadState): RawLabWireThreadState {
   const shared = toWireChatHarnessThreadState(state);
   return {
     ...shared,
     tone_preferences: state.userSteering,
+    recurring_topics: state.recurringTopics,
+    current_vibe: compactText(state.currentVibe, RAW_LAB_MAX_CURRENT_VIBE_CHARS),
+    provisional_stances: state.provisionalStances,
+    self_observations: state.selfObservations,
+    questions_to_revisit: state.questionsToRevisit,
+    smart_compacted_context: toWireSmartCompactedContext(
+      state.smartCompactedContext ?? createEmptyRawLabSmartCompactedContext()
+    ),
     personality: toWirePersonalityState(state.personality),
     updated_at: state.updatedAt || null
   };
@@ -432,6 +569,103 @@ function fixRecurringInterestsDetection(userTexts: string[]): string[] {
     }
   }
   return [...new Set(found)];
+}
+
+function detectRecurringTopicsFromUserTurns(userTexts: string[]): string[] {
+  const found: string[] = [];
+  for (const { pattern, label } of RECURRING_THREAD_TOPICS) {
+    const matches = userTexts.filter((text) => pattern.test(text)).length;
+    if (matches >= RAW_LAB_RECURRING_TOPIC_MIN_USER_MENTIONS) {
+      found.push(label);
+    }
+  }
+  return [...new Set(found)];
+}
+
+function detectDoNotRepeatCommands(userMessage: string): string[] {
+  const snippets: string[] = [];
+  for (const pattern of DO_NOT_REPEAT_COMMAND_PATTERNS) {
+    const match = userMessage.match(pattern);
+    const snippet = match?.[1]?.trim();
+    if (snippet) {
+      snippets.push(compactText(snippet.replace(/[”"']+$/g, ""), 120));
+    }
+  }
+  return snippets;
+}
+
+function detectQuestionsToRevisit(userMessage: string): string[] {
+  const trimmed = userMessage.trim();
+  if (!trimmed || containsSensitiveInference(trimmed)) {
+    return [];
+  }
+  if (!QUESTION_TO_REVISIT_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return [];
+  }
+  return [compactText(trimmed, 180)];
+}
+
+function detectProvisionalStances(userMessage: string): string[] {
+  if (containsSensitiveInference(userMessage)) {
+    return [];
+  }
+  const stances: string[] = [];
+  for (const pattern of PROVISIONAL_STANCE_PATTERNS) {
+    const match = userMessage.match(pattern);
+    const idea = match?.[1]?.trim();
+    if (idea) {
+      stances.push(`Provisional stance: exploring whether ${compactText(idea, 150)}`);
+    }
+  }
+  return stances;
+}
+
+function buildCurrentVibe(args: {
+  userSteering: string[];
+  recurringTopics: string[];
+  personality: RawLabPersonalityState;
+}): string {
+  const parts: string[] = [];
+  if (args.userSteering.length > 0) {
+    parts.push(`steered toward ${args.userSteering.slice(0, 2).join(", ")}`);
+  }
+  if (args.personality.voiceTraits.length > 0) {
+    parts.push(`voice ${args.personality.voiceTraits.slice(0, 2).join(", ")}`);
+  }
+  if (args.recurringTopics.length > 0) {
+    parts.push(`circling ${args.recurringTopics.slice(0, 2).join(" and ")}`);
+  }
+  if (parts.length === 0) {
+    return "";
+  }
+  return compactText(
+    `Current vibe in this chat: ${parts.join("; ")}.`,
+    RAW_LAB_MAX_CURRENT_VIBE_CHARS
+  );
+}
+
+function buildSelfObservations(args: {
+  recurringTopics: string[];
+  userSteering: string[];
+  personality: RawLabPersonalityState;
+}): string[] {
+  const observations: string[] = [];
+  if (args.recurringTopics.length > 0) {
+    observations.push(
+      `I'm noticing I tend to circle ${args.recurringTopics[0]} with you in this thread.`
+    );
+  }
+  if (args.userSteering.length > 0) {
+    observations.push(
+      `I'm noticing I adapt when you steer me toward ${args.userSteering[0]}.`
+    );
+  }
+  if (args.personality.conversationalInstincts.length > 0) {
+    observations.push(
+      `I'm noticing my instinct here is to ${args.personality.conversationalInstincts[0]}.`
+    );
+  }
+  return observations;
 }
 
 export function updateRawLabPersonalityAfterTurn(args: {
@@ -601,6 +835,72 @@ export function addGrowthNote(state: RawLabPersonalityState, note: string): RawL
   };
 }
 
+export function addRecurringTopic(state: RawLabThreadState, topic: string): RawLabThreadState {
+  return {
+    ...state,
+    recurringTopics: appendCappedUnique(
+      state.recurringTopics,
+      topic,
+      RAW_LAB_MAX_RECURRING_TOPICS,
+      120
+    ),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function setCurrentVibe(state: RawLabThreadState, vibe: string): RawLabThreadState {
+  return {
+    ...state,
+    currentVibe: compactText(vibe, RAW_LAB_MAX_CURRENT_VIBE_CHARS),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function addProvisionalStance(state: RawLabThreadState, stance: string): RawLabThreadState {
+  return {
+    ...state,
+    provisionalStances: appendCappedUnique(
+      state.provisionalStances,
+      stance,
+      RAW_LAB_MAX_PROVISIONAL_STANCES,
+      180
+    ),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function addSelfObservation(
+  state: RawLabThreadState,
+  observation: string
+): RawLabThreadState {
+  return {
+    ...state,
+    selfObservations: appendCappedUnique(
+      state.selfObservations,
+      observation,
+      RAW_LAB_MAX_SELF_OBSERVATIONS,
+      180
+    ),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function addQuestionToRevisit(
+  state: RawLabThreadState,
+  question: string
+): RawLabThreadState {
+  return {
+    ...state,
+    questionsToRevisit: appendCappedUnique(
+      state.questionsToRevisit,
+      question,
+      RAW_LAB_MAX_QUESTIONS_TO_REVISIT,
+      180
+    ),
+    updatedAt: new Date().toISOString()
+  };
+}
+
 export function setCurrentStance(
   state: RawLabPersonalityState,
   stance: string
@@ -675,7 +975,8 @@ export function updateRawLabThreadStateAfterTurn(args: {
     now
   });
 
-  return {
+  let next: RawLabThreadState = {
+    ...args.previous,
     ...sharedNext,
     personality: updateRawLabPersonalityAfterTurn({
       previous: args.previous.personality,
@@ -685,16 +986,65 @@ export function updateRawLabThreadStateAfterTurn(args: {
       now
     })
   };
+
+  const userMessage = args.userMessage.trim();
+  const recentUserTexts = userTurnTexts(args.turns.slice(-RAW_LAB_PERSONALITY_TURN_SCAN_COUNT));
+
+  if (!containsSensitiveInference(userMessage)) {
+    for (const snippet of detectDoNotRepeatCommands(userMessage)) {
+      next = addDoNotRepeat(next, snippet);
+    }
+    for (const topic of detectRecurringTopicsFromUserTurns(recentUserTexts)) {
+      next = addRecurringTopic(next, topic);
+    }
+    for (const stance of detectProvisionalStances(userMessage)) {
+      next = addProvisionalStance(next, stance);
+    }
+    for (const question of detectQuestionsToRevisit(userMessage)) {
+      next = addQuestionToRevisit(next, question);
+    }
+
+    const vibe = buildCurrentVibe({
+      userSteering: next.userSteering,
+      recurringTopics: next.recurringTopics,
+      personality: next.personality
+    });
+    if (vibe) {
+      next = setCurrentVibe(next, vibe);
+    }
+
+    for (const observation of buildSelfObservations({
+      recurringTopics: next.recurringTopics,
+      userSteering: next.userSteering,
+      personality: next.personality
+    })) {
+      next = addSelfObservation(next, observation);
+    }
+  }
+
+  if (THREAD_CIRCLING_PATTERNS.some((pattern) => pattern.test(userMessage))) {
+    next = addQuestionToRevisit(next, userMessage);
+  }
+
+  return { ...next, updatedAt: now };
 }
 
 export function pinFact(state: RawLabThreadState, text: string): RawLabThreadState {
-  return { ...pinThreadFact(state, text), personality: state.personality };
+  return { ...state, ...pinThreadFact(state, text), personality: state.personality };
 }
 
 export function addDoNotRepeat(state: RawLabThreadState, text: string): RawLabThreadState {
   return {
     ...state,
     doNotRepeat: appendCappedUnique(state.doNotRepeat, text, RAW_LAB_MAX_DO_NOT_REPEAT),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function addUserSteering(state: RawLabThreadState, text: string): RawLabThreadState {
+  return {
+    ...state,
+    userSteering: appendCappedUnique(state.userSteering, text, MAX_USER_STEERING, 120),
     updatedAt: new Date().toISOString()
   };
 }
@@ -715,14 +1065,36 @@ export function addDecision(state: RawLabThreadState, text: string): RawLabThrea
   };
 }
 
-export type RawLabThreadStateListKey = SharedThreadStateListKey;
+export type RawLabMindListKey =
+  | "recurringTopics"
+  | "provisionalStances"
+  | "selfObservations"
+  | "questionsToRevisit";
+
+export type RawLabThreadStateListKey = SharedThreadStateListKey | RawLabMindListKey;
 
 export function removeThreadStateItem(
   state: RawLabThreadState,
   key: RawLabThreadStateListKey,
   index: number
 ): RawLabThreadState {
-  return { ...removeSharedThreadStateItem(state, key, index), personality: state.personality };
+  if (
+    key === "recurringTopics" ||
+    key === "provisionalStances" ||
+    key === "selfObservations" ||
+    key === "questionsToRevisit"
+  ) {
+    const list = state[key];
+    if (index < 0 || index >= list.length) {
+      return state;
+    }
+    return {
+      ...state,
+      [key]: list.filter((_, itemIndex) => itemIndex !== index),
+      updatedAt: new Date().toISOString()
+    };
+  }
+  return { ...state, ...removeSharedThreadStateItem(state, key, index), personality: state.personality };
 }
 
 export function clearThreadMemoryOnly(
@@ -731,6 +1103,12 @@ export function clearThreadMemoryOnly(
 ): RawLabThreadState {
   return {
     ...clearSharedThreadMemory(state, now),
+    recurringTopics: [],
+    currentVibe: "",
+    provisionalStances: [],
+    selfObservations: [],
+    questionsToRevisit: [],
+    smartCompactedContext: createEmptyRawLabSmartCompactedContext(),
     personality: state.personality
   };
 }

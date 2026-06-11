@@ -16,7 +16,7 @@
 | AI workflow map | [`ai-workflows-current.md`](ai-workflows-current.md) |
 | Ask Harness | [`ask-harness-v0.1.md`](ask-harness-v0.1.md) |
 | Thread intelligence | [`conversation-thread-intelligence.md`](conversation-thread-intelligence.md) |
-| Raw Lab | [`raw-lab-thread-state.md`](raw-lab-thread-state.md) |
+| Raw Lab | [`raw-lab-architecture.md`](raw-lab-architecture.md), [`raw-lab-thread-state.md`](raw-lab-thread-state.md), [`raw-lab-deep.md`](raw-lab-deep.md), [`raw-lab-emergence-review-pack.md`](raw-lab-emergence-review-pack.md) |
 | Career hub | [`career-hub-v0.1.md`](career-hub-v0.1.md) |
 | Job Scout | `job-scout-*.md` (v0.2–v0.11) |
 | Local A770 / AI gateway | [`local-a770-plan.md`](local-a770-plan.md), [`08_ai_provider_and_a770_plan.md`](08_ai_provider_and_a770_plan.md) |
@@ -29,6 +29,7 @@
 - Gateway / synthesis: [`plans/ai-gateway-model-slots-v0.1.md`](plans/ai-gateway-model-slots-v0.1.md), [`plans/deep-synthesis-overnight-brain-v0.1.md`](plans/deep-synthesis-overnight-brain-v0.1.md), [`plans/phi4-critic-deep-pass-v0.1.md`](plans/phi4-critic-deep-pass-v0.1.md)
 - Companion / context: [`plans/companion-reflection-engine-v0.1.md`](plans/companion-reflection-engine-v0.1.md), [`plans/context-packet-builder-v0.1.md`](plans/context-packet-builder-v0.1.md)
 - Evals / agents: [`plans/local-ai-evals-v0.1.md`](plans/local-ai-evals-v0.1.md), [`plans/agent-instructions-local-ai.md`](plans/agent-instructions-local-ai.md)
+- Agent ergonomics / RTK Query control plane: [`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)
 - [`10_future_roadmap.md`](10_future_roadmap.md)
 - Recovery audit: [`plans/stash-recovery-a770-thinking-audit.md`](plans/stash-recovery-a770-thinking-audit.md)
 
