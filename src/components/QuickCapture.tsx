@@ -7,9 +7,10 @@ import { colors, styles } from "./styles";
 
 interface QuickCaptureProps {
   onNotice: (notice: NoticeState) => void;
+  actMode?: boolean;
 }
 
-export function QuickCapture({ onNotice }: QuickCaptureProps) {
+export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
   const { submitQuickCapture } = useLifeHarness();
   const [text, setText] = useState("");
 
@@ -30,10 +31,12 @@ export function QuickCapture({ onNotice }: QuickCaptureProps) {
 
   return (
     <View style={styles.captureWrap}>
-      <Text style={styles.label}>Report</Text>
+      <Text style={styles.label}>{actMode ? "Capture, log, or park" : "Report"}</Text>
       <TextInput
         editable
-        placeholder="worked on project for 10 min..."
+        placeholder={
+          actMode ? "Worked on…, new idea…, park…" : "worked on project for 10 min..."
+        }
         placeholderTextColor={colors.inputPlaceholder}
         style={styles.captureInput}
         value={text}

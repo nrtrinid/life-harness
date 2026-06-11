@@ -1,4 +1,4 @@
-import { Link, type Href } from "expo-router";
+import { Link } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -11,6 +11,7 @@ import { NextMoveContractPanel } from "../src/components/lofi/NextMoveContractPa
 import { RecoveryPanel } from "../src/components/lofi/RecoveryPanel";
 import { RescueRow } from "../src/components/lofi/RescueRow";
 import { TinyQuestCard } from "../src/components/lofi/TinyQuestCard";
+import { TodayBriefingStrip } from "../src/components/lofi/TodayBriefingStrip";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { ProofShelf } from "../src/components/ProofShelf";
@@ -127,108 +128,142 @@ export default function TodayScreen() {
   return (
     <Screen>
       <PageHeader
-        title="Today's Loop"
-        subtitle="Good, you're back. One tiny quest is enough."
+        title="Today"
+        subtitle="Act mode — one move, then proof."
       />
 
-      {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
+      <View style={styles.todayActStack}>
+        {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
 
-      <CompanionNote text={companionNote} />
-      <ActiveLimitBanner />
+        <TodayBriefingStrip
+          briefing={briefing}
+          cards={cards}
+          dailyState={dailyState}
+          logs={logs}
+          companionNote={companionNote}
+          now={now}
+        />
 
-      <TinyQuestCard
-        action={primaryAction}
-        pounceLogged={pounceLogged}
-        onPounce={handlePounce}
-      />
+        <ActiveLimitBanner />
 
-      {nextMove.primary ? <NextMoveContractPanel summary={nextMove} /> : null}
+        {nextMove.primary ? (
+          <NextMoveContractPanel summary={nextMove} actMode />
+        ) : (
+          <TinyQuestCard
+            action={primaryAction}
+            pounceLogged={pounceLogged}
+            onPounce={handlePounce}
+          />
+        )}
 
-      {bonusTrack ? <BonusTrackCard track={bonusTrack} /> : null}
-
-      {recoveryVisibility.shouldPromote ? (
-        <RecoveryPanel visibility={recoveryVisibility} onNotice={showNotice} />
-      ) : (
-        <RescueRow onNotice={showNotice} />
-      )}
-
-      <Section title="Quick Capture">
-        <QuickCapture onNotice={showNotice} />
-      </Section>
-
-      {primaryAction.kind === "pounce" ? (
-        <CollapsibleSection title="Career shortcuts" defaultOpen={false}>
-          <Link href="/career-intake" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>Open Career Intake</Text>
-            </Pressable>
-          </Link>
-          <Link href="/candidate-intake" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>Paste into Candidate Intake</Text>
-            </Pressable>
-          </Link>
-          <Link href="/job-candidates" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
-            </Pressable>
-          </Link>
-          <Link href="/job-sources" asChild>
-            <Pressable style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionText}>
-                {scheduleStats.dueSources > 0
-                  ? `Run Due Job Sources (${scheduleStats.dueSources})`
-                  : "Run an Approved Job Source"}
-              </Text>
-            </Pressable>
-          </Link>
-        </CollapsibleSection>
-      ) : null}
-
-      <CollapsibleSection title="Active threads" defaultOpen={activeCards.length > 0 && activeCards.length <= 3}>
-        {mainQuest ? (
-          <Link href={`/card/${mainQuest.id}`} asChild>
-            <Pressable style={{ marginBottom: 12 }}>
-              <Text style={styles.label}>Main quest</Text>
-              <Text style={styles.titleText}>{mainQuest.title}</Text>
-              <ProgressBar value={computeCardProgress(mainQuest, logs, dailyState.sessionStartedAt)} />
-            </Pressable>
-          </Link>
+        {nextMove.primary ? (
+          <TinyQuestCard
+            action={primaryAction}
+            pounceLogged={pounceLogged}
+            onPounce={handlePounce}
+            label="Current quest"
+          />
         ) : null}
 
-        {followUpsDue.length > 0 ? (
-          <View style={{ marginBottom: 12 }}>
-            <Text style={styles.label}>Follow-ups due</Text>
-            {followUpsDue.map((card) => (
-              <Link key={card.id} href={`/card/${card.id}`} asChild>
-                <Pressable accessibilityRole="link">
-                  <Text style={styles.listItem}>
-                    ▸ {card.title} — due {card.careerApplication?.followUpDate}
+        <Section title="Quick Capture">
+          <Text style={styles.helpText}>Universal input — capture, log, or park without leaving the loop.</Text>
+          <QuickCapture onNotice={showNotice} actMode />
+        </Section>
+
+        <View style={proofPulse ? styles.sectionProofPulse : undefined}>
+          <Section title="You moved" accent="proof">
+            <ProofShelf compact limit={3} />
+          </Section>
+        </View>
+
+        <View style={styles.todayRecoveryFallback}>
+          <Text style={styles.todayRecoveryLabel}>Recovery fallback</Text>
+          <Text style={styles.helpText}>When work is slipping — stabilize before optimizing.</Text>
+          {recoveryVisibility.shouldPromote ? (
+            <RecoveryPanel visibility={recoveryVisibility} onNotice={showNotice} />
+          ) : (
+            <RescueRow onNotice={showNotice} />
+          )}
+        </View>
+
+        <CollapsibleSection
+          title="Active threads"
+          defaultOpen={activeCards.length > 0 && activeCards.length <= 3}
+        >
+          {mainQuest ? (
+            <Link href={`/card/${mainQuest.id}`} asChild>
+              <Pressable style={{ marginBottom: 12 }}>
+                <Text style={styles.label}>Main quest</Text>
+                <Text style={styles.titleText}>{mainQuest.title}</Text>
+                <ProgressBar value={computeCardProgress(mainQuest, logs, dailyState.sessionStartedAt)} />
+              </Pressable>
+            </Link>
+          ) : null}
+
+          {followUpsDue.length > 0 ? (
+            <View style={{ marginBottom: 12 }}>
+              <Text style={styles.label}>Follow-ups due</Text>
+              {followUpsDue.map((card) => (
+                <Link key={card.id} href={`/card/${card.id}`} asChild>
+                  <Pressable accessibilityRole="link">
+                    <Text style={styles.listItem}>
+                      ▸ {card.title} — due {card.careerApplication?.followUpDate}
+                    </Text>
+                  </Pressable>
+                </Link>
+              ))}
+            </View>
+          ) : null}
+
+          {activeCards.length === 0 ? (
+            <Text style={styles.emptyText}>No active threads. Capture something to get started.</Text>
+          ) : (
+            <>
+              <Text style={styles.helpText}>
+                {activeLimit.count}/{ACTIVE_CARD_LIMIT} active
+              </Text>
+              {activeCards.map((card) => (
+                <CardTile key={card.id} card={card} logs={logs} compact />
+              ))}
+            </>
+          )}
+        </CollapsibleSection>
+
+        <CollapsibleSection title="More on Today" defaultOpen={false}>
+          {bonusTrack ? <BonusTrackCard track={bonusTrack} /> : null}
+
+          <CompanionNote text={companionNote} />
+
+          {primaryAction.kind === "pounce" ? (
+            <View style={{ gap: 8, marginTop: 8 }}>
+              <Text style={styles.label}>Career shortcuts</Text>
+              <Link href="/career-intake" asChild>
+                <Pressable style={styles.secondaryAction}>
+                  <Text style={styles.secondaryActionText}>Open Career Intake</Text>
+                </Pressable>
+              </Link>
+              <Link href="/candidate-intake" asChild>
+                <Pressable style={styles.secondaryAction}>
+                  <Text style={styles.secondaryActionText}>Paste into Candidate Intake</Text>
+                </Pressable>
+              </Link>
+              <Link href="/job-candidates" asChild>
+                <Pressable style={styles.secondaryAction}>
+                  <Text style={styles.secondaryActionText}>Open Candidates Queue</Text>
+                </Pressable>
+              </Link>
+              <Link href="/job-sources" asChild>
+                <Pressable style={styles.secondaryAction}>
+                  <Text style={styles.secondaryActionText}>
+                    {scheduleStats.dueSources > 0
+                      ? `Run Due Job Sources (${scheduleStats.dueSources})`
+                      : "Run an Approved Job Source"}
                   </Text>
                 </Pressable>
               </Link>
-            ))}
-          </View>
-        ) : null}
-
-        {activeCards.length === 0 ? (
-          <Text style={styles.emptyText}>No active threads. Capture something to get started.</Text>
-        ) : (
-          <>
-            <Text style={styles.helpText}>
-              {activeLimit.count}/{ACTIVE_CARD_LIMIT} active
-            </Text>
-            {activeCards.map((card) => (
-              <CardTile key={card.id} card={card} logs={logs} compact />
-            ))}
-          </>
-        )}
-      </CollapsibleSection>
-
-      <View style={proofPulse ? styles.sectionProofPulse : undefined}>
-        <Section title="Recent proof">
-          <ProofShelf compact limit={3} />
-        </Section>
+            </View>
+          ) : null}
+        </CollapsibleSection>
       </View>
     </Screen>
   );

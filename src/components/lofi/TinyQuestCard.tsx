@@ -9,14 +9,20 @@ interface TinyQuestCardProps {
   action: PrimaryAction;
   pounceLogged?: boolean;
   onPounce?: () => void;
+  label?: string;
 }
 
-export function TinyQuestCard({ action, pounceLogged = false, onPounce }: TinyQuestCardProps) {
+export function TinyQuestCard({
+  action,
+  pounceLogged = false,
+  onPounce,
+  label = "Today mission"
+}: TinyQuestCardProps) {
   const [showSmaller, setShowSmaller] = useState(false);
 
   return (
-    <View style={styles.lofiCardHero}>
-      <Text style={styles.lofiTapeLabel}>Tiny quest</Text>
+    <View style={styles.lofiCardQuiet}>
+      <Text style={styles.lofiTapeLabel}>{label}</Text>
       <Text style={styles.titleText}>{action.title}</Text>
       <Text style={[styles.bodyText, { marginTop: 8 }]}>{action.reason}</Text>
 
@@ -35,19 +41,19 @@ export function TinyQuestCard({ action, pounceLogged = false, onPounce }: TinyQu
             disabled={pounceLogged || !onPounce}
           >
             <Text style={pounceLogged ? styles.secondaryActionText : styles.primaryActionText}>
-              {pounceLogged ? "Started" : "Start"}
+              {pounceLogged ? "Started" : action.ctaLabel ?? "Start"}
             </Text>
           </Pressable>
         ) : action.targetRoute ? (
           <Link href={action.targetRoute as Href} asChild>
-            <Pressable style={styles.primaryAction}>
-              <Text style={styles.primaryActionText}>{action.ctaLabel ?? "Start"}</Text>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>{action.ctaLabel ?? "Start"}</Text>
             </Pressable>
           </Link>
         ) : action.cardId ? (
           <Link href={`/card/${action.cardId}`} asChild>
-            <Pressable style={styles.primaryAction}>
-              <Text style={styles.primaryActionText}>{action.ctaLabel ?? "Start"}</Text>
+            <Pressable style={styles.secondaryAction}>
+              <Text style={styles.secondaryActionText}>{action.ctaLabel ?? "Start"}</Text>
             </Pressable>
           </Link>
         ) : null}

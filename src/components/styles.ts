@@ -461,6 +461,42 @@ export const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.xs
   },
+  todayActStack: {
+    gap: spacing.lg
+  },
+  todayBriefingStrip: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderLeftColor: lofiColors.softViolet,
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md
+  },
+  todayBriefingLabel: {
+    color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  todayBriefingList: {
+    gap: spacing.xs
+  },
+  todayBriefingItem: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyMedium,
+    lineHeight: 20
+  },
+  todayBriefingCompanion: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyMedium,
+    fontStyle: "italic",
+    lineHeight: 21
+  },
   nextMovePanel: {
     backgroundColor: lofiColors.surface,
     borderColor: colors.borderSubtle,
@@ -469,6 +505,64 @@ export const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.lg
+  },
+  nextMovePanelAct: {
+    backgroundColor: lofiColors.surfaceRaised,
+    borderColor: "rgba(200,168,75,0.35)",
+    borderLeftColor: lofiColors.actionAmber,
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl
+  },
+  nextMoveActTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.displayMedium,
+    fontWeight: "700",
+    lineHeight: 34
+  },
+  nextMoveActWhy: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyMedium,
+    lineHeight: 21
+  },
+  todayRecoveryFallback: {
+    gap: spacing.sm
+  },
+  todayRecoveryLabel: {
+    color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  nextMoveActDoBlock: {
+    gap: spacing.xs,
+    marginTop: spacing.xs
+  },
+  nextMoveActDoLabel: {
+    color: lofiColors.actionAmber,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  nextMoveActDo: {
+    color: colors.textPrimary,
+    fontSize: typography.headingSmall,
+    fontWeight: "600",
+    lineHeight: 22
+  },
+  nextMoveActMeta: {
+    borderTopColor: colors.borderSubtle,
+    borderTopWidth: 1,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    paddingTop: spacing.md
   },
   nextMoveFieldRow: {
     gap: spacing.xs
@@ -484,6 +578,18 @@ export const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.bodyMedium,
     lineHeight: 20
+  },
+  nextMoveFieldLabelCompact: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.4,
+    textTransform: "uppercase"
+  },
+  nextMoveFieldValueCompact: {
+    color: colors.textTertiary,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
   },
   nextMoveBackup: {
     color: colors.textMuted,
