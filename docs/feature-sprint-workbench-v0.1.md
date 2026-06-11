@@ -21,6 +21,8 @@ The screen classifies existing `HarnessFeatureSprintPlan` rows and project-backe
 
 Orchestrator v0.1 added card-anchored plans, step state, packet builders, and mutation controls on Card Detail Backroom. Workbench v0.1 adds a read/classify dashboard so you can see the whole pipeline without opening every card.
 
+Local runner controls (Run scoping/review with Codex) live on **Card Detail Backroom**, not on Workbench.
+
 ## Classification rules
 
 Active plans (`planning`, `in_progress`, `reviewing`) land in exactly one active bucket (first match wins):

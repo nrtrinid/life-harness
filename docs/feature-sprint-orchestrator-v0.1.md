@@ -34,6 +34,10 @@ User → approval gate
 
 Re-importing a plan on an active sprint **preserves plan ID** and replaces steps after explicit **Import plan** — no silent merge.
 
+### Local runner (v0.1)
+
+[Feature Sprint Local Runner](feature-sprint-local-runner-v0.1.md) can execute scoping/review packets via an optional localhost bridge and fill the import textareas. **Import plan**, **Import review verdict**, advance, and complete gates are unchanged — runner output is draft text until you import.
+
 ## Data model
 
 Collection: `featureSprintPlans: HarnessFeatureSprintPlan[]`

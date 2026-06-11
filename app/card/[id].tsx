@@ -29,6 +29,10 @@ import {
   buildFeatureStepReviewPacket,
   getActiveFeatureSprintPlanForCard
 } from "../../src/core/featureSprintOrchestrator";
+import {
+  checkFeatureSprintRunnerHealth,
+  runFeatureSprintPacket
+} from "../../src/core/featureSprintRunnerClient";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import {
   formatListField,
@@ -166,6 +170,12 @@ export default function CardDetailScreen() {
   const [planImportText, setPlanImportText] = useState("");
   const [reviewImportText, setReviewImportText] = useState("");
   const [agentOutputText, setAgentOutputText] = useState("");
+  const [runnerHealth, setRunnerHealth] = useState<"unknown" | "available" | "unavailable">(
+    "unknown"
+  );
+  const [isCheckingRunner, setIsCheckingRunner] = useState(false);
+  const [isRunningScoping, setIsRunningScoping] = useState(false);
+  const [isRunningReview, setIsRunningReview] = useState(false);
   const [detailMode, setDetailMode] = useState<CardDetailMode>("act");
   const card = cards.find((item) => item.id === id);
 
@@ -512,6 +522,112 @@ export default function CardDetailScreen() {
     showNotice(result.ok ? "success" : "warning", result.message ?? "Could not delete plan.");
   }
 
+  async function handleCheckRunner() {
+    setIsCheckingRunner(true);
+    try {
+      const health = await checkFeatureSprintRunnerHealth();
+      setRunnerHealth(health.ok ? "available" : "unavailable");
+      if (!health.ok) {
+        showNotice("warning", health.error ?? "Local runner unavailable.");
+      }
+    } finally {
+      setIsCheckingRunner(false);
+    }
+  }
+
+  async function handleRunScopingWithCodex() {
+    if (isRunningScoping) {
+      return;
+    }
+
+    const packet = buildFeatureScopingPacket(lifeHarnessData, cardId);
+    if (!packet.ok) {
+      showNotice("warning", packet.error);
+      return;
+    }
+
+    const project = getProjectForCard(lifeHarnessData, cardId);
+    setIsRunningScoping(true);
+    try {
+      const result = await runFeatureSprintPacket({
+        profile: "codex_scoping",
+        promptMarkdown: packet.markdown,
+        cardId,
+        repoPath: project?.repoPath
+      });
+
+      if (!result.ok || !result.outputText) {
+        showNotice("warning", result.error ?? "Codex scoping run failed.");
+        return;
+      }
+
+      setPlanImportText(result.outputText);
+      const preview = result.commandPreview ? ` (${result.commandPreview})` : "";
+      showNotice("success", `Codex scoping output ready to import.${preview}`);
+    } finally {
+      setIsRunningScoping(false);
+    }
+  }
+
+  async function handleRunReviewWithCodex() {
+    if (!activeFeatureSprintPlan || isRunningReview) {
+      return;
+    }
+
+    const packet = buildFeatureStepReviewPacket(
+      lifeHarnessData,
+      activeFeatureSprintPlan.id,
+      activeFeatureSprintPlan.currentStepId,
+      agentOutputText
+    );
+    if (!packet.ok) {
+      showNotice("warning", packet.error);
+      return;
+    }
+
+    const project = getProjectForCard(lifeHarnessData, cardId);
+    setIsRunningReview(true);
+    try {
+      const result = await runFeatureSprintPacket({
+        profile: "codex_review",
+        promptMarkdown: packet.markdown,
+        cardId,
+        planId: activeFeatureSprintPlan.id,
+        stepId: activeFeatureSprintPlan.currentStepId,
+        repoPath: project?.repoPath
+      });
+
+      if (!result.ok || !result.outputText) {
+        showNotice("warning", result.error ?? "Codex review run failed.");
+        return;
+      }
+
+      setReviewImportText(result.outputText);
+      const preview = result.commandPreview ? ` (${result.commandPreview})` : "";
+      showNotice("success", `Codex review output ready to import.${preview}`);
+    } finally {
+      setIsRunningReview(false);
+    }
+  }
+
+  useEffect(() => {
+    if (detailMode !== "backroom") {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const health = await checkFeatureSprintRunnerHealth();
+      if (!cancelled) {
+        setRunnerHealth(health.ok ? "available" : "unavailable");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailMode, cardId]);
+
   return (
     <Screen>
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
@@ -698,6 +814,26 @@ export default function CardDetailScreen() {
           implements bounded slices.
         </Text>
 
+        <View style={[styles.cardActionsRow, { marginTop: 12, alignItems: "center" }]}>
+          <Text style={styles.helpText}>
+            Local runner:{" "}
+            {runnerHealth === "available"
+              ? "available"
+              : runnerHealth === "unavailable"
+                ? "unavailable"
+                : "not checked"}
+          </Text>
+          <Pressable
+            style={[styles.secondaryAction, isCheckingRunner && { opacity: 0.5 }]}
+            disabled={isCheckingRunner}
+            onPress={() => {
+              void handleCheckRunner();
+            }}
+          >
+            <Text style={styles.secondaryActionText}>Check runner</Text>
+          </Pressable>
+        </View>
+
         {activeFeatureSprintPlan ? (
           <View style={{ marginTop: 12 }}>
             <Text style={styles.label}>Active plan</Text>
@@ -764,6 +900,17 @@ export default function CardDetailScreen() {
             >
               <Text style={styles.secondaryActionText}>Copy scoping packet</Text>
             </Pressable>
+            <Pressable
+              style={[styles.secondaryAction, isRunningScoping && { opacity: 0.5 }]}
+              disabled={isRunningScoping}
+              onPress={() => {
+                void handleRunScopingWithCodex();
+              }}
+            >
+              <Text style={styles.secondaryActionText}>
+                {isRunningScoping ? "Running…" : "Run scoping with Codex"}
+              </Text>
+            </Pressable>
             {activeFeatureSprintPlan ? (
               <Pressable
                 style={styles.secondaryAction}
@@ -798,6 +945,19 @@ export default function CardDetailScreen() {
                 }}
               >
                 <Text style={styles.secondaryActionText}>Copy review packet</Text>
+              </Pressable>
+            ) : null}
+            {activeFeatureSprintPlan ? (
+              <Pressable
+                style={[styles.secondaryAction, isRunningReview && { opacity: 0.5 }]}
+                disabled={isRunningReview}
+                onPress={() => {
+                  void handleRunReviewWithCodex();
+                }}
+              >
+                <Text style={styles.secondaryActionText}>
+                  {isRunningReview ? "Running…" : "Run review with Codex"}
+                </Text>
               </Pressable>
             ) : null}
           </View>
