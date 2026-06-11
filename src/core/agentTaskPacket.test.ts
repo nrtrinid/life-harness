@@ -332,4 +332,39 @@ describe("agentTaskPacket", () => {
     expect(result.markdown).toContain("## Likely files\n(not specified)");
     expect(result.markdown).toContain("## Verification\n(not specified)");
   });
+
+  it("includes agent session context through embedded card context", () => {
+    const card = fixtureBuildCard();
+    const data = baseData({
+      cards: [card],
+      agentSessions: [
+        {
+          id: "session-target",
+          cardId: card.id,
+          agent: "codex",
+          status: "done",
+          taskName: "Ship agent session log",
+          goal: "Add session tracking.",
+          resultSummary: "Tests pass.",
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+
+    const result = buildAgentTaskPacket(data, {
+      cardId: card.id,
+      goal: "Ship agent session log.",
+      now: FIXED_NOW
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.markdown).toContain("## Existing context");
+    expect(result.markdown).toContain("## Agent sessions");
+    expect(result.markdown).toContain("Ship agent session log");
+  });
 });

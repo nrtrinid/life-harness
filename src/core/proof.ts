@@ -46,7 +46,8 @@ export const PROOF_TITLES = {
   followUp: "Sent follow-up",
   approvedCandidate: "Approved job candidate",
   ranJobSource: "Ran job source",
-  foundJobCandidates: "Found job candidates"
+  foundJobCandidates: "Found job candidates",
+  agentSession: "Completed agent session"
 } as const;
 
 function getRescueKind(proof: ProofItem, logs: LifeLogEntry[]): RescueProofKind | undefined {

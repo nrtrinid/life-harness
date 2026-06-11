@@ -332,6 +332,38 @@ export interface HarnessProject {
   updatedAt: string;
 }
 
+export type HarnessAgentKind = "codex" | "cursor" | "chatgpt" | "local" | "manual" | "other";
+
+export type HarnessAgentSessionStatus =
+  | "planned"
+  | "sent"
+  | "reviewing"
+  | "done"
+  | "failed"
+  | "parked";
+
+export interface HarnessAgentSession {
+  id: string;
+  cardId: string;
+  projectId?: string;
+  agent: HarnessAgentKind;
+  status: HarnessAgentSessionStatus;
+  taskName: string;
+  goal: string;
+  promptExcerpt?: string;
+  resultSummary?: string;
+  filesChanged?: string[];
+  verificationCommands?: string[];
+  verificationResult?: string;
+  commitHash?: string;
+  followUps?: string[];
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  evidenceLogId?: string;
+  evidenceProofItemId?: string;
+}
+
 export type PrimaryActionKind =
   | "park"
   | "follow_up"

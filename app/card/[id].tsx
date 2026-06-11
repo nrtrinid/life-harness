@@ -13,8 +13,14 @@ import { canCopyTextToClipboard, copyTextToClipboard } from "../../src/core/askH
 import { buildApplicationResumeDocxDraft } from "../../src/core/applicationResumeExport";
 import {
   buildAgentTaskPacket,
-  buildDefaultAgentTaskPacketInput
+  buildDefaultAgentTaskPacketInput,
+  resolveDefaultTaskGoal
 } from "../../src/core/agentTaskPacket";
+import {
+  getAgentSessionsForCard,
+  normalizeAgentKind,
+  type HarnessAgentSessionCreateInput
+} from "../../src/core/agentSessionLog";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import {
   formatListField,
@@ -31,12 +37,71 @@ import {
 import { buildApplicationResumeReadiness } from "../../src/core/resumeReadiness";
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
+import type { HarnessAgentSession, HarnessProject, LifeCard } from "../../src/core/types";
 
 const READINESS_LABELS = {
   blocked: "Blocked",
   needs_patch: "Needs patch",
   ready_to_export: "Ready to export"
 } as const;
+
+type SessionFormState = {
+  agent: string;
+  taskName: string;
+  goal: string;
+  resultSummary: string;
+  filesChangedText: string;
+  verificationCommandsText: string;
+  verificationResult: string;
+  commitHash: string;
+  followUpsText: string;
+};
+
+function buildSessionFormFromDefaults(card: LifeCard, project?: HarnessProject): SessionFormState {
+  return {
+    agent: "codex",
+    taskName: `Work on ${card.title}`,
+    goal: resolveDefaultTaskGoal(card),
+    resultSummary: "",
+    filesChangedText: "",
+    verificationCommandsText: formatListField(project?.verificationCommands),
+    verificationResult: "",
+    commitHash: "",
+    followUpsText: ""
+  };
+}
+
+function buildSessionFormFromSession(session: HarnessAgentSession): SessionFormState {
+  return {
+    agent: session.agent,
+    taskName: session.taskName,
+    goal: session.goal,
+    resultSummary: session.resultSummary ?? "",
+    filesChangedText: formatListField(session.filesChanged),
+    verificationCommandsText: formatListField(session.verificationCommands),
+    verificationResult: session.verificationResult ?? "",
+    commitHash: session.commitHash ?? "",
+    followUpsText: formatListField(session.followUps)
+  };
+}
+
+function buildSessionInputFromForm(
+  cardId: string,
+  form: SessionFormState
+): HarnessAgentSessionCreateInput {
+  return {
+    cardId,
+    agent: normalizeAgentKind(form.agent),
+    taskName: form.taskName.trim(),
+    goal: form.goal.trim(),
+    resultSummary: form.resultSummary.trim() || undefined,
+    filesChanged: parseListField(form.filesChangedText),
+    verificationCommands: parseListField(form.verificationCommandsText),
+    verificationResult: form.verificationResult.trim() || undefined,
+    commitHash: form.commitHash.trim() || undefined,
+    followUps: parseListField(form.followUpsText)
+  };
+}
 
 export default function CardDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -52,11 +117,27 @@ export default function CardDetailScreen() {
     chatSummaries,
     memoryItems,
     projects,
+    agentSessions,
     careerSourcePack,
     saveProjectForCard,
-    clearProjectForCard
+    clearProjectForCard,
+    createAgentSessionForCard,
+    updateAgentSession,
+    completeAgentSession,
+    deleteAgentSession
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [sessionFormOpen, setSessionFormOpen] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionAgent, setSessionAgent] = useState("codex");
+  const [sessionTaskName, setSessionTaskName] = useState("");
+  const [sessionGoal, setSessionGoal] = useState("");
+  const [sessionResultSummary, setSessionResultSummary] = useState("");
+  const [sessionFilesChangedText, setSessionFilesChangedText] = useState("");
+  const [sessionVerificationCommandsText, setSessionVerificationCommandsText] = useState("");
+  const [sessionVerificationResult, setSessionVerificationResult] = useState("");
+  const [sessionCommitHash, setSessionCommitHash] = useState("");
+  const [sessionFollowUpsText, setSessionFollowUpsText] = useState("");
   const [repoPath, setRepoPath] = useState("");
   const [branch, setBranch] = useState("");
   const [docsText, setDocsText] = useState("");
@@ -83,6 +164,7 @@ export default function CardDetailScreen() {
         chatSummaries,
         memoryItems,
         projects,
+        agentSessions,
         careerSourcePack
       },
       card.id
@@ -107,8 +189,75 @@ export default function CardDetailScreen() {
     chatSummaries,
     memoryItems,
     projects,
+    agentSessions,
     careerSourcePack
   ]);
+
+  function currentSessionForm(): SessionFormState {
+    return {
+      agent: sessionAgent,
+      taskName: sessionTaskName,
+      goal: sessionGoal,
+      resultSummary: sessionResultSummary,
+      filesChangedText: sessionFilesChangedText,
+      verificationCommandsText: sessionVerificationCommandsText,
+      verificationResult: sessionVerificationResult,
+      commitHash: sessionCommitHash,
+      followUpsText: sessionFollowUpsText
+    };
+  }
+
+  function applySessionForm(form: SessionFormState) {
+    setSessionAgent(form.agent);
+    setSessionTaskName(form.taskName);
+    setSessionGoal(form.goal);
+    setSessionResultSummary(form.resultSummary);
+    setSessionFilesChangedText(form.filesChangedText);
+    setSessionVerificationCommandsText(form.verificationCommandsText);
+    setSessionVerificationResult(form.verificationResult);
+    setSessionCommitHash(form.commitHash);
+    setSessionFollowUpsText(form.followUpsText);
+  }
+
+  function openNewSessionForm() {
+    if (!card) {
+      return;
+    }
+    const project = getProjectForCard(lifeHarnessDataForCard(), card.id);
+    applySessionForm(buildSessionFormFromDefaults(card, project));
+    setSelectedSessionId(null);
+    setSessionFormOpen(true);
+  }
+
+  function openExistingSessionForm(session: HarnessAgentSession) {
+    applySessionForm(buildSessionFormFromSession(session));
+    setSelectedSessionId(session.id);
+    setSessionFormOpen(true);
+  }
+
+  function closeSessionForm() {
+    setSessionFormOpen(false);
+    setSelectedSessionId(null);
+  }
+
+  function lifeHarnessDataForCard() {
+    return {
+      cards,
+      logs,
+      proofItems,
+      dailyState,
+      resumeModules,
+      jobCandidates,
+      jobSources,
+      jobSourceRuns,
+      chatSummaries,
+      memoryItems,
+      projects,
+      agentSessions,
+      careerSourcePack
+    };
+  }
+
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
   if (!card) {
@@ -178,20 +327,8 @@ export default function CardDetailScreen() {
     showNotice("success", "Resume DOCX downloaded.");
   }
 
-  const lifeHarnessData = {
-    cards,
-    logs,
-    proofItems,
-    dailyState,
-    resumeModules,
-    jobCandidates,
-    jobSources,
-    jobSourceRuns,
-    chatSummaries,
-    memoryItems,
-    projects,
-    careerSourcePack
-  };
+  const lifeHarnessData = lifeHarnessDataForCard();
+  const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
 
   async function copyMarkdownToClipboard(
     buildMarkdown: () => { ok: true; markdown: string } | { ok: false; error: string },
@@ -367,6 +504,167 @@ export default function CardDetailScreen() {
             <Text style={styles.secondaryActionText}>Clear project metadata</Text>
           </Pressable>
         </View>
+      </Section>
+
+      <Section title="Agent sessions">
+        <Text style={styles.helpText}>
+          Record what you sent to Codex/Cursor and what came back. Save first, then Mark done.
+        </Text>
+        <Pressable style={[styles.secondaryAction, { marginTop: 12 }]} onPress={openNewSessionForm}>
+          <Text style={styles.secondaryActionText}>Log agent session</Text>
+        </Pressable>
+
+        {cardAgentSessions.length > 0 ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={styles.label}>Recent sessions</Text>
+            {cardAgentSessions.map((session) => (
+              <Pressable key={session.id} onPress={() => openExistingSessionForm(session)}>
+                <Text style={styles.listItem}>
+                  ▸ {session.agent} · {session.status} · {session.taskName}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <Text style={[styles.emptyText, { marginTop: 12 }]}>No agent sessions logged yet.</Text>
+        )}
+
+        {sessionFormOpen ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={styles.label}>Agent</Text>
+            <TextInput
+              style={styles.captureInput}
+              value={sessionAgent}
+              onChangeText={setSessionAgent}
+              placeholder="codex"
+              placeholderTextColor={colors.inputPlaceholder}
+              autoCapitalize="none"
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Task name</Text>
+            <TextInput
+              style={styles.captureInput}
+              value={sessionTaskName}
+              onChangeText={setSessionTaskName}
+              placeholderTextColor={colors.inputPlaceholder}
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Goal</Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+              value={sessionGoal}
+              onChangeText={setSessionGoal}
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Result summary</Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+              value={sessionResultSummary}
+              onChangeText={setSessionResultSummary}
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Files changed</Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+              value={sessionFilesChangedText}
+              onChangeText={setSessionFilesChangedText}
+              placeholder="src/core/agentSessionLog.ts"
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Verification commands</Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+              value={sessionVerificationCommandsText}
+              onChangeText={setSessionVerificationCommandsText}
+              placeholder={"npm test -- agentSessionLog"}
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Verification result</Text>
+            <TextInput
+              style={styles.captureInput}
+              value={sessionVerificationResult}
+              onChangeText={setSessionVerificationResult}
+              placeholderTextColor={colors.inputPlaceholder}
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Commit hash</Text>
+            <TextInput
+              style={styles.captureInput}
+              value={sessionCommitHash}
+              onChangeText={setSessionCommitHash}
+              placeholderTextColor={colors.inputPlaceholder}
+              autoCapitalize="none"
+            />
+            <Text style={[styles.label, { marginTop: 12 }]}>Follow-ups</Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+              value={sessionFollowUpsText}
+              onChangeText={setSessionFollowUpsText}
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <View style={styles.cardActionsRow}>
+              <Pressable
+                style={styles.secondaryAction}
+                onPress={() => {
+                  const input = buildSessionInputFromForm(card.id, currentSessionForm());
+                  if (!input.taskName || !input.goal) {
+                    showNotice("warning", "Task name and goal are required.");
+                    return;
+                  }
+                  if (selectedSessionId) {
+                    const result = updateAgentSession(selectedSessionId, input);
+                    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not update session.");
+                    return;
+                  }
+                  const result = createAgentSessionForCard(input);
+                  if (result.ok && result.sessionId) {
+                    setSelectedSessionId(result.sessionId);
+                  }
+                  showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save session.");
+                }}
+              >
+                <Text style={styles.secondaryActionText}>Save session</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.secondaryAction,
+                  !selectedSessionId && { opacity: 0.5 }
+                ]}
+                disabled={!selectedSessionId}
+                onPress={() => {
+                  if (!selectedSessionId) {
+                    showNotice("warning", "Save the session before marking done.");
+                    return;
+                  }
+                  const result = completeAgentSession(
+                    selectedSessionId,
+                    buildSessionInputFromForm(card.id, currentSessionForm())
+                  );
+                  showNotice(result.ok ? "success" : "warning", result.message ?? "Could not complete session.");
+                }}
+              >
+                <Text style={styles.secondaryActionText}>Mark done</Text>
+              </Pressable>
+              {selectedSessionId ? (
+                <Pressable
+                  style={styles.secondaryAction}
+                  onPress={() => {
+                    const result = deleteAgentSession(selectedSessionId);
+                    closeSessionForm();
+                    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not delete session.");
+                  }}
+                >
+                  <Text style={styles.secondaryActionText}>Delete</Text>
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.secondaryAction} onPress={closeSessionForm}>
+                <Text style={styles.secondaryActionText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </Section>
 
       {card.resumePacket && !card.careerApplication ? (

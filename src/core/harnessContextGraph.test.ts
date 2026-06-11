@@ -379,6 +379,67 @@ describe("harnessContextGraph", () => {
     expect(withProject.markdown).not.toContain("C:/other");
   });
 
+  it("includes agent sessions only for the target card", () => {
+    const target = fixtureBuildCard({ id: "card-target", title: "Target Card" });
+    const other = fixtureBuildCard({ id: "card-other", title: "Other Card" });
+    const data = baseData({
+      cards: [target, other],
+      agentSessions: [
+        {
+          id: "session-other",
+          cardId: other.id,
+          agent: "cursor",
+          status: "sent",
+          taskName: "Other session",
+          goal: "Other goal",
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+
+    const withoutSessions = buildCardContextPacket(data, target.id, { now: FIXED_NOW });
+    expect(withoutSessions.ok).toBe(true);
+    if (!withoutSessions.ok) {
+      return;
+    }
+    expect(withoutSessions.markdown).not.toContain("## Agent sessions");
+
+    const withSessions = buildCardContextPacket(
+      {
+        ...data,
+        agentSessions: [
+          ...data.agentSessions,
+          {
+            id: "session-target",
+            cardId: target.id,
+            agent: "codex",
+            status: "done",
+            taskName: "Ship agent session log",
+            goal: "Add session tracking.",
+            resultSummary: "Tests pass.",
+            commitHash: "abc1234",
+            completedAt: FIXED_NOW.toISOString(),
+            createdAt: FIXED_NOW.toISOString(),
+            updatedAt: FIXED_NOW.toISOString()
+          }
+        ]
+      },
+      target.id,
+      { now: FIXED_NOW }
+    );
+
+    expect(withSessions.ok).toBe(true);
+    if (!withSessions.ok) {
+      return;
+    }
+
+    expect(withSessions.packet.recentAgentSessions).toHaveLength(1);
+    expect(withSessions.markdown).toContain("## Agent sessions");
+    expect(withSessions.markdown).toContain("codex · done · Ship agent session log");
+    expect(withSessions.markdown).not.toContain("Other session");
+  });
+
   it("still blocks S3 cards when project metadata exists", () => {
     const card = fixtureBuildCard({ sensitivity: "S3" });
     const data = baseData({
@@ -389,6 +450,33 @@ describe("harnessContextGraph", () => {
           cardId: card.id,
           name: "Sensitive Project",
           repoPath: "C:/secret",
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+
+    const result = buildCardContextPacket(data, card.id, { now: FIXED_NOW });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toContain("S3");
+  });
+
+  it("still blocks S3 cards when agent sessions exist", () => {
+    const card = fixtureBuildCard({ sensitivity: "S3" });
+    const data = baseData({
+      cards: [card],
+      agentSessions: [
+        {
+          id: "session-s3",
+          cardId: card.id,
+          agent: "codex",
+          status: "done",
+          taskName: "Sensitive session",
+          goal: "Do sensitive work.",
           createdAt: FIXED_NOW.toISOString(),
           updatedAt: FIXED_NOW.toISOString()
         }

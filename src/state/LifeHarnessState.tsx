@@ -15,6 +15,7 @@ import {
   applyAddJobSource,
   applyClearCareerSourcePack,
   applyApproveJobCandidate,
+  applyCompleteAgentSessionWithEvidence,
   applyImportCareerSourcePack,
   applyCardStateChange,
   applyCareerIntake,
@@ -65,6 +66,14 @@ import {
   applyUpdateMemoryItem
 } from "../core/harnessMemoryBank";
 import {
+  applyCreateAgentSessionForCard,
+  applyDeleteAgentSession,
+  applyUpdateAgentSession,
+  type HarnessAgentSessionCompleteInput,
+  type HarnessAgentSessionCreateInput,
+  type HarnessAgentSessionUpdateInput
+} from "../core/agentSessionLog";
+import {
   applyDeleteProjectForCard,
   applyUpsertProjectForCard,
   type HarnessProjectUpsertInput
@@ -106,6 +115,14 @@ type LifeHarnessAction =
   | { type: "toggle_memory_item_active"; itemId: string }
   | { type: "save_project"; input: HarnessProjectUpsertInput }
   | { type: "delete_project"; cardId: string }
+  | { type: "create_agent_session"; input: HarnessAgentSessionCreateInput }
+  | { type: "update_agent_session"; sessionId: string; patch: HarnessAgentSessionUpdateInput }
+  | {
+      type: "complete_agent_session";
+      sessionId: string;
+      input: HarnessAgentSessionCompleteInput;
+    }
+  | { type: "delete_agent_session"; sessionId: string }
   | { type: "state_replaced"; state: LifeHarnessData };
 
 interface LifeHarnessContextValue extends LifeHarnessData {
@@ -148,6 +165,18 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   toggleMemoryItemActive: (itemId: string) => void;
   saveProjectForCard: (input: HarnessProjectUpsertInput) => { ok: boolean; message?: string };
   clearProjectForCard: (cardId: string) => { ok: boolean; message?: string };
+  createAgentSessionForCard: (
+    input: HarnessAgentSessionCreateInput
+  ) => { ok: boolean; message?: string; sessionId?: string };
+  updateAgentSession: (
+    sessionId: string,
+    patch: HarnessAgentSessionUpdateInput
+  ) => { ok: boolean; message?: string };
+  completeAgentSession: (
+    sessionId: string,
+    input?: HarnessAgentSessionCompleteInput
+  ) => { ok: boolean; message?: string };
+  deleteAgentSession: (sessionId: string) => { ok: boolean; message?: string };
   isBatchRunning: boolean;
   batchRunProgress: BatchRunProgress | null;
   runOneJobSource: (
@@ -243,6 +272,18 @@ function lifeHarnessReducer(state: LifeHarnessData, action: LifeHarnessAction): 
     }
     case "delete_project":
       return applyDeleteProjectForCard(state, action.cardId);
+    case "create_agent_session": {
+      const result = applyCreateAgentSessionForCard(state, action.input);
+      return result.ok ? result.state : state;
+    }
+    case "update_agent_session": {
+      const result = applyUpdateAgentSession(state, action.sessionId, action.patch);
+      return result.ok ? result.state : state;
+    }
+    case "complete_agent_session":
+      return applyCompleteAgentSessionWithEvidence(state, action.sessionId, action.input).state;
+    case "delete_agent_session":
+      return applyDeleteAgentSession(state, action.sessionId);
     default:
       return state;
   }
@@ -530,6 +571,57 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     return { ok: true, message: "Project metadata cleared." };
   }, []);
 
+  const createAgentSessionForCard = useCallback((input: HarnessAgentSessionCreateInput) => {
+    const card = stateRef.current.cards.find((item) => item.id === input.cardId);
+    if (!card) {
+      return { ok: false, message: `Card not found: ${input.cardId}` };
+    }
+    const result = applyCreateAgentSessionForCard(stateRef.current, input);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    dispatch({ type: "state_replaced", state: result.state });
+    return { ok: true, message: "Agent session saved.", sessionId: result.sessionId };
+  }, []);
+
+  const updateAgentSession = useCallback(
+    (sessionId: string, patch: HarnessAgentSessionUpdateInput) => {
+      const existing = stateRef.current.agentSessions.find((session) => session.id === sessionId);
+      if (!existing) {
+        return { ok: false, message: "Session not found." };
+      }
+      const result = applyUpdateAgentSession(stateRef.current, sessionId, patch);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Agent session updated." };
+    },
+    []
+  );
+
+  const completeAgentSession = useCallback(
+    (sessionId: string, input: HarnessAgentSessionCompleteInput = {}) => {
+      const existing = stateRef.current.agentSessions.find((session) => session.id === sessionId);
+      if (!existing) {
+        return { ok: false, message: "Session not found." };
+      }
+      const result = applyCompleteAgentSessionWithEvidence(stateRef.current, sessionId, input);
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: result.ok, message: result.message };
+    },
+    []
+  );
+
+  const deleteAgentSession = useCallback((sessionId: string) => {
+    const existing = stateRef.current.agentSessions.find((session) => session.id === sessionId);
+    if (!existing) {
+      return { ok: false, message: "Session not found." };
+    }
+    dispatch({ type: "delete_agent_session", sessionId });
+    return { ok: true, message: "Agent session deleted." };
+  }, []);
+
   const runSourceOnState = useCallback(
     async (current: LifeHarnessData, source: JobSource): Promise<{
       state: LifeHarnessData;
@@ -732,6 +824,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       toggleMemoryItemActive,
       saveProjectForCard,
       clearProjectForCard,
+      createAgentSessionForCard,
+      updateAgentSession,
+      completeAgentSession,
+      deleteAgentSession,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,
@@ -769,6 +865,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       toggleMemoryItemActive,
       saveProjectForCard,
       clearProjectForCard,
+      createAgentSessionForCard,
+      updateAgentSession,
+      completeAgentSession,
+      deleteAgentSession,
       isBatchRunning,
       batchRunProgress,
       runOneJobSource,

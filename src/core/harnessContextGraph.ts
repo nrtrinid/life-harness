@@ -12,9 +12,13 @@ import {
 } from "./harnessContext";
 import { getActiveMemoryItems } from "./harnessMemoryBank";
 import { AREA_LABELS, CARD_STATE_LABELS } from "./labels";
+import { getAgentSessionsForCard } from "./agentSessionLog";
 import { buildProjectContextForCard, type CardProjectContextSummary } from "./projectRegistry";
 import { buildApplicationResumeReadiness } from "./resumeReadiness";
 import type {
+  HarnessAgentKind,
+  HarnessAgentSession,
+  HarnessAgentSessionStatus,
   HarnessMemoryItem,
   HarnessMemoryKind,
   JobCandidate,
@@ -24,6 +28,7 @@ import type {
 } from "./types";
 
 const MAX_RECENT_LOGS = 8;
+const MAX_AGENT_SESSIONS = 5;
 const MAX_RECENT_PROOF = 6;
 const MAX_MEMORY_FACTS = 5;
 const MEMORY_BODY_MAX_CHARS = 120;
@@ -78,6 +83,13 @@ export type HarnessContextNode =
       name: string;
       repoPath?: string;
       branch?: string;
+    }
+  | {
+      id: `agent_session:${string}`;
+      kind: "agent_session";
+      taskName: string;
+      agent: HarnessAgentKind;
+      status: HarnessAgentSessionStatus;
     };
 
 export type CardContextPacketKind =
@@ -133,6 +145,16 @@ export interface CardContextMemorySummary {
 
 export type CardContextProjectSummary = CardProjectContextSummary;
 
+export interface CardContextAgentSessionSummary {
+  id: string;
+  taskName: string;
+  agent: HarnessAgentKind;
+  status: HarnessAgentSessionStatus;
+  resultSummary?: string;
+  commitHash?: string;
+  completedAt?: string;
+}
+
 export interface CardContextPacket {
   packetVersion: "0.2";
   generatedAt: string;
@@ -149,6 +171,7 @@ export interface CardContextPacket {
   recentLogs: CardContextLogSummary[];
   memoryFacts: CardContextMemorySummary[];
   projectContext?: CardContextProjectSummary;
+  recentAgentSessions: CardContextAgentSessionSummary[];
   constraints: string[];
   verificationCommands: string[];
 }
@@ -283,6 +306,29 @@ function gatherCardMemories(card: LifeCard, memoryItems: HarnessMemoryItem[]): H
   return getActiveMemoryItems(memoryItems)
     .filter((memory) => isMemoryRelevantToCard(memory, card))
     .slice(0, MAX_MEMORY_FACTS);
+}
+
+function buildAgentSessionSummary(session: HarnessAgentSession): CardContextAgentSessionSummary {
+  return {
+    id: session.id,
+    taskName: session.taskName,
+    agent: session.agent,
+    status: session.status,
+    resultSummary: session.resultSummary,
+    commitHash: session.commitHash,
+    completedAt: session.completedAt
+  };
+}
+
+function formatAgentSessionMarkdownLine(session: CardContextAgentSessionSummary): string {
+  const parts = [`${session.agent} · ${session.status} · ${session.taskName}`];
+  if (session.commitHash) {
+    parts.push(`merged ${session.commitHash}`);
+  } else if (session.resultSummary) {
+    parts.push(session.resultSummary);
+  }
+  const suffix = session.completedAt ? ` (${session.completedAt})` : "";
+  return `- ${parts.join(" — ")}${suffix}`;
 }
 
 function buildConstraints(data: LifeHarnessData, card: LifeCard): string[] {
@@ -472,6 +518,20 @@ export function buildCardContextPacket(
     });
   }
 
+  const recentAgentSessions = getAgentSessionsForCard(data, card.id)
+    .slice(0, MAX_AGENT_SESSIONS)
+    .map(buildAgentSessionSummary);
+
+  for (const session of recentAgentSessions) {
+    nodes.push({
+      id: `agent_session:${session.id}`,
+      kind: "agent_session",
+      taskName: session.taskName,
+      agent: session.agent,
+      status: session.status
+    });
+  }
+
   const packet: CardContextPacket = {
     packetVersion: "0.2",
     generatedAt,
@@ -488,6 +548,7 @@ export function buildCardContextPacket(
     recentLogs,
     memoryFacts,
     projectContext,
+    recentAgentSessions,
     constraints: buildConstraints(data, card),
     verificationCommands: projectContext?.verificationCommands ?? []
   };
@@ -540,6 +601,15 @@ export function formatCardContextPacketMarkdown(packet: CardContextPacket): stri
       lines.push(`- Verification: ${project.verificationCommands.join("; ")}`);
     }
     lines.push("");
+  }
+
+  if (packet.recentAgentSessions.length > 0) {
+    lines.push(
+      ...formatListSection(
+        "## Agent sessions",
+        packet.recentAgentSessions.map((session) => formatAgentSessionMarkdownLine(session))
+      )
+    );
   }
 
   if (packet.recentProof.length > 0) {

@@ -27,7 +27,8 @@ import type {
   ResumeModule,
   HarnessChatSummary,
   HarnessMemoryItem,
-  HarnessProject
+  HarnessProject,
+  HarnessAgentSession
 } from "./types";
 import {
   parseCareerSourcePackJson,
@@ -38,6 +39,12 @@ import { matchCandidateWithCareerPack } from "./careerPackMatching";
 import { buildResumeDraftPacket } from "./resumeModuleBank";
 import type { JobSourceRunOutput } from "./jobSourceRunner";
 import { rebindJobSourceRunOutput } from "./jobSourceRunner";
+import {
+  applyCompleteAgentSession,
+  buildAgentSessionProofSummary,
+  sessionAlreadyHasEvidence,
+  type HarnessAgentSessionCompleteInput
+} from "./agentSessionLog";
 
 export interface LifeHarnessData {
   cards: LifeCard[];
@@ -51,6 +58,7 @@ export interface LifeHarnessData {
   chatSummaries: HarnessChatSummary[];
   memoryItems: HarnessMemoryItem[];
   projects: HarnessProject[];
+  agentSessions: HarnessAgentSession[];
   careerSourcePack: StoredCareerSourcePack | null;
 }
 
@@ -850,5 +858,79 @@ export function applyRunJobSourceResult(
       output.result.errors.length === 0
         ? withProofSuffix(output.result.message, proofs.length > 1)
         : output.result.message
+  };
+}
+
+export function applyCompleteAgentSessionWithEvidence(
+  state: LifeHarnessData,
+  sessionId: string,
+  input: HarnessAgentSessionCompleteInput = {},
+  now: string = nowIso()
+): ActionResult {
+  const existing = state.agentSessions.find((session) => session.id === sessionId);
+  if (!existing) {
+    return { ok: false, state, message: "Session not found." };
+  }
+
+  const hadEvidence = sessionAlreadyHasEvidence(existing);
+  const completed = applyCompleteAgentSession(state, sessionId, input, now);
+  if (!completed.ok) {
+    return { ok: false, state, message: completed.error };
+  }
+
+  let nextState = completed.state;
+  const session = nextState.agentSessions.find((item) => item.id === sessionId);
+  if (!session) {
+    return { ok: false, state, message: "Session not found." };
+  }
+
+  const card = nextState.cards.find((item) => item.id === session.cardId);
+  if (!card || hadEvidence) {
+    return {
+      ok: true,
+      state: nextState,
+      message: hadEvidence ? "Session updated." : "Session marked done."
+    };
+  }
+
+  const { proofTitle, logText } = buildAgentSessionProofSummary(session);
+  const log = createLogEntry({
+    rawText: logText,
+    area: card.area,
+    type: "win",
+    cardId: card.id
+  });
+  const proof = createProofItem({
+    title: proofTitle,
+    area: card.area,
+    cardId: card.id,
+    sourceLogId: log.id
+  });
+  log.proofItemId = proof.id;
+
+  const agentSessions = nextState.agentSessions.map((item) =>
+    item.id === sessionId
+      ? {
+          ...item,
+          evidenceLogId: log.id,
+          evidenceProofItemId: proof.id
+        }
+      : item
+  );
+
+  return {
+    ok: true,
+    state: {
+      ...nextState,
+      agentSessions,
+      logs: prependLog(nextState.logs, log),
+      proofItems: prependProof(nextState.proofItems, proof),
+      cards: updateCard(nextState.cards, card.id, (current) => ({
+        ...touchCard(current, session.taskName),
+        proofItemIds: [proof.id, ...current.proofItemIds]
+      }))
+    },
+    message: withProofSuffix("Session marked done.", true),
+    cardId: card.id
   };
 }
