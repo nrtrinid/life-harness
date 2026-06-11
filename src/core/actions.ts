@@ -1,4 +1,5 @@
 import { findCapturableCard } from "./cardMatching";
+import { shouldIncludeCard } from "./contextPacketRedaction";
 import { createCareerApplicationCard, syncApplicationStatus, type CareerIntakeInput } from "./career";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
@@ -384,6 +385,11 @@ export function applyQuickCapture(state: LifeHarnessData, rawText: string): Acti
   }
 
   const matched = findCapturableCard(cards, intent.text);
+
+  if (intent.type === "resume_exported" && matched) {
+    return applyResumeExportedForCard(state, matched.id, { rawText: captured });
+  }
+
   let area: LifeArea = matched?.area ?? "build";
   let message = "";
 
@@ -426,14 +432,6 @@ export function applyQuickCapture(state: LifeHarnessData, rawText: string): Acti
     proof = createProofItem({
       title: `Agent finished: ${matched.title}`,
       area,
-      cardId: matched.id,
-      sourceLogId: log.id
-    });
-    log.proofItemId = proof.id;
-  } else if (intent.type === "resume_exported" && matched) {
-    proof = createProofItem({
-      title: PROOF_TITLES.resumeExported,
-      area: "social_career",
       cardId: matched.id,
       sourceLogId: log.id
     });
@@ -510,6 +508,57 @@ export function applyCardStateChange(
     state: { ...state, cards },
     ok: true,
     message: cardStateMessage(card, newState)
+  };
+}
+
+export function applyResumeExportedForCard(
+  state: LifeHarnessData,
+  cardId: string,
+  options?: { filename?: string; rawText?: string }
+): ActionResult {
+  const card = state.cards.find((item) => item.id === cardId);
+  if (!card) {
+    return { state, ok: false, message: "Card not found." };
+  }
+  if (!shouldIncludeCard(card)) {
+    return {
+      state,
+      ok: false,
+      message: "This card is S3-sensitive and cannot be changed from here."
+    };
+  }
+
+  const explicitRaw = options?.rawText?.trim();
+  const filenameSuffix = options?.filename?.trim() ? ` (${options.filename.trim()})` : "";
+  const logText =
+    explicitRaw ?? `Resume exported for ${card.title}${filenameSuffix}`;
+
+  const log = createLogEntry({
+    rawText: logText,
+    area: "social_career",
+    type: "win",
+    cardId: card.id
+  });
+  const proof = createProofItem({
+    title: PROOF_TITLES.resumeExported,
+    area: "social_career",
+    cardId: card.id,
+    sourceLogId: log.id
+  });
+  log.proofItemId = proof.id;
+
+  return {
+    state: {
+      ...state,
+      cards: updateCard(state.cards, card.id, (item) => ({
+        ...touchCard(item, logText),
+        proofItemIds: [proof.id, ...item.proofItemIds]
+      })),
+      logs: prependLog(state.logs, log),
+      proofItems: prependProof(state.proofItems, proof)
+    },
+    ok: true,
+    message: withProofSuffix(`Resume export logged for ${card.title}.`, true)
   };
 }
 

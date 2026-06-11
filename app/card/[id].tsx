@@ -146,7 +146,8 @@ export default function CardDetailScreen() {
     completeFeatureSprintPlan,
     deleteFeatureSprintPlan,
     importFeatureSprintPlanForCard,
-    importFeatureReviewVerdictForPlan
+    importFeatureReviewVerdictForPlan,
+    logResumeExportForCard
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
@@ -354,14 +355,32 @@ export default function CardDetailScreen() {
       return;
     }
 
-    const blob = await packResumeDocxBlob(result.draft);
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = result.fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    showNotice("success", "Resume DOCX downloaded.");
+    try {
+      const blob = await packResumeDocxBlob(result.draft);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showNotice("warning", "Resume DOCX download failed.");
+      return;
+    }
+
+    const logged = logResumeExportForCard(cardId, { filename: result.fileName });
+    if (!logged.ok) {
+      showNotice(
+        "warning",
+        `Resume DOCX downloaded, but export was not logged: ${logged.message ?? "Unknown error."}`
+      );
+      return;
+    }
+
+    showNotice(
+      "success",
+      `Resume DOCX downloaded. Export logged for ${card!.title}.`
+    );
   }
 
   const lifeHarnessData = lifeHarnessDataForCard();

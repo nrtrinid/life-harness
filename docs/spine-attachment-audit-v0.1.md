@@ -82,7 +82,7 @@ Canonical files and link fields:
 | Card Detail Backroom | Agent session CRUD | `agentSessions[]` on `cardId` | Strong | Low | Mark done → evidence |
 | Card Detail Backroom | Feature sprint complete | Plan + win log + proof on card | Strong | Low | `completeFeatureSprintPlan` |
 | Card Detail Backroom | Sprint step agent output | On plan step record | Partial | Medium | Visible in ledger after complete |
-| Card Detail Backroom | Resume DOCX download | Browser file only | Floating | High | P0: post-download capture or auto proof |
+| Card Detail Backroom | Resume DOCX download | Win log + `PROOF_TITLES.resumeExported` via `applyResumeExportedForCard` after successful download | Strong | Low | **Shipped** — Resume Export Proof Log v0.1 |
 | Card Detail Backroom | Clipboard context/packet | Clipboard | Floating | Medium | P1: pair with log sent / session |
 
 ---
@@ -92,10 +92,9 @@ Canonical files and link fields:
 High-risk (useful output does not clearly feed spine):
 
 1. **Raw Lab assistant turns** — in-memory only; no board capture path (`app/raw-lab.tsx`, containment by design).
-2. **Resume DOCX export** — `handleBuildResumeDocx` in `app/card/[id].tsx` downloads file; no log/proof despite `resume exported` capture grammar.
-3. **Deep Synthesis report** — display in Companion; no persist path (`SynthesisReportCard` tests avoid auto `saveMemoryItem`).
-4. **Companion chat** (default) — lost on clear unless user saves summary/memory or approves an action.
-5. **Agent clipboard-only** — task packet / context copied without `createAgentSessionForCard`.
+2. **Deep Synthesis report** — display in Companion; no persist path (`SynthesisReportCard` tests avoid auto `saveMemoryItem`).
+3. **Companion chat** (default) — lost on clear unless user saves summary/memory or approves an action.
+4. **Agent clipboard-only** — task packet / context copied without `createAgentSessionForCard`.
 
 Medium-risk:
 
@@ -126,6 +125,7 @@ What already feeds the spine coherently:
 - **Feature sprint mark complete** — idempotent win log + proof on plan card (`completeFeatureSprintPlan`).
 - **Today recovery** — pounce, MVD, salvage → daily state + logs + proof.
 - **Next Move Contract** — ranks board/career/agent/recovery moves with `cardId` routes for Today.
+- **Resume DOCX export** (Card Detail) — after successful download, `applyResumeExportedForCard` logs win + `PROOF_TITLES.resumeExported` proof; Proof Ledger classifies as `resume`.
 
 ---
 
@@ -133,10 +133,10 @@ What already feeds the spine coherently:
 
 ### P0 — breaks spine coherence
 
-| Fix | Rationale |
-|-----|-----------|
-| After resume DOCX download, offer **one-tap** `resume exported for {card}` capture or auto log+proof | Export is meaningful career progress but invisible to Proof Ledger today |
-| Raw Lab: **Capture as idea** (prefixed quick capture) or explicit **Open in Companion** + save path | High-value lab insights disappear on navigation |
+| Fix | Rationale | Status |
+|-----|-----------|--------|
+| After resume DOCX download, auto log+proof on card | Export was invisible to Proof Ledger | **Addressed** — Resume Export Proof Log v0.1 (`applyResumeExportedForCard`, `logResumeExportForCard`) |
+| Raw Lab: **Capture as idea** (prefixed quick capture) or explicit **Open in Companion** + save path | High-value lab insights disappear on navigation | Open |
 
 ### P1 — useful coherence improvement
 
@@ -192,3 +192,7 @@ npm test            # 806 tests pass (80 files, e74d0d3 worktree)
 - [`unified-proof-ledger-v0.1.md`](unified-proof-ledger-v0.1.md) — ledger sources
 - [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md) — sprint completion proof
 - [`assistant-action-registry-v0.1.md`](assistant-action-registry-v0.1.md) — Companion propose → approve → apply
+
+## Shipped since audit
+
+- **Resume Export Proof Log v0.1** — Card Detail DOCX success → `applyResumeExportedForCard`; failure paths do not log.

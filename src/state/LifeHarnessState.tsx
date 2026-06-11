@@ -25,6 +25,7 @@ import {
   applyMvd,
   applyPounce,
   applyQuickCapture,
+  applyResumeExportedForCard,
   applyRunJobSourceResult,
   applySalvage,
   applySaveJobCandidate,
@@ -212,6 +213,10 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   completeAgentSession: (
     sessionId: string,
     input?: HarnessAgentSessionCompleteInput
+  ) => { ok: boolean; message?: string };
+  logResumeExportForCard: (
+    cardId: string,
+    options?: { filename?: string }
   ) => { ok: boolean; message?: string };
   deleteAgentSession: (sessionId: string) => { ok: boolean; message?: string };
   createFeatureSprintPlanForCard: (
@@ -711,6 +716,17 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const logResumeExportForCard = useCallback(
+    (cardId: string, options?: { filename?: string }) => {
+      const result = applyResumeExportedForCard(stateRef.current, cardId, options);
+      if (result.ok) {
+        dispatch({ type: "state_replaced", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    []
+  );
+
   const deleteAgentSession = useCallback((sessionId: string) => {
     const existing = stateRef.current.agentSessions.find((session) => session.id === sessionId);
     if (!existing) {
@@ -1031,6 +1047,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       createAgentSessionForCard,
       updateAgentSession,
       completeAgentSession,
+      logResumeExportForCard,
       deleteAgentSession,
       createFeatureSprintPlanForCard: createFeatureSprintPlanForCardAction,
       updateFeatureSprintPlan: updateFeatureSprintPlanAction,
@@ -1082,6 +1099,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       createAgentSessionForCard,
       updateAgentSession,
       completeAgentSession,
+      logResumeExportForCard,
       deleteAgentSession,
       createFeatureSprintPlanForCardAction,
       updateFeatureSprintPlanAction,

@@ -11,12 +11,15 @@ import {
   applyMvd,
   applyPounce,
   applyQuickCapture,
+  applyResumeExportedForCard,
   applyRunJobSourceResult,
   applySalvage,
   applySaveJobCandidate,
   applySaveJobSourceWithOptionalImport
 } from "./actions";
 import type { LifeHarnessData } from "./lifeHarnessData";
+import { buildProofLedger } from "./proofLedger";
+import { PROOF_TITLES } from "./proof";
 import { PREVIEW_JOB_SOURCE_ID, runJobSourceFromRaw } from "./jobSourceRunner";
 import { seedJobCandidates, seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";
@@ -142,6 +145,70 @@ describe("applyCareerIntake", () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Active is full");
+  });
+});
+
+describe("applyResumeExportedForCard", () => {
+  it("creates win log and proof linked to the card", () => {
+    const state = createState();
+    const cardId = "qualcomm-application";
+    const result = applyResumeExportedForCard(state, cardId);
+
+    expect(result.ok).toBe(true);
+    expect(result.state.logs[0]?.type).toBe("win");
+    expect(result.state.logs[0]?.cardId).toBe(cardId);
+    expect(result.state.logs[0]?.rawText).toBe("Resume exported for Qualcomm — Security Engineer");
+    expect(result.state.proofItems[0]?.title).toBe(PROOF_TITLES.resumeExported);
+    expect(result.state.proofItems[0]?.cardId).toBe(cardId);
+
+    const card = result.state.cards.find((item) => item.id === cardId);
+    expect(card?.proofItemIds[0]).toBe(result.state.proofItems[0]?.id);
+    expect(card?.lastTouched).toBeTruthy();
+    expect(card?.recentWins[0]).toContain("Resume exported");
+    expect(result.message).toContain("Resume export logged");
+  });
+
+  it("includes filename in log text when provided", () => {
+    const state = createState();
+    const result = applyResumeExportedForCard(state, "qualcomm-application", {
+      filename: "qualcomm-security.docx"
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.state.logs[0]?.rawText).toContain("qualcomm-security.docx");
+  });
+
+  it("rejects missing card without mutating state", () => {
+    const state = createState();
+    const result = applyResumeExportedForCard(state, "missing-card");
+
+    expect(result.ok).toBe(false);
+    expect(result.state).toBe(state);
+    expect(result.message).toContain("not found");
+  });
+
+  it("rejects S3 cards", () => {
+    const state = createState();
+    const s3Card = {
+      ...structuredClone(state.cards.find((card) => card.id === "qualcomm-application")!),
+      id: "card-s3-resume-export",
+      sensitivity: "S3" as const
+    };
+    const withS3 = { ...state, cards: [...state.cards, s3Card] };
+    const result = applyResumeExportedForCard(withS3, s3Card.id);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("S3");
+  });
+
+  it("appears in Proof Ledger under resume source", () => {
+    const state = createState();
+    const result = applyResumeExportedForCard(state, "qualcomm-application");
+    const summary = buildProofLedger(result.state);
+
+    const resumeEntry = summary.entries.find((entry) => entry.source === "resume");
+    expect(resumeEntry?.title).toBe(PROOF_TITLES.resumeExported);
+    expect(resumeEntry?.cardId).toBe("qualcomm-application");
   });
 });
 
