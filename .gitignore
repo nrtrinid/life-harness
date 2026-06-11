@@ -5,6 +5,7 @@ web-build/
 .expo-start.*.log
 .expo-start.pid
 npm-debug.log*
+tmp/
 
 # Local personal career import (S1 — do not commit)
 resume_pack/

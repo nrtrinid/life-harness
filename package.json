@@ -11,10 +11,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "scout:runner": "tsx services/job-scout-runner/src/server.ts",
-    "scout:runner:test": "vitest run services/job-scout-runner/tests"
+    "scout:runner:test": "vitest run services/job-scout-runner/tests",
+    "resume:build": "tsx scripts/build-resume-docx.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~56.0.14",
+    "docx": "^9.7.1",
     "expo": "56.0.9",
     "expo-constants": "~56.0.17",
     "expo-linking": "~56.0.13",

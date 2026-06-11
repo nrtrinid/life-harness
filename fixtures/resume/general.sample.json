@@ -1,0 +1,91 @@
+{
+  "profile": {
+    "name": "Sample Candidate",
+    "contactItems": [
+      "555-010-2026",
+      "candidate@example.com",
+      "linkedin.com/in/sample-candidate",
+      "github.com/sample"
+    ]
+  },
+  "summary": "Recent B.S. Computer Science graduate with a cybersecurity emphasis. Hands-on experience building full-stack, security-aware, and AI-assisted systems using Python, TypeScript/JavaScript, C++, FastAPI, React/Next.js, PostgreSQL, external API integration, diagnostics, and production deployment.",
+  "education": [
+    {
+      "degree": "B.S. Computer Science (Cybersecurity)",
+      "date": "May 2026",
+      "school": "Example State University, Tempe, AZ | School of Computing",
+      "detailRight": "GPA: 3.32",
+      "details": [
+        "Relevant Coursework: Computer Network Security, Distributed Software Development, Computer Forensics, Information Assurance, Human-Computer Interaction, Probability & Statistics."
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "label": "Languages",
+      "skills": "Python, TypeScript/JavaScript, C++, Java, SQL, C#, Bash, Assembly (x86-64)"
+    },
+    {
+      "label": "Backend & Data",
+      "skills": "FastAPI, Pydantic, PostgreSQL, REST APIs, Docker, Git/GitHub, Linux/Unix"
+    },
+    {
+      "label": "Frontend & Cloud",
+      "skills": "Next.js, React, Tailwind CSS, Vercel, React Query"
+    },
+    {
+      "label": "Security & AI",
+      "skills": "Wireshark, Nmap, Ghidra, GDB, RBAC, OWASP, API integration, prompt engineering"
+    }
+  ],
+  "projects": [
+    {
+      "title": "Market Analytics & Risk Platform",
+      "meta": "Next.js, FastAPI, PostgreSQL, Docker",
+      "date": "2025-Present",
+      "bullets": [
+        "Built and deployed a full-stack analytics platform that ingests live market data, normalizes external API responses, calculates expected value, and tracks user outcomes through authenticated workflows.",
+        "Integrated public data feeds, database policies, deployment bridge routes, and readiness diagnostics for production traffic.",
+        "Shipped beta diagnostics including admin health checks, scheduler heartbeats, readiness endpoints, and external-tester analytics."
+      ]
+    },
+    {
+      "title": "AI Simulation & Diagnostics Lab",
+      "meta": "Python, Pytest, YAML, Rich/Textual",
+      "date": "2026",
+      "bullets": [
+        "Developed deterministic Python simulations for evaluating decision policies across generated scenarios and configurable environment behaviors.",
+        "Built counterfactual sweeps, policy-band reports, encounter attribution, balance gates, and automated tests to identify weak policies and regression risks.",
+        "Designed a strict Pydantic/YAML content pipeline with cross-reference validation and JSON save/load."
+      ]
+    },
+    {
+      "title": "Network Security & Offensive Operations Laboratory",
+      "meta": "Python, Ghidra, GDB, Wireshark",
+      "date": "Fall 2024",
+      "bullets": [
+        "Completed 50+ CTF challenges across web, network, and binary exploitation, scripting attacks with Python and analyzing packet captures for protocol anomalies.",
+        "Reverse engineered x86-64 binaries with Ghidra and GDB, crafting buffer-overflow and ROP-chain exploits to bypass memory protections.",
+        "Conducted web and network security testing across SQL injection, XSS, command injection, packet analysis, and protocol-level anomaly detection workflows."
+      ]
+    }
+  ],
+  "additionalExperience": [
+    {
+      "title": "STEM Education & Robotics Instructor",
+      "meta": "Example Learning Center | Tempe, AZ",
+      "date": "Apr 2023-Jul 2023",
+      "bullets": [
+        "Taught robotics programming concepts to student groups, translating loops, conditionals, and robotics logic for non-technical audiences."
+      ]
+    },
+    {
+      "title": "Software Engineering Bootcamp",
+      "meta": "Student Developer Association | Tempe, AZ",
+      "date": "Aug 2023-May 2026",
+      "bullets": [
+        "Completed API and cloud architecture training; built a deployed prototype automating data-retrieval tasks."
+      ]
+    }
+  ]
+}
