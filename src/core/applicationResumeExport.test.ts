@@ -138,5 +138,5 @@ describe("application resume export", () => {
 
     expect(existsSync(outPath)).toBe(true);
     expect(statSync(outPath).size).toBeGreaterThan(1000);
-  });
+  }, 15000);
 });

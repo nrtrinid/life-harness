@@ -1,4 +1,10 @@
-import type { ResumeModule, ResumeModuleCategory, RoleType } from "./types";
+import type {
+  ResumeModule,
+  ResumeModuleCategory,
+  ResumeModulePlacement,
+  ResumeModuleSection,
+  RoleType
+} from "./types";
 
 const MAX_SCAN_DEPTH = 4;
 const SNAKE_CASE_ID = /^[a-z][a-z0-9_]*$/;
@@ -18,6 +24,13 @@ const RESUME_MODULE_CATEGORIES: ReadonlySet<string> = new Set([
   "education",
   "skill_cluster",
   "certification"
+]);
+
+const RESUME_MODULE_SECTIONS: ReadonlySet<string> = new Set([
+  "education",
+  "skills",
+  "projects",
+  "additional_experience"
 ]);
 
 const SECRET_PATTERNS: RegExp[] = [
@@ -59,6 +72,7 @@ export interface CareerPackResumeModule {
   claimsToAvoid: string[];
   metricsToGather: string[];
   isActive: boolean;
+  resumePlacement?: ResumeModulePlacement;
 }
 
 export interface CareerPackRoleRecipe {
@@ -266,6 +280,10 @@ function parseResumeModule(raw: unknown, index: number): CareerPackResumeModule 
   if (!title || !category || !summary) {
     return `resumeModules[${index}] missing title, category, or summary.`;
   }
+  const resumePlacement = parseResumePlacement(raw.resumePlacement, index);
+  if (typeof resumePlacement === "string") {
+    return resumePlacement;
+  }
   return {
     id,
     title,
@@ -280,7 +298,36 @@ function parseResumeModule(raw: unknown, index: number): CareerPackResumeModule 
     confidence: typeof raw.confidence === "string" ? raw.confidence : "medium",
     claimsToAvoid: asStringArray(raw.claimsToAvoid, "claimsToAvoid") ?? [],
     metricsToGather: asStringArray(raw.metricsToGather, "metricsToGather") ?? [],
-    isActive: raw.isActive !== false
+    isActive: raw.isActive !== false,
+    resumePlacement
+  };
+}
+
+function parseResumePlacement(raw: unknown, index: number): ResumeModulePlacement | undefined | string {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!isRecord(raw)) {
+    return `resumeModules[${index}].resumePlacement must be an object.`;
+  }
+  const section = requireString(raw.section, "section");
+  const heading = requireString(raw.heading, "heading");
+  if (!section || !RESUME_MODULE_SECTIONS.has(section)) {
+    return `resumeModules[${index}].resumePlacement.section is invalid.`;
+  }
+  if (!heading) {
+    return `resumeModules[${index}].resumePlacement.heading is required.`;
+  }
+  const order = typeof raw.order === "number" && Number.isFinite(raw.order) ? raw.order : undefined;
+  if (order === undefined) {
+    return `resumeModules[${index}].resumePlacement.order is required.`;
+  }
+  return {
+    section: section as ResumeModuleSection,
+    heading,
+    detail: typeof raw.detail === "string" && raw.detail.trim() ? raw.detail : undefined,
+    date: typeof raw.date === "string" && raw.date.trim() ? raw.date : undefined,
+    order
   };
 }
 
@@ -500,7 +547,8 @@ export function mapPackModuleToResumeModule(module: CareerPackResumeModule): Res
     bestFor: bestFor.length > 0 ? bestFor : ["software"],
     proof: module.proof.length > 0 ? module.proof : undefined,
     isActive: module.isActive,
-    importedFromCareerPack: true
+    importedFromCareerPack: true,
+    resumePlacement: module.resumePlacement
   };
 }
 

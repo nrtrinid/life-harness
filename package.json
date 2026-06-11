@@ -13,7 +13,8 @@
     "scout:runner": "tsx services/job-scout-runner/src/server.ts",
     "scout:runner:test": "vitest run services/job-scout-runner/tests",
     "resume:build": "tsx scripts/build-resume-docx.ts",
-    "resume:build:application": "tsx scripts/build-application-resume-docx.ts"
+    "resume:build:application": "tsx scripts/build-application-resume-docx.ts",
+    "career:pack:build": "tsx scripts/build-career-source-pack.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~56.0.14",

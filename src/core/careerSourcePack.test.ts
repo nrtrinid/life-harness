@@ -103,4 +103,28 @@ describe("resume module mapping", () => {
     expect(updated).toHaveLength(parsed.pack.resumeModules.length);
     expect(updated.find((m) => m.id === mapped.id)?.summary).toBe(mapped.summary);
   });
+
+  it("preserves optional resume placement metadata", () => {
+    const parsed = JSON.parse(fixtureJson) as Record<string, unknown>;
+    const modules = parsed.resumeModules as Array<Record<string, unknown>>;
+    modules[0].resumePlacement = {
+      section: "projects",
+      heading: "EV Tracker",
+      detail: "FastAPI, Next.js",
+      date: "2026",
+      order: 20
+    };
+    const result = parseCareerSourcePackJson(JSON.stringify(parsed));
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const mapped = mapPackModuleToResumeModule(result.pack.resumeModules[0]);
+    expect(mapped.resumePlacement).toMatchObject({
+      section: "projects",
+      heading: "EV Tracker",
+      date: "2026",
+      order: 20
+    });
+  });
 });

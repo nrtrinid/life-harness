@@ -88,6 +88,12 @@ export default function CareerPackScreen() {
             Paste exported Career Source Pack JSON. Secrets are rejected. Contact details may trigger
             warnings. Keep real packs in local resume_pack/ only — never commit them.
           </Text>
+          {Platform.OS === "web" ? (
+            <Text style={styles.helpText}>
+              Local builder: npm run career:pack:build -- --source ../career-source --out
+              resume_pack/life_harness_career_pack.v1.json
+            </Text>
+          ) : null}
           <TextInput
             style={[styles.captureInput, { minHeight: 160, textAlignVertical: "top" }]}
             value={paste}
