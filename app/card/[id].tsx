@@ -505,6 +505,14 @@ export default function CardDetailScreen() {
             </Text>
           ))
         )}
+        <Link
+          href={{ pathname: "/proof-ledger", params: { cardId: card.id } }}
+          asChild
+        >
+          <Pressable style={[styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }]}>
+            <Text style={styles.secondaryActionText}>View proof ledger for this card</Text>
+          </Pressable>
+        </Link>
       </Section>
 
       {recentWinsTeaser.length > 0 ? (

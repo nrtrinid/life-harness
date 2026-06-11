@@ -16,9 +16,10 @@ describe("navRoutes", () => {
 
     expect(primary).toEqual([
       { href: "/", label: "Today" },
-      { href: "/board", label: "Board" },
       { href: "/career", label: "Jobs" },
-      { href: "/progress", label: "Playback" }
+      { href: "/board", label: "Board" },
+      { href: "/progress", label: "Playback" },
+      { href: "/ask-harness", label: "Companion" }
     ]);
   });
 
@@ -42,8 +43,9 @@ describe("navRoutes", () => {
     expect(hrefs.has("/career")).toBe(true);
     expect(hrefs.has("/review")).toBe(true);
     expect(hrefs.has("/agent-workbench")).toBe(true);
+    expect(hrefs.has("/proof-ledger")).toBe(true);
     expect(hrefs.has("/career-pack")).toBe(false);
-    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length - 1);
+    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length);
   });
 
   it("detects active routes including index and nested paths", () => {
@@ -64,10 +66,12 @@ describe("navRoutes", () => {
     expect(isSystemPath("/raw-lab")).toBe(true);
     expect(isSystemPath("/memory-bank")).toBe(true);
     expect(isSystemPath("/source-setup")).toBe(true);
-    expect(isSystemPath("/ask-harness")).toBe(true);
+    expect(isSystemPath("/ask-harness")).toBe(false);
     expect(isSystemPath("/review")).toBe(true);
+    expect(isSystemPath("/proof-ledger")).toBe(true);
+    expect(getNavGroupForPath("/proof-ledger")).toBe("system");
     expect(getNavGroupForPath("/career-intake")).toBe("careerTools");
-    expect(getNavGroupForPath("/ask-harness")).toBe("system");
+    expect(getNavGroupForPath("/ask-harness")).toBe("primary");
     expect(getNavGroupForPath("/review")).toBe("system");
     expect(getNavGroupForPath("/log")).toBe("system");
     expect(getNavGroupForPath("/")).toBe("primary");
@@ -76,6 +80,7 @@ describe("navRoutes", () => {
   it("uses lo-fi labels and keeps setup in backroom only", () => {
     const routes = getAllNavRoutes();
     const ask = routes.find((route) => route.href === "/ask-harness");
+    const bank = routes.find((route) => route.href === "/resume-bank");
     const replay = routes.find((route) => route.href === "/review");
     const raw = routes.find((route) => route.href === "/raw-lab");
     const setupInCareer = NAV_GROUPS.find((group) => group.id === "careerTools")?.routes.some(
@@ -86,7 +91,8 @@ describe("navRoutes", () => {
     );
 
     expect(ask?.label).toBe("Companion");
-    expect(replay?.label).toBe("Replay");
+    expect(bank?.label).toBe("Resume Bank");
+    expect(replay?.label).toBe("Weekly Review");
     expect(raw?.label).toBe("Raw Signal");
     expect(setupInCareer).toBe(false);
     expect(setupInBackroom).toBe(true);

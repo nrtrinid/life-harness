@@ -9,9 +9,15 @@ interface ProofShelfProps {
   compact?: boolean;
   limit?: number;
   rescueOnly?: boolean;
+  showLedgerLink?: boolean;
 }
 
-export function ProofShelf({ compact = false, limit, rescueOnly = false }: ProofShelfProps) {
+export function ProofShelf({
+  compact = false,
+  limit,
+  rescueOnly = false,
+  showLedgerLink = false
+}: ProofShelfProps) {
   const { cards, logs, proofItems } = useLifeHarness();
   let entries = buildProofShelfEntries(proofItems, cards, logs);
 
@@ -24,7 +30,18 @@ export function ProofShelf({ compact = false, limit, rescueOnly = false }: Proof
   }
 
   if (entries.length === 0) {
-    return <Text style={styles.emptyText}>No proof yet. Pounce, log a win, or preserve the day.</Text>;
+    return (
+      <View>
+        <Text style={styles.emptyText}>No proof yet. Pounce, log a win, or preserve the day.</Text>
+        {showLedgerLink ? (
+          <Link href="/proof-ledger" asChild>
+            <Pressable style={[styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }]}>
+              <Text style={styles.secondaryActionText}>View ledger</Text>
+            </Pressable>
+          </Link>
+        ) : null}
+      </View>
+    );
   }
 
   return (
@@ -62,6 +79,13 @@ export function ProofShelf({ compact = false, limit, rescueOnly = false }: Proof
           </View>
         );
       })}
+      {showLedgerLink ? (
+        <Link href="/proof-ledger" asChild>
+          <Pressable style={[styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }]}>
+            <Text style={styles.secondaryActionText}>View ledger</Text>
+          </Pressable>
+        </Link>
+      ) : null}
     </View>
   );
 }

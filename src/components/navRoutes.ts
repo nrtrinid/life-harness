@@ -14,27 +14,28 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "primary",
     routes: [
       { href: "/", label: "Today" },
-      { href: "/board", label: "Board" },
       { href: "/career", label: "Jobs" },
-      { href: "/progress", label: "Playback" }
+      { href: "/board", label: "Board" },
+      { href: "/progress", label: "Playback" },
+      { href: "/ask-harness", label: "Companion" }
     ]
   },
   {
     id: "careerTools",
     label: "Career tools",
-    routes: [{ href: "/resume-bank", label: "Bank" }]
+    routes: [{ href: "/resume-bank", label: "Resume Bank" }]
   },
   {
     id: "system",
     label: "Backroom",
     routes: [
-      { href: "/ask-harness", label: "Companion" },
       { href: "/agent-workbench", label: "Workbench" },
-      { href: "/review", label: "Replay" },
       { href: "/raw-lab", label: "Raw Signal" },
       { href: "/memory-bank", label: "Tape Archive" },
+      { href: "/review", label: "Weekly Review" },
+      { href: "/proof-ledger", label: "Proof Ledger" },
       { href: "/log", label: "Log" },
-      { href: "/source-setup", label: "Setup" }
+      { href: "/source-setup", label: "Source Setup" }
     ]
   }
 ];

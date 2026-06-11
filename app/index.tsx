@@ -172,7 +172,7 @@ export default function TodayScreen() {
 
         <View style={proofPulse ? styles.sectionProofPulse : undefined}>
           <Section title="You moved" accent="proof">
-            <ProofShelf compact limit={3} />
+            <ProofShelf compact limit={3} showLedgerLink />
           </Section>
         </View>
 

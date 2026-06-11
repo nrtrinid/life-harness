@@ -136,7 +136,7 @@ export default function ProgressScreen() {
       />
 
       <Section title="Proof Shelf" accent="proof">
-        <ProofShelf />
+        <ProofShelf showLedgerLink />
       </Section>
 
       <Section title="Recent Rescue Proof">
