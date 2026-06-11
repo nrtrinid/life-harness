@@ -447,6 +447,50 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2
   },
+  primaryMoveLabel: {
+    color: lofiColors.actionAmber,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  primaryMoveActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginTop: spacing.xs
+  },
+  nextMovePanel: {
+    backgroundColor: lofiColors.surface,
+    borderColor: colors.borderSubtle,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg
+  },
+  nextMoveFieldRow: {
+    gap: spacing.xs
+  },
+  nextMoveFieldLabel: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  nextMoveFieldValue: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyMedium,
+    lineHeight: 20
+  },
+  nextMoveBackup: {
+    color: colors.textMuted,
+    fontSize: typography.bodySmall,
+    lineHeight: 18,
+    marginTop: spacing.xs
+  },
   secondaryAction: {
     backgroundColor: "transparent",
     borderWidth: 1,

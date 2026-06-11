@@ -7,6 +7,7 @@ import { CardTile } from "../src/components/CardTile";
 import { CollapsibleSection } from "../src/components/CollapsibleSection";
 import { BonusTrackCard } from "../src/components/lofi/BonusTrackCard";
 import { CompanionNote } from "../src/components/lofi/CompanionNote";
+import { NextMoveContractPanel } from "../src/components/lofi/NextMoveContractPanel";
 import { RecoveryPanel } from "../src/components/lofi/RecoveryPanel";
 import { RescueRow } from "../src/components/lofi/RescueRow";
 import { TinyQuestCard } from "../src/components/lofi/TinyQuestCard";
@@ -21,8 +22,9 @@ import { styles } from "../src/components/styles";
 import { computeBonusTrack } from "../src/core/bonusTrack";
 import { generateWhileYouWereAway } from "../src/core/briefing";
 import { buildCompanionNote } from "../src/core/companionNote";
-import { computePrimaryAction } from "../src/core/primaryAction";
 import { getFollowUpsDue } from "../src/core/career";
+import { buildNextMoveSummary } from "../src/core/nextMoveContract";
+import { computePrimaryAction } from "../src/core/primaryAction";
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "../src/core/guards";
 import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
 import { computeCardProgress } from "../src/core/progress";
@@ -40,7 +42,11 @@ export default function TodayScreen() {
     jobSources,
     jobSourceRuns,
     careerSourcePack,
-    resumeModules
+    resumeModules,
+    projects,
+    agentSessions,
+    chatSummaries,
+    memoryItems
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [proofPulse, setProofPulse] = useState(false);
@@ -67,6 +73,24 @@ export default function TodayScreen() {
   const followUpsDue = getFollowUpsDue(cards, now);
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
   const pounceLogged = dailyState.pounceStarted;
+  const nextMove = buildNextMoveSummary(
+    {
+      cards,
+      logs,
+      proofItems,
+      dailyState,
+      resumeModules,
+      jobCandidates,
+      jobSources,
+      jobSourceRuns,
+      chatSummaries,
+      memoryItems,
+      projects,
+      agentSessions,
+      careerSourcePack
+    },
+    { now }
+  );
 
   useEffect(() => {
     if (!notice) {
@@ -117,6 +141,8 @@ export default function TodayScreen() {
         pounceLogged={pounceLogged}
         onPounce={handlePounce}
       />
+
+      {nextMove.primary ? <NextMoveContractPanel summary={nextMove} /> : null}
 
       {bonusTrack ? <BonusTrackCard track={bonusTrack} /> : null}
 
