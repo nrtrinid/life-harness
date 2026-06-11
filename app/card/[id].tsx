@@ -13,13 +13,31 @@ import { buildApplicationResumeDocxDraft } from "../../src/core/applicationResum
 import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
 import { computeCardProgress } from "../../src/core/progress";
 import { packResumeDocxBlob, type ResumeProfile } from "../../src/core/resumeDocx";
-import { RESUME_MODULE_SECTION_LABELS } from "../../src/core/resumeModuleBank";
+import {
+  RESUME_MODULE_SECTION_LABELS,
+  RESUME_MODULE_SECTION_ORDER
+} from "../../src/core/resumeModuleBank";
+import { buildApplicationResumeReadiness } from "../../src/core/resumeReadiness";
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
 
+const READINESS_LABELS = {
+  blocked: "Blocked",
+  needs_patch: "Needs patch",
+  ready_to_export: "Ready to export"
+} as const;
+
 export default function CardDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { cards, logs, proofItems, dailyState, resumeModules } = useLifeHarness();
+  const {
+    cards,
+    logs,
+    proofItems,
+    dailyState,
+    resumeModules,
+    jobCandidates,
+    careerSourcePack
+  } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const card = cards.find((item) => item.id === id);
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
@@ -42,6 +60,17 @@ export default function CardDetailScreen() {
   const cardProof = proofItems.filter((proof) => card.proofItemIds.includes(proof.id));
   const resumeDraftPacket = card.careerApplication?.resumeDraftPacket;
   const moduleById = new Map(resumeModules.map((module) => [module.id, module]));
+  const linkedCandidate = card.careerApplication?.jobCandidateId
+    ? jobCandidates.find((candidate) => candidate.id === card.careerApplication?.jobCandidateId)
+    : undefined;
+  const resumeReadiness = card.careerApplication
+    ? buildApplicationResumeReadiness({
+        card,
+        resumeModules,
+        jobCandidate: linkedCandidate,
+        careerSourcePack: careerSourcePack?.pack
+      })
+    : undefined;
 
   function showNotice(kind: NoticeState["kind"], message: string) {
     setNotice({ kind, message });
@@ -49,6 +78,13 @@ export default function CardDetailScreen() {
   }
 
   async function handleBuildResumeDocx() {
+    if (resumeReadiness && !resumeReadiness.exportReadiness.canExportDocx) {
+      showNotice(
+        "warning",
+        `Cannot export resume: ${resumeReadiness.exportReadiness.reason ?? resumeReadiness.nextTinyResumeAction}`
+      );
+      return;
+    }
     if (Platform.OS !== "web" || typeof document === "undefined") {
       showNotice("warning", "Resume DOCX export is web-only for now.");
       return;
@@ -131,6 +167,62 @@ export default function CardDetailScreen() {
         )}
       </Section>
 
+      {card.careerApplication && resumeReadiness ? (
+        <Section title="Resume Readiness / Hardening">
+          <Text style={styles.titleText}>{READINESS_LABELS[resumeReadiness.status]}</Text>
+          <Text style={styles.bodyText}>{resumeReadiness.nextTinyResumeAction}</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>DOCX Export</Text>
+          <Text style={styles.bodyText}>
+            {resumeReadiness.exportReadiness.canExportDocx
+              ? "Can export DOCX for manual review."
+              : resumeReadiness.exportReadiness.reason}
+          </Text>
+
+          <Text style={[styles.label, { marginTop: 12 }]}>Selected Modules</Text>
+          {RESUME_MODULE_SECTION_ORDER.map((section) => {
+            const modules = resumeReadiness.selectedModulesBySection[section];
+            return (
+              <View key={section} style={{ marginTop: 6 }}>
+                <Text style={styles.helpText}>{RESUME_MODULE_SECTION_LABELS[section]}</Text>
+                {modules.length === 0 ? (
+                  <Text style={styles.emptyText}>No selected module.</Text>
+                ) : (
+                  modules.map((module) => (
+                    <Text key={module.id} style={styles.listItem}>
+                      - {module.title}
+                    </Text>
+                  ))
+                )}
+              </View>
+            );
+          })}
+
+          <Text style={[styles.label, { marginTop: 12 }]}>Missing / cautions</Text>
+          {resumeReadiness.warnings.length === 0 ? (
+            <Text style={styles.emptyText}>No missing evidence or cautions.</Text>
+          ) : (
+            resumeReadiness.warnings.slice(0, 8).map((warning) => (
+              <Text key={warning.id} style={styles.listItem}>
+                - {warning.message}
+              </Text>
+            ))
+          )}
+
+          <View style={styles.cardActionsRow}>
+            <Link href="/resume-bank" asChild>
+              <Pressable style={styles.secondaryAction}>
+                <Text style={styles.secondaryActionText}>Resume Bank</Text>
+              </Pressable>
+            </Link>
+            <Link href="/career-pack" asChild>
+              <Pressable style={styles.secondaryAction}>
+                <Text style={styles.secondaryActionText}>Career Pack</Text>
+              </Pressable>
+            </Link>
+          </View>
+        </Section>
+      ) : null}
+
       {card.careerApplication ? (
         <Section title="Career Application">
           <Text style={styles.label}>Company</Text>
@@ -159,7 +251,13 @@ export default function CardDetailScreen() {
             <>
               <Text style={[styles.label, { marginTop: 12 }]}>Resume Draft Packet</Text>
               <Text style={styles.bodyText}>{resumeDraftPacket.nextTinyAction}</Text>
-              <Pressable style={styles.secondaryAction} onPress={handleBuildResumeDocx}>
+              <Pressable
+                style={[
+                  styles.secondaryAction,
+                  resumeReadiness?.exportReadiness.canExportDocx === false && { opacity: 0.7 }
+                ]}
+                onPress={handleBuildResumeDocx}
+              >
                 <Text style={styles.secondaryActionText}>Build Resume DOCX</Text>
               </Pressable>
               <Text style={[styles.label, { marginTop: 12 }]}>Selected Modules</Text>

@@ -18,6 +18,7 @@
 | Thread intelligence | [`conversation-thread-intelligence.md`](conversation-thread-intelligence.md) |
 | Raw Lab | [`raw-lab-architecture.md`](raw-lab-architecture.md), [`raw-lab-thread-state.md`](raw-lab-thread-state.md), [`raw-lab-deep.md`](raw-lab-deep.md), [`raw-lab-emergence-review-pack.md`](raw-lab-emergence-review-pack.md), [`raw-lab-benchmark-runner.md`](raw-lab-benchmark-runner.md) |
 | Career hub | [`career-hub-v0.1.md`](career-hub-v0.1.md) |
+| Career pipeline | [`career-v0.1-pipeline.md`](career-v0.1-pipeline.md) |
 | Job Scout | `job-scout-*.md` (v0.2–v0.11) |
 | Local A770 / AI gateway | [`local-a770-plan.md`](local-a770-plan.md), [`08_ai_provider_and_a770_plan.md`](08_ai_provider_and_a770_plan.md) |
 
