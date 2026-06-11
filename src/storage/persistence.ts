@@ -1,6 +1,7 @@
 import type { LifeHarnessData } from "../core/actions";
 import { syncApplicationStatus } from "../core/career";
 import { nowIso } from "../core/ids";
+import { normalizeResumeModules } from "../core/resumeModuleBank";
 import type { CardState, DailyState, JobCandidate, JobSource, LifeCard } from "../core/types";
 import { seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { envelopeData, migrateEnvelope, parseEnvelopeJson } from "./migrations";
@@ -76,7 +77,7 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     logs: partial.logs ?? [],
     proofItems: partial.proofItems ?? [],
     dailyState,
-    resumeModules: partial.resumeModules ?? [],
+    resumeModules: normalizeResumeModules(partial.resumeModules ?? []),
     jobCandidates: partial.jobCandidates ?? [],
     jobSources: partial.jobSources ?? [],
     jobSourceRuns: partial.jobSourceRuns ?? [],

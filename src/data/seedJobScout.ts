@@ -16,7 +16,14 @@ export const seedResumeModules: ResumeModule[] = [
     projects: ["EV Tracker"],
     bestFor: ["data_finance", "software", "full_stack"],
     proof: ["Wrote one fair-value market note"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "projects",
+      heading: "EV Tracker / Kalshi Market Tooling",
+      detail: "Python, market analysis, fair-value notes",
+      date: "2025 - 2026",
+      order: 20
+    }
   }),
   createResumeModule({
     id: "resume-text-rpg",
@@ -31,7 +38,14 @@ export const seedResumeModules: ResumeModule[] = [
     skills: ["TypeScript", "testing", "game systems"],
     projects: ["Text RPG"],
     bestFor: ["software", "full_stack"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "projects",
+      heading: "Text RPG Systems",
+      detail: "TypeScript, testing, game systems",
+      date: "2025 - 2026",
+      order: 30
+    }
   }),
   createResumeModule({
     id: "resume-life-harness",
@@ -46,7 +60,14 @@ export const seedResumeModules: ResumeModule[] = [
     skills: ["TypeScript", "React", "FastAPI", "product design"],
     projects: ["Life Harness"],
     bestFor: ["software", "full_stack", "it"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "projects",
+      heading: "Life Harness / Local Scout",
+      detail: "React Native, TypeScript, FastAPI",
+      date: "2026",
+      order: 10
+    }
   }),
   createResumeModule({
     id: "resume-legoland",
@@ -60,7 +81,14 @@ export const seedResumeModules: ResumeModule[] = [
     ],
     skills: ["communication", "teamwork", "operations"],
     bestFor: ["it", "other"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "additional_experience",
+      heading: "Legoland Robotics / Customer-Facing Operations",
+      detail: "Guest-facing robotics and team operations",
+      date: "Prior Experience",
+      order: 10
+    }
   }),
   createResumeModule({
     id: "resume-in-n-out",
@@ -74,7 +102,14 @@ export const seedResumeModules: ResumeModule[] = [
     ],
     skills: ["operations", "teamwork", "reliability"],
     bestFor: ["it", "other"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "additional_experience",
+      heading: "In-N-Out Operations / Teamwork",
+      detail: "Fast-paced operations and reliability",
+      date: "Prior Experience",
+      order: 20
+    }
   }),
   createResumeModule({
     id: "resume-asu",
@@ -88,7 +123,14 @@ export const seedResumeModules: ResumeModule[] = [
     ],
     skills: ["computer science", "cybersecurity", "security"],
     bestFor: ["software", "cybersecurity", "it", "full_stack"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "education",
+      heading: "Arizona State University",
+      detail: "Computer Science, Cybersecurity coursework",
+      date: "Expected 2026",
+      order: 10
+    }
   }),
   createResumeModule({
     id: "resume-tech-skills",
@@ -102,7 +144,13 @@ export const seedResumeModules: ResumeModule[] = [
     ],
     skills: ["Python", "TypeScript", "React", "FastAPI", "Postgres"],
     bestFor: ["software", "full_stack", "data_finance"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "skills",
+      heading: "Technical",
+      detail: "Python, TypeScript, React, FastAPI, Postgres",
+      order: 10
+    }
   }),
   createResumeModule({
     id: "resume-security-dev",
@@ -116,7 +164,14 @@ export const seedResumeModules: ResumeModule[] = [
     ],
     skills: ["security", "application security", "secure development"],
     bestFor: ["cybersecurity", "software", "it"],
-    isActive: true
+    isActive: true,
+    resumePlacement: {
+      section: "additional_experience",
+      heading: "Security-Aware Development",
+      detail: "Application security and secure development habits",
+      date: "2025 - 2026",
+      order: 30
+    }
   })
 ];
 

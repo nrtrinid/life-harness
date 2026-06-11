@@ -39,6 +39,20 @@ export type ResumeModuleCategory =
   | "skill_cluster"
   | "certification";
 
+export type ResumeModuleSection =
+  | "education"
+  | "skills"
+  | "projects"
+  | "additional_experience";
+
+export interface ResumeModulePlacement {
+  section: ResumeModuleSection;
+  heading: string;
+  detail?: string;
+  date?: string;
+  order: number;
+}
+
 export interface ResumeModule {
   id: string;
   title: string;
@@ -52,6 +66,7 @@ export interface ResumeModule {
   proof?: string[];
   isActive: boolean;
   importedFromCareerPack?: boolean;
+  resumePlacement?: ResumeModulePlacement;
 }
 
 export type JobSourceKind =

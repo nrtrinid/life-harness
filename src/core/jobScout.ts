@@ -360,7 +360,8 @@ export function createResumeModule(
     projects: input.projects,
     bestFor: input.bestFor,
     proof: input.proof,
-    isActive: input.isActive
+    isActive: input.isActive,
+    resumePlacement: input.resumePlacement
   };
 }
 

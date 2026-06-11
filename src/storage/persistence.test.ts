@@ -133,6 +133,30 @@ describe("normalizeData", () => {
     expect(normalized.resumeModules).toEqual([]);
     expect(normalized.careerSourcePack).toBeNull();
   });
+
+  it("hydrates old resume modules with default placement", () => {
+    const normalized = normalizeData({
+      resumeModules: [
+        {
+          id: "legacy-project",
+          title: "Legacy Project",
+          category: "project",
+          summary: "Old saved module.",
+          tags: [],
+          bullets: ["Built useful thing"],
+          skills: ["TypeScript"],
+          bestFor: ["software"],
+          isActive: true
+        }
+      ]
+    });
+
+    expect(normalized.resumeModules[0]?.resumePlacement).toMatchObject({
+      section: "projects",
+      heading: "Legacy Project",
+      order: 0
+    });
+  });
 });
 
 describe("mergeSeedDefaults", () => {

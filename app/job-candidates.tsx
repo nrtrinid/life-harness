@@ -24,6 +24,10 @@ import {
 } from "../src/core/labels";
 import { buildJobFindingsSummary } from "../src/core/jobFindings";
 import { formatFitScore } from "../src/core/jobScout";
+import {
+  buildCandidateResumePacket,
+  RESUME_MODULE_SECTION_LABELS
+} from "../src/core/resumeModuleBank";
 import type { JobCandidate, JobCandidateStatus } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
@@ -84,6 +88,9 @@ export default function JobCandidatesScreen() {
 
   const pack = careerSourcePack?.pack ?? null;
   const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, new Date());
+  const bestResumePacket = findings.bestCandidate
+    ? buildCandidateResumePacket(findings.bestCandidate, resumeModules)
+    : null;
 
   const matchesById = useMemo(() => {
     if (!pack) {
@@ -193,6 +200,30 @@ export default function JobCandidatesScreen() {
               </Text>
             ) : null}
             <Text style={styles.helpText}>{findings.bestCandidate.nextTinyAction}</Text>
+            {bestResumePacket ? (
+              <View style={{ marginTop: 8, gap: 4 }}>
+                <Text style={styles.label}>Resume packet</Text>
+                <Text style={styles.bodyText}>
+                  {bestResumePacket.modules.length > 0
+                    ? bestResumePacket.modules.map((module) => module.title).join(", ")
+                    : "No suggested modules yet."}
+                </Text>
+                {bestResumePacket.sectionCoverage.length > 0 ? (
+                  <Text style={styles.helpText}>
+                    Sections:{" "}
+                    {bestResumePacket.sectionCoverage
+                      .map((section) => RESUME_MODULE_SECTION_LABELS[section])
+                      .join(", ")}
+                  </Text>
+                ) : null}
+                {bestResumePacket.missingEvidence.slice(0, 3).map((issue) => (
+                  <Text key={`${issue.moduleId}-${issue.message}`} style={styles.helpText}>
+                    Patch: {issue.moduleTitle} - {issue.message}
+                  </Text>
+                ))}
+                <Text style={styles.helpText}>{bestResumePacket.nextTinyAction}</Text>
+              </View>
+            ) : null}
             <View style={styles.cardActions}>
               <Pressable
                 style={styles.primaryAction}
