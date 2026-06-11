@@ -19,6 +19,7 @@ type RawLabBudgetInspectorProps = {
   gatewayMaxInputChars?: number;
   companionSelfMemories?: CompanionSelfMemory[];
   forceExpanded?: boolean;
+  embeddedInBackroom?: boolean;
   lastSend?: {
     estimatedChars: number;
     level: RawLabBudgetLevel;
@@ -37,9 +38,10 @@ export function RawLabBudgetInspector({
   gatewayMaxInputChars = DEFAULT_GATEWAY_MAX_INPUT_CHARS,
   companionSelfMemories = [],
   forceExpanded = false,
+  embeddedInBackroom = false,
   lastSend
 }: RawLabBudgetInspectorProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(embeddedInBackroom);
   const [preview, setPreview] = useState<{
     estimatedChars: number;
     level: RawLabBudgetLevel;
@@ -87,17 +89,20 @@ export function RawLabBudgetInspector({
     return (
       <Pressable onPress={() => setExpanded(true)} style={styles.smallButton}>
         <Text style={styles.smallButtonText}>
-          Thread budget{lastSend?.notice ? " ⚠" : ""}
+          {embeddedInBackroom ? "Show budget details" : `Thread budget${lastSend?.notice ? " ⚠" : ""}`}
         </Text>
       </Pressable>
     );
   }
 
   return (
-    <View style={styles.bannerInfo}>
-      <Pressable onPress={() => setExpanded(false)}>
+    <View style={styles.chatBackroomSection}>
+      <Pressable onPress={() => !embeddedInBackroom && setExpanded(false)}>
         <Text style={styles.sectionTitle}>Thread budget</Text>
       </Pressable>
+      <Text style={styles.helpText}>
+        {lastSend?.notice ? "Compact older thread memory when needed." : "Budget OK for now."}
+      </Text>
       <Text style={styles.helpText}>
         Raw Signal max ~{gatewayRawLabMaxInputChars.toLocaleString()} chars (Companion default{" "}
         {gatewayMaxInputChars.toLocaleString()}).

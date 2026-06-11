@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
 import {
   Platform,
@@ -11,7 +11,13 @@ import {
 } from "react-native";
 
 import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/ChatComposer";
-import { ChatAdvancedPanel } from "../src/components/chat/ChatAdvancedPanel";
+import {
+  ChatBackroomPanel,
+  ChatBackroomSection,
+  type ChatBackroomSectionId
+} from "../src/components/chat/ChatBackroomPanel";
+import { shouldUseChatBackroomSideLayout } from "../src/components/chat/chatBackroomLayout";
+import { ChatStateStrip } from "../src/components/chat/ChatStateStrip";
 import { ChatSurfaceFrame } from "../src/components/chat/ChatSurfaceFrame";
 import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { formatGatewayHost } from "../src/components/askHarness/askHarnessInspectorFormat";
@@ -28,6 +34,12 @@ import { RawLabThreadMemoryPanel } from "../src/components/rawLab/RawLabThreadMe
 import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
 import { createId } from "../src/core/ids";
+import {
+  buildRawLabStateChips,
+  countRawLabPersonalityItems,
+  countRawLabThreadMemoryItems,
+  type ChatStateChipDescriptor
+} from "../src/core/chatBackroomSummary";
 import {
   activeCompanionSelfMemoriesForSend,
   applyBatchedLastUsedAt,
@@ -133,6 +145,8 @@ export default function RawLabScreen() {
   const [chatOnlyMemories, setChatOnlyMemories] = useState<CompanionSelfMemory[]>([]);
   const [reflectionProposals, setReflectionProposals] = useState<RawLabSelfMemoryProposal[]>([]);
   const [reflecting, setReflecting] = useState(false);
+  const [backroomOpen, setBackroomOpen] = useState(false);
+  const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
   const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
   const gatewayHealthPolledRef = useRef(false);
 
@@ -185,7 +199,8 @@ export default function RawLabScreen() {
     !handoffDismissed &&
     (shouldSuggestGroundedHandoff(message) ||
       turns.some((turn) => turn.role === "user" && shouldSuggestGroundedHandoff(turn.content)));
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
+  const useSideBackroom = shouldUseChatBackroomSideLayout(width);
   const chatSurfaceHeight = getChatSurfaceHeight(height, "rawLab");
   const threadScrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
@@ -414,10 +429,175 @@ export default function RawLabScreen() {
 
   const budgetForceExpanded = Boolean(lastSendStats?.notice);
   const selfMemoryCount = countActiveSelfMemories(companionMemories);
-  const backroomBadge =
-    selfMemoryCount + reflectionProposals.length > 0
-      ? `${selfMemoryCount + reflectionProposals.length} notes`
-      : undefined;
+  const signalNotesCount =
+    selfMemoryCount + chatOnlyMemories.filter((m) => m.isActive).length + reflectionProposals.length;
+  const threadMemoryCount = countRawLabThreadMemoryItems(threadState);
+  const personalityCount = countRawLabPersonalityItems(threadState);
+
+  const stateChips = useMemo(
+    () =>
+      buildRawLabStateChips({
+        threadMemoryCount,
+        signalNotesCount,
+        personalityCount,
+        budget: {
+          level: lastSendStats?.level ?? null,
+          hasCompactionNotice: Boolean(lastSendStats?.notice)
+        }
+      }),
+    [threadMemoryCount, signalNotesCount, personalityCount, lastSendStats]
+  );
+
+  useEffect(() => {
+    if (budgetForceExpanded) {
+      setBackroomOpen(true);
+      setBackroomSection("budget");
+    }
+  }, [budgetForceExpanded]);
+
+  function handleStateChipPress(chip: ChatStateChipDescriptor) {
+    if (chip.id === "backroom") {
+      setBackroomOpen((open) => !open);
+      return;
+    }
+    if (chip.sectionId) {
+      setBackroomSection(chip.sectionId as ChatBackroomSectionId);
+      setBackroomOpen(true);
+      if (chip.sectionId === "budget") {
+        ensureGatewayBudget();
+      }
+    }
+  }
+
+  const backroomPanel = (
+    <ChatBackroomPanel
+      open={backroomOpen}
+      onClose={() => {
+        setBackroomOpen(false);
+        setBackroomSection(null);
+      }}
+      focusedSection={backroomSection}
+      layout={useSideBackroom ? "side" : "inline"}
+    >
+      <Text style={styles.chatInspectorStatusLine}>
+        {formatGatewayHost(baseUrl)} · Ungrounded · ephemeral
+      </Text>
+      <ChatBackroomSection sectionId="memory" focused={backroomSection === "memory"}>
+        <RawLabThreadMemoryPanel
+          embeddedInBackroom
+          sectionFilter="memory"
+          threadState={threadState}
+          onThreadStateChange={setThreadState}
+        />
+      </ChatBackroomSection>
+      <ChatBackroomSection sectionId="style" focused={backroomSection === "style"}>
+        <RawLabThreadMemoryPanel
+          embeddedInBackroom
+          sectionFilter="style"
+          threadState={threadState}
+          onThreadStateChange={setThreadState}
+        />
+      </ChatBackroomSection>
+      <ChatBackroomSection sectionId="signal" focused={backroomSection === "signal"}>
+        <CompanionSelfMemoryPanel
+          embedded
+          memories={companionMemories}
+          proposals={reflectionProposals}
+          reflecting={reflecting}
+          onMemoriesChange={persistCompanionMemories}
+          onSessionOnly={handleSessionOnlyProposal}
+          onReflect={() => void handleReflect()}
+          onDismissProposal={(index) =>
+            setReflectionProposals((previous) =>
+              previous.filter((_, itemIndex) => itemIndex !== index)
+            )
+          }
+        />
+      </ChatBackroomSection>
+      <ChatBackroomSection sectionId="budget" focused={backroomSection === "budget"}>
+        <RawLabBudgetInspector
+          embeddedInBackroom
+          turns={turns}
+          threadState={threadState}
+          message={message}
+          gatewayRawLabMaxInputChars={gatewayBudget.rawLabMaxInputChars}
+          gatewayMaxInputChars={gatewayBudget.maxInputChars}
+          companionSelfMemories={memoriesForSend()}
+          forceExpanded={budgetForceExpanded}
+          lastSend={lastSendStats ?? undefined}
+        />
+      </ChatBackroomSection>
+    </ChatBackroomPanel>
+  );
+
+  const chatFrame = (
+    <ChatSurfaceFrame
+      variant="rawSignal"
+      height={chatSurfaceHeight}
+      toolbar={
+        <>
+          <Pressable style={styles.smallButton} onPress={handleClearChat}>
+            <Text style={styles.smallButtonText}>Clear chat</Text>
+          </Pressable>
+          {turns.length > 0 ? (
+            <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
+              <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
+            </Pressable>
+          ) : null}
+          {loading ? (
+            <Pressable style={styles.smallButton} onPress={handleStopStream}>
+              <Text style={styles.smallButtonText}>Stop</Text>
+            </Pressable>
+          ) : null}
+          {showHandoffBanner ? (
+            <View style={styles.bannerInfo}>
+              <Text style={styles.bannerInfoText}>
+                This sounds like a board question. Open in Companion for grounded help.
+              </Text>
+              <View style={styles.splitRow}>
+                <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
+                  <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
+                </Pressable>
+                <Pressable style={styles.smallButton} onPress={() => setHandoffDismissed(true)}>
+                  <Text style={styles.smallButtonText}>Stay in Raw Signal</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </>
+      }
+      composer={
+        <ChatComposer
+          message={message}
+          loading={loading}
+          quickQuestions={QUICK_QUESTIONS}
+          placeholder="Say anything — ungrounded sandbox…"
+          inputRef={inputRef}
+          onMessageChange={setMessage}
+          onQuickQuestion={handleQuickQuestion}
+          onSend={() => void handleSend()}
+        />
+      }
+    >
+      <RawLabThread
+        turns={toDisplayTurns(turns, responses)}
+        errors={errors}
+        threadScrollRef={threadScrollRef}
+        loading={loading}
+        streamingDraft={streamingAnswer}
+        onSelectPrompt={handleQuickQuestion}
+        onPin={handlePin}
+        onDoNotRepeat={handleDoNotRepeat}
+        onOpenLoop={handleOpenLoop}
+        onAddVoiceTrait={handleAddVoiceTrait}
+        onAddConversationalInstinct={handleAddConversationalInstinct}
+        onAddRecurringInterest={handleAddRecurringInterest}
+        onAddUserRespondsWellTo={handleAddUserRespondsWellTo}
+        onAddUserDislike={handleAddUserDislike}
+        onSetCurrentStance={handleSetCurrentStance}
+      />
+    </ChatSurfaceFrame>
+  );
 
   return (
     <Screen>
@@ -435,111 +615,21 @@ export default function RawLabScreen() {
 
         {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
 
-        <ChatSurfaceFrame
+        <ChatStateStrip
           variant="rawSignal"
-          height={chatSurfaceHeight}
-          toolbar={
-            <>
-              <Pressable style={styles.smallButton} onPress={handleClearChat}>
-                <Text style={styles.smallButtonText}>Clear chat</Text>
-              </Pressable>
-              {turns.length > 0 ? (
-                <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-                  <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
-                </Pressable>
-              ) : null}
-              {loading ? (
-                <Pressable style={styles.smallButton} onPress={handleStopStream}>
-                  <Text style={styles.smallButtonText}>Stop</Text>
-                </Pressable>
-              ) : null}
-              {showHandoffBanner ? (
-                <View style={styles.bannerInfo}>
-                  <Text style={styles.bannerInfoText}>
-                    This sounds like a board question. Open in Companion for grounded help.
-                  </Text>
-                  <View style={styles.splitRow}>
-                    <Pressable style={styles.smallButton} onPress={handleUseBoardContext}>
-                      <Text style={styles.smallButtonText}>Open in Companion with board context</Text>
-                    </Pressable>
-                    <Pressable style={styles.smallButton} onPress={() => setHandoffDismissed(true)}>
-                      <Text style={styles.smallButtonText}>Stay in Raw Signal</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : null}
-            </>
-          }
-          composer={
-            <ChatComposer
-              message={message}
-              loading={loading}
-              quickQuestions={QUICK_QUESTIONS}
-              placeholder="Say anything — ungrounded sandbox…"
-              inputRef={inputRef}
-              onMessageChange={setMessage}
-              onQuickQuestion={handleQuickQuestion}
-              onSend={() => void handleSend()}
-            />
-          }
-        >
-          <RawLabThread
-            turns={toDisplayTurns(turns, responses)}
-            errors={errors}
-            threadScrollRef={threadScrollRef}
-            loading={loading}
-            streamingDraft={streamingAnswer}
-            onSelectPrompt={handleQuickQuestion}
-            onPin={handlePin}
-            onDoNotRepeat={handleDoNotRepeat}
-            onOpenLoop={handleOpenLoop}
-            onAddVoiceTrait={handleAddVoiceTrait}
-            onAddConversationalInstinct={handleAddConversationalInstinct}
-            onAddRecurringInterest={handleAddRecurringInterest}
-            onAddUserRespondsWellTo={handleAddUserRespondsWellTo}
-            onAddUserDislike={handleAddUserDislike}
-            onSetCurrentStance={handleSetCurrentStance}
-          />
-        </ChatSurfaceFrame>
+          chips={stateChips}
+          backroomOpen={backroomOpen}
+          onChipPress={handleStateChipPress}
+        />
 
-        <ChatAdvancedPanel
-          title="Backroom"
-          badge={backroomBadge}
-          defaultOpen={reflectionProposals.length > 0}
-          onExpandedChange={(open) => {
-            if (open) {
-              ensureGatewayBudget();
-            }
-          }}
-        >
-          <Text style={styles.chatInspectorStatusLine}>
-            {formatGatewayHost(baseUrl)} · Ungrounded · ephemeral
-          </Text>
-          <RawLabThreadMemoryPanel threadState={threadState} onThreadStateChange={setThreadState} />
-          <CompanionSelfMemoryPanel
-            memories={companionMemories}
-            proposals={reflectionProposals}
-            reflecting={reflecting}
-            onMemoriesChange={persistCompanionMemories}
-            onSessionOnly={handleSessionOnlyProposal}
-            onReflect={() => void handleReflect()}
-            onDismissProposal={(index) =>
-              setReflectionProposals((previous) =>
-                previous.filter((_, itemIndex) => itemIndex !== index)
-              )
-            }
-          />
-          <RawLabBudgetInspector
-            turns={turns}
-            threadState={threadState}
-            message={message}
-            gatewayRawLabMaxInputChars={gatewayBudget.rawLabMaxInputChars}
-            gatewayMaxInputChars={gatewayBudget.maxInputChars}
-            companionSelfMemories={memoriesForSend()}
-            forceExpanded={budgetForceExpanded}
-            lastSend={lastSendStats ?? undefined}
-          />
-        </ChatAdvancedPanel>
+        {!useSideBackroom && backroomOpen ? backroomPanel : null}
+
+        <View style={useSideBackroom ? styles.chatBackroomChatRow : undefined}>
+          <View style={useSideBackroom ? styles.chatBackroomChatColumn : undefined}>
+            {chatFrame}
+          </View>
+          {useSideBackroom && backroomOpen ? backroomPanel : null}
+        </View>
       </View>
     </Screen>
   );

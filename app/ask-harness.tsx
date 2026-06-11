@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { AskHarnessAdvancedPanel } from "../src/components/askHarness/AskHarnessAdvancedPanel";
+import { CompanionBudgetSection } from "../src/components/askHarness/CompanionBudgetSection";
 import { ChatComposer, type QuickQuestion } from "../src/components/askHarness/ChatComposer";
 import { ChatThreadContextPanel } from "../src/components/askHarness/ChatThreadContextPanel";
 import { ChatThread } from "../src/components/askHarness/ChatThread";
@@ -18,13 +19,23 @@ import { HarnessReadCard } from "../src/components/askHarness/HarnessReadCard";
 import { SynthesisJobPanel } from "../src/components/askHarness/SynthesisJobPanel";
 import { useDeepSynthesisJob } from "../src/components/askHarness/useDeepSynthesisJob";
 import type { ChatThreadItem, ContextExportMode } from "../src/components/askHarness/types";
-import { ChatAdvancedPanel } from "../src/components/chat/ChatAdvancedPanel";
+import {
+  ChatBackroomPanel,
+  ChatBackroomSection,
+  type ChatBackroomSectionId
+} from "../src/components/chat/ChatBackroomPanel";
+import { shouldUseChatBackroomSideLayout } from "../src/components/chat/chatBackroomLayout";
+import { ChatStateStrip } from "../src/components/chat/ChatStateStrip";
 import { ChatSurfaceFrame } from "../src/components/chat/ChatSurfaceFrame";
 import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
 import { PageHeader } from "../src/components/PageHeader";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
+import {
+  buildCompanionStateChips,
+  type ChatStateChipDescriptor
+} from "../src/core/chatBackroomSummary";
 import {
   askChatHarness,
   ChatHarnessError,
@@ -123,7 +134,8 @@ export default function AskHarnessDevScreen() {
     deleteMemoryItem,
     toggleMemoryItemActive
   } = harnessState;
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
+  const useSideBackroom = shouldUseChatBackroomSideLayout(width);
   const chatSurfaceHeight = getChatSurfaceHeight(height, "harness");
   const threadScrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
@@ -145,6 +157,9 @@ export default function AskHarnessDevScreen() {
   const [gatewayBudget, setGatewayBudget] = useState<GatewayHealthBudget>(() =>
     fallbackGatewayHealthBudget()
   );
+  const [backroomOpen, setBackroomOpen] = useState(false);
+  const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
+  const [lastBudgetNotice, setLastBudgetNotice] = useState<string | null>(null);
 
   function buildInspectorPacket(
     userMessage: string,
@@ -291,6 +306,48 @@ export default function AskHarnessDevScreen() {
     [harnessState.memoryItems]
   );
 
+  const stateChips = useMemo(
+    () =>
+      buildCompanionStateChips({
+        boardContextReady: harnessState.cards.length >= 0,
+        activeMemoryCount,
+        memoryItemCount: harnessState.memoryItems.length,
+        mode,
+        reasoningDepth,
+        budget: {
+          promptOverBudget,
+          hasCompactionNotice: Boolean(lastBudgetNotice)
+        }
+      }),
+    [
+      harnessState.cards.length,
+      activeMemoryCount,
+      harnessState.memoryItems.length,
+      mode,
+      reasoningDepth,
+      promptOverBudget,
+      lastBudgetNotice
+    ]
+  );
+
+  useEffect(() => {
+    if (promptOverBudget) {
+      setBackroomOpen(true);
+      setBackroomSection("budget");
+    }
+  }, [promptOverBudget]);
+
+  function handleStateChipPress(chip: ChatStateChipDescriptor) {
+    if (chip.id === "backroom") {
+      setBackroomOpen((open) => !open);
+      return;
+    }
+    if (chip.sectionId) {
+      setBackroomSection(chip.sectionId as ChatBackroomSectionId);
+      setBackroomOpen(true);
+    }
+  }
+
   const previewText = useMemo(() => {
     if (!previewOpen) {
       return "";
@@ -320,6 +377,7 @@ export default function AskHarnessDevScreen() {
     setMessage("");
     setNotice(null);
     setLastSentPacketSummary(null);
+    setLastBudgetNotice(null);
   }
 
   function buildCompletedChatTurns(
@@ -371,6 +429,7 @@ export default function AskHarnessDevScreen() {
       }
       if (sendBundle.notice) {
         setNotice({ kind: "info", message: sendBundle.notice.message });
+        setLastBudgetNotice(sendBundle.notice.message);
       }
 
       const result = await askChatHarness({
@@ -508,6 +567,119 @@ export default function AskHarnessDevScreen() {
     />
   );
 
+  const backroomPanel = (
+    <ChatBackroomPanel
+      open={backroomOpen}
+      onClose={() => {
+        setBackroomOpen(false);
+        setBackroomSection(null);
+      }}
+      focusedSection={backroomSection}
+      layout={useSideBackroom ? "side" : "inline"}
+    >
+      <ChatBackroomSection sectionId="context" focused={backroomSection === "context"}>
+        <ChatThreadContextPanel threadState={threadState} onThreadStateChange={setThreadState} />
+      </ChatBackroomSection>
+      <ChatBackroomSection sectionId="board" focused={backroomSection === "board"}>
+        {inspectorPanel}
+      </ChatBackroomSection>
+      <ChatBackroomSection sectionId="budget" focused={backroomSection === "budget"}>
+        <CompanionBudgetSection
+          selectedPromptChars={selectedPromptChars}
+          gatewayMaxInputChars={gatewayBudget.maxInputChars}
+          promptOverBudget={promptOverBudget}
+          contextMode={contextMode}
+          lastNoticeMessage={lastBudgetNotice}
+        />
+      </ChatBackroomSection>
+    </ChatBackroomPanel>
+  );
+
+  const chatFrame = (
+    <ChatSurfaceFrame
+      variant="companion"
+      height={chatSurfaceHeight}
+      toolbar={
+        thread.length > 0 ? (
+          <>
+            <Pressable style={styles.smallButton} onPress={handleClearConversation}>
+              <Text style={styles.smallButtonText}>Clear conversation</Text>
+            </Pressable>
+            {showSynthesisAction ? (
+              <Pressable
+                style={styles.smallButton}
+                disabled={synthesisDisabled}
+                onPress={() => void synthesis.startSynthesis()}
+              >
+                <Text style={styles.smallButtonText}>Synthesize this thread</Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : null
+      }
+      composer={
+        <ChatComposer
+          message={message}
+          loading={loading}
+          quickQuestions={QUICK_QUESTIONS}
+          placeholder="Ask your companion…"
+          inputRef={inputRef}
+          onMessageChange={setMessage}
+          onQuickQuestion={handleQuickQuestion}
+          onSend={() => void handleSend()}
+        />
+      }
+    >
+      {!synthesis.eligible && showSynthesisAction && sensitivity !== "S3" ? (
+        <Text style={styles.helpText}>
+          Need a bit more conversation first — send another message.
+        </Text>
+      ) : null}
+      <SynthesisJobPanel
+        jobState={synthesis.jobState}
+        onDismiss={synthesis.dismissSynthesis}
+        onRetry={() => void synthesis.retrySynthesis()}
+      />
+      <ChatThread
+        thread={thread}
+        threadScrollRef={threadScrollRef}
+        loading={loading}
+        memoryItems={harnessState.memoryItems}
+        onSelectPrompt={handleQuickQuestion}
+        onToggleConfidence={(turnId) =>
+          setThread((previous) =>
+            previous.map((item) =>
+              item.id === turnId && item.kind === "assistant"
+                ? { ...item, showConfidence: !item.showConfidence }
+                : item
+            )
+          )
+        }
+        onToggleMemoryTools={(turnId) =>
+          setThread((previous) =>
+            previous.map((item) =>
+              item.id === turnId && item.kind === "assistant"
+                ? { ...item, showMemoryTools: !item.showMemoryTools }
+                : item
+            )
+          )
+        }
+        onToggleMemoryPreview={(turnId) =>
+          setThread((previous) =>
+            previous.map((item) =>
+              item.id === turnId && item.kind === "assistant"
+                ? { ...item, showMemoryPreview: !item.showMemoryPreview }
+                : item
+            )
+          )
+        }
+        onSaveChatSummary={handleSaveChatSummary}
+        onSaveMemoryBankCandidate={handleSaveMemoryBankCandidate}
+        onVariantPrompt={(prompt) => void handleVariantPrompt(prompt)}
+      />
+    </ChatSurfaceFrame>
+  );
+
   return (
     <Screen>
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
@@ -517,105 +689,23 @@ export default function AskHarnessDevScreen() {
       />
 
       <View style={styles.chatPrimaryColumn}>
-        <HarnessReadCard
-          contextMode={contextMode}
-          context={selectedContext}
-          chatSummaryCount={harnessState.chatSummaries.length}
-          memoryItemCount={harnessState.memoryItems.length}
-          activeMemoryCount={activeMemoryCount}
-          activeLimitSignal={activeLimitSignal}
+        <HarnessReadCard />
+
+        <ChatStateStrip
+          variant="companion"
+          chips={stateChips}
+          backroomOpen={backroomOpen}
+          onChipPress={handleStateChipPress}
         />
 
-        <ChatSurfaceFrame
-          variant="companion"
-          height={chatSurfaceHeight}
-          toolbar={
-            thread.length > 0 ? (
-              <>
-                <Pressable style={styles.smallButton} onPress={handleClearConversation}>
-                  <Text style={styles.smallButtonText}>Clear conversation</Text>
-                </Pressable>
-                {showSynthesisAction ? (
-                  <Pressable
-                    style={styles.smallButton}
-                    disabled={synthesisDisabled}
-                    onPress={() => void synthesis.startSynthesis()}
-                  >
-                    <Text style={styles.smallButtonText}>Synthesize this thread</Text>
-                  </Pressable>
-                ) : null}
-              </>
-            ) : null
-          }
-          composer={
-            <ChatComposer
-              message={message}
-              loading={loading}
-              quickQuestions={QUICK_QUESTIONS}
-              placeholder="Ask your companion…"
-              inputRef={inputRef}
-              onMessageChange={setMessage}
-              onQuickQuestion={handleQuickQuestion}
-              onSend={() => void handleSend()}
-            />
-          }
-        >
-          {!synthesis.eligible && showSynthesisAction && sensitivity !== "S3" ? (
-            <Text style={styles.helpText}>
-              Need a bit more conversation first — send another message.
-            </Text>
-          ) : null}
-          <SynthesisJobPanel
-            jobState={synthesis.jobState}
-            onDismiss={synthesis.dismissSynthesis}
-            onRetry={() => void synthesis.retrySynthesis()}
-          />
-          <ChatThread
-            thread={thread}
-            threadScrollRef={threadScrollRef}
-            loading={loading}
-            memoryItems={harnessState.memoryItems}
-            onSelectPrompt={handleQuickQuestion}
-            onToggleConfidence={(turnId) =>
-              setThread((previous) =>
-                previous.map((item) =>
-                  item.id === turnId && item.kind === "assistant"
-                    ? { ...item, showConfidence: !item.showConfidence }
-                    : item
-                )
-              )
-            }
-            onToggleMemoryTools={(turnId) =>
-              setThread((previous) =>
-                previous.map((item) =>
-                  item.id === turnId && item.kind === "assistant"
-                    ? { ...item, showMemoryTools: !item.showMemoryTools }
-                    : item
-                )
-              )
-            }
-            onToggleMemoryPreview={(turnId) =>
-              setThread((previous) =>
-                previous.map((item) =>
-                  item.id === turnId && item.kind === "assistant"
-                    ? { ...item, showMemoryPreview: !item.showMemoryPreview }
-                    : item
-                )
-              )
-            }
-            onSaveChatSummary={handleSaveChatSummary}
-            onSaveMemoryBankCandidate={handleSaveMemoryBankCandidate}
-            onVariantPrompt={(prompt) => void handleVariantPrompt(prompt)}
-          />
-        </ChatSurfaceFrame>
+        {!useSideBackroom && backroomOpen ? backroomPanel : null}
 
-        <ChatAdvancedPanel title="Backroom">
-          {inspectorPanel}
-          <ChatThreadContextPanel
-            threadState={threadState}
-            onThreadStateChange={setThreadState}
-          />
-        </ChatAdvancedPanel>
+        <View style={useSideBackroom ? styles.chatBackroomChatRow : undefined}>
+          <View style={useSideBackroom ? styles.chatBackroomChatColumn : undefined}>
+            {chatFrame}
+          </View>
+          {useSideBackroom && backroomOpen ? backroomPanel : null}
+        </View>
       </View>
     </Screen>
   );

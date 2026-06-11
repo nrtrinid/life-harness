@@ -594,7 +594,15 @@ export function CompanionSelfMemoryPanel({
   );
 
   if (embedded) {
-    return <View style={styles.checklist}>{panelBody}</View>;
+    return (
+      <View style={styles.chatBackroomSection}>
+        <Text style={styles.sectionTitle}>Signal notes</Text>
+        <Text style={styles.helpText}>
+          Saved on this device only · Not board memory · Editable and deletable
+        </Text>
+        {panelBody}
+      </View>
+    );
   }
 
   return (

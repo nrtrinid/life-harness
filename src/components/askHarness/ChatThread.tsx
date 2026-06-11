@@ -1,6 +1,7 @@
 import { type RefObject, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 
+import { MessageActionMenu } from "../chat/MessageActionMenu";
 import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
 import { styles } from "../styles";
 import { buildChatSummary } from "../../core/harnessMemory";

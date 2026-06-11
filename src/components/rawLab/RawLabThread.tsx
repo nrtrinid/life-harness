@@ -1,6 +1,7 @@
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { MessageActionMenu } from "../chat/MessageActionMenu";
 import type { QuickQuestion } from "../askHarness/ChatComposer";
 import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
 import { styles } from "../styles";
@@ -34,25 +35,6 @@ interface RawLabThreadProps {
   onAddUserRespondsWellTo?: (content: string) => void;
   onAddUserDislike?: (content: string) => void;
   onSetCurrentStance?: (content: string) => void;
-}
-
-function CompactActionMenu({
-  label,
-  children
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <View style={styles.checklist}>
-      <Pressable style={styles.chatBubbleToggle} onPress={() => setOpen((value) => !value)}>
-        <Text style={styles.chatBubbleToggleText}>{open ? `Hide ${label}` : label}</Text>
-      </Pressable>
-      {open ? <View style={styles.splitRow}>{children}</View> : null}
-    </View>
-  );
 }
 
 function BubbleActions({
@@ -92,71 +74,62 @@ function BubbleActions({
   }
 
   return (
-    <View style={styles.checklist}>
-      {hasThreadActions ? (
-        <CompactActionMenu label="Thread actions">
-          {onPin ? (
-            <Pressable style={styles.chatBubbleToggle} onPress={() => onPin(content)}>
-              <Text style={styles.chatBubbleToggleText}>Pin</Text>
-            </Pressable>
-          ) : null}
-          {onDoNotRepeat ? (
-            <Pressable style={styles.chatBubbleToggle} onPress={() => onDoNotRepeat(content)}>
-              <Text style={styles.chatBubbleToggleText}>Do not repeat</Text>
-            </Pressable>
-          ) : null}
-          {onOpenLoop ? (
-            <Pressable style={styles.chatBubbleToggle} onPress={() => onOpenLoop(content)}>
-              <Text style={styles.chatBubbleToggleText}>Open loop</Text>
-            </Pressable>
-          ) : null}
-        </CompactActionMenu>
+    <MessageActionMenu>
+      {onPin ? (
+        <Pressable style={styles.chatBubbleToggle} onPress={() => onPin(content)}>
+          <Text style={styles.chatBubbleToggleText}>Pin</Text>
+        </Pressable>
       ) : null}
-
-      {hasPersonalityActions ? (
-        <CompactActionMenu label="Shape personality">
-          {onAddVoiceTrait ? (
-            <Pressable style={styles.chatBubbleToggle} onPress={() => onAddVoiceTrait(content)}>
-              <Text style={styles.chatBubbleToggleText}>Voice trait</Text>
-            </Pressable>
-          ) : null}
-          {onAddConversationalInstinct ? (
-            <Pressable
-              style={styles.chatBubbleToggle}
-              onPress={() => onAddConversationalInstinct(content)}
-            >
-              <Text style={styles.chatBubbleToggleText}>Instinct</Text>
-            </Pressable>
-          ) : null}
-          {onAddRecurringInterest ? (
-            <Pressable
-              style={styles.chatBubbleToggle}
-              onPress={() => onAddRecurringInterest(content)}
-            >
-              <Text style={styles.chatBubbleToggleText}>Recurring interest</Text>
-            </Pressable>
-          ) : null}
-          {onAddUserRespondsWellTo ? (
-            <Pressable
-              style={styles.chatBubbleToggle}
-              onPress={() => onAddUserRespondsWellTo(content)}
-            >
-              <Text style={styles.chatBubbleToggleText}>Likes this</Text>
-            </Pressable>
-          ) : null}
-          {onAddUserDislike ? (
-            <Pressable style={styles.chatBubbleToggle} onPress={() => onAddUserDislike(content)}>
-              <Text style={styles.chatBubbleToggleText}>Avoid this</Text>
-            </Pressable>
-          ) : null}
-          {onSetCurrentStance ? (
-            <Pressable style={styles.chatBubbleToggle} onPress={() => onSetCurrentStance(content)}>
-              <Text style={styles.chatBubbleToggleText}>Current stance</Text>
-            </Pressable>
-          ) : null}
-        </CompactActionMenu>
+      {onDoNotRepeat ? (
+        <Pressable style={styles.chatBubbleToggle} onPress={() => onDoNotRepeat(content)}>
+          <Text style={styles.chatBubbleToggleText}>Do not repeat</Text>
+        </Pressable>
       ) : null}
-    </View>
+      {onOpenLoop ? (
+        <Pressable style={styles.chatBubbleToggle} onPress={() => onOpenLoop(content)}>
+          <Text style={styles.chatBubbleToggleText}>Open loop</Text>
+        </Pressable>
+      ) : null}
+      {onAddVoiceTrait ? (
+        <Pressable style={styles.chatBubbleToggle} onPress={() => onAddVoiceTrait(content)}>
+          <Text style={styles.chatBubbleToggleText}>Voice trait</Text>
+        </Pressable>
+      ) : null}
+      {onAddConversationalInstinct ? (
+        <Pressable
+          style={styles.chatBubbleToggle}
+          onPress={() => onAddConversationalInstinct(content)}
+        >
+          <Text style={styles.chatBubbleToggleText}>Instinct</Text>
+        </Pressable>
+      ) : null}
+      {onAddRecurringInterest ? (
+        <Pressable
+          style={styles.chatBubbleToggle}
+          onPress={() => onAddRecurringInterest(content)}
+        >
+          <Text style={styles.chatBubbleToggleText}>Interest</Text>
+        </Pressable>
+      ) : null}
+      {onAddUserRespondsWellTo ? (
+        <Pressable
+          style={styles.chatBubbleToggle}
+          onPress={() => onAddUserRespondsWellTo(content)}
+        >
+          <Text style={styles.chatBubbleToggleText}>Likes this</Text>
+        </Pressable>
+      ) : null}
+      {onAddUserDislike ? (
+        <Pressable style={styles.chatBubbleToggle} onPress={() => onAddUserDislike(content)}>
+          <Text style={styles.chatBubbleToggleText}>Avoid this</Text>
+        </Pressable>
+      ) : null}
+      {onSetCurrentStance ? (
+        <Pressable style={styles.chatBubbleToggle} onPress={() => onSetCurrentStance(content)}>
+          <Text style={styles.chatBubbleToggleText}>Stance</Text>
+        </Pressable>
+      ) : null}
+    </MessageActionMenu>
   );
 }
 
