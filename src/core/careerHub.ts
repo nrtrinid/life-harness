@@ -1,4 +1,5 @@
 import { buildCareerPipelineState } from "./careerPipeline";
+import type { JobBoardTab } from "./jobBoardTab";
 import type {
   JobCandidate,
   JobSource,
@@ -12,6 +13,7 @@ export interface CareerHubNextAction {
   reason: string;
   ctaLabel: string;
   href: string;
+  tab?: JobBoardTab;
 }
 
 export interface CareerHubQueuePreviewItem {
@@ -94,7 +96,8 @@ export function buildCareerHubSummary(input: CareerHubSummaryInput): CareerHubSu
         "contracts need"
       )} a follow-up before more tooling.`,
       ctaLabel: "Open follow-up",
-      href: `/card/${firstFollowUp.id}`
+      href: `/card/${firstFollowUp.id}`,
+      tab: "followup"
     };
   } else if (firstQueueCandidate) {
     nextAction = {
@@ -104,15 +107,17 @@ export function buildCareerHubSummary(input: CareerHubSummaryInput): CareerHubSu
         "candidate is",
         "candidates are"
       )} waiting for a resume angle or application card.`,
-      ctaLabel: "Open queue",
-      href: "/job-candidates"
+      ctaLabel: "Review matches",
+      href: "/career?tab=review",
+      tab: "review"
     };
   } else if (input.jobCandidates.length === 0 && applicationCards.length === 0) {
     nextAction = {
       title: "Paste one job description",
       reason: "No current contract is in motion. Start with one concrete posting.",
-      ctaLabel: "Paste a job",
-      href: "/candidate-intake"
+      ctaLabel: "Add a job",
+      href: "/career?add=1&tab=find",
+      tab: "find"
     };
   } else if (activeResumeModules.length === 0 || input.resumeModules.length === 0) {
     nextAction = {
@@ -128,15 +133,17 @@ export function buildCareerHubSummary(input: CareerHubSummaryInput): CareerHubSu
         pipeline.dueSources > 0
           ? `${pipeline.dueSources} approved ${pluralize(pipeline.dueSources, "source is", "sources are")} due.`
           : "Approved sources are available when you want fresh candidates.",
-      ctaLabel: "Open sources",
-      href: "/job-sources"
+      ctaLabel: "Find jobs",
+      href: "/career?tab=find",
+      tab: "find"
     };
   } else {
     nextAction = {
       title: "Paste one job description",
       reason: "The next useful career move is one manual job post, not more setup.",
-      ctaLabel: "Paste a job",
-      href: "/candidate-intake"
+      ctaLabel: "Add a job",
+      href: "/career?add=1&tab=find",
+      tab: "find"
     };
   }
 
@@ -162,7 +169,7 @@ export function buildCareerHubSummary(input: CareerHubSummaryInput): CareerHubSu
       id: candidate.id,
       title: candidateTitle(candidate),
       detail: `${candidate.status} - ${candidate.nextTinyAction}`,
-      href: "/job-candidates"
+      href: "/career?tab=review"
     })),
     followUpPreview: pipeline.followUpsDue.slice(0, 3).map((card) => ({
       id: card.id,

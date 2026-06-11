@@ -15,21 +15,14 @@ export const NAV_GROUPS: NavGroup[] = [
     routes: [
       { href: "/", label: "Today" },
       { href: "/board", label: "Board" },
-      { href: "/career", label: "Career" },
+      { href: "/career", label: "Jobs" },
       { href: "/progress", label: "Playback" }
     ]
   },
   {
     id: "careerTools",
     label: "Career tools",
-    routes: [
-      { href: "/career-intake", label: "Intake" },
-      { href: "/candidate-intake", label: "Paste" },
-      { href: "/job-candidates", label: "Queue" },
-      { href: "/career-pack", label: "Pack" },
-      { href: "/resume-bank", label: "Bank" },
-      { href: "/job-sources", label: "Sources" }
-    ]
+    routes: [{ href: "/resume-bank", label: "Bank" }]
   },
   {
     id: "system",
@@ -82,6 +75,15 @@ const CAREER_TOOL_HREFS = new Set(
   NAV_GROUPS.find((group) => group.id === "careerTools")?.routes.map((route) => route.href) ?? []
 );
 
+/** Career routes still reachable from Jobs but not listed in Career Tools nav. */
+const HIDDEN_CAREER_HREFS = [
+  "/career-intake",
+  "/candidate-intake",
+  "/job-candidates",
+  "/career-pack",
+  "/job-sources"
+] as const;
+
 const SYSTEM_HREFS = new Set(
   NAV_GROUPS.find((group) => group.id === "system")?.routes.map((route) => route.href) ?? []
 );
@@ -91,7 +93,7 @@ export function isCareerToolPath(pathname: string): boolean {
     return true;
   }
 
-  for (const href of CAREER_TOOL_HREFS) {
+  for (const href of [...CAREER_TOOL_HREFS, ...HIDDEN_CAREER_HREFS]) {
     if (isNavActive(pathname, href)) {
       return true;
     }

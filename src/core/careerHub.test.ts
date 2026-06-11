@@ -106,7 +106,7 @@ describe("buildCareerHubSummary", () => {
     });
 
     expect(result.nextAction.title).toBe("Work the application queue");
-    expect(result.nextAction.href).toBe("/job-candidates");
+    expect(result.nextAction.href).toBe("/career?tab=review");
     expect(result.queueCount).toBe(1);
   });
 
@@ -117,7 +117,7 @@ describe("buildCareerHubSummary", () => {
     });
 
     expect(result.nextAction.title).toBe("Paste one job description");
-    expect(result.nextAction.href).toBe("/candidate-intake");
+    expect(result.nextAction.href).toBe("/career?add=1&tab=find");
   });
 
   it("suggests adding source material when resume artifacts are empty", () => {
@@ -141,7 +141,7 @@ describe("buildCareerHubSummary", () => {
     });
 
     expect(result.nextAction.title).toBe("Paste one job description");
-    expect(result.nextAction.href).toBe("/candidate-intake");
+    expect(result.nextAction.href).toBe("/career?add=1&tab=find");
   });
 
   it("suggests approved sources when source material exists and no queue is waiting", () => {
@@ -153,7 +153,7 @@ describe("buildCareerHubSummary", () => {
     });
 
     expect(result.nextAction.title).toBe("Check approved sources");
-    expect(result.nextAction.href).toBe("/job-sources");
+    expect(result.nextAction.href).toBe("/career?tab=find");
     expect(result.enabledSourceCount).toBe(1);
   });
 });

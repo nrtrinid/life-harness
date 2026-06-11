@@ -17,22 +17,32 @@ describe("navRoutes", () => {
     expect(primary).toEqual([
       { href: "/", label: "Today" },
       { href: "/board", label: "Board" },
-      { href: "/career", label: "Career" },
+      { href: "/career", label: "Jobs" },
       { href: "/progress", label: "Playback" }
     ]);
   });
 
-  it("includes all legacy nav hrefs plus the career hub", () => {
+  it("includes legacy nav hrefs still in the shell plus Jobs hub", () => {
     const hrefs = new Set(getAllNavRoutes().map((route) => route.href));
+    const legacyMovedToJobs = [
+      "/career-intake",
+      "/candidate-intake",
+      "/job-candidates",
+      "/job-sources"
+    ] as const;
 
     for (const href of LEGACY_NAV_HREFS) {
+      if (legacyMovedToJobs.includes(href as (typeof legacyMovedToJobs)[number])) {
+        expect(hrefs.has(href)).toBe(false);
+        continue;
+      }
       expect(hrefs.has(href)).toBe(true);
     }
 
     expect(hrefs.has("/career")).toBe(true);
     expect(hrefs.has("/review")).toBe(true);
-    expect(hrefs.has("/career-pack")).toBe(true);
-    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length + 3);
+    expect(hrefs.has("/career-pack")).toBe(false);
+    expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length - 2);
   });
 
   it("detects active routes including index and nested paths", () => {
