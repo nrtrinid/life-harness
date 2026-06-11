@@ -25,6 +25,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Backroom",
     routes: [
       { href: "/agent-workbench", label: "Agent Workbench" },
+      { href: "/feature-sprints", label: "Feature Sprints" },
       { href: "/proof-ledger", label: "Proof Ledger" },
       { href: "/review", label: "Weekly Review" },
       { href: "/memory-bank", label: "Memory Bank" },
@@ -63,6 +64,7 @@ export const LEGACY_NAV_HREFS = [
   "/ask-harness",
   "/raw-lab",
   "/agent-workbench",
+  "/feature-sprints",
   "/proof-ledger",
   "/review"
 ] as const;

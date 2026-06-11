@@ -32,6 +32,7 @@ describe("navRoutes", () => {
     expect(hrefs.size).toBe(LEGACY_NAV_HREFS.length);
     expect(hrefs.has("/career")).toBe(true);
     expect(hrefs.has("/agent-workbench")).toBe(true);
+    expect(hrefs.has("/feature-sprints")).toBe(true);
     expect(hrefs.has("/proof-ledger")).toBe(true);
     expect(hrefs.has("/career-pack")).toBe(true);
     expect(hrefs.has("/job-sources")).toBe(true);
@@ -55,6 +56,8 @@ describe("navRoutes", () => {
 
     expect(isSystemPath("/agent-workbench")).toBe(true);
     expect(getNavGroupForPath("/agent-workbench")).toBe("system");
+    expect(isSystemPath("/feature-sprints")).toBe(true);
+    expect(getNavGroupForPath("/feature-sprints")).toBe("system");
     expect(isSystemPath("/raw-lab")).toBe(true);
     expect(isSystemPath("/memory-bank")).toBe(true);
     expect(isSystemPath("/source-setup")).toBe(true);
@@ -80,6 +83,7 @@ describe("navRoutes", () => {
     const replay = routes.find((route) => route.href === "/review");
     const raw = routes.find((route) => route.href === "/raw-lab");
     const workbench = routes.find((route) => route.href === "/agent-workbench");
+    const featureSprints = routes.find((route) => route.href === "/feature-sprints");
     const memory = routes.find((route) => route.href === "/memory-bank");
     const setupInPrimary = PRIMARY_NAV_ROUTES.some((route) => route.href === "/source-setup");
     const setupInBackroom = BACKROOM_NAV_ROUTES.some((route) => route.href === "/source-setup");
@@ -89,6 +93,8 @@ describe("navRoutes", () => {
     expect(replay?.label).toBe("Weekly Review");
     expect(raw?.label).toBe("Raw Signal");
     expect(workbench?.label).toBe("Agent Workbench");
+    expect(featureSprints?.label).toBe("Feature Sprints");
+    expect(BACKROOM_NAV_ROUTES.some((route) => route.href === "/feature-sprints")).toBe(true);
     expect(memory?.label).toBe("Memory Bank");
     expect(setupInPrimary).toBe(false);
     expect(setupInBackroom).toBe(true);
