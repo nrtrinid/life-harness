@@ -1,4 +1,4 @@
-import { findCardByTitleTokens } from "./cardMatching";
+import { findCapturableCard } from "./cardMatching";
 import { createCareerApplicationCard, syncApplicationStatus, type CareerIntakeInput } from "./career";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
@@ -12,7 +12,7 @@ import {
   scoreJobCandidate,
   type JobCandidateIntakeInput
 } from "./jobScout";
-import { parseQuickCapture } from "./parsing";
+import { CAPTURE_GRAMMAR_HINT, parseUniversalCapture } from "./parsing";
 import { createProofItem, PROOF_TITLES } from "./proof";
 import { computeXP } from "./scoring";
 import type {
@@ -327,24 +327,24 @@ function createInboxCard(title: string): LifeCard {
 }
 
 export function applyQuickCapture(state: LifeHarnessData, rawText: string): ActionResult {
-  const intent = parseQuickCapture(rawText);
+  const intent = parseUniversalCapture(rawText);
   if (!intent) {
     return {
       state,
       ok: false,
-      message: "No rule matched. Try: worked on …, new idea: …, park …"
+      message: CAPTURE_GRAMMAR_HINT
     };
   }
 
   let cards = state.cards;
   let logs = state.logs;
   let proofItems = state.proofItems;
-  let message = "";
+  const captured = trimmedCapture(rawText);
 
-  if (intent.kind === "new_idea") {
-    const card = createInboxCard(intent.title);
+  if (intent.type === "idea") {
+    const card = createInboxCard(intent.text);
     const log = createLogEntry({
-      rawText: trimmedCapture(rawText),
+      rawText: captured,
       area: "build",
       type: "idea",
       cardId: card.id
@@ -358,75 +358,116 @@ export function applyQuickCapture(state: LifeHarnessData, rawText: string): Acti
     log.proofItemId = proof.id;
     card.proofItemIds = [proof.id];
 
-    cards = [card, ...cards];
-    logs = prependLog(logs, log);
-    proofItems = prependProof(proofItems, proof);
-    message = withProofSuffix("Idea captured to Inbox", true);
-  } else if (intent.kind === "park") {
-    const matched = findCardByTitleTokens(cards, rawText);
+    return {
+      state: {
+        ...state,
+        cards: [card, ...cards],
+        logs: prependLog(logs, log),
+        proofItems: prependProof(proofItems, proof)
+      },
+      ok: true,
+      message: withProofSuffix("Idea captured to Inbox", true)
+    };
+  }
+
+  if (intent.type === "park") {
+    const matched = findCapturableCard(cards, intent.text);
     if (!matched) {
-      return { state, ok: false, message: "Could not find a card to park. Try including more of the title." };
+      return {
+        state,
+        ok: false,
+        message: 'Could not find a safe card to park. Try "park: exact card title".'
+      };
     }
 
-    const parkResult = applyParkCard(state, matched.id, trimmedCapture(rawText));
-    return parkResult;
-  } else {
-    const matched = findCardByTitleTokens(cards, rawText);
-    const log = createLogEntry({
-      rawText: trimmedCapture(rawText),
-      area: intent.area,
-      type: intent.type,
-      cardId: matched?.id
+    return applyParkCard(state, matched.id, captured);
+  }
+
+  const matched = findCapturableCard(cards, intent.text);
+  let area: LifeArea = matched?.area ?? "build";
+  let message = "";
+
+  if (intent.type === "worked_on") {
+    area = matched?.area ?? "build";
+  } else if (
+    intent.type === "followed_up" ||
+    intent.type === "resume_exported"
+  ) {
+    area = "social_career";
+  } else if (intent.type === "agent_finished") {
+    area = matched?.area ?? "build";
+  }
+
+  const log = createLogEntry({
+    rawText: captured,
+    area,
+    type: "win",
+    cardId: matched?.id
+  });
+
+  let proof: ProofItem | undefined;
+  if (intent.type === "worked_on" && matched) {
+    proof = createProofItem({
+      title: `Worked on ${matched.title}.`,
+      area,
+      cardId: matched.id,
+      sourceLogId: log.id
     });
+    log.proofItemId = proof.id;
+  } else if (intent.type === "followed_up" && matched) {
+    proof = createProofItem({
+      title: PROOF_TITLES.followUp,
+      area: "social_career",
+      cardId: matched.id,
+      sourceLogId: log.id
+    });
+    log.proofItemId = proof.id;
+  } else if (intent.type === "agent_finished" && matched) {
+    proof = createProofItem({
+      title: `Agent finished: ${matched.title}`,
+      area,
+      cardId: matched.id,
+      sourceLogId: log.id
+    });
+    log.proofItemId = proof.id;
+  } else if (intent.type === "resume_exported" && matched) {
+    proof = createProofItem({
+      title: PROOF_TITLES.resumeExported,
+      area: "social_career",
+      cardId: matched.id,
+      sourceLogId: log.id
+    });
+    log.proofItemId = proof.id;
+  }
 
-    let proof: ProofItem | undefined;
-    if (intent.applied) {
-      proof = createProofItem({
-        title: PROOF_TITLES.appliedToJob,
-        area: "social_career",
-        cardId: matched?.id,
-        sourceLogId: log.id
-      });
-      log.proofItemId = proof.id;
-    } else if (intent.type === "win" && matched) {
-      proof = createProofItem({
-        title: `Worked on ${matched.title}.`,
-        area: intent.area,
-        cardId: matched.id,
-        sourceLogId: log.id
-      });
-      log.proofItemId = proof.id;
-    } else if (intent.area === "social_career" && /follow-up|texted|emailed/i.test(rawText)) {
-      proof = createProofItem({
-        title: PROOF_TITLES.followUp,
-        area: "social_career",
-        cardId: matched?.id,
-        sourceLogId: log.id
-      });
-      log.proofItemId = proof.id;
-    }
+  if (matched) {
+    cards = updateCard(cards, matched.id, (card) => ({
+      ...touchCard(card, captured),
+      proofItemIds: proof ? [proof.id, ...card.proofItemIds] : card.proofItemIds
+    }));
+  }
 
-    if (matched) {
-      cards = updateCard(cards, matched.id, (card) => ({
-        ...touchCard(card, intent.type === "win" ? trimmedCapture(rawText) : undefined),
-        proofItemIds: proof ? [proof.id, ...card.proofItemIds] : card.proofItemIds
-      }));
-    }
+  logs = prependLog(logs, log);
+  if (proof) {
+    proofItems = prependProof(proofItems, proof);
+  }
 
-    logs = prependLog(logs, log);
-    if (proof) {
-      proofItems = prependProof(proofItems, proof);
-    }
-
-    if (intent.type === "leak") {
-      message = "Leak logged";
-    } else if (intent.applied) {
-      message = withProofSuffix(`+${log.xp} XP · Applied to job logged`, true);
-    } else if (intent.type === "win" && !matched) {
-      message = `+${log.xp} XP · ${AREA_LABELS[intent.area]} win logged (no card match — proof not added)`;
-    } else {
-      message = withProofSuffix(`+${log.xp} XP · ${AREA_LABELS[intent.area]} win logged`, Boolean(proof));
-    }
+  if (intent.type === "worked_on") {
+    message = matched
+      ? withProofSuffix(`+${log.xp} XP · Work logged to ${matched.title}`, Boolean(proof))
+      : `+${log.xp} XP · Work logged`;
+  } else if (intent.type === "followed_up") {
+    message = matched
+      ? withProofSuffix(`Follow-up logged for ${matched.title}`, Boolean(proof))
+      : `+${log.xp} XP · Follow-up logged`;
+  } else if (intent.type === "agent_finished") {
+    message = matched
+      ? withProofSuffix(`Agent result captured for ${matched.title}`, Boolean(proof))
+      : `+${log.xp} XP · Agent result captured`;
+  } else if (intent.type === "resume_exported") {
+    message = matched
+      ? withProofSuffix(`Resume export logged for ${matched.title}`, Boolean(proof))
+      : `+${log.xp} XP · Resume export logged`;
   }
 
   return {
@@ -627,8 +668,16 @@ export function applyApproveJobCandidate(state: LifeHarnessData, candidateId: st
     }
   };
   const card = createCareerApplicationCard(intake);
-  card.nextTinyAction = "Tailor resume angle and submit application.";
-  card.whyItMatters = "Fit found through Job Scout; applying keeps career momentum warm.";
+  const weakMatch =
+    candidate.roleType === "other" ||
+    candidate.fitLabel === "bad_fit" ||
+    candidate.fitLabel === "stretch";
+  card.nextTinyAction = weakMatch
+    ? "Open the posting — decide whether to tailor manually or pass."
+    : "Tailor resume angle and submit application.";
+  card.whyItMatters = weakMatch
+    ? "Saved from Job Scout — confirm this role fits your goals before investing time."
+    : "Fit found through Job Scout; applying keeps career momentum warm.";
   if (candidate.location?.trim()) {
     card.openLoops = [...(card.openLoops ?? []), `Location: ${candidate.location.trim()}`];
   }

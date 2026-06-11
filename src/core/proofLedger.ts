@@ -112,8 +112,11 @@ function classifyProofSource(proof: ProofItem, log?: LifeLogEntry): ProofLedgerS
   if (title === PROOF_TITLES.parked || title.startsWith("Worked on ")) {
     return "card";
   }
-  if (title.startsWith("Agent session:")) {
+  if (title.startsWith("Agent session:") || title.startsWith("Agent finished:")) {
     return "agent";
+  }
+  if (title === PROOF_TITLES.resumeExported) {
+    return "resume";
   }
   if (CAREER_PROOF_TITLES.has(title)) {
     return "career";

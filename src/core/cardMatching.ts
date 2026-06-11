@@ -1,3 +1,4 @@
+import { shouldIncludeCard } from "./contextPacketRedaction";
 import type { LifeCard } from "./types";
 
 const STOP_WORDS = new Set([
@@ -25,7 +26,9 @@ const STOP_WORDS = new Set([
   "emailed",
   "applied",
   "follow",
+  "followed",
   "up",
+  "with",
   "bought",
   "subscription",
   "new",
@@ -44,7 +47,13 @@ const STOP_WORDS = new Set([
   "move",
   "repo",
   "text",
-  "walk"
+  "walk",
+  "agent",
+  "finished",
+  "done",
+  "exported",
+  "export",
+  "resume"
 ]);
 
 function tokenize(text: string): string[] {
@@ -94,4 +103,12 @@ export function findCardByTitleTokens(cards: LifeCard[], rawText: string): LifeC
   }
 
   return bestCard;
+}
+
+export function findCapturableCard(cards: LifeCard[], payload: string): LifeCard | undefined {
+  const matched = findCardByTitleTokens(cards, payload);
+  if (matched && !shouldIncludeCard(matched)) {
+    return undefined;
+  }
+  return matched;
 }

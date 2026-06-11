@@ -35,7 +35,9 @@ export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
       <TextInput
         editable
         placeholder={
-          actMode ? "Worked on…, new idea…, park…" : "worked on project for 10 min..."
+          actMode
+            ? "worked on…, followed up…, agent finished…, new idea…"
+            : "worked on project for 10 min..."
         }
         placeholderTextColor={colors.inputPlaceholder}
         style={styles.captureInput}
@@ -47,7 +49,11 @@ export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
       <Pressable style={styles.secondaryAction} onPress={handleSubmit}>
         <Text style={styles.secondaryActionText}>Log Action</Text>
       </Pressable>
-      <Text style={styles.helpText}>New ideas go to Inbox, not Active.</Text>
+      <Text style={styles.helpText}>
+        {actMode
+          ? "Try: worked on resume · followed up with recruiter · agent finished card split"
+          : "New ideas go to Inbox, not Active."}
+      </Text>
     </View>
   );
 }

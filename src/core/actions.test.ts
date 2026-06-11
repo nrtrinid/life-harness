@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAddJobSource,
   applyApproveJobCandidate,
+  applyBackfillResumeDraftPacket,
   applyCardStateChange,
   applyCareerIntake,
   applyDismissJobCandidate,
@@ -144,20 +145,87 @@ describe("applyCareerIntake", () => {
 });
 
 describe("applyQuickCapture", () => {
-  it("creates exactly one log on a matched win", () => {
+  it("creates a log and proof on matched worked_on", () => {
     const state = createState();
     const result = applyQuickCapture(state, "worked on rpg");
 
     expect(result.ok).toBe(true);
     expect(result.state.logs.length).toBe(state.logs.length + 1);
+    expect(result.state.proofItems.length).toBe(state.proofItems.length + 1);
+    expect(result.message).toContain("Work logged");
   });
 
-  it("creates applied proof for applied capture", () => {
+  it("creates log-only worked_on when no card matches", () => {
     const state = createState();
-    const result = applyQuickCapture(state, "applied to Acme job");
+    const result = applyQuickCapture(state, "worked on unknown project xyz");
 
     expect(result.ok).toBe(true);
-    expect(result.state.proofItems[0]?.title).toBe("Applied to job");
+    expect(result.state.logs.length).toBe(state.logs.length + 1);
+    expect(result.state.proofItems.length).toBe(state.proofItems.length);
+    expect(result.message).toContain("Work logged");
+  });
+
+  it("returns grammar hint without mutating on unmatched input", () => {
+    const state = createState();
+    const result = applyQuickCapture(state, "random note");
+
+    expect(result.ok).toBe(false);
+    expect(result.state).toBe(state);
+    expect(result.message).toContain("No rule matched");
+  });
+
+  it("logs follow-up without proof when no card matches", () => {
+    const state = createState();
+    const result = applyQuickCapture(state, "followed up with unknown company");
+
+    expect(result.ok).toBe(true);
+    expect(result.state.logs.length).toBe(state.logs.length + 1);
+    expect(result.state.proofItems.length).toBe(state.proofItems.length);
+  });
+
+  it("captures agent finished without completing sessions", () => {
+    const state = createState();
+    const beforeSessions = state.agentSessions.length;
+    const result = applyQuickCapture(state, "agent finished card split");
+
+    expect(result.ok).toBe(true);
+    expect(result.state.agentSessions.length).toBe(beforeSessions);
+    expect(result.state.logs.length).toBe(state.logs.length + 1);
+  });
+
+  it("records resume exported without creating DOCX", () => {
+    const state = createState();
+    const result = applyQuickCapture(state, "resume exported for unknown role");
+
+    expect(result.ok).toBe(true);
+    expect(result.state.logs.length).toBe(state.logs.length + 1);
+    expect(result.message).toContain("Resume export logged");
+  });
+
+  it("does not park without a safe card match", () => {
+    const state = createState();
+    const result = applyQuickCapture(state, "park unknown card title");
+
+    expect(result.ok).toBe(false);
+    expect(result.state.cards).toEqual(state.cards);
+    expect(result.message).toContain("safe card");
+  });
+
+  it("does not match or mutate S3 cards", () => {
+    const state = createState();
+    const s3Card = {
+      ...structuredClone(state.cards[0]!),
+      id: "card-s3-capture",
+      title: "Secret Vault Project",
+      sensitivity: "S3" as const
+    };
+    state.cards = [s3Card, ...state.cards];
+
+    const result = applyQuickCapture(state, "worked on secret vault project");
+
+    expect(result.ok).toBe(true);
+    expect(result.state.logs[0]?.cardId).toBeUndefined();
+    expect(result.state.proofItems.length).toBe(state.proofItems.length);
   });
 });
 
@@ -206,6 +274,26 @@ describe("job candidate actions", () => {
     expect(card?.careerApplication?.resumeDraftPacket?.selectedModuleIds.length).toBeGreaterThan(0);
     expect(card?.nextTinyAction).toBe("Tailor resume angle and submit application.");
     expect(card?.whyItMatters).toContain("Job Scout");
+  });
+
+  it("backfills resume draft packet on legacy application cards", () => {
+    const state = createState();
+    const created = applyCareerIntake(state, {
+      company: "Legacy Co",
+      roleTitle: "Security Engineer",
+      jobDescription: "Python, application security, and TypeScript.",
+      roleType: "cybersecurity",
+      applicationStatus: "waiting"
+    });
+    const cardId = created.cardId!;
+    expect(created.state.cards[0]?.careerApplication?.resumeDraftPacket).toBeUndefined();
+
+    const backfill = applyBackfillResumeDraftPacket(created.state, cardId);
+    expect(backfill.ok).toBe(true);
+    const packet = backfill.state.cards.find((card) => card.id === cardId)?.careerApplication
+      ?.resumeDraftPacket;
+    expect(packet?.selectedModuleIds.length).toBeGreaterThan(0);
+    expect(packet?.company).toBe("Legacy Co");
   });
 
   it("enriches paste intake with fit label and matched skills", () => {

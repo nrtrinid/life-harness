@@ -62,6 +62,17 @@ describe("validateAssistantAction", () => {
     expect(result).toEqual({ ok: false, error: "Capture text is required." });
   });
 
+  it("rejects quick_capture without universal capture prefix", () => {
+    const result = validateAssistantAction(baseData(), {
+      type: "quick_capture",
+      text: "Paste one job description to restart the career thread."
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("No rule matched");
+    }
+  });
+
   it("accepts log_win on a card", () => {
     const result = validateAssistantAction(baseData(), {
       type: "log_win",
@@ -263,6 +274,8 @@ describe("buildAssistantActionSchemaHint", () => {
     for (const kind of ASSISTANT_ACTION_KINDS) {
       expect(hint).toContain(kind);
     }
+    expect(hint).toContain("new idea:");
+    expect(hint).toContain("Universal Capture");
   });
 });
 

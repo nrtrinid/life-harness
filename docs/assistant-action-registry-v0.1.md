@@ -20,8 +20,8 @@ Model suggests → app validates → user approves → core mutates
 
 | Action | Risk | Apply path |
 |--------|------|------------|
-| `quick_capture` | low | `applyQuickCapture` |
-| `log_win` | low | `applyQuickCapture` with win-shaped text |
+| `quick_capture` | low | `applyQuickCapture` — **text must match Universal Capture prefix grammar** (`new idea: …`, `worked on …`, etc.); plain prose is rejected at validation |
+| `log_win` | low | `applyQuickCapture` with win-shaped text — **prefer** for card progress when `cardId` is known |
 | `park_card` | medium | `applyCardStateChange(..., "parked")` |
 | `update_next_tiny_action` | medium | `applyUpdateNextTinyAction` |
 | `create_agent_session` | medium | `createAgentSessionForCard` |

@@ -1,11 +1,30 @@
-import type { LifeArea, LogType } from "./types";
+export type UniversalCaptureIntent =
+  | { type: "idea"; text: string }
+  | { type: "worked_on"; text: string }
+  | { type: "followed_up"; text: string }
+  | { type: "agent_finished"; text: string }
+  | { type: "resume_exported"; text: string }
+  | { type: "park"; text: string };
 
-export type QuickCaptureIntent =
-  | { kind: "new_idea"; title: string }
-  | { kind: "park" }
-  | { kind: "log"; type: LogType; area: LifeArea; applied?: boolean };
+/** @deprecated Use UniversalCaptureIntent */
+export type QuickCaptureIntent = UniversalCaptureIntent;
 
-export function parseQuickCapture(rawText: string): QuickCaptureIntent | undefined {
+const PREFIX_RULES: Array<{ type: UniversalCaptureIntent["type"]; prefixes: string[] }> = [
+  { type: "idea", prefixes: ["new idea:", "idea:"] },
+  {
+    type: "resume_exported",
+    prefixes: ["resume exported for ", "resume exported:", "resume exported "]
+  },
+  {
+    type: "followed_up",
+    prefixes: ["followed up with ", "followed up:", "followed up "]
+  },
+  { type: "agent_finished", prefixes: ["agent finished ", "agent done "] },
+  { type: "worked_on", prefixes: ["worked on:", "worked on "] },
+  { type: "park", prefixes: ["park:", "park "] }
+];
+
+export function parseUniversalCapture(rawText: string): UniversalCaptureIntent | undefined {
   const trimmed = rawText.trim();
   if (!trimmed) {
     return undefined;
@@ -13,37 +32,26 @@ export function parseQuickCapture(rawText: string): QuickCaptureIntent | undefin
 
   const lower = trimmed.toLowerCase();
 
-  if (lower.startsWith("new idea:")) {
-    const title = trimmed.slice("new idea:".length).trim();
-    if (!title) {
-      return undefined;
+  for (const rule of PREFIX_RULES) {
+    const sortedPrefixes = [...rule.prefixes].sort((left, right) => right.length - left.length);
+    for (const prefix of sortedPrefixes) {
+      if (!lower.startsWith(prefix)) {
+        continue;
+      }
+      const payload = trimmed.slice(prefix.length).trim();
+      if (!payload) {
+        return undefined;
+      }
+      return { type: rule.type, text: payload } as UniversalCaptureIntent;
     }
-    return { kind: "new_idea", title };
-  }
-
-  if (/\bpark\b/i.test(trimmed)) {
-    return { kind: "park" };
-  }
-
-  if (/(worked on|coded|built)/i.test(trimmed)) {
-    return { kind: "log", type: "win", area: "build" };
-  }
-
-  if (/(walked|lifted|ran|\bate\b)/i.test(trimmed)) {
-    return { kind: "log", type: "win", area: "body" };
-  }
-
-  if (/\bapplied\b/i.test(trimmed)) {
-    return { kind: "log", type: "win", area: "social_career", applied: true };
-  }
-
-  if (/(texted|emailed|follow-up)/i.test(trimmed)) {
-    return { kind: "log", type: "win", area: "social_career" };
-  }
-
-  if (/(bought|\$|subscription)/i.test(trimmed)) {
-    return { kind: "log", type: "leak", area: "stability_vices" };
   }
 
   return undefined;
 }
+
+export function parseQuickCapture(rawText: string): UniversalCaptureIntent | undefined {
+  return parseUniversalCapture(rawText);
+}
+
+export const CAPTURE_GRAMMAR_HINT =
+  "No rule matched. Try: worked on … · followed up with … · agent finished … · new idea: …";

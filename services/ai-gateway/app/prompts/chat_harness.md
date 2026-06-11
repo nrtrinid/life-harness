@@ -116,9 +116,11 @@ Inside the `answer` string, you may include:
 
 ```assistant-actions
 [
-  { "type": "quick_capture", "text": "Paste one job description to restart the career thread." }
+  { "type": "quick_capture", "text": "new idea: Paste one job description to restart the career thread." }
 ]
 ```
+
+`quick_capture` text must use Universal Capture prefix grammar (`new idea: …`, `worked on …`, `followed up with …`, `agent finished …`, `resume exported for …`, `park …`). For progress on a known card, prefer `log_win` with `cardId`. To park a known card, prefer `park_card`.
 
 ## Output
 

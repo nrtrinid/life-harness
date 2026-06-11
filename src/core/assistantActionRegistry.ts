@@ -3,6 +3,7 @@ import type { LifeHarnessData } from "./actions";
 import { createAgentSessionForCard, normalizeAgentKind } from "./agentSessionLog";
 import { shouldIncludeCard } from "./contextPacketRedaction";
 import { nowIso } from "./ids";
+import { CAPTURE_GRAMMAR_HINT, parseUniversalCapture } from "./parsing";
 import type { LifeCard } from "./types";
 
 export const MAX_ASSISTANT_ACTIONS_PER_MESSAGE = 5;
@@ -81,9 +82,9 @@ export function buildAssistantActionSchemaHint(): string {
   return [
     "Proposable board actions (user must Approve in UI; max 5 per message):",
     `- Fence label inside answer: \`\`\`${ASSISTANT_ACTIONS_FENCE_LABEL}`,
-    "- quick_capture: { type, text }",
-    "- log_win: { type, text, cardId? }",
-    "- park_card: { type, cardId, reason? }",
+    "- quick_capture: { type, text } — text must use Universal Capture prefix grammar (e.g. new idea: …, worked on …, followed up with …, agent finished …, resume exported for …, park …). Plain prose fails validation.",
+    "- log_win: { type, text, cardId? } — prefer over quick_capture for progress notes; prefixes worked on automatically when cardId is set",
+    "- park_card: { type, cardId, reason? } — prefer over quick_capture park … when the target card is known",
     "- update_next_tiny_action: { type, cardId, nextTinyAction }",
     "- create_agent_session: { type, cardId, goal?, agent?, taskName? }",
     "Do not claim an action is done until the user approves it."
@@ -359,6 +360,9 @@ export function validateAssistantAction(
       const text = action.text.trim();
       if (!text) {
         return { ok: false, error: "Capture text is required." };
+      }
+      if (!parseUniversalCapture(text)) {
+        return { ok: false, error: CAPTURE_GRAMMAR_HINT };
       }
       return {
         ok: true,

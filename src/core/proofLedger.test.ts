@@ -346,4 +346,32 @@ describe("buildProofLedger", () => {
     expect(summary.entries.length).toBeGreaterThanOrEqual(0);
     expect(summary.recent.length).toBeLessThanOrEqual(8);
   });
+
+  it("classifies universal capture proof titles", () => {
+    const card = fixtureCard();
+    const summary = buildProofLedger(
+      baseData({
+        cards: [card],
+        proofItems: [
+          {
+            id: "proof-agent",
+            timestamp: FIXED_NOW,
+            title: "Agent finished: Momentum Board v0.1",
+            cardId: card.id
+          },
+          {
+            id: "proof-resume",
+            timestamp: FIXED_NOW,
+            title: PROOF_TITLES.resumeExported,
+            cardId: card.id,
+            area: "social_career"
+          }
+        ],
+        logs: []
+      })
+    );
+
+    expect(summary.entries.find((entry) => entry.id === "proof-proof-agent")?.source).toBe("agent");
+    expect(summary.entries.find((entry) => entry.id === "proof-proof-resume")?.source).toBe("resume");
+  });
 });
