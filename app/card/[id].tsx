@@ -12,6 +12,7 @@ import sampleProfile from "../../fixtures/resume/profile.sample.json";
 import { canCopyTextToClipboard, copyTextToClipboard } from "../../src/core/askHarnessSynthesis";
 import { buildApplicationResumeDocxDraft } from "../../src/core/applicationResumeExport";
 import {
+  buildAgentSessionCreateInputFromTaskPacket,
   buildAgentTaskPacket,
   buildDefaultAgentTaskPacketInput,
   resolveDefaultTaskGoal
@@ -144,6 +145,7 @@ export default function CardDetailScreen() {
   const [likelyFilesText, setLikelyFilesText] = useState("");
   const [verificationCommandsText, setVerificationCommandsText] = useState("");
   const [projectNotes, setProjectNotes] = useState("");
+  const [isCopyLogging, setIsCopyLogging] = useState(false);
   const card = cards.find((item) => item.id === id);
 
   useEffect(() => {
@@ -363,6 +365,41 @@ export default function CardDetailScreen() {
     );
   }
 
+  async function handleCopyTaskPacketAndLogSent() {
+    if (isCopyLogging) {
+      return;
+    }
+
+    setIsCopyLogging(true);
+    try {
+      const result = buildAgentTaskPacket(
+        lifeHarnessData,
+        buildDefaultAgentTaskPacketInput(card!)
+      );
+      if (!result.ok) {
+        showNotice("warning", result.error);
+        return;
+      }
+
+      const copied = await copyTextToClipboard(result.markdown);
+      if (!copied) {
+        showNotice("warning", "Clipboard unavailable.");
+        return;
+      }
+
+      const sessionResult = createAgentSessionForCard(
+        buildAgentSessionCreateInputFromTaskPacket(result.packet, result.markdown)
+      );
+      if (sessionResult.ok) {
+        showNotice("success", "Task packet copied and session logged.");
+      } else {
+        showNotice("warning", "Task packet copied, but session was not logged.");
+      }
+    } finally {
+      setIsCopyLogging(false);
+    }
+  }
+
   return (
     <Screen>
       {notice ? <Notice kind={notice.kind} message={notice.message} /> : null}
@@ -381,6 +418,15 @@ export default function CardDetailScreen() {
             </Pressable>
             <Pressable style={styles.secondaryAction} onPress={handleCopyAgentTaskPacket}>
               <Text style={styles.secondaryActionText}>Copy agent task packet</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.secondaryAction, isCopyLogging && { opacity: 0.5 }]}
+              disabled={isCopyLogging}
+              onPress={() => {
+                void handleCopyTaskPacketAndLogSent();
+              }}
+            >
+              <Text style={styles.secondaryActionText}>Copy + log sent</Text>
             </Pressable>
           </View>
         ) : null}

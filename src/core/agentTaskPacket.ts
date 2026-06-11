@@ -5,7 +5,8 @@ import {
   type CardContextPacket,
   type CardContextProjectSummary
 } from "./harnessContextGraph";
-import type { LifeCard } from "./types";
+import type { HarnessAgentSessionCreateInput } from "./agentSessionLog";
+import type { HarnessAgentKind, LifeCard } from "./types";
 
 export type AgentTaskPacketInput = {
   cardId: string;
@@ -226,5 +227,36 @@ export function buildDefaultAgentTaskPacketInput(card: LifeCard): AgentTaskPacke
     taskName: `Work on ${card.title}`,
     goal: resolveDefaultTaskGoal(card),
     extraConstraints: ["Stay scoped to this card."]
+  };
+}
+
+const PACKET_EXCERPT_ELLIPSIS = "…";
+
+export function truncatePacketExcerpt(text: string, maxLength = 500): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength - 1)}${PACKET_EXCERPT_ELLIPSIS}`;
+}
+
+export function buildAgentSessionCreateInputFromTaskPacket(
+  packet: AgentTaskPacket,
+  packetMarkdown: string,
+  options: {
+    agent?: HarnessAgentKind;
+    promptExcerptMaxLength?: number;
+  } = {}
+): HarnessAgentSessionCreateInput {
+  const maxLength = options.promptExcerptMaxLength ?? 500;
+
+  return {
+    cardId: packet.cardId,
+    agent: options.agent ?? "codex",
+    taskName: packet.taskName,
+    goal: packet.goal,
+    verificationCommands:
+      packet.verificationCommands.length > 0 ? packet.verificationCommands : undefined,
+    promptExcerpt: truncatePacketExcerpt(packetMarkdown, maxLength)
   };
 }

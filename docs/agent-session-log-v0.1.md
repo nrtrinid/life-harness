@@ -12,12 +12,25 @@ Saved sessions enrich card context packets and future copy flows. Completed sess
 
 ## Manual workflow
 
+### v0.1 (manual log)
+
 1. Copy agent task packet from Card Detail.
 2. Paste into Codex/Cursor and do the work.
 3. On Card Detail, open **Agent sessions** → **Log agent session**.
 4. Fill in what you sent and what came back → **Save session**.
 5. When finished, **Mark done** (Save first — Mark done only works on a saved session).
 6. Use logged sessions as future context via card context / task packet copy.
+
+### v0.2 (Copy + log sent)
+
+1. Click **Copy + log sent** on Card Detail (same default task packet as **Copy agent task packet**).
+2. Clipboard copy succeeds → a new `sent` Agent Session is created automatically.
+3. Paste into Codex/Cursor and do the work.
+4. Edit the session in **Agent sessions** if needed, then **Mark done** when finished.
+
+**Copy agent task packet** remains side-effect-free — it does not create a session. Only the explicit **Copy + log sent** action logs `sent`.
+
+Sent sessions do not create proof/log evidence until **Mark done** (unchanged idempotent completion flow).
 
 ## Source of truth
 
@@ -40,15 +53,13 @@ Completed proof appears on Proof Shelf automatically through existing proof aggr
 - automatic Codex/Cursor execution
 - PC or browser automation
 - background agent runs
-- silent session creation on packet copy
-- `Copy task packet + log sent` (future)
+- silent session creation on normal packet copy
 - assistant action registry
 - sprint tracker / burndown / project dashboard route
 - ai-gateway, Raw Lab, GitHub, auth, or cloud sync changes
 
 ## Future path
 
-- Agent Session Log v0.2 proof timeline polish
-- Copy task packet + log sent
+- Agent Session Log proof timeline polish
 - Codex/Cursor execution bridge
 - Assistant Action Registry

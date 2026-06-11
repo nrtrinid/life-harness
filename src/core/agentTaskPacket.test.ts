@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import { createSeedState } from "../data/createSeedState";
 import type { LifeHarnessData } from "./actions";
 import {
+  buildAgentSessionCreateInputFromTaskPacket,
   buildAgentTaskPacket,
   buildDefaultAgentTaskPacketInput,
   deriveTaskName,
   formatAgentTaskPacketMarkdown,
-  resolveDefaultTaskGoal
+  resolveDefaultTaskGoal,
+  truncatePacketExcerpt
 } from "./agentTaskPacket";
 import type { LifeCard } from "./types";
 
@@ -366,5 +368,85 @@ describe("agentTaskPacket", () => {
     expect(result.markdown).toContain("## Existing context");
     expect(result.markdown).toContain("## Agent sessions");
     expect(result.markdown).toContain("Ship agent session log");
+  });
+});
+
+describe("truncatePacketExcerpt", () => {
+  it("returns text unchanged when within max length", () => {
+    expect(truncatePacketExcerpt("short packet", 500)).toBe("short packet");
+  });
+
+  it("truncates with ellipsis when text exceeds max length", () => {
+    const text = "a".repeat(10);
+    expect(truncatePacketExcerpt(text, 5)).toBe("aaaa…");
+  });
+});
+
+describe("buildAgentSessionCreateInputFromTaskPacket", () => {
+  it("maps packet fields into a sent-session create input", () => {
+    const card = fixtureBuildCard();
+    const data = baseData({
+      cards: [card],
+      projects: [
+        {
+          id: "project-target",
+          cardId: card.id,
+          name: card.title,
+          verificationCommands: ["npm test -- agentTaskPacket"],
+          createdAt: FIXED_NOW.toISOString(),
+          updatedAt: FIXED_NOW.toISOString()
+        }
+      ]
+    });
+    const packetResult = buildAgentTaskPacket(data, {
+      cardId: card.id,
+      goal: "Ship copy + log sent.",
+      now: FIXED_NOW
+    });
+
+    expect(packetResult.ok).toBe(true);
+    if (!packetResult.ok) {
+      return;
+    }
+
+    const input = buildAgentSessionCreateInputFromTaskPacket(
+      packetResult.packet,
+      packetResult.markdown
+    );
+
+    expect(input.cardId).toBe(card.id);
+    expect(input.agent).toBe("codex");
+    expect(input.taskName).toBe(packetResult.packet.taskName);
+    expect(input.goal).toBe("Ship copy + log sent.");
+    expect(input.verificationCommands).toEqual(["npm test -- agentTaskPacket"]);
+    expect(input.promptExcerpt).toBe(truncatePacketExcerpt(packetResult.markdown));
+    expect(input.resultSummary).toBeUndefined();
+    expect(input.filesChanged).toBeUndefined();
+    expect(input.verificationResult).toBeUndefined();
+    expect(input.commitHash).toBeUndefined();
+    expect(input.followUps).toBeUndefined();
+  });
+
+  it("truncates prompt excerpt for large packet markdown", () => {
+    const card = fixtureBuildCard();
+    const packetResult = buildAgentTaskPacket(baseData({ cards: [card] }), {
+      cardId: card.id,
+      goal: "Ship copy + log sent.",
+      now: FIXED_NOW
+    });
+
+    expect(packetResult.ok).toBe(true);
+    if (!packetResult.ok) {
+      return;
+    }
+
+    const longMarkdown = "x".repeat(600);
+    const input = buildAgentSessionCreateInputFromTaskPacket(
+      packetResult.packet,
+      longMarkdown,
+      { promptExcerptMaxLength: 20 }
+    );
+
+    expect(input.promptExcerpt).toBe(`${"x".repeat(19)}…`);
   });
 });
