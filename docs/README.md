@@ -11,6 +11,7 @@
 
 | Area | Doc |
 |------|-----|
+| Nav / Backroom | [`nav-backroom-cleanup-v0.1.md`](nav-backroom-cleanup-v0.1.md) |
 | Persistence | [`persistence-audit-v0.5.md`](persistence-audit-v0.5.md) |
 | Memory Bank | [`memory-bank-v0.1.md`](memory-bank-v0.1.md) |
 | AI workflow map | [`ai-workflows-current.md`](ai-workflows-current.md) |
@@ -19,6 +20,8 @@
 | Raw Lab | [`raw-lab-architecture.md`](raw-lab-architecture.md), [`raw-lab-thread-state.md`](raw-lab-thread-state.md), [`raw-lab-deep.md`](raw-lab-deep.md), [`raw-lab-emergence-review-pack.md`](raw-lab-emergence-review-pack.md), [`raw-lab-benchmark-runner.md`](raw-lab-benchmark-runner.md) |
 | Career hub | [`career-hub-v0.1.md`](career-hub-v0.1.md) |
 | Career pipeline | [`career-v0.1-pipeline.md`](career-v0.1-pipeline.md) |
+| Job Board UX | [`career-job-board-ux-v0.13.md`](career-job-board-ux-v0.13.md) |
+| Full pipeline Find UX | [`career-full-pipeline-ux-v0.14.md`](career-full-pipeline-ux-v0.14.md) |
 | Job Scout | `job-scout-*.md` (v0.2–v0.11) |
 | Local A770 / AI gateway | [`local-a770-plan.md`](local-a770-plan.md), [`08_ai_provider_and_a770_plan.md`](08_ai_provider_and_a770_plan.md) |
 
@@ -41,3 +44,4 @@
 ## UX audits
 
 - [`ux/`](ux/) — current UX audits and consolidation notes
+- Application card detail: [`ux/career-application-card-detail-v0.15.md`](ux/career-application-card-detail-v0.15.md)

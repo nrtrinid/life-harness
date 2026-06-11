@@ -11,7 +11,7 @@ This map records the implemented AI-adjacent surfaces as of the dogfood-blocked 
 
 ## Companion / Ask
 
-- **Route:** `/ask-harness`, labeled **Companion** in Backroom.
+- **Route:** `/ask-harness`, labeled **Companion** in primary nav (see [`nav-backroom-cleanup-v0.1.md`](nav-backroom-cleanup-v0.1.md)).
 - **Gateway endpoint:** `POST /chat-harness`.
 - **Purpose:** Grounded, read-only chat over board context.
 - **Context sent:** board snapshot, context packet when available, conversation history, and temporary thread state.

@@ -63,14 +63,11 @@ If no primary contract exists, Today falls back to **TinyQuestCard** as hero.
 - Recovery core (`computeRecoveryVisibility`, MVD/Salvage behavior)
 - Proof data model and Proof Shelf behavior
 - Quick Capture parser / commands
-- Nav structure and Backroom routes
 - TinyQuestCard functionality (pounce, make smaller, deep links)
 
 ## Future path
 
 - Merge TinyQuestCard and Next Move Contract into one CTA
-- Card Detail Act / Backroom split
-- Unified Proof Ledger
-- Universal Capture commands
-- Nav demotion / Backroom cleanup
 - Act buttons on contract (park, delegate, log proof) via Assistant Action Registry
+
+Related shipped slices: Card Detail Act / Backroom, Unified Proof Ledger, Universal Capture, [`nav-backroom-cleanup-v0.1.md`](nav-backroom-cleanup-v0.1.md).

@@ -62,16 +62,11 @@ function NavGroupToggle({
 export function SidebarNav() {
   const pathname = usePathname();
   const activeGroup = getNavGroupForPath(pathname);
-  const careerGroup = NAV_GROUPS.find((group) => group.id === "careerTools");
   const backroomGroup = NAV_GROUPS.find((group) => group.id === "system");
 
-  const [careerOpen, setCareerOpen] = useState(activeGroup === "careerTools");
   const [backroomOpen, setBackroomOpen] = useState(activeGroup === "system");
 
   useEffect(() => {
-    if (activeGroup === "careerTools") {
-      setCareerOpen(true);
-    }
     if (activeGroup === "system") {
       setBackroomOpen(true);
     }
@@ -89,19 +84,6 @@ export function SidebarNav() {
           <NavLink key={href} href={href} label={label} layout="sidebar" />
         ))}
       </View>
-
-      {careerGroup ? (
-        <NavGroupToggle
-          label={careerGroup.label ?? "Career tools"}
-          open={careerOpen}
-          onToggle={() => setCareerOpen((value) => !value)}
-          layout="sidebar"
-        >
-          {careerGroup.routes.map(({ href, label }) => (
-            <NavSecondaryLink key={href} href={href} label={label} layout="sidebar" />
-          ))}
-        </NavGroupToggle>
-      ) : null}
 
       {backroomGroup ? (
         <NavGroupToggle
