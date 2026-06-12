@@ -390,7 +390,8 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
     return {
       kind: "save_agent_output",
       label: "Save agent output",
-      detail: "Inspect the implementation runner result, then use Save agent output below."
+      detail:
+        "Open View details on the run, inspect output/diff/verification, then Save agent output below."
     };
   }
 

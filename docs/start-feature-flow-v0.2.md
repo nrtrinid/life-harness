@@ -63,13 +63,30 @@ Unchanged on Card Detail:
 - Implementation / review copy and run buttons (post-plan)
 - Builder readiness tile, recent runs, save output, import verdict, advance, complete, delete
 
+## Post-import trust loop
+
+After **Import plan**, the builder loop continues on Card Detail Backroom:
+
+1. Run implementation in worktree
+2. View details (Recent runner runs)
+3. Inspect output, changed files, diff, and verification
+4. Save agent output
+5. Run review with Codex / copy review packet
+6. Import review verdict
+7. Advance step → repeat for next slice
+8. Mark feature complete
+9. Clean worktree — View details → Clean worktree; Force clean only after inspecting output/diff
+
+See [feature-sprint-flow-guide-v0.3.md](./feature-sprint-flow-guide-v0.3.md) and [feature-sprint-worktree-cleanup-v0.1.md](./feature-sprint-worktree-cleanup-v0.1.md).
+
 ## Manual gates unchanged
 
 - Import plan — manual
-- Save agent output — manual
+- Save agent output — manual (inspect via View details first)
 - Import review verdict — manual
 - Advance step / mark complete — manual
-- No auto-import, auto-save, auto-review, or auto-advance
+- Worktree cleanup — manual
+- No auto-import, auto-save, auto-review, auto-advance, or auto-cleanup
 
 ## Intentional limits (v0.2)
 
@@ -89,6 +106,7 @@ Unchanged on Card Detail:
 
 ## Related docs
 
+- [feature-sprint-flow-guide-v0.3.md](./feature-sprint-flow-guide-v0.3.md)
 - [feature-spec-intake-v0.1.md](./feature-spec-intake-v0.1.md)
 - [feature-sprint-dogfood-checklist-v0.1.md](./feature-sprint-dogfood-checklist-v0.1.md)
 - [feature-sprint-workbench-v0.1.md](./feature-sprint-workbench-v0.1.md)

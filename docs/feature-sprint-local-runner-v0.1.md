@@ -58,14 +58,18 @@ Real mode is documented and adapter-only. Do not block on perfect local Codex CL
 
 1. Start runner: `npm run feature-runner` (mock default).
 2. Open card → **Backroom** → **Feature Sprint**.
-3. Optionally paste a **Rough feature spec** (see [feature-spec-intake-v0.1.md](./feature-spec-intake-v0.1.md)).
-4. **Check runner** → should show available when runner is up.
-5. **Run scoping with Codex** → plan import textarea fills → inspect → **Import plan**.
-5. **Copy implementation prompt** / save agent output manually (unchanged).
-6. **Run review with Codex** → review import textarea fills → inspect → **Import review verdict**.
-7. **Advance step** / **Mark feature complete** on Card Detail as before.
+3. Expand **How this flow works** for the full loop and mental model.
+4. **Start feature panel** — describe spec (optional), check setup, scope it (see [start-feature-flow-v0.2.md](./start-feature-flow-v0.2.md)).
+5. **Run scoping with Codex** or copy scoping packet → inspect → **Import plan** manually.
+6. **Run implementation in worktree**.
+7. **View details** on the run in Recent runner runs → inspect output, changed files, diff, verification.
+8. **Save agent output** manually.
+9. **Run review with Codex** or copy review packet → inspect → **Import review verdict** manually.
+10. **Advance step** → repeat steps 6–10 for each plan slice.
+11. **Mark feature complete**.
+12. **Clean worktree** — View details → Clean worktree; Force clean only after inspecting output/diff.
 
-Runner controls live on Card Detail Backroom only — not Feature Sprint Workbench.
+Runner controls live on Card Detail Backroom only — not Feature Sprint Workbench. See [feature-sprint-flow-guide-v0.3.md](./feature-sprint-flow-guide-v0.3.md).
 
 ## Safety boundaries
 

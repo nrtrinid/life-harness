@@ -11,7 +11,7 @@ Is this feature card ready to run the builder loop?
 What is the next safe manual action?
 ```
 
-The checklist lives in core logic as `buildFeatureSprintDogfoodSummary()` and appears in Card Detail Backroom near the existing Feature Sprint controls, including the **Start feature** panel for scoping.
+The checklist lives in core logic as `buildFeatureSprintDogfoodSummary()` and appears in Card Detail Backroom near the existing Feature Sprint controls, including **How this flow works**, the **Start feature** panel, and Recent runner runs **View details**.
 
 ## Why it exists
 
@@ -59,7 +59,7 @@ The next action is deterministic and intentionally simple:
 3. Scoping output exists with no active plan -> Import plan
 4. No active plan -> Run scoping (via **Start feature** panel step 3)
 5. No current step and plan is reviewing/done-ready -> Mark feature complete
-6. Implementation output exists but step output is not saved -> Save agent output
+6. Implementation output exists but step output is not saved -> View details, then Save agent output
 7. Ready/planned step with no output -> Run implementation
 8. Review output exists but verdict is not imported -> Import review verdict
 9. Output exists but no review -> Run review
@@ -79,11 +79,13 @@ Use the mock runner path for safe loop testing:
 3. Run scoping with Codex (step 3)
 4. Import plan
 5. Run implementation in worktree
-6. Save agent output
-7. Run review with Codex
-8. Import verdict
-9. Advance step
-10. Mark feature complete
+6. View details → inspect output / changed files / diff / verification
+7. Save agent output
+8. Run review with Codex
+9. Import verdict
+10. Advance step
+11. Mark feature complete
+12. Clean worktree when done (Force clean only after inspection)
 ```
 
 Every step still requires an explicit user action.
@@ -110,9 +112,7 @@ Every step still requires an explicit user action.
 Useful later slices:
 
 - one-click mock full-loop test
-- runner result diff viewer
-- worktree cleanup UI
 - commit approval gate
 - Project Hub after more dogfood
 
-See [start-feature-flow-v0.2.md](./start-feature-flow-v0.2.md) for the guided Start feature panel on Card Detail.
+See [feature-sprint-flow-guide-v0.3.md](./feature-sprint-flow-guide-v0.3.md) for the full trust loop and [start-feature-flow-v0.2.md](./start-feature-flow-v0.2.md) for the Start feature panel.

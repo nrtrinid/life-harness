@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-na
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
 import { FeatureRunnerOutputDetails } from "../../src/components/featureSprint/FeatureRunnerOutputDetails";
+import { FeatureSprintFlowGuide } from "../../src/components/featureSprint/FeatureSprintFlowGuide";
 import { FeatureSprintStartFlow } from "../../src/components/featureSprint/FeatureSprintStartFlow";
 import { CollapsibleSection } from "../../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../../src/components/Notice";
@@ -125,19 +126,6 @@ const DOGFOOD_STATUS_LABELS = {
   needs_review: "needs review",
   complete: "complete"
 } as const;
-
-const DOGFOOD_LOOP_STEPS = [
-  "1. Start runner: npm run feature-runner",
-  "2. Check runner",
-  "3. Run scoping with Codex",
-  "4. Import plan",
-  "5. Run implementation in worktree",
-  "6. Save agent output",
-  "7. Run review with Codex",
-  "8. Import verdict",
-  "9. Advance step",
-  "10. Mark feature complete"
-] as const;
 
 function formatRunnerStartedAt(iso: string): string {
   return iso.slice(0, 16).replace("T", " ");
@@ -1126,6 +1114,8 @@ export default function CardDetailScreen() {
           implements bounded slices.
         </Text>
 
+        <FeatureSprintFlowGuide />
+
         <FeatureSprintStartFlow
           cardTitle={card.title}
           nextTinyAction={card.nextTinyAction}
@@ -1197,19 +1187,6 @@ export default function CardDetailScreen() {
             ))}
           </View>
         </View>
-
-        <CollapsibleSection title="Mock dogfood loop" defaultOpen={false}>
-          <Text style={styles.helpText}>
-            Manual mock path. Every gate below still requires an explicit click.
-          </Text>
-          <View style={{ gap: 4, marginTop: 8 }}>
-            {DOGFOOD_LOOP_STEPS.map((step) => (
-              <Text key={step} style={styles.helpText}>
-                {step}
-              </Text>
-            ))}
-          </View>
-        </CollapsibleSection>
 
         <View style={{ marginTop: 12 }}>
           <Text style={styles.label}>Recent runner runs</Text>
@@ -1512,10 +1489,13 @@ export default function CardDetailScreen() {
         {activeFeatureSprintPlan ? (
           <>
             <Text style={[styles.label, { marginTop: 12 }]}>Agent output</Text>
+            <Text style={styles.helpText}>
+              Inspect the run in Recent runner runs → View details before saving.
+            </Text>
             {showAgentOutputReadyHelper ? (
-              <Text style={[styles.helpText, { marginBottom: 8 }]}>
-                This run is ready to save as agent output after inspection. Use “Save agent output” below
-                when ready.
+              <Text style={[styles.helpText, { marginTop: 4, marginBottom: 8 }]}>
+                Implementation output is ready. Open View details on the run, inspect output/diff/verification,
+                then use Save agent output below.
               </Text>
             ) : null}
             <TextInput
