@@ -8,6 +8,7 @@ import {
   addSelfObservation,
   addUserSteering,
   createEmptyRawLabThreadState,
+  sanitizeRawLabMemoryProposal,
   setCurrentVibe,
   toWireThreadState,
   toWireTurns,
@@ -110,22 +111,38 @@ export function applyRawLabThreadReflection(
 ): RawLabThreadState {
   let next = state;
   for (const observation of response.proposals.self_observations) {
-    next = addSelfObservation(next, observation);
+    const sanitized = sanitizeRawLabMemoryProposal(observation, "selfObservation");
+    if (sanitized) {
+      next = addSelfObservation(next, sanitized);
+    }
   }
   for (const question of response.proposals.questions_to_revisit) {
-    next = addQuestionToRevisit(next, question);
+    const sanitized = sanitizeRawLabMemoryProposal(question, "questionToRevisit");
+    if (sanitized) {
+      next = addQuestionToRevisit(next, sanitized);
+    }
   }
   for (const stance of response.proposals.provisional_stances) {
-    next = addProvisionalStance(next, stance);
+    const sanitized = sanitizeRawLabMemoryProposal(stance, "provisionalStance");
+    if (sanitized) {
+      next = addProvisionalStance(next, sanitized);
+    }
   }
   for (const phrase of response.proposals.do_not_repeat) {
-    next = addDoNotRepeat(next, phrase);
+    const sanitized = sanitizeRawLabMemoryProposal(phrase, "doNotRepeat");
+    if (sanitized) {
+      next = addDoNotRepeat(next, sanitized);
+    }
   }
   for (const steering of response.proposals.user_steering) {
-    next = addUserSteering(next, steering);
+    const sanitized = sanitizeRawLabMemoryProposal(steering, "userSteering");
+    if (sanitized) {
+      next = addUserSteering(next, sanitized);
+    }
   }
-  if (response.proposals.current_vibe.trim()) {
-    next = setCurrentVibe(next, response.proposals.current_vibe);
+  const vibe = sanitizeRawLabMemoryProposal(response.proposals.current_vibe, "currentVibe");
+  if (vibe) {
+    next = setCurrentVibe(next, vibe);
   }
   return next;
 }

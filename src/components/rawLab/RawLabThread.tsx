@@ -1,11 +1,14 @@
-import { type RefObject, useEffect, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { ChatReasoningPanel } from "../chat/ChatReasoningPanel";
 import { MessageActionMenu } from "../chat/MessageActionMenu";
+import { ReasoningDepthPill } from "../chat/ReasoningDepthPill";
 import type { QuickQuestion } from "../askHarness/ChatComposer";
 import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
 import { styles } from "../styles";
-import type { RawLabResponse } from "../../core/rawLabClient";
+import type { ReasoningDepth } from "../../core/chatHarnessClient";
+import type { RawLabReasoningDepth, RawLabResponse } from "../../core/rawLabClient";
 import { isAttachableRawLabOutput } from "../../core/rawLabOutputAttachment";
 import type { RawLabTurn } from "../../core/rawLabThreadState";
 import { RawLabEmptyState } from "./RawLabEmptyState";
@@ -25,6 +28,7 @@ interface RawLabThreadProps {
   errors?: RawLabThreadError[];
   threadScrollRef?: RefObject<ScrollView | null>;
   loading?: boolean;
+  reasoningDepth?: RawLabReasoningDepth;
   streamingDraft?: string;
   onSelectPrompt?: (item: QuickQuestion) => void;
   onPin?: (content: string) => void;
@@ -41,8 +45,15 @@ interface RawLabThreadProps {
   onCopyForCompanion?: (content: string) => void;
 }
 
+function visibleRawLabReasoningDepth(
+  reasoningDepth?: RawLabReasoningDepth
+): ReasoningDepth | undefined {
+  return reasoningDepth === "deep_plus" ? undefined : reasoningDepth;
+}
+
 function BubbleActions({
   content,
+  trailing,
   onPin,
   onDoNotRepeat,
   onOpenLoop,
@@ -54,6 +65,7 @@ function BubbleActions({
   onSetCurrentStance
 }: {
   content: string;
+  trailing?: ReactNode;
   onPin?: (content: string) => void;
   onDoNotRepeat?: (content: string) => void;
   onOpenLoop?: (content: string) => void;
@@ -78,7 +90,7 @@ function BubbleActions({
   }
 
   return (
-    <MessageActionMenu>
+    <MessageActionMenu trailing={trailing}>
       {onPin ? (
         <Pressable style={styles.chatBubbleToggle} onPress={() => onPin(content)}>
           <Text style={styles.chatBubbleToggleText}>Pin</Text>
@@ -201,6 +213,7 @@ function SpineAttachmentActions({
 
 function AssistantTurn({
   content,
+  reasoningDepth,
   response,
   onCaptureAsIdea,
   onSaveAsMemory,
@@ -208,6 +221,7 @@ function AssistantTurn({
   ...actionProps
 }: {
   content: string;
+  reasoningDepth?: RawLabReasoningDepth;
   response?: RawLabResponse;
   onCaptureAsIdea?: (content: string) => void;
   onSaveAsMemory?: (content: string) => void;
@@ -224,9 +238,10 @@ function AssistantTurn({
 }) {
   const [showSafety, setShowSafety] = useState(false);
   const safetyNotes = response?.safety_notes ?? [];
+  const visibleReasoningDepth = visibleRawLabReasoningDepth(reasoningDepth);
 
   return (
-    <View style={styles.chatBubbleAssistant}>
+    <View style={[styles.chatBubbleAssistant, styles.chatBubbleAssistantRawSignal]}>
       <Text style={styles.chatSpeakerLabel}>Raw Signal</Text>
       <Text style={styles.chatAnswerText}>{content}</Text>
       <SpineAttachmentActions
@@ -235,7 +250,15 @@ function AssistantTurn({
         onSaveAsMemory={onSaveAsMemory}
         onCopyForCompanion={onCopyForCompanion}
       />
-      <BubbleActions content={content} {...actionProps} />
+      <BubbleActions
+        content={content}
+        trailing={
+          visibleReasoningDepth ? (
+            <ReasoningDepthPill depth={visibleReasoningDepth} variant="rawSignal" />
+          ) : undefined
+        }
+        {...actionProps}
+      />
       {safetyNotes.length > 0 ? (
         <View style={styles.checklist}>
           <Pressable style={styles.chatBubbleToggle} onPress={() => setShowSafety((open) => !open)}>
@@ -261,6 +284,7 @@ export function RawLabThread({
   errors = [],
   threadScrollRef,
   loading = false,
+  reasoningDepth = "fast",
   streamingDraft = "",
   onSelectPrompt,
   onPin,
@@ -293,6 +317,7 @@ export function RawLabThread({
     onSaveAsMemory,
     onCopyForCompanion
   };
+  const visibleReasoningDepth = visibleRawLabReasoningDepth(reasoningDepth);
 
   useEffect(() => {
     if (itemCount === 0) {
@@ -332,6 +357,7 @@ export function RawLabThread({
           <AssistantTurn
             key={turn.id}
             content={turn.content}
+            reasoningDepth={turn.reasoningDepth}
             response={response}
             {...actionProps}
             {...spineAttachmentProps}
@@ -347,10 +373,25 @@ export function RawLabThread({
           <Text style={styles.helpText}>{error.content}</Text>
         </View>
       ))}
+      {visibleReasoningDepth ? (
+        <ChatReasoningPanel
+          visible={loading}
+          reasoningDepth={visibleReasoningDepth}
+          streamingStarted={streamingDraft.length > 0}
+        />
+      ) : null}
       {loading && streamingDraft ? (
-        <View style={styles.chatBubbleAssistant}>
+        <View style={[styles.chatBubbleAssistant, styles.chatBubbleAssistantRawSignal]}>
           <Text style={styles.chatSpeakerLabel}>Raw Signal</Text>
           <Text style={styles.chatAnswerText}>{streamingDraft}</Text>
+          <View style={styles.chatBubbleFooter}>
+            <View />
+            <View style={styles.chatBubbleFooterTrailing}>
+              {visibleReasoningDepth ? (
+                <ReasoningDepthPill depth={visibleReasoningDepth} variant="rawSignal" />
+              ) : null}
+            </View>
+          </View>
         </View>
       ) : null}
     </ScrollView>

@@ -10,6 +10,7 @@ import {
   createEmptyRawLabThreadState,
   toWireThreadState,
   toWireTurns,
+  type RawLabReasoningDepth,
   type RawLabSmartCompactedContext,
   type RawLabThreadState,
   type RawLabTurn,
@@ -19,16 +20,42 @@ import {
 
 export const DEFAULT_RAW_LAB_URL = "http://127.0.0.1:8111";
 
-export type { RawLabRole, RawLabThreadState, RawLabTurn } from "./rawLabThreadState";
+export type {
+  RawLabReasoningDepth,
+  RawLabRole,
+  RawLabThreadState,
+  RawLabTurn
+} from "./rawLabThreadState";
 export type { RawLabCompactionNotice } from "./rawLabContextBudget";
 
-export type RawLabReasoningDepth = "fast" | "deliberate" | "deep";
+export type RawLabDeepPlusFallbackReason =
+  | "contract_failed"
+  | "candidate_generation_failed"
+  | "judge_failed"
+  | "revision_failed"
+  | "timeout"
+  | "final_contract_failed";
+
+export interface RawLabDeepPlusMetadata {
+  deep_plus_attempted: true;
+  deep_plus_used: boolean;
+  deep_plus_task_kind: string;
+  deep_plus_contract_confidence: string;
+  deep_plus_selected_index: number | null;
+  deep_plus_revised: boolean;
+  deep_plus_fallback_reason: RawLabDeepPlusFallbackReason | null;
+  deep_plus_latency_ms: number;
+  deep_plus_all_candidates_weak?: boolean | null;
+  deep_plus_final_contract_passed?: boolean | null;
+  deep_plus_final_contract_failures?: string[] | null;
+}
 
 export interface RawLabResponse {
   answer: string;
   mode: "raw_lab";
   safety_notes: string[];
   used_context: false;
+  deep_plus?: RawLabDeepPlusMetadata | null;
 }
 
 export type RawLabSendResult = {
@@ -124,6 +151,68 @@ export function rawLabFetchFailureMessage(baseUrl: string, error: unknown): stri
   return `Local ai-gateway is not reachable at ${baseUrl}.`;
 }
 
+function parseRawLabDeepPlusMetadata(value: unknown): RawLabDeepPlusMetadata | null {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value !== "object") {
+    throw new RawLabError("Unexpected response from ai-gateway.");
+  }
+  const data = value as Record<string, unknown>;
+  if (
+    data.deep_plus_attempted !== true ||
+    typeof data.deep_plus_used !== "boolean" ||
+    typeof data.deep_plus_task_kind !== "string" ||
+    typeof data.deep_plus_contract_confidence !== "string" ||
+    typeof data.deep_plus_revised !== "boolean" ||
+    typeof data.deep_plus_latency_ms !== "number"
+  ) {
+    throw new RawLabError("Unexpected response from ai-gateway.");
+  }
+  if (
+    data.deep_plus_selected_index !== null &&
+    typeof data.deep_plus_selected_index !== "number"
+  ) {
+    throw new RawLabError("Unexpected response from ai-gateway.");
+  }
+  if (
+    data.deep_plus_fallback_reason !== null &&
+    typeof data.deep_plus_fallback_reason !== "string"
+  ) {
+    throw new RawLabError("Unexpected response from ai-gateway.");
+  }
+  return {
+    deep_plus_attempted: true,
+    deep_plus_used: data.deep_plus_used,
+    deep_plus_task_kind: data.deep_plus_task_kind,
+    deep_plus_contract_confidence: data.deep_plus_contract_confidence,
+    deep_plus_selected_index: data.deep_plus_selected_index,
+    deep_plus_revised: data.deep_plus_revised,
+    deep_plus_fallback_reason:
+      data.deep_plus_fallback_reason as RawLabDeepPlusFallbackReason | null,
+    deep_plus_latency_ms: data.deep_plus_latency_ms,
+    deep_plus_all_candidates_weak:
+      typeof data.deep_plus_all_candidates_weak === "boolean"
+        ? data.deep_plus_all_candidates_weak
+        : data.deep_plus_all_candidates_weak === null
+          ? null
+          : undefined,
+    deep_plus_final_contract_passed:
+      typeof data.deep_plus_final_contract_passed === "boolean"
+        ? data.deep_plus_final_contract_passed
+        : data.deep_plus_final_contract_passed === null
+          ? null
+          : undefined,
+    deep_plus_final_contract_failures: Array.isArray(data.deep_plus_final_contract_failures)
+      ? data.deep_plus_final_contract_failures.filter(
+          (item): item is string => typeof item === "string"
+        )
+      : data.deep_plus_final_contract_failures === null
+        ? null
+        : undefined
+  };
+}
+
 export function bundleToRequestBody(
   bundle: RawLabSendBundle,
   reasoningDepth: RawLabReasoningDepth = "fast"
@@ -174,12 +263,14 @@ export function parseRawLabResponse(payload: unknown): RawLabResponse {
   if (!Array.isArray(data.safety_notes)) {
     throw new RawLabError("Unexpected response from ai-gateway.");
   }
+  const deepPlus = parseRawLabDeepPlusMetadata(data.deep_plus);
 
   return {
     answer: data.answer,
     mode: "raw_lab",
     safety_notes: data.safety_notes.filter((note): note is string => typeof note === "string"),
-    used_context: false
+    used_context: false,
+    deep_plus: deepPlus
   };
 }
 

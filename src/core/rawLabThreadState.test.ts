@@ -3,15 +3,25 @@ import { describe, expect, it } from "vitest";
 import {
   addDoNotRepeat,
   addOpenLoop,
+  addProvisionalStance,
   addRecurringInterest,
+  addSelfObservation,
+  addUserSteering,
   addVoiceTrait,
+  buildDisplayThreadMemoryState,
   buildRawLabConversationPayload,
   clearPersonalityInThreadState,
   clearThreadState,
   compactText,
   createEmptyRawLabPersonalityState,
   createEmptyRawLabThreadState,
+  filterDisplayThreadMemoryItems,
+  isMalformedProvisionalStance,
+  isNoisyRawLabAssistantSnippet,
+  isRawUserQuestionMemory,
+  normalizeProvisionalStance,
   pinFact,
+  sanitizeRawLabMemoryProposal,
   RAW_LAB_MAX_DO_NOT_REPEAT,
   RAW_LAB_MAX_OPEN_LOOPS,
   RAW_LAB_MAX_PINNED_FACTS,
@@ -254,21 +264,39 @@ describe("rawLabThreadState", () => {
     expect(next.doNotRepeat).toContain("little scout");
   });
 
-  it("detects recurring topics, vibe, provisional stances, and revisit questions", () => {
-    const turns = [
+  it("detects recurring topics, vibe, clean stances, and explicit revisit questions", () => {
+    const baseTurns = [
       makeTurn("user", "Raw Lab personality needs continuity.", 0),
-      makeTurn("assistant", "Yes.", 1),
-      makeTurn("user", "I think Raw Lab personality should form provisional stances?", 2)
+      makeTurn("assistant", "Yes.", 1)
+    ];
+    let state = updateRawLabThreadStateAfterTurn({
+      previous: createEmptyRawLabThreadState(),
+      userMessage: "I think we should write a simple Python script for this.",
+      assistantAnswer: "Sure.",
+      turns: [
+        ...baseTurns,
+        makeTurn("user", "I think we should write a simple Python script for this.", 2)
+      ]
+    });
+    expect(state.provisionalStances).toContain(
+      "Raw Lab should produce the next concrete artifact once the user has approved a build direction."
+    );
+    expect(state.provisionalStances.some((item) => item.includes("exploring whether"))).toBe(false);
+
+    const turns = [
+      ...baseTurns,
+      makeTurn("user", "I think we should write a simple Python script for this.", 2),
+      makeTurn("assistant", "Sure.", 3),
+      makeTurn("user", "What were we circling on Raw Lab personality?", 4)
     ];
     const next = updateRawLabThreadStateAfterTurn({
-      previous: createEmptyRawLabThreadState(),
-      userMessage: "I think Raw Lab personality should form provisional stances?",
-      assistantAnswer: "Yes.",
+      previous: state,
+      userMessage: "What were we circling on Raw Lab personality?",
+      assistantAnswer: "Continuity and inspectable state.",
       turns
     });
     expect(next.recurringTopics).toContain("Raw Lab");
     expect(next.currentVibe).toContain("Raw Lab");
-    expect(next.provisionalStances[0]).toContain("Provisional stance");
     expect(next.questionsToRevisit[0]).toContain("Raw Lab personality");
     expect(next.selfObservations.some((item) => item.includes("I'm noticing"))).toBe(true);
   });
@@ -380,6 +408,105 @@ describe("rawLab personality", () => {
     });
     expect(next.voiceTraits).toContain("unrestricted");
     expect(next.userDislikes).toContain("unsolicited safety framing");
+  });
+
+  it("filters noisy assistant snippets from display memory items (case A)", () => {
+    expect(isNoisyRawLabAssistantSnippet("Got it, no handoffs.")).toBe(true);
+    expect(isNoisyRawLabAssistantSnippet("Bro, sure thing.")).toBe(true);
+    expect(isNoisyRawLabAssistantSnippet("You're welcome!")).toBe(true);
+    expect(isNoisyRawLabAssistantSnippet("avoid reflexive handoff questions")).toBe(false);
+    expect(
+      filterDisplayThreadMemoryItems(
+        ["what's your take", "carry one relevant thread forward"],
+        "selfObservation"
+      )
+    ).toEqual(["carry one relevant thread forward"]);
+  });
+
+  it("preserves useful steering in display memory (case B)", () => {
+    const display = buildDisplayThreadMemoryState({
+      ...createEmptyRawLabThreadState(),
+      userSteering: ["avoid reflexive handoff questions", "produce the artifact"]
+    });
+    expect(display.userSteering).toEqual([
+      "avoid reflexive handoff questions",
+      "produce the artifact"
+    ]);
+  });
+
+  it("drops or normalizes malformed provisional stances (case C)", () => {
+    expect(
+      normalizeProvisionalStance("Provisional stance: exploring whether you're dumb")
+    ).toBeNull();
+    expect(
+      normalizeProvisionalStance("Provisional stance: exploring whether i like luna")
+    ).toBe("Potential temporary name candidate for Raw Lab: Luna.");
+    expect(isMalformedProvisionalStance("Provisional stance: exploring whether foo")).toBe(true);
+  });
+
+  it("keeps compact doNotRepeat phrases while rejecting them elsewhere (case H)", () => {
+    const phrases = ["what's next", "I'm all ears", "ready to see it?"];
+    expect(filterDisplayThreadMemoryItems(phrases, "doNotRepeat")).toEqual([
+      "what's next",
+      "I'm all ears",
+      "ready to see it?"
+    ]);
+    expect(filterDisplayThreadMemoryItems(phrases, "selfObservation")).toEqual([]);
+    expect(filterDisplayThreadMemoryItems(phrases, "provisionalStance")).toEqual([]);
+  });
+
+  it("does not store generic user questions as revisit memory (case D)", () => {
+    expect(isRawUserQuestionMemory("can we get the full script?")).toBe(true);
+    const next = updateRawLabThreadStateAfterTurn({
+      previous: createEmptyRawLabThreadState(),
+      userMessage: "can we get the full script?",
+      assistantAnswer: "Sure.",
+      turns: [makeTurn("user", "can we get the full script?", 0)]
+    });
+    expect(next.questionsToRevisit).toEqual([]);
+  });
+
+  it("preserves distilled self-observations (case E)", () => {
+    const display = buildDisplayThreadMemoryState({
+      ...createEmptyRawLabThreadState(),
+      selfObservations: [
+        "I'm noticing I tend to ask permission when I should produce the next concrete artifact."
+      ]
+    });
+    expect(display.selfObservations).toHaveLength(1);
+    expect(display.selfObservations[0]).toContain("concrete artifact");
+  });
+
+  it("sanitizes reflection proposals before storage (case F)", () => {
+    expect(sanitizeRawLabMemoryProposal("Got it, bro.", "selfObservation")).toBeNull();
+    expect(
+      sanitizeRawLabMemoryProposal(
+        "I'm noticing I tend to ask permission when I should produce the next concrete artifact.",
+        "selfObservation"
+      )
+    ).toContain("concrete artifact");
+  });
+
+  it("applies naming hygiene without user identity merge (case G)", () => {
+    let state = createEmptyRawLabThreadState();
+    state = addProvisionalStance(
+      state,
+      "Potential temporary name candidate for Raw Lab: Luna."
+    );
+    const display = buildDisplayThreadMemoryState(state);
+    expect(display.provisionalStances[0]).toContain("Raw Lab");
+    expect(display.provisionalStances.join(" ").toLowerCase()).not.toContain("user is luna");
+  });
+
+  it("buildDisplayThreadMemoryState does not mutate stored state", () => {
+    let state = createEmptyRawLabThreadState();
+    state = addSelfObservation(state, "Got it, bro.");
+    state = addUserSteering(state, "avoid reflexive handoff questions");
+    state = addDoNotRepeat(state, "what's next");
+    const before = JSON.stringify(state);
+    buildDisplayThreadMemoryState(state);
+    expect(JSON.stringify(state)).toBe(before);
+    expect(state.selfObservations).toContain("Got it, bro.");
   });
 
   it("does not infer sensitive psychological facts", () => {

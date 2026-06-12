@@ -79,7 +79,7 @@ describe("rawLabThreadReflectionClient", () => {
     const next = applyRawLabThreadReflection(state, {
       proposals: {
         self_observations: ["I'm noticing I tend to synthesize the thread."],
-        questions_to_revisit: ["How should the reflection pass stay bounded?"],
+        questions_to_revisit: ["What should we revisit about reflection bounds?"],
         provisional_stances: ["Provisional stance: reflection should stay inspectable."],
         current_vibe: "Current vibe in this chat: deliberate and experimental.",
         do_not_repeat: ["entity sauce"],
@@ -90,14 +90,38 @@ describe("rawLabThreadReflectionClient", () => {
     });
 
     expect(next.selfObservations).toContain("I'm noticing I tend to synthesize the thread.");
-    expect(next.questionsToRevisit).toContain("How should the reflection pass stay bounded?");
-    expect(next.provisionalStances).toContain(
-      "Provisional stance: reflection should stay inspectable."
-    );
+    expect(next.questionsToRevisit).toContain("What should we revisit about reflection bounds?");
+    expect(next.provisionalStances).toContain("reflection should stay inspectable.");
     expect(next.currentVibe).toBe("Current vibe in this chat: deliberate and experimental.");
     expect(next.doNotRepeat).toContain("entity sauce");
     expect(next.userSteering).toContain("avoid entity sauce");
     expect(state.selfObservations).toEqual([]);
+  });
+
+  it("sanitizes noisy reflection proposals before applying", () => {
+    const state = createEmptyRawLabThreadState();
+    const next = applyRawLabThreadReflection(state, {
+      proposals: {
+        self_observations: ["Got it, bro.", "I'm noticing I tend to synthesize the thread."],
+        questions_to_revisit: ["can we get the full script?"],
+        provisional_stances: [
+          "Provisional stance: exploring whether you're dumb",
+          "Provisional stance: reflection should stay inspectable."
+        ],
+        current_vibe: "",
+        do_not_repeat: ["what's next", "I'm all ears"],
+        user_steering: ["what's your take", "avoid reflexive handoff questions"]
+      },
+      safety_notes: [],
+      used_context: false
+    });
+
+    expect(next.selfObservations).toEqual(["I'm noticing I tend to synthesize the thread."]);
+    expect(next.questionsToRevisit).toEqual([]);
+    expect(next.provisionalStances).toContain("reflection should stay inspectable.");
+    expect(next.provisionalStances.some((item) => item.includes("exploring whether"))).toBe(false);
+    expect(next.doNotRepeat).toEqual(expect.arrayContaining(["what's next", "I'm all ears"]));
+    expect(next.userSteering).toEqual(["avoid reflexive handoff questions"]);
   });
 
   it("posts to the narrow thread reflection endpoint", async () => {

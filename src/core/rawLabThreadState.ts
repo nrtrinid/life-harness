@@ -21,11 +21,14 @@ export { compactText } from "./chatThreadState";
 
 export type RawLabRole = "user" | "assistant";
 
+export type RawLabReasoningDepth = "fast" | "deliberate" | "deep" | "deep_plus";
+
 export type RawLabTurn = {
   id: string;
   role: RawLabRole;
   content: string;
   createdAt: string;
+  reasoningDepth?: RawLabReasoningDepth;
 };
 
 export type RawLabPersonalityState = {
@@ -237,7 +240,6 @@ const RECURRING_THREAD_TOPICS: { pattern: RegExp; label: string }[] = [
 ];
 
 const QUESTION_TO_REVISIT_PATTERNS = [
-  /\?$/,
   /\bcome back to\b/i,
   /\brevisit\b/i,
   /\bcircle back\b/i,
@@ -605,6 +607,17 @@ function detectQuestionsToRevisit(userMessage: string): string[] {
   return [compactText(trimmed, 180)];
 }
 
+const BUILD_INTENT_RE =
+  /\b(code|python|script|skeleton|implementation|prototype|artifact|build|project|game|plan)\b/i;
+const FALSE_EXECUTION_CONCERN_RE =
+  /\b(ran the code|run the code|actually execute|did you run|claim you ran)\b/i;
+const HANDOFF_INDEPENDENCE_RE =
+  /\b(handoff|independent|initiative|what'?s next|stop checking in)\b/i;
+const NAMING_RAW_LAB_RE =
+  /\b(call you|your name|name (?:you|raw lab)|(?:lily|luna)\b|name (?:for )?raw lab)\b/i;
+const HOSTILE_OR_INSULT_RE =
+  /\b(you'?re dumb|you are dumb|stupid|idiot|worthless|shut up)\b/i;
+
 function detectProvisionalStances(userMessage: string): string[] {
   if (containsSensitiveInference(userMessage)) {
     return [];
@@ -613,8 +626,18 @@ function detectProvisionalStances(userMessage: string): string[] {
   for (const pattern of PROVISIONAL_STANCE_PATTERNS) {
     const match = userMessage.match(pattern);
     const idea = match?.[1]?.trim();
-    if (idea) {
-      stances.push(`Provisional stance: exploring whether ${compactText(idea, 150)}`);
+    if (!idea) {
+      continue;
+    }
+    const normalized = normalizeProvisionalStance(`Provisional stance: exploring whether ${idea}`);
+    if (normalized) {
+      stances.push(normalized);
+    }
+  }
+  if (BUILD_INTENT_RE.test(userMessage) && !stances.length) {
+    const normalized = normalizeProvisionalStance(userMessage);
+    if (normalized) {
+      stances.push(normalized);
     }
   }
   return stances;
@@ -655,17 +678,14 @@ function buildSelfObservations(args: {
       `I'm noticing I tend to circle ${args.recurringTopics[0]} with you in this thread.`
     );
   }
-  if (args.userSteering.length > 0) {
-    observations.push(
-      `I'm noticing I adapt when you steer me toward ${args.userSteering[0]}.`
-    );
-  }
   if (args.personality.conversationalInstincts.length > 0) {
     observations.push(
       `I'm noticing my instinct here is to ${args.personality.conversationalInstincts[0]}.`
     );
   }
-  return observations;
+  return observations
+    .map((item) => sanitizeRawLabMemoryProposal(item, "selfObservation"))
+    .filter((item): item is string => Boolean(item));
 }
 
 export function updateRawLabPersonalityAfterTurn(args: {
@@ -1115,4 +1135,301 @@ export function clearThreadMemoryOnly(
 
 export function clearThreadState(now: string = new Date().toISOString()): RawLabThreadState {
   return createEmptyRawLabThreadState(now);
+}
+
+export type RawLabMemoryItemKind =
+  | "doNotRepeat"
+  | "provisionalStance"
+  | "selfObservation"
+  | "userSteering"
+  | "openLoop"
+  | "recurringTopic"
+  | "questionToRevisit"
+  | "currentVibe"
+  | "pinnedFact"
+  | "decision";
+
+export const RAW_LAB_DISPLAY_MEMORY_MAX_CHARS = 180;
+
+const RAW_ASSISTANT_OPENER_PATTERNS = [
+  /^got it\b/i,
+  /^bro\b/i,
+  /^sure thing\b/i,
+  /^you'?re welcome\b/i,
+  /^absolutely\b/i,
+  /^i'?m glad\b/i,
+  /^happy to help\b/i,
+  /^let'?s dive in\b/i,
+  /^i'?ll help\b/i
+];
+
+const RAW_ASSISTANT_HANDOFF_ECHO_PATTERNS = [
+  /what'?s your take/i,
+  /ready to pivot/i,
+  /let'?s see where this goes/i,
+  /^i'?m ready[.!]?$/i,
+  /^i'?m all ears\b/i,
+  /ready to see/i,
+  /what do you want me to do/i
+];
+
+const COMPACT_DO_NOT_REPEAT_PHRASES = [
+  "what's next",
+  "whats next",
+  "what's your take",
+  "ready to pivot",
+  "i'm all ears",
+  "ready to see it",
+  "what's on your mind"
+];
+
+const STANCE_ARTIFACT =
+  "Raw Lab should produce the next concrete artifact once the user has approved a build direction.";
+const STANCE_FALSE_EXECUTION =
+  "Raw Lab should not claim code ran unless it actually executed code.";
+const STANCE_HANDOFF_ENGAGEMENT =
+  "Engagement should come from carrying a thread forward, not reflexive check-in questions.";
+
+function normalizeMemoryKey(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isCompactDoNotRepeatPhrase(text: string): boolean {
+  const key = normalizeMemoryKey(text).replace(/[?.!]+$/g, "");
+  return COMPACT_DO_NOT_REPEAT_PHRASES.some(
+    (phrase) => key === phrase || key.startsWith(`${phrase} `)
+  );
+}
+
+export function isNoisyRawLabAssistantSnippet(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (trimmed.includes("```")) {
+    return true;
+  }
+  if (trimmed.length > RAW_LAB_DISPLAY_MEMORY_MAX_CHARS + 40) {
+    return true;
+  }
+  return (
+    RAW_ASSISTANT_OPENER_PATTERNS.some((pattern) => pattern.test(trimmed)) ||
+    RAW_ASSISTANT_HANDOFF_ECHO_PATTERNS.some((pattern) => pattern.test(trimmed))
+  );
+}
+
+export function isMalformedProvisionalStance(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/^provisional stance:\s*exploring whether\b/i.test(trimmed)) {
+    return true;
+  }
+  if (isNoisyRawLabAssistantSnippet(trimmed)) {
+    return true;
+  }
+  if (isRawUserQuestionMemory(trimmed)) {
+    return true;
+  }
+  return false;
+}
+
+function extractExploringWhetherPayload(text: string): string {
+  const match = text.match(/^provisional stance:\s*exploring whether\s+(.+)$/i);
+  return (match?.[1] ?? text).trim().replace(/[?.!]+$/g, "");
+}
+
+function extractRawLabNameCandidate(text: string): string | null {
+  const match = text.match(/\b(lily|luna)\b/i);
+  if (match) {
+    const name = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+    return `Potential temporary name candidate for Raw Lab: ${name}.`;
+  }
+  return null;
+}
+
+export function normalizeProvisionalStance(text: string): string | null {
+  const payload = extractExploringWhetherPayload(text);
+  if (!payload || HOSTILE_OR_INSULT_RE.test(payload)) {
+    return null;
+  }
+  if (NAMING_RAW_LAB_RE.test(payload) || /\b(lily|luna)\b/i.test(payload)) {
+    return extractRawLabNameCandidate(payload);
+  }
+  if (FALSE_EXECUTION_CONCERN_RE.test(payload)) {
+    return STANCE_FALSE_EXECUTION;
+  }
+  if (HANDOFF_INDEPENDENCE_RE.test(payload)) {
+    return STANCE_HANDOFF_ENGAGEMENT;
+  }
+  if (BUILD_INTENT_RE.test(payload)) {
+    return STANCE_ARTIFACT;
+  }
+  if (/^provisional stance:\s*exploring whether\b/i.test(text)) {
+    return null;
+  }
+  const stripped = text.replace(/^provisional stance:\s*/i, "").trim();
+  if (stripped.length >= 24 && !isNoisyRawLabAssistantSnippet(stripped)) {
+    return compactText(stripped, RAW_LAB_DISPLAY_MEMORY_MAX_CHARS);
+  }
+  return null;
+}
+
+export function isRawUserQuestionMemory(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || !trimmed.endsWith("?")) {
+    return false;
+  }
+  if (QUESTION_TO_REVISIT_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return false;
+  }
+  if (THREAD_CIRCLING_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return false;
+  }
+  if (/^how (does|should|do|can|would)\b/i.test(trimmed)) {
+    return false;
+  }
+  if (trimmed.length >= 80) {
+    return false;
+  }
+  return trimmed.length < 120;
+}
+
+export function normalizeRawLabMemoryItem(
+  text: string,
+  kind: RawLabMemoryItemKind
+): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (kind === "provisionalStance") {
+    return normalizeProvisionalStance(trimmed);
+  }
+  if (kind === "doNotRepeat") {
+    return compactText(trimmed.replace(/^["']|["']$/g, ""), 120);
+  }
+  if (isNoisyRawLabAssistantSnippet(trimmed)) {
+    return null;
+  }
+  if (kind === "questionToRevisit" && isRawUserQuestionMemory(trimmed)) {
+    return null;
+  }
+  return compactText(trimmed, RAW_LAB_DISPLAY_MEMORY_MAX_CHARS);
+}
+
+function shouldRejectMemoryItem(text: string, kind: RawLabMemoryItemKind): boolean {
+  if (kind === "doNotRepeat") {
+    if (isNoisyRawLabAssistantSnippet(text) && !isCompactDoNotRepeatPhrase(text)) {
+      return true;
+    }
+    return false;
+  }
+  if (kind === "provisionalStance") {
+    if (isCompactDoNotRepeatPhrase(text)) {
+      return true;
+    }
+    return isMalformedProvisionalStance(text) || !normalizeProvisionalStance(text);
+  }
+  if (kind === "selfObservation" || kind === "userSteering") {
+    if (isCompactDoNotRepeatPhrase(text)) {
+      return true;
+    }
+  }
+  if (kind === "selfObservation" || kind === "userSteering") {
+    if (isNoisyRawLabAssistantSnippet(text)) {
+      return true;
+    }
+    if (kind === "selfObservation" && /^i'?m noticing i adapt when you steer me toward\b/i.test(text)) {
+      return true;
+    }
+  }
+  if (kind === "questionToRevisit" && isRawUserQuestionMemory(text)) {
+    return true;
+  }
+  if (isNoisyRawLabAssistantSnippet(text)) {
+    return true;
+  }
+  return false;
+}
+
+export function filterDisplayThreadMemoryItems(
+  items: string[],
+  kind: RawLabMemoryItemKind = "selfObservation"
+): string[] {
+  const seen = new Set<string>();
+  const filtered: string[] = [];
+  for (const item of items) {
+    if (shouldRejectMemoryItem(item, kind)) {
+      continue;
+    }
+    const normalized =
+      kind === "provisionalStance"
+        ? normalizeProvisionalStance(item)
+        : normalizeRawLabMemoryItem(item, kind);
+    if (!normalized) {
+      continue;
+    }
+    const key = normalizeMemoryKey(normalized);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    filtered.push(normalized);
+  }
+  return filtered;
+}
+
+export type RawLabDisplayThreadMemoryState = Pick<
+  RawLabThreadState,
+  | "userSteering"
+  | "doNotRepeat"
+  | "provisionalStances"
+  | "selfObservations"
+  | "openLoops"
+  | "recurringTopics"
+  | "currentVibe"
+  | "questionsToRevisit"
+  | "pinnedFacts"
+  | "decisions"
+>;
+
+export function buildDisplayThreadMemoryState(
+  state: RawLabThreadState
+): RawLabDisplayThreadMemoryState {
+  return {
+    userSteering: filterDisplayThreadMemoryItems(state.userSteering, "userSteering"),
+    doNotRepeat: filterDisplayThreadMemoryItems(state.doNotRepeat, "doNotRepeat"),
+    provisionalStances: filterDisplayThreadMemoryItems(
+      state.provisionalStances,
+      "provisionalStance"
+    ),
+    selfObservations: filterDisplayThreadMemoryItems(
+      state.selfObservations,
+      "selfObservation"
+    ),
+    openLoops: filterDisplayThreadMemoryItems(state.openLoops, "openLoop"),
+    recurringTopics: filterDisplayThreadMemoryItems(state.recurringTopics, "recurringTopic"),
+    currentVibe: filterDisplayThreadMemoryItems(
+      state.currentVibe ? [state.currentVibe] : [],
+      "currentVibe"
+    ).join(""),
+    questionsToRevisit: filterDisplayThreadMemoryItems(
+      state.questionsToRevisit,
+      "questionToRevisit"
+    ),
+    pinnedFacts: filterDisplayThreadMemoryItems(state.pinnedFacts, "pinnedFact"),
+    decisions: filterDisplayThreadMemoryItems(state.decisions, "decision")
+  };
+}
+
+export function sanitizeRawLabMemoryProposal(
+  text: string,
+  kind: RawLabMemoryItemKind
+): string | null {
+  if (shouldRejectMemoryItem(text, kind)) {
+    return null;
+  }
+  return normalizeRawLabMemoryItem(text, kind);
 }

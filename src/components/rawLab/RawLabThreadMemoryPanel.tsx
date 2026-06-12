@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import {
   addUserDislike,
   addUserRespondsWellTo,
+  buildDisplayThreadMemoryState,
   clearPersonalityInThreadState,
   clearThreadMemoryOnly,
   removePersonalityItem,
@@ -56,13 +57,14 @@ function MemoryReviewCard({
   );
 }
 
-function TruncatedDigest({ text }: { text: string }) {
+function TruncatedDigest({ text, label }: { text: string; label?: string }) {
   const [expanded, setExpanded] = useState(false);
   const needsTruncate = text.length > DIGEST_PREVIEW_CHARS;
   const visible = expanded || !needsTruncate ? text : `${text.slice(0, DIGEST_PREVIEW_CHARS)}…`;
 
   return (
     <View style={styles.memoryReviewCard}>
+      {label ? <Text style={styles.helpText}>{label}</Text> : null}
       <Text style={styles.memoryReviewCardText}>{visible}</Text>
       {needsTruncate ? (
         <Pressable onPress={() => setExpanded((open) => !open)}>
@@ -115,19 +117,20 @@ export function RawLabThreadMemoryPanel({
   const [personalityCollapsed, setPersonalityCollapsed] = useState(!embeddedInBackroom);
 
   const { personality } = threadState;
+  const displayMemory = buildDisplayThreadMemoryState(threadState);
 
   const hasMemoryContent =
     Boolean(threadState.recentDigest) ||
-    threadState.pinnedFacts.length > 0 ||
-    threadState.decisions.length > 0 ||
-    threadState.openLoops.length > 0 ||
-    threadState.userSteering.length > 0 ||
-    threadState.doNotRepeat.length > 0 ||
-    threadState.recurringTopics.length > 0 ||
-    Boolean(threadState.currentVibe) ||
-    threadState.provisionalStances.length > 0 ||
-    threadState.selfObservations.length > 0 ||
-    threadState.questionsToRevisit.length > 0;
+    displayMemory.pinnedFacts.length > 0 ||
+    displayMemory.decisions.length > 0 ||
+    displayMemory.openLoops.length > 0 ||
+    displayMemory.userSteering.length > 0 ||
+    displayMemory.doNotRepeat.length > 0 ||
+    displayMemory.recurringTopics.length > 0 ||
+    Boolean(displayMemory.currentVibe) ||
+    displayMemory.provisionalStances.length > 0 ||
+    displayMemory.selfObservations.length > 0 ||
+    displayMemory.questionsToRevisit.length > 0;
 
   const hasPersonalityContent =
     personality.voiceTraits.length > 0 ||
@@ -188,37 +191,70 @@ export function RawLabThreadMemoryPanel({
           {memoryOpen ? (
             <View style={styles.checklist}>
               {threadState.recentDigest ? (
-                <TruncatedDigest text={threadState.recentDigest} />
+                <TruncatedDigest
+                  text={threadState.recentDigest}
+                  label="Recent digest (transcript snippet, not distilled memory)"
+                />
               ) : null}
 
               <MemoryItemsList
-                items={threadState.pinnedFacts}
+                items={displayMemory.pinnedFacts}
                 listKey="pinnedFacts"
-                onRemove={(index) => handleRemoveMemory("pinnedFacts", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.pinnedFacts[index];
+                  const stateIndex = threadState.pinnedFacts.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("pinnedFacts", stateIndex);
+                  }
+                }}
               />
               <MemoryItemsList
-                items={threadState.openLoops}
+                items={displayMemory.openLoops}
                 listKey="openLoops"
-                onRemove={(index) => handleRemoveMemory("openLoops", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.openLoops[index];
+                  const stateIndex = threadState.openLoops.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("openLoops", index);
+                  }
+                }}
               />
               <MemoryItemsList
-                items={threadState.userSteering}
+                items={displayMemory.userSteering}
                 listKey="userSteering"
-                onRemove={(index) => handleRemoveMemory("userSteering", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.userSteering[index];
+                  const stateIndex = threadState.userSteering.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("userSteering", stateIndex);
+                  }
+                }}
               />
               <MemoryItemsList
-                items={threadState.doNotRepeat}
+                items={displayMemory.doNotRepeat}
                 listKey="doNotRepeat"
-                onRemove={(index) => handleRemoveMemory("doNotRepeat", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.doNotRepeat[index];
+                  const stateIndex = threadState.doNotRepeat.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("doNotRepeat", stateIndex);
+                  }
+                }}
               />
               <MemoryItemsList
-                items={threadState.recurringTopics}
+                items={displayMemory.recurringTopics}
                 listKey="recurringTopics"
-                onRemove={(index) => handleRemoveMemory("recurringTopics", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.recurringTopics[index];
+                  const stateIndex = threadState.recurringTopics.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("recurringTopics", stateIndex);
+                  }
+                }}
               />
-              {threadState.currentVibe ? (
+              {displayMemory.currentVibe ? (
                 <MemoryReviewCard
-                  text={threadState.currentVibe}
+                  text={displayMemory.currentVibe}
                   onForget={() =>
                     onThreadStateChange({
                       ...threadState,
@@ -229,19 +265,37 @@ export function RawLabThreadMemoryPanel({
                 />
               ) : null}
               <MemoryItemsList
-                items={threadState.provisionalStances}
+                items={displayMemory.provisionalStances}
                 listKey="provisionalStances"
-                onRemove={(index) => handleRemoveMemory("provisionalStances", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.provisionalStances[index];
+                  const stateIndex = threadState.provisionalStances.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("provisionalStances", stateIndex);
+                  }
+                }}
               />
               <MemoryItemsList
-                items={threadState.selfObservations}
+                items={displayMemory.selfObservations}
                 listKey="selfObservations"
-                onRemove={(index) => handleRemoveMemory("selfObservations", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.selfObservations[index];
+                  const stateIndex = threadState.selfObservations.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("selfObservations", stateIndex);
+                  }
+                }}
               />
               <MemoryItemsList
-                items={threadState.questionsToRevisit}
+                items={displayMemory.questionsToRevisit}
                 listKey="questionsToRevisit"
-                onRemove={(index) => handleRemoveMemory("questionsToRevisit", index)}
+                onRemove={(index) => {
+                  const item = displayMemory.questionsToRevisit[index];
+                  const stateIndex = threadState.questionsToRevisit.indexOf(item);
+                  if (stateIndex >= 0) {
+                    handleRemoveMemory("questionsToRevisit", stateIndex);
+                  }
+                }}
               />
 
               {hasMemoryContent ? (

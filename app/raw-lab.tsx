@@ -19,8 +19,9 @@ import {
 import { shouldUseChatBackroomSideLayout } from "../src/components/chat/chatBackroomLayout";
 import { ChatStateStrip } from "../src/components/chat/ChatStateStrip";
 import { ChatSurfaceFrame } from "../src/components/chat/ChatSurfaceFrame";
-import { getChatSurfaceHeight } from "../src/components/chatSurfaceLayout";
+import { getChatFillPaneMinHeight } from "../src/components/chatSurfaceLayout";
 import { formatGatewayHost } from "../src/components/askHarness/askHarnessInspectorFormat";
+import { SignalStrip } from "../src/components/AlivePatterns";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { PageHeader } from "../src/components/PageHeader";
 import { SafetyBanner } from "../src/components/SafetyBanner";
@@ -32,7 +33,6 @@ import { RawLabBudgetInspector } from "../src/components/rawLab/RawLabBudgetInsp
 import { RawLabThread, type RawLabThreadError, type RawLabTurnDisplay } from "../src/components/rawLab/RawLabThread";
 import { RawLabThreadMemoryPanel } from "../src/components/rawLab/RawLabThreadMemoryPanel";
 import { RawLabThreadReflectionPanel } from "../src/components/rawLab/RawLabThreadReflectionPanel";
-import { Screen } from "../src/components/Screen";
 import { styles } from "../src/components/styles";
 import { createId } from "../src/core/ids";
 import { copyTextToClipboard } from "../src/core/askHarnessSynthesis";
@@ -63,9 +63,9 @@ import {
   DEFAULT_RAW_LAB_URL,
   RawLabError,
   streamRawLab,
-  type RawLabReasoningDepth,
   type RawLabResponse
 } from "../src/core/rawLabClient";
+import type { ReasoningDepth } from "../src/core/chatHarnessClient";
 import {
   DEFAULT_RAW_LAB_MAX_INPUT_CHARS,
   DEFAULT_GATEWAY_MAX_INPUT_CHARS
@@ -112,8 +112,6 @@ const QUICK_QUESTIONS = [
   { label: "Playful", message: "Be playful and less corporate.", mode: "general" as const },
   { label: "Challenge", message: "Challenge my assumption directly.", mode: "general" as const }
 ];
-
-const RAW_LAB_DEPTHS: RawLabReasoningDepth[] = ["fast", "deliberate", "deep"];
 
 function formatSendError(error: unknown): { text: string; status?: number } {
   if (error instanceof RawLabError) {
@@ -168,7 +166,7 @@ export default function RawLabScreen() {
   const [threadReflection, setThreadReflection] =
     useState<RawLabThreadReflectionResponse | null>(null);
   const [threadReflecting, setThreadReflecting] = useState(false);
-  const [reasoningDepth, setReasoningDepth] = useState<RawLabReasoningDepth>("fast");
+  const [reasoningDepth, setReasoningDepth] = useState<ReasoningDepth>("fast");
   const [backroomOpen, setBackroomOpen] = useState(false);
   const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
   const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
@@ -223,9 +221,9 @@ export default function RawLabScreen() {
     !handoffDismissed &&
     (shouldSuggestGroundedHandoff(message) ||
       turns.some((turn) => turn.role === "user" && shouldSuggestGroundedHandoff(turn.content)));
-  const { height, width } = useWindowDimensions();
+  const { width, height: windowHeight } = useWindowDimensions();
   const useSideBackroom = shouldUseChatBackroomSideLayout(width);
-  const chatSurfaceHeight = getChatSurfaceHeight(height, "rawLab");
+  const chatPaneMinHeight = getChatFillPaneMinHeight(windowHeight);
   const threadScrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -302,6 +300,7 @@ export default function RawLabScreen() {
 
     setTurns((previous) => [...previous, userTurn]);
     setErrors([]);
+    setMessage("");
 
     try {
       const sendResult = await streamRawLab({
@@ -339,7 +338,8 @@ export default function RawLabScreen() {
         id: createId("raw-assistant"),
         role: "assistant",
         content: response.answer,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        reasoningDepth
       };
 
       const completedTurns = [...priorTurns, userTurn, assistantTurn];
@@ -353,12 +353,12 @@ export default function RawLabScreen() {
           turns: completedTurns
         })
       );
-      setMessage("");
       setStreamingAnswer("");
       if (Platform.OS === "web") {
         inputRef.current?.focus();
       }
     } catch (error) {
+      setMessage((current) => (current.trim().length > 0 ? current : trimmed));
       const formatted = formatSendError(error);
       setErrors([{ id: createId("raw-error"), content: formatted.text }]);
       setNotice({
@@ -647,7 +647,7 @@ export default function RawLabScreen() {
   const chatFrame = (
     <ChatSurfaceFrame
       variant="rawSignal"
-      height={chatSurfaceHeight}
+      fill
       toolbar={
         <>
           <Pressable style={styles.smallButton} onPress={handleClearChat}>
@@ -663,26 +663,6 @@ export default function RawLabScreen() {
               <Text style={styles.smallButtonText}>Stop</Text>
             </Pressable>
           ) : null}
-          <View style={styles.splitRow}>
-            {RAW_LAB_DEPTHS.map((depth) => (
-              <Pressable
-                key={depth}
-                style={reasoningDepth === depth ? styles.chatMetaPillAccent : styles.chatQuickChip}
-                onPress={() => setReasoningDepth(depth)}
-                disabled={loading}
-              >
-                <Text
-                  style={
-                    reasoningDepth === depth
-                      ? styles.chatMetaPillTextAccent
-                      : styles.chatQuickChipText
-                  }
-                >
-                  {depth === "fast" ? "Fast" : depth === "deliberate" ? "Deliberate" : "Deep"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
           {showHandoffBanner ? (
             <View style={styles.bannerInfo}>
               <Text style={styles.bannerInfoText}>
@@ -705,8 +685,11 @@ export default function RawLabScreen() {
           message={message}
           loading={loading}
           quickQuestions={QUICK_QUESTIONS}
-          placeholder="Say anything — ungrounded sandbox…"
+          placeholder="Say anything..."
           inputRef={inputRef}
+          reasoningDepth={reasoningDepth}
+          onReasoningDepthChange={setReasoningDepth}
+          centered
           onMessageChange={setMessage}
           onQuickQuestion={handleQuickQuestion}
           onSend={() => void handleSend()}
@@ -718,6 +701,7 @@ export default function RawLabScreen() {
         errors={errors}
         threadScrollRef={threadScrollRef}
         loading={loading}
+        reasoningDepth={reasoningDepth}
         streamingDraft={streamingAnswer}
         onSelectPrompt={handleQuickQuestion}
         onPin={handlePin}
@@ -737,11 +721,16 @@ export default function RawLabScreen() {
   );
 
   return (
-    <Screen>
-      <View style={styles.chatPrimaryColumn}>
+    <View style={styles.chatScreenFill}>
+      <View style={[styles.chatPrimaryColumn, styles.chatPrimaryColumnFill]}>
         <PageHeader
           title="Raw Signal"
-          subtitle="Lab / Backroom — exploratory chat, not board authority."
+          subtitle="Ungrounded riffs and experiments. Nothing here changes your board."
+        />
+
+        <SignalStrip
+          label="Sandbox"
+          text="No board context, no tools, no Memory Bank writes. Use Companion when the answer should touch your real board."
         />
 
         <SafetyBanner
@@ -761,13 +750,26 @@ export default function RawLabScreen() {
 
         {!useSideBackroom && backroomOpen ? backroomPanel : null}
 
-        <View style={useSideBackroom ? styles.chatBackroomChatRow : undefined}>
-          <View style={useSideBackroom ? styles.chatBackroomChatColumn : undefined}>
+        <View
+          style={
+            useSideBackroom
+              ? [styles.chatBackroomChatRow, styles.chatBackroomChatRowFill]
+              : styles.chatBackroomChatRowFill
+          }
+        >
+          <View
+            style={[
+              useSideBackroom
+                ? [styles.chatBackroomChatColumn, styles.chatBackroomChatColumnFill]
+                : styles.chatBackroomChatColumnFill,
+              { minHeight: chatPaneMinHeight }
+            ]}
+          >
             {chatFrame}
           </View>
           {useSideBackroom && backroomOpen ? backroomPanel : null}
         </View>
       </View>
-    </Screen>
+    </View>
   );
 }

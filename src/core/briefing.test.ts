@@ -258,7 +258,7 @@ describe("scout briefing signals", () => {
       baseDaily,
       NOW,
       [fetchedCandidate],
-      seedJobSources,
+      [seedJobSources.find((source) => source.id === "source-fixture-greenhouse")!],
       [
         {
           sourceId: "source-fixture-greenhouse",

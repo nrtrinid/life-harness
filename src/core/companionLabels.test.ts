@@ -5,6 +5,9 @@ import {
   escalateReasoningDepthForThinkHarder,
   reasoningDepthHint,
   reasoningDepthLabel,
+  reasoningDepthShortLabel,
+  reasoningPanelTitle,
+  shouldShowReasoningPanel,
   thinkingStatusForDepth
 } from "./companionLabels";
 
@@ -16,6 +19,14 @@ describe("reasoningDepthLabel", () => {
   });
 });
 
+describe("reasoningDepthShortLabel", () => {
+  it("returns compact composer labels", () => {
+    expect(reasoningDepthShortLabel("fast")).toBe("Fast");
+    expect(reasoningDepthShortLabel("deliberate")).toBe("Think");
+    expect(reasoningDepthShortLabel("deep")).toBe("Deep");
+  });
+});
+
 describe("reasoningDepthHint", () => {
   it("returns short composer hints", () => {
     expect(reasoningDepthHint("fast")).toBe("Quick read on your board");
@@ -24,11 +35,31 @@ describe("reasoningDepthHint", () => {
   });
 });
 
+describe("shouldShowReasoningPanel", () => {
+  it("hides the panel for fast and shows it for slower depths", () => {
+    expect(shouldShowReasoningPanel("fast")).toBe(false);
+    expect(shouldShowReasoningPanel("deliberate")).toBe(true);
+    expect(shouldShowReasoningPanel("deep")).toBe(true);
+  });
+});
+
+describe("reasoningPanelTitle", () => {
+  it("uses thinking copy only for deep", () => {
+    expect(reasoningPanelTitle("fast")).toBe("");
+    expect(reasoningPanelTitle("deliberate")).toBe("Reasoning");
+    expect(reasoningPanelTitle("deep")).toBe("Thinking");
+  });
+});
+
 describe("thinkingStatusForDepth", () => {
-  it("returns Thinking… for fast and deliberate", () => {
-    expect(thinkingStatusForDepth("fast", 0)).toBe("Thinking…");
-    expect(thinkingStatusForDepth("fast", 10000)).toBe("Thinking…");
-    expect(thinkingStatusForDepth("deliberate", 5000)).toBe("Thinking…");
+  it("returns empty status for fast", () => {
+    expect(thinkingStatusForDepth("fast", 0)).toBe("");
+    expect(thinkingStatusForDepth("fast", 10000)).toBe("");
+  });
+
+  it("stages deliberate copy without thinking language", () => {
+    expect(thinkingStatusForDepth("deliberate", 0)).toBe("Reading your message…");
+    expect(thinkingStatusForDepth("deliberate", 5000)).toBe("Working through tradeoffs…");
   });
 
   it("stages deep copy by elapsed time", () => {
