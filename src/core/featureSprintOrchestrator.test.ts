@@ -5,6 +5,7 @@ import { normalizeData } from "./stateHydration";
 import {
   advanceFeatureSprintStep,
   buildFeatureScopingPacket,
+  FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS,
   buildFeatureStepImplementationPacket,
   buildFeatureStepReviewPacket,
   completeFeatureSprintPlan,
@@ -330,6 +331,99 @@ describe("featureSprintOrchestrator", () => {
     expect(result.markdown).toContain("Momentum Board v0.1");
     expect(result.markdown).toContain("life-harness");
     expect(result.markdown).toContain("feature-sprint-plan");
+  });
+
+  it("includes rough spec and scoping instructions when provided", () => {
+    const result = buildFeatureScopingPacket(baseData(), "card-build-test", {
+      now: FIXED_NOW,
+      roughSpec: "Build a safe worktree cleanup button."
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.markdown).toContain("## User-provided rough spec");
+    expect(result.markdown).toContain("## Scoping instructions");
+    expect(result.markdown).toContain("Build a safe worktree cleanup button.");
+    expect(result.markdown).toContain("Treat the rough spec above as the primary feature intent.");
+  });
+
+  it("trims whitespace from rough spec before inserting", () => {
+    const result = buildFeatureScopingPacket(baseData(), "card-build-test", {
+      now: FIXED_NOW,
+      roughSpec: "   Build X   "
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.markdown).toContain("Build X");
+    expect(result.markdown).not.toContain("   Build X   ");
+  });
+
+  it("omits rough spec sections when roughSpec is whitespace only", () => {
+    const result = buildFeatureScopingPacket(baseData(), "card-build-test", {
+      now: FIXED_NOW,
+      roughSpec: "   "
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.markdown).not.toContain("## User-provided rough spec");
+    expect(result.markdown).not.toContain("## Scoping instructions");
+  });
+
+  it("caps rough spec and notes truncation", () => {
+    const longSpec = "x".repeat(FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS + 50);
+    const result = buildFeatureScopingPacket(baseData(), "card-build-test", {
+      now: FIXED_NOW,
+      roughSpec: longSpec
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.markdown).toContain("(truncated)");
+    expect(result.markdown).not.toContain("x".repeat(FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS + 1));
+  });
+
+  it("places rough spec before existing context", () => {
+    const result = buildFeatureScopingPacket(baseData(), "card-build-test", {
+      now: FIXED_NOW,
+      roughSpec: "Build feature intake."
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const roughIndex = result.markdown.indexOf("## User-provided rough spec");
+    const contextIndex = result.markdown.indexOf("## Existing context");
+    expect(roughIndex).toBeGreaterThan(-1);
+    expect(contextIndex).toBeGreaterThan(roughIndex);
+  });
+
+  it("preserves key scoping sections when rough spec is empty", () => {
+    const result = buildFeatureScopingPacket(baseData(), "card-build-test", { now: FIXED_NOW });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.markdown).not.toContain("## User-provided rough spec");
+    expect(result.markdown).not.toContain("## Scoping instructions");
+    expect(result.markdown).toContain("# Feature Scoping Packet");
+    expect(result.markdown).toContain("## Card summary");
+    expect(result.markdown).toContain("feature-sprint-plan");
+  });
+
+  it("does not mutate data when building scoping packet with rough spec", () => {
+    const data = baseData();
+    const before = JSON.stringify(data);
+    buildFeatureScopingPacket(data, "card-build-test", {
+      now: FIXED_NOW,
+      roughSpec: "Build feature intake."
+    });
+    expect(JSON.stringify(data)).toBe(before);
   });
 
   it("builds implementation packet with step and verification commands", () => {

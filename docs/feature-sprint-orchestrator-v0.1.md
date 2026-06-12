@@ -20,17 +20,18 @@ User → approval gate
 ## Manual workflow
 
 1. Open a build/feature card → **Backroom** → **Feature Sprint**.
-2. **Copy scoping packet** → paste into ChatGPT or Codex (high/xhigh).
-3. Architect returns prose + `feature-sprint-plan` fenced JSON.
-4. **Import plan** — parses fenced block only; no NL parsing.
-5. **Copy implementation prompt** or **Run implementation in worktree** (local runner, isolated git worktree) → send to Cursor/Codex implementation agent.
-6. Paste or receive agent output → **Save agent output** on the current step (never auto-saved).
-7. **Copy review packet** → paste into ChatGPT/Codex reviewer.
-8. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
-9. **Import review verdict** — does not auto-advance.
-10. **Advance step** when ready (manual gate).
-11. Repeat steps 5–10 for each slice.
-12. **Mark feature complete** — creates one win log + proof (idempotent).
+2. Optionally paste a **Rough feature spec** (see [feature-spec-intake-v0.1.md](./feature-spec-intake-v0.1.md)).
+3. **Copy scoping packet** or **Run scoping with Codex** → paste into ChatGPT or Codex (high/xhigh) if copying manually.
+4. Architect returns prose + `feature-sprint-plan` fenced JSON.
+5. **Import plan** — parses fenced block only; no NL parsing.
+6. **Copy implementation prompt** or **Run implementation in worktree** (local runner, isolated git worktree) → send to Cursor/Codex implementation agent.
+7. Paste or receive agent output → **Save agent output** on the current step (never auto-saved).
+8. **Copy review packet** → paste into ChatGPT/Codex reviewer.
+9. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
+10. **Import review verdict** — does not auto-advance.
+11. **Advance step** when ready (manual gate).
+12. Repeat steps 6–11 for each slice.
+13. **Mark feature complete** — creates one win log + proof (idempotent).
 
 Re-importing a plan on an active sprint **preserves plan ID** and replaces steps after explicit **Import plan** — no silent merge.
 

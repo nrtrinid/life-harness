@@ -58,8 +58,9 @@ Real mode is documented and adapter-only. Do not block on perfect local Codex CL
 
 1. Start runner: `npm run feature-runner` (mock default).
 2. Open card → **Backroom** → **Feature Sprint**.
-3. **Check runner** → should show available when runner is up.
-4. **Run scoping with Codex** → plan import textarea fills → inspect → **Import plan**.
+3. Optionally paste a **Rough feature spec** (see [feature-spec-intake-v0.1.md](./feature-spec-intake-v0.1.md)).
+4. **Check runner** → should show available when runner is up.
+5. **Run scoping with Codex** → plan import textarea fills → inspect → **Import plan**.
 5. **Copy implementation prompt** / save agent output manually (unchanged).
 6. **Run review with Codex** → review import textarea fills → inspect → **Import review verdict**.
 7. **Advance step** / **Mark feature complete** on Card Detail as before.

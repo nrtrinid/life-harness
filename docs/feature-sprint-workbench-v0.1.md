@@ -38,7 +38,8 @@ Active plans (`planning`, `in_progress`, `reviewing`) land in exactly one active
 
 1. Open **Feature Sprints** from Backroom.
 2. Pick a **Needs planning** card (project metadata required).
-3. **Copy scoping packet** or **Open card** to import a plan on Card Detail Backroom.
+3. **Open card** to paste a rough spec, then copy/run scoping on Card Detail Backroom — or **Copy scoping packet** from Workbench (card context only).
+4. **Import plan** on Card Detail after scoping output is ready.
 4. When a step is **Ready to implement**, copy the implementation prompt and paste into Codex/Cursor.
 5. Save agent output on Card Detail; work moves to **Awaiting agent output** → **Needs review**.
 6. **Copy review packet** for ChatGPT/Codex review; import verdict on Card Detail.

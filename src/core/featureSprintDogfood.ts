@@ -373,7 +373,8 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
     return {
       kind: "run_scoping",
       label: "Run scoping",
-      detail: "Use Run scoping with Codex below, or copy the scoping packet and paste the plan back."
+      detail:
+        "Paste a rough spec in Backroom if helpful, then run scoping with Codex or copy the scoping packet."
     };
   }
 

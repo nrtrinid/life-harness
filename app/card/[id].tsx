@@ -255,6 +255,7 @@ export default function CardDetailScreen() {
   const [projectNotes, setProjectNotes] = useState("");
   const [isCopyLogging, setIsCopyLogging] = useState(false);
   const [planImportText, setPlanImportText] = useState("");
+  const [featureSpecText, setFeatureSpecText] = useState("");
   const [reviewImportText, setReviewImportText] = useState("");
   const [agentOutputText, setAgentOutputText] = useState("");
   const [runnerHealth, setRunnerHealth] = useState<"unknown" | "available" | "unavailable">(
@@ -524,6 +525,12 @@ export default function CardDetailScreen() {
     showNotice("success", successMessage);
   }
 
+  function buildScopingPacketForCard() {
+    return buildFeatureScopingPacket(lifeHarnessData, cardId, {
+      roughSpec: featureSpecText
+    });
+  }
+
   function handleCopyAgentContext() {
     void copyMarkdownToClipboard(
       () => buildCardContextPacket(lifeHarnessData, card!.id),
@@ -677,7 +684,7 @@ export default function CardDetailScreen() {
       return;
     }
 
-    const packet = buildFeatureScopingPacket(lifeHarnessData, cardId);
+    const packet = buildScopingPacketForCard();
     if (!packet.ok) {
       showNotice("warning", packet.error);
       return;
@@ -1117,6 +1124,36 @@ export default function CardDetailScreen() {
           implements bounded slices.
         </Text>
 
+        <Text style={[styles.label, { marginTop: 12 }]}>Rough feature spec</Text>
+        <Text style={styles.helpText}>
+          Paste the feature idea here. Life Harness will wrap it with card/project context for ChatGPT
+          or Codex.
+        </Text>
+        <Text style={[styles.helpText, { marginTop: 4 }]}>
+          This rough spec is not saved yet. Import the generated plan to keep it.
+        </Text>
+        <TextInput
+          style={[styles.captureInput, { minHeight: 88, marginTop: 8, textAlignVertical: "top" }]}
+          value={featureSpecText}
+          onChangeText={setFeatureSpecText}
+          placeholder="Example: Build a safe worktree cleanup button that removes old runner worktrees after review."
+          placeholderTextColor={colors.inputPlaceholder}
+          multiline
+        />
+        <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+          <Pressable style={styles.secondaryAction} onPress={() => setFeatureSpecText("")}>
+            <Text style={styles.secondaryActionText}>Clear spec</Text>
+          </Pressable>
+          {card.nextTinyAction?.trim() ? (
+            <Pressable
+              style={styles.secondaryAction}
+              onPress={() => setFeatureSpecText(card.nextTinyAction)}
+            >
+              <Text style={styles.secondaryActionText}>Use card next action as spec</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
         <View style={[styles.cardTile, { marginTop: 12 }]}>
           <View style={[styles.cardActionsRow, { alignItems: "center", justifyContent: "space-between" }]}>
             <Text style={styles.label}>Builder readiness</Text>
@@ -1417,7 +1454,7 @@ export default function CardDetailScreen() {
               style={styles.secondaryAction}
               onPress={() => {
                 void copyMarkdownToClipboard(
-                  () => buildFeatureScopingPacket(lifeHarnessData, card.id),
+                  buildScopingPacketForCard,
                   "Scoping packet copied."
                 );
               }}

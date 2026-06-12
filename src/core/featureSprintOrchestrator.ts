@@ -47,6 +47,13 @@ const REVIEW_STATUSES = new Set<HarnessFeatureSprintReviewStatus>([
 
 const DEFAULT_VERIFY_COMMANDS = ["npm run typecheck", "npm test"];
 
+export const FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS = 12_000;
+
+export type FeatureScopingPacketOptions = {
+  now?: Date;
+  roughSpec?: string;
+};
+
 const SCOPING_NON_GOALS = [
   "Codex/Cursor CLI runner",
   "PC/browser automation",
@@ -789,10 +796,47 @@ function formatBulletSection(title: string, lines: string[]): string[] {
   return [title, ...lines.map((line) => `- ${line}`), ""];
 }
 
+function normalizeRoughSpecForScoping(
+  raw?: string
+): { body: string; truncated: boolean } | null {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.length <= FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS) {
+    return { body: trimmed, truncated: false };
+  }
+  return {
+    body: trimmed.slice(0, FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS),
+    truncated: true
+  };
+}
+
+function formatRoughSpecSections(normalized: { body: string; truncated: boolean }): string[] {
+  const lines = [
+    "## User-provided rough spec",
+    "",
+    normalized.body
+  ];
+  if (normalized.truncated) {
+    lines.push("(truncated)");
+  }
+  lines.push(
+    "",
+    "## Scoping instructions",
+    "- Treat the rough spec above as the primary feature intent.",
+    "- Use card, project, and existing context below as grounding only.",
+    "- Preserve the non-goals and safety boundaries in this packet.",
+    "- Return short prose plus a fenced `feature-sprint-plan` JSON block.",
+    ""
+  );
+  return lines;
+}
+
 export function buildFeatureScopingPacket(
   data: LifeHarnessData,
   cardId: string,
-  options: { now?: Date } = {}
+  options: FeatureScopingPacketOptions = {}
 ): FeaturePacketBuildResult {
   const cardResult = buildCardContextPacket(data, cardId, options);
   if (!cardResult.ok) {
@@ -808,6 +852,7 @@ export function buildFeatureScopingPacket(
     nextMove.primary?.cardId === cardId || nextMove.backup?.cardId === cardId;
   const verifyCommands =
     project?.verificationCommands?.length ? project.verificationCommands : DEFAULT_VERIFY_COMMANDS;
+  const normalizedRoughSpec = normalizeRoughSpecForScoping(options.roughSpec);
 
   const lines: string[] = [
     "# Feature Scoping Packet",
@@ -815,12 +860,19 @@ export function buildFeatureScopingPacket(
     "## Purpose",
     "Ask ChatGPT or Codex (high/xhigh reasoning) to scope this feature for a solo-builder OS.",
     "Return prose plus a fenced `feature-sprint-plan` JSON block.",
-    "",
+    ""
+  ];
+
+  if (normalizedRoughSpec) {
+    lines.push(...formatRoughSpecSections(normalizedRoughSpec));
+  }
+
+  lines.push(
     "## Card summary",
     `- Title: ${cardPacket.title}`,
     `- Status: ${cardPacket.status}`,
     `- Next tiny action: ${cardPacket.nextTinyAction}`
-  ];
+  );
 
   if (lifeCard) {
     lines.push(`- Do lane: ${lifeCard.doLane}`, `- Improve lane: ${lifeCard.improveLane}`);
