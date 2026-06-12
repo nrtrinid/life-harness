@@ -2,7 +2,7 @@
 
 ## What this adds
 
-A **Rough feature spec** textarea in Card Detail Backroom — the front door for the Feature Sprint Builder loop.
+A **Rough feature spec** textarea inside the Card Detail Backroom **Start feature** panel — the front door for the Feature Sprint Builder loop.
 
 Paste a rough idea; Life Harness wraps it with card, project, and context into the existing scoping packet. Copy or run scoping with Codex/ChatGPT as before; import the plan manually.
 
@@ -40,9 +40,9 @@ Rough spec is **not** stored on the plan or in history unless the architect incl
 
 ## Manual workflow
 
-1. Open a build card with project metadata → **Backroom** → **Feature Sprint**.
-2. Paste a rough feature spec (optional but recommended for new features).
-3. **Copy scoping packet** or **Run scoping with Codex** (local runner).
+1. Open a build card with project metadata → **Backroom** → **Feature Sprint** → **Start feature** panel.
+2. Paste a rough feature spec in step 1 (optional but recommended for new features).
+3. Check setup in step 2; **Copy scoping packet** or **Run scoping with Codex** in step 3.
 4. Inspect output → **Import plan** manually.
 5. Continue the existing implementation → review → advance loop.
 
@@ -54,19 +54,20 @@ Helper actions:
 ## Intentional limits (v0.1)
 
 - Rough spec is **local UI state only** — not persisted; navigating away loses it
-- UI note: *This rough spec is not saved yet. Import the generated plan to keep it.*
+- UI note: *This rough spec is local only. Import the generated plan to keep it.*
 - No auto-import, auto-save, auto-review, or auto-advance
 - No automatic spec generation or prompt rewrite
-- Feature Sprint Workbench has no textarea — open the card to paste a spec
+- Feature Sprint Workbench has no textarea — open the card to use the **Start feature** panel
 - Workbench **Copy scoping packet** remains card-context-only
 
 ## Future path
 
 - Ask Companion/Codex to draft a spec from card context
 - Persistent spec drafts per card
-- **Start Feature** flow from Workbench or Project Hub
 - Workbench intake surface
 - Project Hub integration
+
+See also [start-feature-flow-v0.2.md](./start-feature-flow-v0.2.md) for the guided Start feature panel.
 
 ## Related docs
 

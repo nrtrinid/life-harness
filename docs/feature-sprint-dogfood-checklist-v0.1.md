@@ -11,7 +11,7 @@ Is this feature card ready to run the builder loop?
 What is the next safe manual action?
 ```
 
-The checklist lives in core logic as `buildFeatureSprintDogfoodSummary()` and appears in Card Detail Backroom near the existing Feature Sprint controls.
+The checklist lives in core logic as `buildFeatureSprintDogfoodSummary()` and appears in Card Detail Backroom near the existing Feature Sprint controls, including the **Start feature** panel for scoping.
 
 ## Why it exists
 
@@ -57,7 +57,7 @@ The next action is deterministic and intentionally simple:
 1. Missing project metadata/repoPath -> Add project metadata
 2. Runner not checked/unavailable -> Check runner
 3. Scoping output exists with no active plan -> Import plan
-4. No active plan -> Run scoping
+4. No active plan -> Run scoping (via **Start feature** panel step 3)
 5. No current step and plan is reviewing/done-ready -> Mark feature complete
 6. Implementation output exists but step output is not saved -> Save agent output
 7. Ready/planned step with no output -> Run implementation
@@ -75,8 +75,8 @@ Use the mock runner path for safe loop testing:
 
 ```text
 1. Start runner: npm run feature-runner
-2. Check runner
-3. Run scoping with Codex
+2. Open card → Start feature panel → Check runner (step 2)
+3. Run scoping with Codex (step 3)
 4. Import plan
 5. Run implementation in worktree
 6. Save agent output
@@ -114,3 +114,5 @@ Useful later slices:
 - worktree cleanup UI
 - commit approval gate
 - Project Hub after more dogfood
+
+See [start-feature-flow-v0.2.md](./start-feature-flow-v0.2.md) for the guided Start feature panel on Card Detail.

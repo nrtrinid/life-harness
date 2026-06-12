@@ -374,7 +374,7 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
       kind: "run_scoping",
       label: "Run scoping",
       detail:
-        "Paste a rough spec in Backroom if helpful, then run scoping with Codex or copy the scoping packet."
+        "Use the Start feature panel: paste a rough spec if helpful, then run scoping with Codex or copy the scoping packet."
     };
   }
 

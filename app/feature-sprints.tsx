@@ -137,7 +137,7 @@ function ReadyCardRow({
         </Text>
       ) : null}
       <Text style={styles.bodyText}>Next: {row.nextTinyAction}</Text>
-      <Text style={styles.helpText}>Open card to paste a rough spec and scope the feature.</Text>
+      <Text style={styles.helpText}>Open the card to paste a rough spec and start the guided scoping flow.</Text>
       <View style={[styles.cardActionsRow, { marginTop: 8 }]}>
         <Link href={`/card/${row.cardId}`} asChild>
           <Pressable style={styles.secondaryAction}>
@@ -235,8 +235,8 @@ export default function FeatureSprintsScreen() {
       <Section title="Needs planning">
         {summary.needsPlanning.length === 0 ? (
           <Text style={styles.emptyText}>
-            Add project metadata to a build card, then open the card to paste a rough spec and scope
-            a feature.
+            Add project metadata to a build card, then open the card to paste a rough spec and start
+            the guided scoping flow.
           </Text>
         ) : (
           summary.needsPlanning.map((row) => (

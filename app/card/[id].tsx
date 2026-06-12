@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-na
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
 import { FeatureRunnerOutputDetails } from "../../src/components/featureSprint/FeatureRunnerOutputDetails";
+import { FeatureSprintStartFlow } from "../../src/components/featureSprint/FeatureSprintStartFlow";
 import { CollapsibleSection } from "../../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../../src/components/Notice";
 import { ProgressBar } from "../../src/components/ProgressBar";
@@ -486,6 +487,7 @@ export default function CardDetailScreen() {
   }
 
   const activeFeatureSprintPlan = getActiveFeatureSprintPlanForCard(lifeHarnessData, card.id);
+  const cardProject = getProjectForCard(lifeHarnessData, card.id);
   const currentFeatureStep = activeFeatureSprintPlan?.steps.find(
     (step) => step.id === activeFeatureSprintPlan.currentStepId
   );
@@ -1029,7 +1031,7 @@ export default function CardDetailScreen() {
           href={{ pathname: "/proof-ledger", params: { cardId: card.id } }}
           asChild
         >
-          <Pressable style={[styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }]}>
+          <Pressable style={StyleSheet.flatten([styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }])}>
             <Text style={styles.secondaryActionText}>View proof ledger for this card</Text>
           </Pressable>
         </Link>
@@ -1124,35 +1126,34 @@ export default function CardDetailScreen() {
           implements bounded slices.
         </Text>
 
-        <Text style={[styles.label, { marginTop: 12 }]}>Rough feature spec</Text>
-        <Text style={styles.helpText}>
-          Paste the feature idea here. Life Harness will wrap it with card/project context for ChatGPT
-          or Codex.
-        </Text>
-        <Text style={[styles.helpText, { marginTop: 4 }]}>
-          This rough spec is not saved yet. Import the generated plan to keep it.
-        </Text>
-        <TextInput
-          style={[styles.captureInput, { minHeight: 88, marginTop: 8, textAlignVertical: "top" }]}
-          value={featureSpecText}
-          onChangeText={setFeatureSpecText}
-          placeholder="Example: Build a safe worktree cleanup button that removes old runner worktrees after review."
-          placeholderTextColor={colors.inputPlaceholder}
-          multiline
+        <FeatureSprintStartFlow
+          cardTitle={card.title}
+          nextTinyAction={card.nextTinyAction}
+          roughSpec={featureSpecText}
+          onChangeRoughSpec={setFeatureSpecText}
+          onClearSpec={() => setFeatureSpecText("")}
+          onUseNextActionAsSpec={
+            card.nextTinyAction?.trim()
+              ? () => setFeatureSpecText(card.nextTinyAction)
+              : undefined
+          }
+          runnerHealth={runnerHealth}
+          isCheckingRunner={isCheckingRunner}
+          isRunningScoping={isRunningScoping}
+          hasProjectMetadata={Boolean(cardProject)}
+          hasRepoPath={Boolean(cardProject?.repoPath?.trim())}
+          hasActivePlan={Boolean(activeFeatureSprintPlan)}
+          canCopyScopingPacket={canCopyTextToClipboard()}
+          onCheckRunner={() => {
+            void handleCheckRunner();
+          }}
+          onCopyScopingPacket={() => {
+            void copyMarkdownToClipboard(buildScopingPacketForCard, "Scoping packet copied.");
+          }}
+          onRunScoping={() => {
+            void handleRunScopingWithCodex();
+          }}
         />
-        <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
-          <Pressable style={styles.secondaryAction} onPress={() => setFeatureSpecText("")}>
-            <Text style={styles.secondaryActionText}>Clear spec</Text>
-          </Pressable>
-          {card.nextTinyAction?.trim() ? (
-            <Pressable
-              style={styles.secondaryAction}
-              onPress={() => setFeatureSpecText(card.nextTinyAction)}
-            >
-              <Text style={styles.secondaryActionText}>Use card next action as spec</Text>
-            </Pressable>
-          ) : null}
-        </View>
 
         <View style={[styles.cardTile, { marginTop: 12 }]}>
           <View style={[styles.cardActionsRow, { alignItems: "center", justifyContent: "space-between" }]}>
@@ -1209,26 +1210,6 @@ export default function CardDetailScreen() {
             ))}
           </View>
         </CollapsibleSection>
-
-        <View style={[styles.cardActionsRow, { marginTop: 12, alignItems: "center" }]}>
-          <Text style={styles.helpText}>
-            Local runner:{" "}
-            {runnerHealth === "available"
-              ? "available"
-              : runnerHealth === "unavailable"
-                ? "unavailable"
-                : "not checked"}
-          </Text>
-          <Pressable
-            style={[styles.secondaryAction, isCheckingRunner && { opacity: 0.5 }]}
-            disabled={isCheckingRunner}
-            onPress={() => {
-              void handleCheckRunner();
-            }}
-          >
-            <Text style={styles.secondaryActionText}>Check runner</Text>
-          </Pressable>
-        </View>
 
         <View style={{ marginTop: 12 }}>
           <Text style={styles.label}>Recent runner runs</Text>
@@ -1448,31 +1429,9 @@ export default function CardDetailScreen() {
           <Text style={[styles.emptyText, { marginTop: 12 }]}>No active feature sprint plan yet.</Text>
         )}
 
-        {canCopyTextToClipboard() ? (
-          <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
-            <Pressable
-              style={styles.secondaryAction}
-              onPress={() => {
-                void copyMarkdownToClipboard(
-                  buildScopingPacketForCard,
-                  "Scoping packet copied."
-                );
-              }}
-            >
-              <Text style={styles.secondaryActionText}>Copy scoping packet</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.secondaryAction, isRunningScoping && { opacity: 0.5 }]}
-              disabled={isRunningScoping}
-              onPress={() => {
-                void handleRunScopingWithCodex();
-              }}
-            >
-              <Text style={styles.secondaryActionText}>
-                {isRunningScoping ? "Running…" : "Run scoping with Codex"}
-              </Text>
-            </Pressable>
-            {activeFeatureSprintPlan ? (
+        {activeFeatureSprintPlan || canCopyTextToClipboard() ? (
+          <View style={[styles.cardActionsRow, { marginTop: 12, flexWrap: "wrap" }]}>
+            {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
               <Pressable
                 style={styles.secondaryAction}
                 onPress={() => {
@@ -1502,7 +1461,7 @@ export default function CardDetailScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            {activeFeatureSprintPlan ? (
+            {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
               <Pressable
                 style={styles.secondaryAction}
                 onPress={() => {
