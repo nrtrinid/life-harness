@@ -53,17 +53,37 @@ export type FeatureSprintRunnerOutputView = {
     stdoutExcerpt?: string;
   }[];
 
+  worktreeCleanedAt?: string;
+  worktreeCleanupStatus?: string;
+  worktreeCleanupMessage?: string;
+  canCleanWorktree: boolean;
+
   safetyNotes: string[];
 };
 
-function buildSafetyNotes(profile: FeatureSprintRunnerProfile): string[] {
+export const FEATURE_SPRINT_WORKTREE_CLEANUP_HELPER =
+  "Normal cleanup checks safety first. Worktrees with changes require Force clean after inspection.";
+
+export const FEATURE_SPRINT_WORKTREE_FORCE_CLEAN_HELPER =
+  "Force clean deletes uncommitted worktree changes. Inspect output/diff first.";
+
+function buildSafetyNotes(
+  profile: FeatureSprintRunnerProfile,
+  cleanedAt?: string
+): string[] {
   if (profile === "codex_implementation") {
-    return [
+    const notes = [
       "This run used an isolated worktree.",
       "No commit, merge, or push is performed by Life Harness.",
       "Save agent output is still manual.",
       "Verification failures do not auto-reject; review the output."
     ];
+    if (cleanedAt) {
+      notes.push("Worktree was cleaned; history/output remains in Life Harness.");
+    } else {
+      notes.push("Inspect and save/review before cleaning the worktree.");
+    }
+    return notes;
   }
 
   return ["Runner output is advisory only.", "Import and save steps remain manual."];
@@ -111,7 +131,14 @@ function mapRun(run: HarnessFeatureSprintRunnerRun): FeatureSprintRunnerOutputVi
         stderrExcerpt: row.stderrExcerpt,
         stdoutExcerpt: row.stdoutExcerpt
       })),
-    safetyNotes: buildSafetyNotes(run.profile)
+    worktreeCleanedAt: run.worktreeCleanedAt,
+    worktreeCleanupStatus: run.worktreeCleanupStatus,
+    worktreeCleanupMessage: run.worktreeCleanupMessage,
+    canCleanWorktree:
+      run.profile === "codex_implementation" &&
+      Boolean(run.worktreePath?.trim()) &&
+      !run.worktreeCleanedAt,
+    safetyNotes: buildSafetyNotes(run.profile, run.worktreeCleanedAt)
   };
 }
 

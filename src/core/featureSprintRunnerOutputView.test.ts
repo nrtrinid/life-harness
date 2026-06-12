@@ -11,8 +11,10 @@ import {
 } from "./featureSprintRunnerHistory";
 import {
   buildFeatureSprintRunnerOutputView,
-  FEATURE_SPRINT_RUNNER_DIFF_FALLBACK_MESSAGE
+  FEATURE_SPRINT_RUNNER_DIFF_FALLBACK_MESSAGE,
+  FEATURE_SPRINT_WORKTREE_CLEANUP_HELPER
 } from "./featureSprintRunnerOutputView";
+import { markFeatureSprintRunnerRunWorktreeCleanup } from "./featureSprintRunnerHistory";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type { LifeCard } from "./types";
 
@@ -239,5 +241,111 @@ describe("buildFeatureSprintRunnerOutputView", () => {
     const before = completed.state.featureSprintRunnerRuns;
     buildFeatureSprintRunnerOutputView(completed.state, created.runId);
     expect(completed.state.featureSprintRunnerRuns).toBe(before);
+  });
+
+  it("exposes cleanup fields and canCleanWorktree for implementation runs", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "codex_implementation",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "codex_implementation",
+      outputText: "Done.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      worktreePath: "/tmp/worktree-1",
+      branchName: "life-harness/feature-step-abc"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(completed.state, created.runId);
+    expect(view?.canCleanWorktree).toBe(true);
+    expect(view?.safetyNotes.some((note) => note.includes("Inspect and save/review"))).toBe(true);
+    expect(FEATURE_SPRINT_WORKTREE_CLEANUP_HELPER).toContain("Force clean");
+  });
+
+  it("updates safety notes after cleanup and disables further cleanup", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "codex_implementation",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "codex_implementation",
+      outputText: "Done.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      worktreePath: "/tmp/worktree-1"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(completed.state, created.runId, {
+      ok: true,
+      status: "cleaned",
+      worktreePath: "/tmp/worktree-1",
+      message: "Worktree removed.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    }, FIXED_NOW.toISOString());
+    if (!marked.ok) {
+      throw new Error("Expected mark to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(marked.state, created.runId);
+    expect(view?.canCleanWorktree).toBe(false);
+    expect(view?.worktreeCleanupStatus).toBe("cleaned");
+    expect(view?.safetyNotes.some((note) => note.includes("Worktree was cleaned"))).toBe(true);
+  });
+
+  it("surfaces not_found cleanup status on the output view", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "codex_implementation",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "codex_implementation",
+      outputText: "Done.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      worktreePath: "/tmp/worktree-1"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(completed.state, created.runId, {
+      ok: false,
+      status: "not_found",
+      worktreePath: "/tmp/worktree-1",
+      message: "Worktree path was not found on disk.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    });
+    if (!marked.ok) {
+      throw new Error("Expected mark to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(marked.state, created.runId);
+    expect(view?.worktreeCleanupStatus).toBe("not_found");
+    expect(view?.worktreeCleanedAt).toBeUndefined();
+    expect(view?.canCleanWorktree).toBe(true);
   });
 });

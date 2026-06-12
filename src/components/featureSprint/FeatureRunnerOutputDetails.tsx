@@ -5,6 +5,8 @@ import {
   FEATURE_SPRINT_RUNNER_DIFF_FALLBACK_MESSAGE,
   FEATURE_SPRINT_RUNNER_DIFF_TRUNCATION_NOTICE,
   FEATURE_SPRINT_RUNNER_OUTPUT_TRUNCATION_NOTICE,
+  FEATURE_SPRINT_WORKTREE_CLEANUP_HELPER,
+  FEATURE_SPRINT_WORKTREE_FORCE_CLEAN_HELPER,
   type FeatureSprintRunnerOutputView
 } from "../../core/featureSprintRunnerOutputView";
 import { colors, styles } from "../styles";
@@ -17,7 +19,28 @@ type FeatureRunnerOutputDetailsProps = {
   onCopyOutput: () => void;
   onCopyDiff?: () => void;
   onCopyVerificationSummary?: () => void;
+  onCopyWorktreePath?: () => void;
+  onCleanWorktree?: () => void;
+  onForceCleanWorktree?: () => void;
+  showForceClean?: boolean;
+  isCleaning?: boolean;
 };
+
+function cleanupStatusLabel(view: FeatureSprintRunnerOutputView): string | undefined {
+  if (view.worktreeCleanedAt || view.worktreeCleanupStatus === "cleaned") {
+    return "Worktree cleaned";
+  }
+  if (view.worktreeCleanupStatus === "blocked") {
+    return "Cleanup blocked: uncommitted changes";
+  }
+  if (view.worktreeCleanupStatus === "failed") {
+    return "Cleanup failed";
+  }
+  if (view.worktreeCleanupStatus === "not_found") {
+    return "Worktree not found on disk";
+  }
+  return undefined;
+}
 
 const monoBlockStyle = {
   fontFamily: "monospace" as const,
@@ -41,9 +64,15 @@ export function FeatureRunnerOutputDetails({
   canCopy,
   onCopyOutput,
   onCopyDiff,
-  onCopyVerificationSummary
+  onCopyVerificationSummary,
+  onCopyWorktreePath,
+  onCleanWorktree,
+  onForceCleanWorktree,
+  showForceClean = false,
+  isCleaning = false
 }: FeatureRunnerOutputDetailsProps) {
   const outputBody = view.outputText ?? view.outputExcerpt;
+  const cleanupLabel = cleanupStatusLabel(view);
 
   return (
     <View style={[styles.cardTile, { marginTop: 8, gap: 4 }]}>
@@ -138,6 +167,55 @@ export function FeatureRunnerOutputDetails({
             >
               <Text style={styles.secondaryActionText}>Copy verification summary</Text>
             </Pressable>
+          ) : null}
+        </DetailBlock>
+      ) : null}
+
+      {view.profile === "codex_implementation" && view.worktreePath ? (
+        <DetailBlock label="Worktree cleanup">
+          {view.canCleanWorktree ? (
+            <Text style={styles.helpText}>{FEATURE_SPRINT_WORKTREE_CLEANUP_HELPER}</Text>
+          ) : null}
+          {cleanupLabel ? <Text style={styles.bodyText}>{cleanupLabel}</Text> : null}
+          {view.worktreeCleanupMessage ? (
+            <Text style={styles.helpText}>{view.worktreeCleanupMessage}</Text>
+          ) : null}
+          {view.worktreeCleanupStatus === "blocked" && view.canCleanWorktree ? (
+            <Text style={[styles.helpText, { marginTop: 4 }]}>
+              Safety check passed: uncommitted changes detected. Use Force clean after inspection.
+            </Text>
+          ) : null}
+          <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+            {canCopy && onCopyWorktreePath ? (
+              <Pressable style={styles.secondaryAction} onPress={onCopyWorktreePath}>
+                <Text style={styles.secondaryActionText}>Copy path</Text>
+              </Pressable>
+            ) : null}
+            {view.canCleanWorktree && onCleanWorktree ? (
+              <Pressable
+                style={[styles.secondaryAction, isCleaning && { opacity: 0.5 }]}
+                disabled={isCleaning}
+                onPress={onCleanWorktree}
+              >
+                <Text style={styles.secondaryActionText}>
+                  {isCleaning ? "Cleaning…" : "Clean worktree"}
+                </Text>
+              </Pressable>
+            ) : null}
+            {showForceClean && onForceCleanWorktree ? (
+              <Pressable
+                style={[styles.secondaryAction, isCleaning && { opacity: 0.5 }]}
+                disabled={isCleaning}
+                onPress={onForceCleanWorktree}
+              >
+                <Text style={styles.secondaryActionText}>
+                  {isCleaning ? "Cleaning…" : "Force clean worktree"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {showForceClean ? (
+            <Text style={[styles.helpText, { marginTop: 6 }]}>{FEATURE_SPRINT_WORKTREE_FORCE_CLEAN_HELPER}</Text>
           ) : null}
         </DetailBlock>
       ) : null}

@@ -14,7 +14,7 @@ Implementation agents may write files. v0.1 never runs Codex in the main repo ch
 2. Creates a unique branch + worktree under a temp/worktree root
 3. Runs mock or real Codex with `cwd` set to the worktree
 4. Captures `git status`, `diff --stat`, and changed file names
-5. Returns metadata to the app — no commit, merge, push, or cleanup
+5. Returns metadata to the app — no commit, merge, or push; cleanup is a separate explicit step (see [feature-sprint-worktree-cleanup-v0.1.md](./feature-sprint-worktree-cleanup-v0.1.md))
 
 ## Setup
 
@@ -69,7 +69,9 @@ Pair app token: `EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN=your-dev-token`
 
 ## Worktree cleanup
 
-v0.1 does not delete worktrees automatically. Remove stale worktrees manually:
+v0.1 does not delete worktrees automatically at run completion. After inspecting output/diff in **View details**, use **Clean worktree** (Backroom). See [feature-sprint-worktree-cleanup-v0.1.md](./feature-sprint-worktree-cleanup-v0.1.md).
+
+Manual fallback:
 
 ```bash
 git worktree list

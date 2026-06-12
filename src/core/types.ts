@@ -1,4 +1,8 @@
-import type { FeatureSprintRunnerProfile, FeatureSprintVerificationResult } from "./featureSprintRunner";
+import type {
+  FeatureSprintRunnerProfile,
+  FeatureSprintVerificationResult,
+  FeatureSprintWorktreeCleanupStatus
+} from "./featureSprintRunner";
 
 export type LifeArea = "build" | "body" | "money_independence" | "social_career" | "stability_vices";
 
@@ -426,6 +430,9 @@ export type HarnessFeatureSprintRunnerRun = {
   changedFiles?: string[];
   diffText?: string;
   verificationResults?: FeatureSprintVerificationResult[];
+  worktreeCleanedAt?: string;
+  worktreeCleanupStatus?: FeatureSprintWorktreeCleanupStatus;
+  worktreeCleanupMessage?: string;
   startedAt: string;
   completedAt?: string;
   importedAt?: string;

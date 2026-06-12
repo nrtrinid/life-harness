@@ -3,7 +3,8 @@ import {
   capGitMetadataFields,
   capVerificationResults,
   type FeatureSprintRunnerProfile,
-  type FeatureSprintRunnerResponse
+  type FeatureSprintRunnerResponse,
+  type FeatureSprintWorktreeCleanupResponse
 } from "./featureSprintRunner";
 import { createId, nowIso } from "./ids";
 import type { LifeHarnessData } from "./lifeHarnessData";
@@ -305,6 +306,38 @@ export function markMostRecentFeatureSprintRunnerRunImported(
   }
 
   return { ok: true, state: marked.state, runId: candidate.id };
+}
+
+export function markFeatureSprintRunnerRunWorktreeCleanup(
+  data: LifeHarnessData,
+  runId: string,
+  response: FeatureSprintWorktreeCleanupResponse,
+  now: string = nowIso()
+): FeatureSprintRunnerRunResult {
+  const existing = data.featureSprintRunnerRuns.find((run) => run.id === runId);
+  if (!existing) {
+    return { ok: false, error: `Runner run not found: ${runId}` };
+  }
+
+  const updated: HarnessFeatureSprintRunnerRun = {
+    ...existing,
+    worktreeCleanupStatus: response.status,
+    worktreeCleanupMessage: cleanOptional(response.message),
+    worktreeCleanedAt:
+      response.ok && response.status === "cleaned" ? now : existing.worktreeCleanedAt,
+    updatedAt: now
+  };
+
+  return {
+    ok: true,
+    state: {
+      ...data,
+      featureSprintRunnerRuns: data.featureSprintRunnerRuns.map((run) =>
+        run.id === runId ? updated : run
+      )
+    },
+    runId
+  };
 }
 
 export function deleteFeatureSprintRunnerRun(

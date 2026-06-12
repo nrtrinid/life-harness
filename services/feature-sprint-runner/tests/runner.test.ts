@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { parseFeatureReviewVerdictBlock, parseFeatureSprintPlanBlock } from "../../../src/core/featureSprintOrchestrator";
 import type { FeatureSprintRunnerRequest, FeatureSprintRunnerResponse } from "../../../src/core/featureSprintRunner";
+import type { FeatureSprintWorktreeCleanupResponse } from "../../../src/core/featureSprintRunner";
 import { createServer } from "../src/server";
 import { resolveWorktreeRoot } from "../src/worktree";
 
@@ -53,6 +54,42 @@ function postRun(
         hostname: "127.0.0.1",
         port,
         path: "/feature-sprint/run",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+          ...headers
+        }
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on("end", () => {
+          resolve({
+            statusCode: response.statusCode ?? 500,
+            body: JSON.parse(Buffer.concat(chunks).toString("utf8"))
+          });
+        });
+      }
+    );
+    request.on("error", reject);
+    request.write(payload);
+    request.end();
+  });
+}
+
+function postCleanup(
+  port: number,
+  body: unknown,
+  headers: Record<string, string> = {}
+): Promise<{ statusCode: number; body: FeatureSprintWorktreeCleanupResponse | { error: string } }> {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify(body);
+    const request = http.request(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: "/feature-sprint/cleanup-worktree",
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -392,5 +429,58 @@ describe("feature-sprint-runner", () => {
     });
     expect(authorized.statusCode).toBe(200);
     expect(authorized.body).toMatchObject({ ok: true });
+  });
+
+  it("cleans up worktrees via POST /feature-sprint/cleanup-worktree", async () => {
+    const runResult = await postRun(port, {
+      profile: "codex_implementation",
+      promptMarkdown: "Implement slice.",
+      cardId: "card-build-test",
+      repoPath: tempRepoPath,
+      worktree: { enabled: true }
+    });
+    expect(runResult.statusCode).toBe(200);
+    if (!("worktreePath" in runResult.body) || !runResult.body.worktreePath) {
+      throw new Error("Expected worktreePath in implementation response.");
+    }
+
+    const cleanupResult = await postCleanup(port, {
+      worktreePath: runResult.body.worktreePath,
+      branchName: runResult.body.branchName,
+      repoPath: tempRepoPath,
+      force: true
+    });
+
+    expect(cleanupResult.statusCode).toBe(200);
+    expect(cleanupResult.body).toMatchObject({ ok: true, status: "cleaned" });
+  });
+
+  it("requires bearer token for cleanup when token is configured", async () => {
+    process.env.FEATURE_SPRINT_RUNNER_TOKEN = "secret-token";
+
+    const unauthorized = await postCleanup(port, {
+      worktreePath: path.join(tempWorktreeRoot!, "missing"),
+      repoPath: tempRepoPath
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const invalidBody = await postCleanup(
+      port,
+      { worktreePath: "" },
+      { Authorization: "Bearer secret-token" }
+    );
+    expect(invalidBody.statusCode).toBe(400);
+
+    const authorized = await postCleanup(
+      port,
+      {
+        worktreePath: path.join(tempWorktreeRoot!, "life-harness/missing-branch"),
+        branchName: "life-harness/missing-branch",
+        repoPath: tempRepoPath
+      },
+      { Authorization: "Bearer secret-token" }
+    );
+    expect(authorized.statusCode).toBe(200);
+    expect(authorized.body).toMatchObject({ status: "not_found" });
   });
 });

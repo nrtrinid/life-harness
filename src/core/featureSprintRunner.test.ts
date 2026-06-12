@@ -10,10 +10,12 @@ import {
   FEATURE_SPRINT_VERIFY_MAX_COMMANDS,
   isDiffTextTruncated,
   summarizeVerificationResults,
-  validateFeatureSprintRunnerRequest
+  validateFeatureSprintRunnerRequest,
+  validateFeatureSprintWorktreeCleanupRequest
 } from "./featureSprintRunner";
 import {
   checkFeatureSprintRunnerHealth,
+  cleanupFeatureSprintWorktree,
   FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
   resolveFeatureSprintRunnerToken,
   runFeatureSprintPacket
@@ -438,5 +440,95 @@ describe("featureSprintRunnerClient", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toBe("Runner failed.");
+  });
+});
+
+describe("validateFeatureSprintWorktreeCleanupRequest", () => {
+  it("rejects empty worktreePath", () => {
+    const result = validateFeatureSprintWorktreeCleanupRequest({ worktreePath: "  " });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects unsafe path segments", () => {
+    const result = validateFeatureSprintWorktreeCleanupRequest({
+      worktreePath: "/tmp/../escape",
+      repoPath: "C:/repo"
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts optional branchName, repoPath, and force", () => {
+    const result = validateFeatureSprintWorktreeCleanupRequest({
+      worktreePath: "C:/worktrees/life-harness/feature-step-abc",
+      branchName: "life-harness/feature-step-abc",
+      repoPath: "C:/repo/life-harness",
+      force: true
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.request.force).toBe(true);
+      expect(result.request.branchName).toBe("life-harness/feature-step-abc");
+    }
+  });
+});
+
+describe("cleanupFeatureSprintWorktree client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns typed cleanup response on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: false,
+          status: "blocked",
+          worktreePath: "/tmp/worktree-1",
+          message: "Worktree has uncommitted changes.",
+          hadChanges: true,
+          gitStatus: " M src/example.ts",
+          startedAt: "2026-06-09T12:00:00.000Z",
+          completedAt: "2026-06-09T12:00:01.000Z"
+        })
+      })
+    );
+
+    const result = await cleanupFeatureSprintWorktree({
+      worktreePath: "/tmp/worktree-1",
+      repoPath: "C:/repo"
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.hadChanges).toBe(true);
+  });
+
+  it("returns graceful failure when runner is unreachable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    const result = await cleanupFeatureSprintWorktree({
+      worktreePath: "/tmp/worktree-1",
+      repoPath: "C:/repo"
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("failed");
+    expect(result.message).toBe(FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE);
+  });
+
+  it("returns validation failure without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await cleanupFeatureSprintWorktree({
+      worktreePath: "",
+      repoPath: "C:/repo"
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("failed");
   });
 });

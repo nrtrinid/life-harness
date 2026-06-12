@@ -53,6 +53,32 @@ export type FeatureSprintRunnerResponse = {
   verificationResults?: FeatureSprintVerificationResult[];
 };
 
+export type FeatureSprintWorktreeCleanupRequest = {
+  worktreePath: string;
+  branchName?: string;
+  repoPath?: string;
+  force?: boolean;
+};
+
+export type FeatureSprintWorktreeCleanupStatus =
+  | "cleaned"
+  | "blocked"
+  | "not_found"
+  | "failed";
+
+export type FeatureSprintWorktreeCleanupResponse = {
+  ok: boolean;
+  status: FeatureSprintWorktreeCleanupStatus;
+  worktreePath: string;
+  branchName?: string;
+  message: string;
+  hadChanges?: boolean;
+  gitStatus?: string;
+  error?: string;
+  startedAt: string;
+  completedAt: string;
+};
+
 export const FEATURE_SPRINT_RUNNER_PROFILES: FeatureSprintRunnerProfile[] = [
   "codex_scoping",
   "codex_review",
@@ -378,4 +404,81 @@ export function validateFeatureSprintRunnerRequest(
   }
 
   return { ok: true, request };
+}
+
+function hasUnsafePathSegments(value: string): boolean {
+  if (!value.trim()) {
+    return true;
+  }
+  if (value.includes("\0")) {
+    return true;
+  }
+  if (value.startsWith("~")) {
+    return true;
+  }
+  return value.split(/[/\\]/).some((segment) => segment === "..");
+}
+
+export function validateFeatureSprintWorktreeCleanupRequest(
+  value: unknown
+):
+  | { ok: true; request: FeatureSprintWorktreeCleanupRequest }
+  | { ok: false; error: string } {
+  if (!value || typeof value !== "object") {
+    return { ok: false, error: "Cleanup request must be an object." };
+  }
+
+  const record = value as Record<string, unknown>;
+  const worktreePath =
+    typeof record.worktreePath === "string" ? record.worktreePath.trim() : "";
+  if (!worktreePath) {
+    return { ok: false, error: "worktreePath is required." };
+  }
+  if (hasUnsafePathSegments(worktreePath)) {
+    return { ok: false, error: "worktreePath contains unsafe path segments." };
+  }
+
+  const branchName = cleanOptional(
+    typeof record.branchName === "string" ? record.branchName : undefined
+  );
+  if (branchName && hasUnsafePathSegments(branchName)) {
+    return { ok: false, error: "branchName contains unsafe path segments." };
+  }
+
+  const repoPath = cleanOptional(typeof record.repoPath === "string" ? record.repoPath : undefined);
+  if (repoPath && hasUnsafePathSegments(repoPath)) {
+    return { ok: false, error: "repoPath contains unsafe path segments." };
+  }
+
+  let force = false;
+  if (record.force !== undefined) {
+    if (typeof record.force !== "boolean") {
+      return { ok: false, error: "force must be a boolean." };
+    }
+    force = record.force;
+  }
+
+  const request: FeatureSprintWorktreeCleanupRequest = {
+    worktreePath,
+    force
+  };
+  if (branchName) {
+    request.branchName = branchName;
+  }
+  if (repoPath) {
+    request.repoPath = repoPath;
+  }
+
+  return { ok: true, request };
+}
+
+export function isFeatureSprintWorktreeCleanupStatus(
+  value: unknown
+): value is FeatureSprintWorktreeCleanupStatus {
+  return (
+    value === "cleaned" ||
+    value === "blocked" ||
+    value === "not_found" ||
+    value === "failed"
+  );
 }

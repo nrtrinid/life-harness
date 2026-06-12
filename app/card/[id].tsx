@@ -39,6 +39,7 @@ import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintR
 import { buildFeatureSprintRunnerOutputView } from "../../src/core/featureSprintRunnerOutputView";
 import {
   checkFeatureSprintRunnerHealth,
+  cleanupFeatureSprintWorktree,
   composeImplementationRunnerOutputSummary,
   runFeatureSprintPacket,
   summarizeVerificationResults
@@ -60,7 +61,7 @@ import {
 import { buildApplicationResumeReadiness } from "../../src/core/resumeReadiness";
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
-import type { HarnessAgentSession, HarnessProject, LifeCard } from "../../src/core/types";
+import type { HarnessAgentSession, HarnessFeatureSprintRunnerRun, HarnessProject, LifeCard } from "../../src/core/types";
 
 const READINESS_LABELS = {
   blocked: "Blocked",
@@ -141,6 +142,25 @@ function formatRunnerStartedAt(iso: string): string {
   return iso.slice(0, 16).replace("T", " ");
 }
 
+function formatRunnerWorktreeCleanupLine(run: HarnessFeatureSprintRunnerRun): string | undefined {
+  if (!run.worktreePath || run.profile !== "codex_implementation") {
+    return undefined;
+  }
+  if (run.worktreeCleanedAt || run.worktreeCleanupStatus === "cleaned") {
+    return "Worktree cleaned";
+  }
+  if (run.worktreeCleanupStatus === "blocked") {
+    return "Cleanup blocked — inspect output/diff, then force clean if ready";
+  }
+  if (run.worktreeCleanupStatus === "failed") {
+    return "Cleanup failed";
+  }
+  if (run.worktreeCleanupStatus === "not_found") {
+    return "Worktree not found on disk";
+  }
+  return undefined;
+}
+
 function dogfoodCheckMarker(status: FeatureSprintDogfoodCheckStatus): string {
   if (status === "ready" || status === "done") {
     return "OK";
@@ -212,6 +232,7 @@ export default function CardDetailScreen() {
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
     markMostRecentFeatureSprintRunnerRunImported,
+    markFeatureSprintRunnerRunWorktreeCleanup,
     logResumeExportForCard
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
@@ -244,6 +265,8 @@ export default function CardDetailScreen() {
   const [isRunningReview, setIsRunningReview] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
+  const [forceCleanEligibleRunId, setForceCleanEligibleRunId] = useState<string | null>(null);
+  const [cleaningRunId, setCleaningRunId] = useState<string | null>(null);
   const [detailMode, setDetailMode] = useState<CardDetailMode>("act");
   const card = cards.find((item) => item.id === id);
 
@@ -829,6 +852,59 @@ export default function CardDetailScreen() {
     }
   }
 
+  async function handleCleanWorktree(run: HarnessFeatureSprintRunnerRun, force: boolean) {
+    if (!run.worktreePath?.trim() || cleaningRunId) {
+      return;
+    }
+
+    const project = getProjectForCard(lifeHarnessData, cardId);
+    const repoPath = run.repoPath?.trim() || project?.repoPath?.trim();
+    if (!repoPath) {
+      showNotice("warning", "Add project repo path before cleaning worktree.");
+      return;
+    }
+
+    setCleaningRunId(run.id);
+    try {
+      const response = await cleanupFeatureSprintWorktree({
+        worktreePath: run.worktreePath,
+        branchName: run.branchName,
+        repoPath,
+        force
+      });
+
+      const markResult = markFeatureSprintRunnerRunWorktreeCleanup(run.id, response);
+      if (!markResult.ok) {
+        showNotice("warning", markResult.message ?? "Could not update runner history.");
+      }
+
+      if (response.status === "cleaned") {
+        setForceCleanEligibleRunId(null);
+        showNotice("success", response.message ?? "Worktree cleaned.");
+        return;
+      }
+
+      if (response.status === "blocked") {
+        setForceCleanEligibleRunId(run.id);
+        showNotice(
+          "warning",
+          response.message ??
+            "Worktree has uncommitted changes. Inspect output and diff, then force clean if ready."
+        );
+        return;
+      }
+
+      if (response.status === "not_found") {
+        showNotice("info", response.message ?? "Worktree path was not found on disk.");
+        return;
+      }
+
+      showNotice("warning", response.message ?? response.error ?? "Worktree cleanup failed.");
+    } finally {
+      setCleaningRunId(null);
+    }
+  }
+
   useEffect(() => {
     if (detailMode !== "backroom") {
       return;
@@ -1138,6 +1214,11 @@ export default function CardDetailScreen() {
                 {run.worktreePath ? (
                   <Text style={[styles.helpText, { marginTop: 4 }]}>Worktree: {run.worktreePath}</Text>
                 ) : null}
+                {formatRunnerWorktreeCleanupLine(run) ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>
+                    {formatRunnerWorktreeCleanupLine(run)}
+                  </Text>
+                ) : null}
                 {run.branchName ? (
                   <Text style={[styles.helpText, { marginTop: 4 }]}>Branch: {run.branchName}</Text>
                 ) : null}
@@ -1241,6 +1322,34 @@ export default function CardDetailScreen() {
                         );
                       });
                     }}
+                    onCopyWorktreePath={
+                      runnerOutputView.worktreePath
+                        ? () => {
+                            void copyTextToClipboard(runnerOutputView.worktreePath ?? "").then((copied) => {
+                              showNotice(
+                                copied ? "success" : "warning",
+                                copied ? "Worktree path copied." : "Clipboard unavailable."
+                              );
+                            });
+                          }
+                        : undefined
+                    }
+                    onCleanWorktree={
+                      runnerOutputView.canCleanWorktree
+                        ? () => {
+                            void handleCleanWorktree(run, false);
+                          }
+                        : undefined
+                    }
+                    onForceCleanWorktree={
+                      forceCleanEligibleRunId === run.id
+                        ? () => {
+                            void handleCleanWorktree(run, true);
+                          }
+                        : undefined
+                    }
+                    showForceClean={forceCleanEligibleRunId === run.id}
+                    isCleaning={cleaningRunId === run.id}
                   />
                 ) : null}
               </View>

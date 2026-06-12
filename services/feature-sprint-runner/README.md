@@ -20,6 +20,7 @@ Mock mode fills the existing import textareas with valid fenced blocks. You stil
 
 - `GET /health` — `{ ok, mode, port }`
 - `POST /feature-sprint/run` — body: `FeatureSprintRunnerRequest`; response: `FeatureSprintRunnerResponse`
+- `POST /feature-sprint/cleanup-worktree` — body: `FeatureSprintWorktreeCleanupRequest`; response: `FeatureSprintWorktreeCleanupResponse` (see [docs/feature-sprint-worktree-cleanup-v0.1.md](../../docs/feature-sprint-worktree-cleanup-v0.1.md))
 
 ## Environment
 

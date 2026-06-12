@@ -4,10 +4,14 @@ import {
   FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS,
   type FeatureSprintRunnerProfile,
   type FeatureSprintVerificationResult,
+  type FeatureSprintWorktreeCleanupRequest,
+  type FeatureSprintWorktreeCleanupResponse,
   isFeatureSprintRunnerProfile,
+  isFeatureSprintWorktreeCleanupStatus,
   type FeatureSprintRunnerRequest,
   type FeatureSprintRunnerResponse,
-  validateFeatureSprintRunnerRequest
+  validateFeatureSprintRunnerRequest,
+  validateFeatureSprintWorktreeCleanupRequest
 } from "./featureSprintRunner";
 
 export {
@@ -194,6 +198,101 @@ export async function runFeatureSprintPacket(
   } catch {
     return buildFailureResponse(
       validated.request.profile,
+      FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
+      startedAt
+    );
+  }
+}
+
+function buildCleanupFailureResponse(
+  worktreePath: string,
+  message: string,
+  startedAt: string
+): FeatureSprintWorktreeCleanupResponse {
+  return {
+    ok: false,
+    status: "failed",
+    worktreePath,
+    message,
+    error: message,
+    startedAt,
+    completedAt: nowIso()
+  };
+}
+
+function parseCleanupResponse(
+  body: Partial<FeatureSprintWorktreeCleanupResponse>,
+  fallbackWorktreePath: string,
+  startedAt: string
+): FeatureSprintWorktreeCleanupResponse {
+  if (
+    typeof body.ok !== "boolean" ||
+    !isFeatureSprintWorktreeCleanupStatus(body.status) ||
+    typeof body.message !== "string" ||
+    typeof body.startedAt !== "string" ||
+    typeof body.completedAt !== "string"
+  ) {
+    return buildCleanupFailureResponse(
+      fallbackWorktreePath,
+      "Runner returned an invalid cleanup response.",
+      startedAt
+    );
+  }
+
+  return {
+    ok: body.ok,
+    status: body.status,
+    worktreePath: typeof body.worktreePath === "string" ? body.worktreePath : fallbackWorktreePath,
+    branchName: typeof body.branchName === "string" ? body.branchName : undefined,
+    message: body.message,
+    hadChanges: typeof body.hadChanges === "boolean" ? body.hadChanges : undefined,
+    gitStatus: typeof body.gitStatus === "string" ? body.gitStatus : undefined,
+    error: typeof body.error === "string" ? body.error : undefined,
+    startedAt: body.startedAt,
+    completedAt: body.completedAt
+  };
+}
+
+export async function cleanupFeatureSprintWorktree(
+  request: FeatureSprintWorktreeCleanupRequest,
+  options: { baseUrl?: string } = {}
+): Promise<FeatureSprintWorktreeCleanupResponse> {
+  const startedAt = nowIso();
+  const validated = validateFeatureSprintWorktreeCleanupRequest(request);
+  if (!validated.ok) {
+    return buildCleanupFailureResponse(
+      typeof request.worktreePath === "string" ? request.worktreePath : "",
+      validated.error,
+      startedAt
+    );
+  }
+
+  try {
+    const response = await fetch(`${resolveBaseUrl(options.baseUrl)}/feature-sprint/cleanup-worktree`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders()
+      },
+      body: JSON.stringify(validated.request)
+    });
+
+    const body = (await response.json()) as Partial<FeatureSprintWorktreeCleanupResponse>;
+
+    if (!response.ok) {
+      const message =
+        typeof body.message === "string"
+          ? body.message
+          : typeof body.error === "string"
+            ? body.error
+            : FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE;
+      return buildCleanupFailureResponse(validated.request.worktreePath, message, startedAt);
+    }
+
+    return parseCleanupResponse(body, validated.request.worktreePath, startedAt);
+  } catch {
+    return buildCleanupFailureResponse(
+      validated.request.worktreePath,
       FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
       startedAt
     );

@@ -7,10 +7,12 @@ import http from "node:http";
 import {
   FEATURE_SPRINT_RUNNER_DEFAULT_PORT,
   validateFeatureSprintRunnerRequest,
+  validateFeatureSprintWorktreeCleanupRequest,
   type FeatureSprintRunnerResponse
 } from "../../../src/core/featureSprintRunner";
 import { isAuthorizedRequest } from "./auth";
 import { resolveRunnerMode, runFeatureSprintPacketOnRunner } from "./runCodex";
+import { cleanupFeatureSprintWorktree } from "./worktreeCleanup";
 
 export const RUNNER_HOST = "127.0.0.1";
 export const RUNNER_PORT = Number.parseInt(
@@ -108,6 +110,24 @@ export function createServer() {
           validated.request
         );
         sendJson(response, result.ok ? 200 : 500, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid request.";
+        sendJson(response, 400, { error: message } satisfies ErrorResponseBody);
+      }
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/feature-sprint/cleanup-worktree") {
+      try {
+        const parsed = await readJsonBody(request);
+        const validated = validateFeatureSprintWorktreeCleanupRequest(parsed);
+        if (!validated.ok) {
+          sendJson(response, 400, { error: validated.error } satisfies ErrorResponseBody);
+          return;
+        }
+
+        const result = await cleanupFeatureSprintWorktree(validated.request);
+        sendJson(response, 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Invalid request.";
         sendJson(response, 400, { error: message } satisfies ErrorResponseBody);

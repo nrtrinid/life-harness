@@ -13,6 +13,7 @@ Card Detail Backroom **Recent runner runs** now includes **View details** with:
 - Full diff text when git tracked it (`git diff --`)
 - Verification summary + per-command status + failure excerpts
 - Safety notes (manual save/review, no auto-commit)
+- Worktree cleanup section (implementation runs with `worktreePath`) — see [feature-sprint-worktree-cleanup-v0.1.md](./feature-sprint-worktree-cleanup-v0.1.md)
 
 Core helper: `buildFeatureSprintRunnerOutputView(data, runId)` in `src/core/featureSprintRunnerOutputView.ts`.
 
@@ -67,7 +68,8 @@ No rerun, cleanup, save, import, advance, or commit from the detail panel.
 
 ## Safety boundaries
 
-- Read-only git capture — no staging, commit, merge, push, or worktree cleanup
+- Read-only git capture in the output viewer — no staging, commit, merge, or push from inspection
+- Explicit worktree cleanup is a separate Backroom action — see [feature-sprint-worktree-cleanup-v0.1.md](./feature-sprint-worktree-cleanup-v0.1.md)
 - No auto-save, auto-review, auto-import, or auto-advance
 - Verification failures do not auto-reject implementation output
 - S3 cards still blocked from runner history mutation (unchanged)
@@ -85,10 +87,10 @@ No rerun, cleanup, save, import, advance, or commit from the detail panel.
 - [feature-sprint-runner-history-v0.2.md](./feature-sprint-runner-history-v0.2.md)
 - [feature-sprint-verification-capture-v0.2.md](./feature-sprint-verification-capture-v0.2.md)
 - [feature-sprint-dogfood-checklist-v0.1.md](./feature-sprint-dogfood-checklist-v0.1.md)
+- [feature-sprint-worktree-cleanup-v0.1.md](./feature-sprint-worktree-cleanup-v0.1.md)
 
 ## Future path
 
-- Worktree cleanup UI
 - Richer diff viewer (syntax highlight, file tree)
 - External artifact files for large diffs
 - Commit approval gate before advance

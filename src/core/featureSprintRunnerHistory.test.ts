@@ -12,6 +12,7 @@ import {
   getFeatureSprintRunnerRunsForPlan,
   isFeatureSprintRunnerHistorySafetyBlocked,
   markFeatureSprintRunnerRunImported,
+  markFeatureSprintRunnerRunWorktreeCleanup,
   markMostRecentFeatureSprintRunnerRunImported
 } from "./featureSprintRunnerHistory";
 import {
@@ -647,5 +648,174 @@ describe("featureSprintRunnerHistory", () => {
     expect(JSON.stringify(completed.state.featureSprintPlans)).toBe(
       JSON.stringify(created.state.featureSprintPlans)
     );
+  });
+});
+
+describe("markFeatureSprintRunnerRunWorktreeCleanup", () => {
+  function implementationRun(data: LifeHarnessData) {
+    const created = createFeatureSprintRunnerRun(
+      data,
+      {
+        profile: "codex_implementation",
+        cardId: "card-build-test",
+        repoPath: "C:/repo"
+      },
+      FIXED_NOW.toISOString()
+    );
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(
+      created.state,
+      created.runId,
+      {
+        ok: true,
+        profile: "codex_implementation",
+        outputText: "Implemented.",
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString(),
+        worktreePath: "/tmp/worktree-1",
+        branchName: "life-harness/feature-step-abc"
+      },
+      FIXED_NOW.toISOString()
+    );
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    return { state: completed.state, runId: created.runId };
+  }
+
+  it("records cleaned status and cleanedAt", () => {
+    const { state, runId } = implementationRun(baseData());
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(
+      state,
+      runId,
+      {
+        ok: true,
+        status: "cleaned",
+        worktreePath: "/tmp/worktree-1",
+        message: "Worktree removed.",
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString()
+      },
+      FIXED_NOW.toISOString()
+    );
+
+    expect(marked.ok).toBe(true);
+    if (!marked.ok) {
+      return;
+    }
+
+    const run = marked.state.featureSprintRunnerRuns[0];
+    expect(run?.worktreeCleanupStatus).toBe("cleaned");
+    expect(run?.worktreeCleanedAt).toBe(FIXED_NOW.toISOString());
+    expect(run?.worktreePath).toBe("/tmp/worktree-1");
+  });
+
+  it("records blocked status without cleanedAt", () => {
+    const { state, runId } = implementationRun(baseData());
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(state, runId, {
+      ok: false,
+      status: "blocked",
+      worktreePath: "/tmp/worktree-1",
+      message: "Worktree has uncommitted changes.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    });
+
+    expect(marked.ok).toBe(true);
+    if (!marked.ok) {
+      return;
+    }
+
+    const run = marked.state.featureSprintRunnerRuns[0];
+    expect(run?.worktreeCleanupStatus).toBe("blocked");
+    expect(run?.worktreeCleanedAt).toBeUndefined();
+  });
+
+  it("records failed status without cleanedAt", () => {
+    const { state, runId } = implementationRun(baseData());
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(state, runId, {
+      ok: false,
+      status: "failed",
+      worktreePath: "/tmp/worktree-1",
+      message: "Path not allowed.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    });
+
+    expect(marked.ok).toBe(true);
+    if (!marked.ok) {
+      return;
+    }
+
+    const run = marked.state.featureSprintRunnerRuns[0];
+    expect(run?.worktreeCleanupStatus).toBe("failed");
+    expect(run?.worktreeCleanedAt).toBeUndefined();
+  });
+
+  it("records not_found status without cleanedAt", () => {
+    const { state, runId } = implementationRun(baseData());
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(state, runId, {
+      ok: false,
+      status: "not_found",
+      worktreePath: "/tmp/worktree-1",
+      message: "Worktree path was not found on disk.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    });
+
+    expect(marked.ok).toBe(true);
+    if (!marked.ok) {
+      return;
+    }
+
+    const run = marked.state.featureSprintRunnerRuns[0];
+    expect(run?.worktreeCleanupStatus).toBe("not_found");
+    expect(run?.worktreeCleanedAt).toBeUndefined();
+    expect(run?.worktreeCleanupMessage).toContain("not found");
+  });
+
+  it("returns error for unknown run id", () => {
+    const result = markFeatureSprintRunnerRunWorktreeCleanup(baseData(), "missing-run", {
+      ok: true,
+      status: "cleaned",
+      worktreePath: "/tmp/worktree-1",
+      message: "Worktree removed.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("does not mutate feature sprint plans", () => {
+    let data = baseData();
+    const imported = importFeatureSprintPlanFromText(
+      data,
+      "card-build-test",
+      '```feature-sprint-plan\n{"title":"Imported","goal":"G","acceptanceCriteria":["A"],"steps":[{"title":"S","goal":"G","acceptanceCriteria":["A"]}]}\n```'
+    );
+    if (!imported.ok) {
+      throw new Error("Expected import to succeed.");
+    }
+    data = imported.state;
+
+    const { state, runId } = implementationRun(data);
+    const plansBefore = JSON.stringify(state.featureSprintPlans);
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(state, runId, {
+      ok: true,
+      status: "cleaned",
+      worktreePath: "/tmp/worktree-1",
+      message: "Worktree removed.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    });
+    expect(marked.ok).toBe(true);
+    if (!marked.ok) {
+      return;
+    }
+    expect(JSON.stringify(marked.state.featureSprintPlans)).toBe(plansBefore);
   });
 });
