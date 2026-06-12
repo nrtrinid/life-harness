@@ -17,8 +17,6 @@ import type { ContextExportMode } from "./types";
 const MODES: ChatHarnessMode[] = ["general", "operator", "reflection", "builder"];
 const SENSITIVITIES: SensitivityLevel[] = ["S0", "S1", "S2", "S3"];
 
-const REASONING_DEPTHS: ReasoningDepth[] = ["fast", "deliberate", "deep"];
-
 interface AskHarnessAdvancedPanelProps {
   embedded?: boolean;
   baseUrl: string;
@@ -145,24 +143,10 @@ export function AskHarnessAdvancedPanel({
             </Pressable>
           ))}
         </View>
-        <Text style={styles.chatInspectorSectionTitle}>Reasoning depth</Text>
-        <View style={styles.splitRow}>
-          {REASONING_DEPTHS.map((option) => (
-            <Pressable
-              key={option}
-              style={reasoningDepth === option ? styles.chatMetaPillAccent : styles.chatQuickChip}
-              onPress={() => onReasoningDepthChange(option)}
-            >
-              <Text
-                style={
-                  reasoningDepth === option ? styles.chatMetaPillTextAccent : styles.chatQuickChipText
-                }
-              >
-                {option}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Text style={styles.helpText}>
+          Thinking mode: {reasoningDepth} — change with the menu beside the send arrow in the
+          composer.
+        </Text>
         {reasoningDepth === "deep" ? (
           <Text style={styles.helpText}>Deep mode may take longer on local OpenVINO.</Text>
         ) : null}
