@@ -7,9 +7,11 @@ import {
   extractJobPostingsFromJsonLdHtml,
   getAdapterForKind,
   GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
+  inferRoleType,
   normalizeWithAdapter,
   parseGovernmentJobsListingHtml,
   parseWorkdaySearchPayload,
+  resolveGovernmentJobsFetchUrl,
   stripHtml,
   WORKDAY_ZERO_LISTINGS_MESSAGE
 } from "./jobSourceAdapters";
@@ -116,8 +118,23 @@ describe("jobSourceAdapters", () => {
     expect(result.errors[0]).toContain("Unsupported source kind");
   });
 
+  it("classifies civil engineer as other, not software", () => {
+    expect(inferRoleType("Civil Engineer", "County infrastructure projects.")).toBe("other");
+    expect(inferRoleType("Software Engineer", "TypeScript and React services.")).toBe("software");
+  });
+
   it("strips HTML from descriptions", () => {
     expect(stripHtml("<p>Hello <strong>world</strong></p>")).toBe("Hello world");
+    expect(stripHtml("Sheriff&#39;s Mechanic")).toBe("Sheriff's Mechanic");
+  });
+
+  it("resolves GovernmentJobs careers URLs to listing endpoint", () => {
+    expect(resolveGovernmentJobsFetchUrl("https://www.governmentjobs.com/careers/sdcounty")).toBe(
+      "https://www.governmentjobs.com/careers/home/index?agency=sdcounty"
+    );
+    expect(resolveGovernmentJobsFetchUrl("/fixtures/sample-governmentjobs-listing.html")).toBe(
+      "/fixtures/sample-governmentjobs-listing.html"
+    );
   });
 
   it("parses governmentjobs fixture with at least two postings", () => {
@@ -178,7 +195,7 @@ describe("jobSourceAdapters", () => {
     expect(result.errors).toEqual([]);
     expect(result.postings.length).toBeGreaterThanOrEqual(2);
     expect(getAdapterForKind("governmentjobs")).toBeDefined();
-    expect(GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE).toContain("No static GovernmentJobs listings found");
+    expect(GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE).toContain("No GovernmentJobs listings found");
   });
 
   it("parses workday fixture with at least two postings", () => {

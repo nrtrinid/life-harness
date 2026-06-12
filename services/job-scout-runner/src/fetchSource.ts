@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
 
+import { resolveGovernmentJobsFetchUrl } from "../../../src/core/jobSourceAdapters";
 import {
   buildSafeRequestHeaders,
   validateJobSourceRequestConfig
 } from "../../../src/core/jobSourceRequestConfig";
-import type { JobSourceRequestConfig } from "../../../src/core/types";
+import type { JobSourceKind, JobSourceRequestConfig } from "../../../src/core/types";
 import {
   assertUrlSafeForFetch,
   FETCH_TIMEOUT_MS,
@@ -81,7 +82,8 @@ async function fetchNetworkUrl(
   url: string,
   resolvedAddresses: string[],
   fetchImpl: FetchImpl,
-  requestConfig?: JobSourceRequestConfig
+  requestConfig?: JobSourceRequestConfig,
+  kind?: JobSourceKind
 ): Promise<FetchSourceResult | FetchSourceError> {
   let hostname: string | undefined;
   try {
@@ -91,7 +93,13 @@ async function fetchNetworkUrl(
   }
 
   const method = requestConfig?.method ?? "GET";
-  const headers = buildSafeRequestHeaders();
+  const headers =
+    kind === "governmentjobs" && method === "GET"
+      ? {
+          Accept: "text/html,application/xhtml+xml,*/*",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      : buildSafeRequestHeaders();
   const init: RequestInit = {
     method,
     headers,
@@ -128,6 +136,7 @@ export async function fetchSourceText(
     requestConfig?: JobSourceRequestConfig;
     resolveHost?: DnsResolver;
     fetchImpl?: FetchImpl;
+    kind?: JobSourceKind;
   } = {}
 ): Promise<FetchSourceResult | FetchSourceError> {
   const configValidation = validateJobSourceRequestConfig(options.requestConfig);
@@ -135,7 +144,9 @@ export async function fetchSourceText(
     return { ok: false, error: configValidation.error };
   }
 
-  const safety = await assertUrlSafeForFetch(url, options.resolveHost);
+  const fetchUrl =
+    options.kind === "governmentjobs" ? resolveGovernmentJobsFetchUrl(url) : url;
+  const safety = await assertUrlSafeForFetch(fetchUrl, options.resolveHost);
   if (!safety.ok) {
     return { ok: false, error: safety.error };
   }
@@ -155,7 +166,8 @@ export async function fetchSourceText(
     safety.url,
     safety.resolvedAddresses,
     options.fetchImpl ?? fetch,
-    options.requestConfig
+    options.requestConfig,
+    options.kind
   );
 }
 

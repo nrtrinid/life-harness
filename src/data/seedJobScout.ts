@@ -1,4 +1,5 @@
 import { createJobCandidate, createResumeModule } from "../core/jobScout";
+import { NORTHROP_WORKDAY_CXS_URL } from "../core/jobSourceHealth";
 import type { JobCandidate, JobSource, ResumeModule } from "../core/types";
 
 export const seedResumeModules: ResumeModule[] = [
@@ -178,18 +179,157 @@ export const seedResumeModules: ResumeModule[] = [
 const REGISTRY_ONLY_NOTES =
   "Registry only — set a supported kind (greenhouse/lever/ashby/jobposting_jsonld/manual) and a public URL before running.";
 
+const STARTER_MAX_RESULTS = 25;
+
+const STARTER_GREENHOUSE_NOTE =
+  "Starter pack — Greenhouse public API with job descriptions (content=true).";
+
+const STARTER_LEVER_NOTE = "Starter pack — Lever public postings API.";
+
+const STARTER_ASHBY_NOTE = "Starter pack — Ashby public job board API.";
+
+const STARTER_GOVERNMENTJOBS_NOTE =
+  "Public-sector board — first page of agency listings via GovernmentJobs listing endpoint.";
+
+function starterGovernmentJobsSource(id: string, name: string, agency: string): JobSource {
+  return {
+    id,
+    name,
+    url: `https://www.governmentjobs.com/careers/${agency}`,
+    kind: "governmentjobs",
+    enabled: true,
+    cadence: "manual",
+    maxResults: STARTER_MAX_RESULTS,
+    runStatus: "idle",
+    adapterNotes: STARTER_GOVERNMENTJOBS_NOTE
+  };
+}
+
+function starterGreenhouseSource(id: string, name: string, slug: string): JobSource {
+  return {
+    id,
+    name,
+    url: `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
+    kind: "greenhouse",
+    enabled: true,
+    cadence: "manual",
+    maxResults: STARTER_MAX_RESULTS,
+    runStatus: "idle",
+    adapterNotes: STARTER_GREENHOUSE_NOTE
+  };
+}
+
+function starterLeverSource(id: string, name: string, company: string): JobSource {
+  return {
+    id,
+    name,
+    url: `https://api.lever.co/v0/postings/${company}?mode=json`,
+    kind: "lever",
+    enabled: true,
+    cadence: "manual",
+    maxResults: STARTER_MAX_RESULTS,
+    runStatus: "idle",
+    adapterNotes: STARTER_LEVER_NOTE
+  };
+}
+
+function starterAshbySource(id: string, name: string, org: string): JobSource {
+  return {
+    id,
+    name,
+    url: `https://api.ashbyhq.com/posting-api/job-board/${org}?includeCompensation=true`,
+    kind: "ashby",
+    enabled: true,
+    cadence: "manual",
+    maxResults: STARTER_MAX_RESULTS,
+    runStatus: "idle",
+    adapterNotes: STARTER_ASHBY_NOTE
+  };
+}
+
+/** Enabled runnable sources merged into persisted state when missing. */
+export const STARTER_JOB_SOURCE_IDS = [
+  "source-netskope",
+  "source-opswat",
+  "source-spacex",
+  "source-secureframe",
+  "source-weride",
+  "source-mechanical-orchard",
+  "source-notion",
+  "source-eliseai",
+  "source-cohere",
+  "source-radiant",
+  "source-northrop-workday-cxs",
+  "source-sd-county",
+  "source-city-sandiego",
+  "source-la-county",
+  "source-orange-county"
+] as const;
+
 export const seedJobSources: JobSource[] = [
   {
     id: "source-fixture-greenhouse",
     name: "Local Fixture Source",
     url: "/fixtures/sample-greenhouse.json",
     kind: "greenhouse",
-    enabled: true,
+    enabled: false,
     cadence: "manual",
     maxResults: 25,
     runStatus: "idle",
     adapterNotes:
-      "Demo fixture — web only. Real sources need a public CORS-friendly JSON URL."
+      "Demo fixture — web only. Re-enable for offline testing without network fetches."
+  },
+  starterGreenhouseSource("source-netskope", "Netskope", "netskope"),
+  starterGreenhouseSource("source-opswat", "OPSWAT", "opswat"),
+  starterGreenhouseSource("source-spacex", "SpaceX", "spacex"),
+  starterLeverSource("source-secureframe", "Secureframe", "secureframe"),
+  starterLeverSource("source-weride", "WeRide", "weride"),
+  starterLeverSource("source-mechanical-orchard", "Mechanical Orchard", "mechanicalorchard"),
+  starterAshbySource("source-notion", "Notion", "notion"),
+  starterAshbySource("source-eliseai", "EliseAI", "eliseai"),
+  starterAshbySource("source-cohere", "Cohere", "cohere"),
+  starterAshbySource("source-radiant", "Radiant Industries", "radiant"),
+  {
+    id: "source-northrop-workday-cxs",
+    name: "Northrop Grumman — Workday CXS",
+    url: NORTHROP_WORKDAY_CXS_URL,
+    kind: "workday",
+    enabled: true,
+    cadence: "manual",
+    maxResults: STARTER_MAX_RESULTS,
+    runStatus: "idle",
+    adapterNotes:
+      "Starter pack — Northrop Workday CXS search endpoint (POST, paginated).",
+    requestConfig: {
+      method: "POST",
+      bodyJson: {
+        appliedFacets: {},
+        limit: 20,
+        offset: 0,
+        searchText: ""
+      },
+      pagination: {
+        mode: "workday_offset",
+        limit: 20,
+        maxPages: 3
+      }
+    }
+  },
+  starterGovernmentJobsSource("source-sd-county", "County of San Diego", "sdcounty"),
+  starterGovernmentJobsSource("source-city-sandiego", "City of San Diego", "sandiego"),
+  starterGovernmentJobsSource("source-la-county", "Los Angeles County", "lacounty"),
+  starterGovernmentJobsSource("source-orange-county", "Orange County", "oc"),
+  {
+    id: "source-camp-pendleton-mccs",
+    name: "Camp Pendleton — MCCS Careers",
+    url: "https://careers.usmc-mccs.org/",
+    kind: "company_careers",
+    enabled: false,
+    cadence: "manual",
+    notes:
+      "MCCS civilian jobs — filter to MCB Camp Pendleton in their portal. Use Quick paste until an MCCS adapter exists.",
+    adapterNotes:
+      "Registry bookmark — careers.usmc-mccs.org is not adapter-supported yet."
   },
   {
     id: "source-microsoft",

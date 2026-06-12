@@ -2,9 +2,15 @@ import type { JobCandidate, JobSource, ResumeModule } from "./types";
 import type { JobSourceRunOutput } from "./jobSourceRunner";
 
 export const JOB_SCOUT_RUNNER_URL = "http://127.0.0.1:8122";
+export const JOB_SCOUT_LAUNCHER_URL = "http://127.0.0.1:8123";
+
+export const RUNNER_START_COMMAND = "npm run scout:runner";
 
 export const RUNNER_UNREACHABLE_MESSAGE =
-  "Local Job Scout Runner is not running. Start it with npm run scout:runner.";
+  "Local Job Scout Runner is not running. Tap Start runner or run npm run scout:runner.";
+
+export const LAUNCHER_UNREACHABLE_MESSAGE =
+  "Dev launcher is not running. Use npm run web (starts launcher + app) or npm run scout:runner.";
 
 export interface RunSourceRequest {
   source: JobSource;
@@ -22,6 +28,31 @@ export class RunnerUnreachableError extends Error {
   constructor(message = RUNNER_UNREACHABLE_MESSAGE) {
     super(message);
     this.name = "RunnerUnreachableError";
+  }
+}
+
+export async function checkJobScoutRunnerHealth(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const response = await fetch(`${JOB_SCOUT_RUNNER_URL}/health`);
+    if (!response.ok) {
+      return { ok: false, message: RUNNER_UNREACHABLE_MESSAGE };
+    }
+    return { ok: true, message: "Runner awake on 127.0.0.1:8122." };
+  } catch {
+    return { ok: false, message: RUNNER_UNREACHABLE_MESSAGE };
+  }
+}
+
+export async function requestJobScoutRunnerStart(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const response = await fetch(`${JOB_SCOUT_LAUNCHER_URL}/start`, { method: "POST" });
+    const body = (await response.json()) as { ok?: boolean; message?: string };
+    return {
+      ok: Boolean(body.ok),
+      message: body.message ?? (body.ok ? "Runner started." : LAUNCHER_UNREACHABLE_MESSAGE)
+    };
+  } catch {
+    return { ok: false, message: LAUNCHER_UNREACHABLE_MESSAGE };
   }
 }
 

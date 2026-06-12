@@ -45,6 +45,9 @@ export function stripHtml(text: string): string {
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -57,15 +60,25 @@ export function truncateDescription(text: string, max = 4000): string {
   return `${trimmed.slice(0, max - 3)}...`;
 }
 
+const NON_SOFTWARE_ENGINEER_TITLE =
+  /\b(civil|structural|mechanical|electrical|environmental|traffic|highway|water|sanitary|geotechnical|aerospace|biomedical|petroleum|chemical|industrial)\s+engineer\b/i;
+
 const ROLE_KEYWORDS: Array<{ roleType: RoleType; pattern: RegExp }> = [
   { roleType: "cybersecurity", pattern: /\b(cyber|security|infosec|soc)\b/i },
   { roleType: "data_finance", pattern: /\b(data|finance|analyst|quant)\b/i },
   { roleType: "full_stack", pattern: /\b(full[\s-]?stack|frontend|backend)\b/i },
-  { roleType: "software", pattern: /\b(software|developer|engineer|programmer)\b/i },
+  {
+    roleType: "software",
+    pattern: /\b(software engineer|software developer|developer|programmer|swe)\b/i
+  },
   { roleType: "it", pattern: /\b(it support|help desk|systems admin|devops)\b/i }
 ];
 
 export function inferRoleType(title: string, description: string): RoleType {
+  if (NON_SOFTWARE_ENGINEER_TITLE.test(title)) {
+    return "other";
+  }
+
   const text = `${title} ${description}`;
   for (const entry of ROLE_KEYWORDS) {
     if (entry.pattern.test(text)) {
@@ -301,9 +314,11 @@ function normalizeManual(raw: unknown, source: JobSource): NormalizedJobPosting[
 }
 
 export const GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE =
-  "No static GovernmentJobs listings found. This page may require a future XHR/pagination adapter.";
+  "No GovernmentJobs listings found for this agency. Check the careers URL or try again later.";
 
-function extractAgencySlugFromSourceUrl(sourceUrl: string): string | null {
+export const GOVERNMENTJOBS_LISTING_ORIGIN = "https://www.governmentjobs.com";
+
+export function extractGovernmentJobsAgencySlug(sourceUrl: string): string | null {
   try {
     const parsed = new URL(
       sourceUrl,
@@ -314,6 +329,27 @@ function extractAgencySlugFromSourceUrl(sourceUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function resolveGovernmentJobsFetchUrl(sourceUrl: string): string {
+  const trimmed = sourceUrl.trim();
+  if (!trimmed || trimmed.startsWith("/fixtures/")) {
+    return trimmed;
+  }
+
+  if (trimmed.includes("/careers/home/index")) {
+    if (trimmed.startsWith("http")) {
+      return trimmed;
+    }
+    return `${GOVERNMENTJOBS_LISTING_ORIGIN}${trimmed.startsWith("/") ? trimmed : `/${trimmed}`}`;
+  }
+
+  const agency = extractGovernmentJobsAgencySlug(trimmed);
+  if (!agency) {
+    return trimmed;
+  }
+
+  return `${GOVERNMENTJOBS_LISTING_ORIGIN}/careers/home/index?agency=${encodeURIComponent(agency)}`;
 }
 
 function resolveGovernmentJobsHref(href: string, sourceUrl: string): string {
@@ -464,7 +500,7 @@ function postingsFromGovernmentJobsJsonLd(html: string, source: JobSource): Norm
 
 export function parseGovernmentJobsListingHtml(html: string, source: JobSource): NormalizedJobPosting[] {
   const company = source.name.replace(/\s+(Careers|Jobs)$/i, "").trim();
-  const agency = extractAgencySlugFromSourceUrl(source.url);
+  const agency = extractGovernmentJobsAgencySlug(source.url);
   const deduped = new Map<string, NormalizedJobPosting>();
 
   function addPosting(posting: NormalizedJobPosting | undefined) {

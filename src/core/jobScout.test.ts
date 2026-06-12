@@ -264,6 +264,24 @@ describe("buildCareerIntakeFromCandidate", () => {
     expect(intake.jobCandidateId).toBe(candidate.id);
     expect(intake.resumeAngle).toBeTruthy();
   });
+
+  it("uses manual-review messaging for weak public-sector matches", () => {
+    const candidate = createJobCandidate(
+      {
+        company: "Orange County",
+        roleTitle: "Civil Engineer",
+        description: "County civil engineering projects and permitting.",
+        roleType: "other",
+        origin: "source_fetch"
+      },
+      seedResumeModules
+    );
+    candidate.fitLabel = "bad_fit";
+
+    const intake = buildCareerIntakeFromCandidate(candidate, seedResumeModules);
+    expect(intake.resumeAngle).toContain("review manually");
+    expect(intake.projectsToEmphasize).toBeUndefined();
+  });
 });
 
 describe("buildJobScoutStats and locks", () => {

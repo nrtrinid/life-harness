@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  checkJobScoutRunnerHealth,
+  JOB_SCOUT_LAUNCHER_URL,
   JOB_SCOUT_RUNNER_URL,
+  LAUNCHER_UNREACHABLE_MESSAGE,
   RUNNER_UNREACHABLE_MESSAGE,
   RunnerUnreachableError,
+  requestJobScoutRunnerStart,
   runSourceViaRunner,
   type RunSourceRequest
 } from "./jobScoutRunnerClient";
@@ -25,6 +29,32 @@ const request: RunSourceRequest = {
 };
 
 describe("jobScoutRunnerClient", () => {
+  it("checks runner health via /health", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200
+      })
+    );
+
+    const healthy = await checkJobScoutRunnerHealth();
+    expect(healthy.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(`${JOB_SCOUT_RUNNER_URL}/health`);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reports runner down when health check fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    const unhealthy = await checkJobScoutRunnerHealth();
+    expect(unhealthy.ok).toBe(false);
+    expect(unhealthy.message).toBe(RUNNER_UNREACHABLE_MESSAGE);
+
+    vi.unstubAllGlobals();
+  });
+
   it("throws RunnerUnreachableError when runner is not running", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
     vi.stubGlobal("fetch", fetchMock);
@@ -85,6 +115,33 @@ describe("jobScoutRunnerClient", () => {
     expect(output.candidates).toHaveLength(1);
     expect(output.result.createdCandidateIds).toEqual(["candidate-1"]);
     expect(output.updatedSource.lastFetchedCount).toBe(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("requests runner start from the dev launcher", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, message: "Job Scout Runner started on 127.0.0.1:8122." })
+      })
+    );
+
+    const result = await requestJobScoutRunnerStart();
+    expect(result.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(`${JOB_SCOUT_LAUNCHER_URL}/start`, { method: "POST" });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("returns launcher unreachable when dev launcher is down", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    const result = await requestJobScoutRunnerStart();
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe(LAUNCHER_UNREACHABLE_MESSAGE);
 
     vi.unstubAllGlobals();
   });

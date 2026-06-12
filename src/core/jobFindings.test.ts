@@ -168,4 +168,30 @@ describe("job findings", () => {
 
     expect(pasteFallback.nextMove.kind).toBe("paste_candidate");
   });
+
+  it("routes next moves to Jobs board tabs", () => {
+    const review = buildJobFindingsSummary(
+      [candidate({ id: "c1", status: "new" })],
+      [],
+      [],
+      new Date("2026-06-10T13:00:00.000Z")
+    );
+    expect(review.nextMove.targetRoute).toBe("/career?tab=review");
+
+    const sources = buildJobFindingsSummary(
+      [],
+      [source({ id: "source-1" })],
+      [],
+      new Date("2026-06-10T13:00:00.000Z")
+    );
+    expect(sources.nextMove.targetRoute).toBe("/career?tab=find");
+
+    const paste = buildJobFindingsSummary(
+      [],
+      [source({ id: "manual", kind: "company_careers" })],
+      [],
+      new Date("2026-06-10T13:00:00.000Z")
+    );
+    expect(paste.nextMove.targetRoute).toBe("/career?tab=find&add=1");
+  });
 });

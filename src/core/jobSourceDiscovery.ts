@@ -113,6 +113,18 @@ function detectUnsupportedDomain(parsed: URL): SourceDetectionResult | null {
   };
 }
 
+function withGreenhouseJobContent(url: URL): string {
+  const next = new URL(url.href);
+  next.searchParams.set("content", "true");
+  return next.href;
+}
+
+function greenhouseBoardJobsApiUrl(slug: string): string {
+  return withGreenhouseJobContent(
+    new URL(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`)
+  );
+}
+
 function detectGreenhouse(parsed: URL, inputUrl: string): SourceDetectionResult | null {
   const host = parsed.hostname.toLowerCase();
 
@@ -122,10 +134,10 @@ function detectGreenhouse(parsed: URL, inputUrl: string): SourceDetectionResult 
     return {
       inputUrl,
       detectedKind: "greenhouse",
-      runnableUrl: `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`,
+      runnableUrl: withGreenhouseJobContent(parsed),
       sourceName: titleCaseSlug(slug),
       confidence: "high",
-      notes: ["Greenhouse public jobs API URL."],
+      notes: ["Greenhouse public jobs API URL (with job content)."],
       warnings: [],
       isRunnable: true
     };
@@ -140,10 +152,10 @@ function detectGreenhouse(parsed: URL, inputUrl: string): SourceDetectionResult 
     return {
       inputUrl,
       detectedKind: "greenhouse",
-      runnableUrl: `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`,
+      runnableUrl: greenhouseBoardJobsApiUrl(slug),
       sourceName: titleCaseSlug(slug),
       confidence: "medium",
-      notes: ["Derived Greenhouse API URL from hosted board."],
+      notes: ["Derived Greenhouse API URL from hosted board (with job content)."],
       warnings: [DERIVED_URL_WARNING],
       isRunnable: true
     };

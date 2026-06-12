@@ -403,6 +403,21 @@ export function buildApplicationResumeReadiness(
 
   const selected = selectedModulesFromPacket(packet, input.resumeModules, warnings);
   const grouped = groupSelectedModules(selected);
+
+  if (
+    input.jobCandidate &&
+    (input.jobCandidate.fitLabel === "bad_fit" ||
+      input.jobCandidate.fitLabel === "stretch" ||
+      application.roleType === "other")
+  ) {
+    addWarning(warnings, {
+      category: "weak_role_fit",
+      message:
+        "This posting is a weak match for your tech-focused resume bank. Passing is fine — or tailor manually on the employer site.",
+      blocksExport: false
+    });
+  }
+
   addSectionCoverageWarnings(grouped, warnings);
   addModuleContentWarnings(selected, warnings);
   addCareerPackWarnings(selected, input, warnings);

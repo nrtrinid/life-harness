@@ -111,7 +111,8 @@ async function handleRunSource(
     const pageFetched = await fetchSourceText(pageSource.url, {
       requestConfig: pageSource.requestConfig,
       resolveHost: options.resolveHost,
-      fetchImpl: options.fetchImpl
+      fetchImpl: options.fetchImpl,
+      kind: pageSource.kind
     });
     if (!pageFetched.ok) {
       return { ok: false as const, error: pageFetched.error };
@@ -143,7 +144,8 @@ async function handleRunSource(
     const fetched = await fetchSourceText(source.url, {
       requestConfig: source.requestConfig,
       resolveHost: options.resolveHost,
-      fetchImpl: options.fetchImpl
+      fetchImpl: options.fetchImpl,
+      kind: source.kind
     });
 
     if (!fetched.ok) {

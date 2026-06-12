@@ -125,6 +125,13 @@ export const SOURCE_CANDIDATE_EXAMPLES: SourceCandidateExample[] = [
     notes: "GovernmentJobs / NEOGOV public-sector careers page."
   },
   {
+    name: "Camp Pendleton — MCCS",
+    kind: "company_careers",
+    url: "https://careers.usmc-mccs.org/",
+    notes:
+      "MCCS civilian careers (filter to MCB Camp Pendleton). Registry bookmark — not runnable until an MCCS adapter exists."
+  },
+  {
     name: "Workday Fixture (local)",
     kind: "workday",
     url: "/fixtures/sample-workday-search.json",

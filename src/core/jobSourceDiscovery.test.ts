@@ -13,11 +13,13 @@ describe("normalizePastedUrl", () => {
 });
 
 describe("detectJobSourceFromUrl", () => {
-  it("detects Greenhouse API URL unchanged", () => {
+  it("detects Greenhouse API URL with content=true", () => {
     const url = "https://boards-api.greenhouse.io/v1/boards/spacex/jobs";
     const result = detectJobSourceFromUrl(url);
     expect(result.detectedKind).toBe("greenhouse");
-    expect(result.runnableUrl).toBe(url);
+    expect(result.runnableUrl).toBe(
+      "https://boards-api.greenhouse.io/v1/boards/spacex/jobs?content=true"
+    );
     expect(result.confidence).toBe("high");
     expect(result.isRunnable).toBe(true);
   });
@@ -25,7 +27,9 @@ describe("detectJobSourceFromUrl", () => {
   it("derives Greenhouse API URL from hosted board", () => {
     const result = detectJobSourceFromUrl("https://boards.greenhouse.io/netskope");
     expect(result.detectedKind).toBe("greenhouse");
-    expect(result.runnableUrl).toBe("https://boards-api.greenhouse.io/v1/boards/netskope/jobs");
+    expect(result.runnableUrl).toBe(
+      "https://boards-api.greenhouse.io/v1/boards/netskope/jobs?content=true"
+    );
     expect(result.warnings.length).toBeGreaterThan(0);
     expect(result.isRunnable).toBe(true);
   });

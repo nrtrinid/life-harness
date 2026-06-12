@@ -29,8 +29,8 @@ export type JobFindingsNextMove =
       kind: "review_candidate";
       title: string;
       body: string;
-      ctaLabel: "Open Queue";
-      targetRoute: "/job-candidates";
+      ctaLabel: "Review matches";
+      targetRoute: "/career?tab=review";
       candidate: JobCandidate;
       sourceName?: string;
     }
@@ -38,15 +38,15 @@ export type JobFindingsNextMove =
       kind: "run_sources";
       title: string;
       body: string;
-      ctaLabel: "Open Sources";
-      targetRoute: "/job-sources";
+      ctaLabel: "Find jobs";
+      targetRoute: "/career?tab=find";
     }
   | {
       kind: "paste_candidate";
       title: string;
       body: string;
-      ctaLabel: "Paste Job";
-      targetRoute: "/candidate-intake";
+      ctaLabel: "Paste job";
+      targetRoute: "/career?tab=find&add=1";
     };
 
 export interface JobFindingsSummary {
@@ -163,8 +163,8 @@ export function buildJobFindingsSummary(
         kind: "review_candidate",
         title: `${bestCandidate.company} - ${bestCandidate.roleTitle}`,
         body: bestCandidate.nextTinyAction,
-        ctaLabel: "Open Queue",
-        targetRoute: "/job-candidates",
+        ctaLabel: "Review matches",
+        targetRoute: "/career?tab=review",
         candidate: bestCandidate,
         sourceName: source?.name
       }
@@ -184,8 +184,8 @@ export function buildJobFindingsSummary(
           dueSources > 0
             ? `${dueSources} source${dueSources === 1 ? "" : "s"} due. Find fresh matches, then review one.`
             : "No candidates are waiting. Run an approved source, then review one match.",
-        ctaLabel: "Open Sources",
-        targetRoute: "/job-sources"
+        ctaLabel: "Find jobs",
+        targetRoute: "/career?tab=find"
       }
     };
   }
@@ -199,8 +199,8 @@ export function buildJobFindingsSummary(
       kind: "paste_candidate",
       title: "Paste one job",
       body: "No runnable sources yet. Paste a posting manually or set up one approved source.",
-      ctaLabel: "Paste Job",
-      targetRoute: "/candidate-intake"
+      ctaLabel: "Paste job",
+      targetRoute: "/career?tab=find&add=1"
     }
   };
 }

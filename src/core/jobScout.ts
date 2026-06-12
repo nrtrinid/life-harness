@@ -608,12 +608,28 @@ export function dismissJobCandidate(candidate: JobCandidate): JobCandidate {
   return { ...candidate, status: "dismissed" };
 }
 
+function isWeakResumeBankMatch(candidate: JobCandidate): boolean {
+  return (
+    candidate.roleType === "other" ||
+    candidate.fitLabel === "bad_fit" ||
+    candidate.fitLabel === "stretch"
+  );
+}
+
 export function buildCareerIntakeFromCandidate(
   candidate: JobCandidate,
   modules: ResumeModule[]
 ): CareerIntakeInput {
   const suggested = getSuggestedResumeModules(candidate, modules);
   const bullets = suggested.flatMap((module) => module.bullets).slice(0, 6);
+  const weakMatch = isWeakResumeBankMatch(candidate);
+  const manualReviewGap = candidate.gaps.find(
+    (gap) =>
+      gap.includes("review manually") ||
+      gap.includes("Bad fit") ||
+      gap.includes("Stretch fit") ||
+      gap.includes("Limited resume modules")
+  );
 
   return {
     company: candidate.company,
@@ -622,9 +638,14 @@ export function buildCareerIntakeFromCandidate(
     jobDescription: candidate.description,
     roleType: candidate.roleType,
     applicationStatus: "inbox",
-    resumeAngle: candidate.recommendedResumeAngle,
-    projectsToEmphasize: suggested.map((module) => module.title).join("; ") || undefined,
-    bulletsToEmphasize: bullets.join(" · ") || undefined,
+    resumeAngle: weakMatch
+      ? (manualReviewGap ??
+          "Weak match for your resume bank — open the posting and tailor manually, or pass.")
+      : candidate.recommendedResumeAngle,
+    projectsToEmphasize: weakMatch
+      ? undefined
+      : suggested.map((module) => module.title).join("; ") || undefined,
+    bulletsToEmphasize: weakMatch ? undefined : bullets.join(" · ") || undefined,
     jobCandidateId: candidate.id
   };
 }
