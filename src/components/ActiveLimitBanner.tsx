@@ -1,18 +1,18 @@
 import { Text, View } from "react-native";
 
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus } from "../core/guards";
-import { useLifeHarness } from "../state/LifeHarnessState";
+import { useBoardState } from "../state/lifeHarnessHooks";
 import { styles } from "./styles";
 
 export function ActiveLimitBanner() {
-  const { cards } = useLifeHarness();
+  const { cards } = useBoardState();
   const activeLimit = getActiveLimitStatus(cards);
 
   if (activeLimit.isOverLimit) {
     return (
       <View style={styles.bannerWarning}>
         <Text style={styles.bannerWarningText}>
-          Active {activeLimit.count}/{ACTIVE_CARD_LIMIT} — park one before activating more.
+          Active {activeLimit.count}/{ACTIVE_CARD_LIMIT}: choose one to park so the board can breathe.
         </Text>
       </View>
     );
@@ -22,7 +22,7 @@ export function ActiveLimitBanner() {
     return (
       <View style={styles.bannerInfo}>
         <Text style={styles.bannerInfoText}>
-          Active {activeLimit.count}/{ACTIVE_CARD_LIMIT} — slots full.
+          Active {activeLimit.count}/{ACTIVE_CARD_LIMIT}: focus slots are full.
         </Text>
       </View>
     );

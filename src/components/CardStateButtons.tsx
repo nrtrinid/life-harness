@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import type { CardState } from "../core/types";
-import { useLifeHarness } from "../state/LifeHarnessState";
+import { useBoardActions } from "../state/lifeHarnessHooks";
 import { Notice } from "./Notice";
 import { styles } from "./styles";
 
@@ -21,7 +21,7 @@ const STATE_BUTTONS: { state: CardState; label: string }[] = [
 ];
 
 export function CardStateButtons({ cardId, currentState, compact = false }: CardStateButtonsProps) {
-  const { setCardState } = useLifeHarness();
+  const { setCardState } = useBoardActions();
   const [warning, setWarning] = useState<string | undefined>();
   const [success, setSuccess] = useState<string | undefined>();
 

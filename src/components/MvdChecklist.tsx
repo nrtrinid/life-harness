@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import type { NoticeState } from "./Notice";
-import { useLifeHarness } from "../state/LifeHarnessState";
+import { useBoardActions, useBoardState } from "../state/lifeHarnessHooks";
 import { styles } from "./styles";
 
 const MVD_ITEMS = [
@@ -17,7 +17,8 @@ interface MvdChecklistProps {
 }
 
 export function MvdChecklist({ onNotice }: MvdChecklistProps) {
-  const { dailyState, completeMinimumViableDay } = useLifeHarness();
+  const { dailyState } = useBoardState();
+  const { completeMinimumViableDay } = useBoardActions();
   const [open, setOpen] = useState(false);
   const [checked, setChecked] = useState<Record<number, boolean>>({});
 
