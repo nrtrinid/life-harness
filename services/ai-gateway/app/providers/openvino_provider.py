@@ -34,7 +34,12 @@ from app.prompt_loader import (
 from app.chat_harness_finalize import finalize_chat_harness_response
 from app.deep_synthesis_openvino import run_openvino_fast_only
 from app.synthesis_models import DeepSynthesisCompletedBody, DeepSynthesisRequest
-from app.thread_verifier import VerificationResult, verify_raw_lab_response
+from app.thread_verifier import (
+    DETERMINISTIC_STEERING_CHECKS,
+    VerificationResult,
+    finalize_raw_lab_answer,
+    verify_raw_lab_response,
+)
 from app.raw_lab_utils import (
     is_hedged_response,
     is_repetitive_response,
@@ -465,13 +470,27 @@ class OpenVinoProvider:
             elif trace:
                 trace.fallback_used = True
 
+        answer = finalize_raw_lab_answer(
+            answer or "",
+            request.thread_state,
+            request.message,
+            recent_turns=request.recent_turns,
+        )
         verification = verify_raw_lab_response(
             answer=answer or "",
             user_message=request.message,
             conversation_history=history,
             companion_self_memory_count=len(request.companion_self_memories),
+            thread_state=request.thread_state,
         )
-        if answer and not verification.ok and verification.repair_instruction:
+        if answer and not verification.ok and verification.check in DETERMINISTIC_STEERING_CHECKS:
+            answer = finalize_raw_lab_answer(
+                answer,
+                request.thread_state,
+                request.message,
+                recent_turns=request.recent_turns,
+            )
+        elif answer and not verification.ok and verification.repair_instruction:
             started = time.perf_counter()
             verified_raw = self._generate_chat_repair(
                 system=system,
@@ -486,6 +505,13 @@ class OpenVinoProvider:
             verified = sanitize_raw_lab_text(verified_raw)
             if verified:
                 answer = verified
+
+        answer = finalize_raw_lab_answer(
+            answer or "",
+            request.thread_state,
+            request.message,
+            recent_turns=request.recent_turns,
+        )
 
         if not answer:
             logger.warning("openvino raw_lab returned empty text; using fallback")

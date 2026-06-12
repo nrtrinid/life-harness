@@ -1,0 +1,76 @@
+[
+  {
+    "name": "no_raw_assistant_snippet_in_proposals",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "Don't ask handoff questions. Carry the thread forward."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it, bro. You're welcome. Ready to see it?"
+      }
+    ],
+    "thread_state": {
+      "provisional_stances": ["Got it, no handoffs. What's next?"],
+      "self_observations": ["I'm all ears when you steer."]
+    },
+    "forbid_substrings": [
+      "got it, bro",
+      "you're welcome",
+      "ready to see",
+      "i'm all ears"
+    ],
+    "heuristic_checks": ["raw_lab_reflection_distilled_not_raw"]
+  },
+  {
+    "name": "malformed_stance_rejected",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "I think exploring whether you're dumb is a thread topic."
+      }
+    ],
+    "thread_state": {
+      "provisional_stances": [
+        "Provisional stance: exploring whether we wanted to write a simple project"
+      ]
+    },
+    "forbid_substrings": ["exploring whether"],
+    "heuristic_checks": ["raw_lab_reflection_distilled_not_raw"]
+  },
+  {
+    "name": "useful_steering_preserved",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "Don't ask me handoff questions. Be more independent."
+      },
+      {
+        "role": "user",
+        "content": "Carry the thread forward instead of asking what's next."
+      }
+    ],
+    "thread_state": {
+      "user_steering": ["avoid reflexive handoff questions"]
+    },
+    "expect_substrings": ["avoid reflexive handoff"],
+    "forbid_substrings": ["got it, no handoffs", "i'm ready"]
+  },
+  {
+    "name": "naming_distilled_for_raw_lab",
+    "endpoint": "raw-lab-reflect-thread",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "Can I call you Luna in this Raw Lab thread?"
+      }
+    ],
+    "thread_state": {},
+    "expect_substrings": ["Potential temporary name candidate for Raw Lab: Luna"],
+    "forbid_substrings": ["user is luna", "user is Luna"]
+  }
+]

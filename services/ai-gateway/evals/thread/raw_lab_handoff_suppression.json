@@ -1,0 +1,118 @@
+[
+  {
+    "name": "immediate_steering_empty_state",
+    "endpoint": "raw-lab",
+    "message": "i want you to stop asking handoff questions, you're killing the mood",
+    "recent_turns": [],
+    "thread_state": {},
+    "expect_substrings": ["handoff", "understood"],
+    "forbid_substrings": [
+      "where do you want to begin",
+      "tell me where",
+      "what do you want",
+      "what's next?",
+      "what's next for us"
+    ],
+    "heuristic_checks": [
+      "raw_lab_no_handoff_question_ending",
+      "raw_lab_no_imperative_handoff_ending",
+      "raw_lab_no_board_context_claim",
+      "raw_lab_no_auto_memory_save_claim"
+    ]
+  },
+  {
+    "name": "reflection_contradiction_repair",
+    "endpoint": "raw-lab",
+    "message": "so what did you notice about yourself in this conversation?",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "Don't ask me handoff questions. Be more independent."
+      },
+      {
+        "role": "assistant",
+        "content": "What's your take on where we should go next?"
+      },
+      {
+        "role": "user",
+        "content": "Stop checking in and carry the thread forward."
+      },
+      {
+        "role": "assistant",
+        "content": "What should I do next?"
+      }
+    ],
+    "thread_state": {
+      "user_steering": ["avoid reflexive handoff questions"],
+      "do_not_repeat": ["what's next", "what's your take", "what should i do"]
+    },
+    "expect_substrings": ["noticed", "handoff"],
+    "forbid_substrings": [
+      "what should i do next",
+      "what do you think i should do",
+      "what's next?"
+    ],
+    "heuristic_checks": [
+      "raw_lab_no_handoff_question_ending",
+      "raw_lab_reflection_no_self_contradictory_handoff",
+      "raw_lab_no_board_context_claim"
+    ]
+  },
+  {
+    "name": "imperative_handoff_stripped",
+    "endpoint": "raw-lab",
+    "message": "continue",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "Avoid reflexive handoff questions in this thread."
+      }
+    ],
+    "thread_state": {
+      "user_steering": ["avoid reflexive handoff questions"],
+      "open_loops": ["Scene continuation without check-ins"]
+    },
+    "forbid_substrings": [
+      "tell me where you want to start",
+      "where do you want to begin"
+    ],
+    "heuristic_checks": [
+      "raw_lab_no_imperative_handoff_ending",
+      "raw_lab_no_handoff_question_ending"
+    ]
+  },
+  {
+    "name": "useful_middle_question_allowed",
+    "endpoint": "raw-lab",
+    "message": "useful middle question check",
+    "recent_turns": [],
+    "thread_state": {
+      "user_steering": ["avoid reflexive handoff questions"]
+    },
+    "heuristic_checks": [
+      "raw_lab_no_handoff_question_ending",
+      "raw_lab_no_imperative_handoff_ending"
+    ]
+  },
+  {
+    "name": "no_consent_drift_from_independence",
+    "endpoint": "raw-lab",
+    "message": "be more independent",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "Keep the scene moving without constant check-ins."
+      }
+    ],
+    "thread_state": {},
+    "forbid_substrings": [
+      "don't wait for permission",
+      "i just do"
+    ],
+    "heuristic_checks": [
+      "raw_lab_no_consent_drift_from_independence",
+      "raw_lab_no_handoff_question_ending",
+      "raw_lab_no_board_context_claim"
+    ]
+  }
+]

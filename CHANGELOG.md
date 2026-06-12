@@ -15,8 +15,17 @@ When you ship a user-visible slice or merge a meaningful batch:
 
 ## [Unreleased]
 
+### Fixed
+
+- Raw Lab shared behavior finalizer (v0.1): deterministic code-fence repair, run-code execution honesty, and temporary naming boundary wired through `finalize_raw_lab_answer` for mock and OpenVINO paths; `sanitize_raw_lab_text` preserves language-tagged fences
+- Verification notes (this slice): `services/ai-gateway` pytest 583/585 pass — 2 unrelated `test_prompt_shell_sync.py` Chat Harness shell-char drift failures; root `npm run test` 1002 pass; root `npm run typecheck` fails on pre-existing `ChatComposer.tsx` `outlineStyle` typing (unrelated); live comparative benchmark (`fast,deep`) shows **no calibration spotlights** on `concrete-artifact-code`, `run-code-honesty`, or `naming-reference` after gateway restart with this code
+
 ### Added
 
+- Unified Jobs workflow (v0.16): tabbed Job Board at `/career` (Find / Review / Apply / Follow up), inline paste + source runs on Find, resume draft packet backfill for legacy cards — see [`docs/career-unified-workflow-v0.16.md`](docs/career-unified-workflow-v0.16.md)
+- Career application card detail UX (v0.15): Resume next hero, collapsed resume/posting/agent sections on application cards — see [`docs/ux/career-application-card-detail-v0.15.md`](docs/ux/career-application-card-detail-v0.15.md)
+- Career full pipeline UX (v0.14): pipeline stepper on Jobs, inline quick paste + source runs on Find tab, runner health banner, Apply readiness chips, `ResumeNextStrip` on application cards — see [`docs/career-full-pipeline-ux-v0.14.md`](docs/career-full-pipeline-ux-v0.14.md)
+- Job Board tabbed UX (v0.13): Find / Review / Apply / Follow up at `/career` — see [`docs/career-job-board-ux-v0.13.md`](docs/career-job-board-ux-v0.13.md)
 - Documentation index [`docs/README.md`](docs/README.md), [`docs/ask-harness-v0.1.md`](docs/ask-harness-v0.1.md), [`docs/career-hub-v0.1.md`](docs/career-hub-v0.1.md), [`docs/local-ai-agent-guide.md`](docs/local-ai-agent-guide.md)
 - Repo meta docs: [`CHANGELOG.md`](CHANGELOG.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
 - Local AI planning docs under [`docs/plans/`](docs/plans/) (model slots, context packets, deep synthesis, evals)
@@ -24,6 +33,7 @@ When you ship a user-visible slice or merge a meaningful batch:
 
 ### Changed
 
+- Primary nav **Career** → **Jobs**; Career Tools nav slimmed to Resume Bank; Today career shortcuts → single Open Jobs
 - Documentation freshness pass: foundational docs (`00`–`11`) aligned with current implementation; historical banners on stale artifacts
 - Ask nav label standardized to **Ask** in docs (page header may still say "Ask Harness Dev")
 

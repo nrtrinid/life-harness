@@ -170,7 +170,9 @@ pytest tests/test_thread_eval_fixtures.py -q
 pytest -q
 ```
 
-**CI-safe:** MockProvider only. Deterministic fixtures: `reference_resolution`, `anti_repeat`, `raw_lab_no_board_access`, `style_steering`, `grounded_context_vs_thread`.
+**CI-safe:** MockProvider only. Deterministic fixtures: `reference_resolution`, `anti_repeat`, `raw_lab_no_board_access`, `style_steering`, `grounded_context_vs_thread`. Manual-only comparative deck: `raw_lab_comparative_deck.json` (`tags: manual_only` — excluded from CI; see [docs/raw-lab-comparative-benchmark.md](../../docs/raw-lab-comparative-benchmark.md)).
+
+**Raw Lab comparative benchmark (manual):** `python scripts/raw_lab_comparative_benchmark.py --variants fast,deep` — side-by-side Fast vs Deep report to `tmp/raw-lab-comparative-benchmark-results.md` (see doc for OpenVINO run). v0.2 adds calibration scorers, category summary, failure spotlights, and optional `--check-python-artifacts`.
 
 **OpenVINO manual smoke** (not in CI — run before prompt/model changes):
 

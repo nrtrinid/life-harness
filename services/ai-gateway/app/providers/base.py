@@ -95,12 +95,30 @@ _THINKING_TAG_RE = re.compile(
     r"<think[^>]*>.*?</" + "think>",
     re.DOTALL | re.IGNORECASE,
 )
+_DOCUMENT_JSON_WRAPPER_RE = re.compile(
+    r"^\s*```json\s*\n(?P<body>[\s\S]*?)\n```\s*$",
+    re.IGNORECASE,
+)
+_DOCUMENT_BARE_WRAPPER_RE = re.compile(
+    r"^\s*```\s*\n(?P<body>[\s\S]*?)\n```\s*$",
+)
+
+
+def _strip_document_wrapper_fences(text: str) -> str:
+    """Unwrap whole-response ```json or bare ``` wrappers only — preserve code fences."""
+    json_match = _DOCUMENT_JSON_WRAPPER_RE.match(text)
+    if json_match:
+        return json_match.group("body").strip()
+    bare_match = _DOCUMENT_BARE_WRAPPER_RE.match(text)
+    if bare_match:
+        return bare_match.group("body").strip()
+    return text
 
 
 def sanitize_raw_lab_text(raw: str) -> str:
     cleaned = raw.strip()
     cleaned = _THINKING_TAG_RE.sub("", cleaned).strip()
-    cleaned = _FENCE_RE.sub("", cleaned).strip()
+    cleaned = _strip_document_wrapper_fences(cleaned)
     return cleaned
 
 

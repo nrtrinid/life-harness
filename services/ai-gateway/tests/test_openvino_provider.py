@@ -154,3 +154,49 @@ def test_parse_model_json_extracts_embedded_object():
     raw = 'Here is JSON:\\n{"summary":"s","themes":["t"],"possible_cards":[],"next_actions":["a"],"pounce_mission":"p","things_to_park":[],"patterns_detected":[],"confidence_notes":["c"]}'
     parsed = parse_model_json(raw)
     assert parsed.themes == ["t"]
+
+
+def test_openvino_raw_lab_finalize_runs_after_verifier_repair(openvino_settings, monkeypatch):
+    from app.models import ChatRole, RawLabRequest, RawLabThreadState, RawLabTurn
+    from app.thread_verifier import has_handoff_ending
+
+    provider = OpenVinoProvider(openvino_settings)
+    finalize_calls: list[str] = []
+
+    def _track_finalize(answer, thread_state, user_message="", recent_turns=None):
+        from app.thread_verifier import apply_raw_lab_steering_repairs
+
+        finalize_calls.append(answer)
+        return apply_raw_lab_steering_repairs(
+            answer,
+            thread_state,
+            user_message,
+            recent_turns=recent_turns,
+        )
+
+    monkeypatch.setattr(
+        "app.providers.openvino_provider.finalize_raw_lab_answer",
+        _track_finalize,
+    )
+    monkeypatch.setattr(provider, "_generate_chat", lambda **_: "Draft point. What's next?")
+    monkeypatch.setattr(
+        provider,
+        "_generate_chat_repair",
+        lambda **_: "Repaired point. What's on your mind?",
+    )
+    monkeypatch.setattr(provider, "_ensure_pipeline", lambda: None)
+
+    request = RawLabRequest(
+        message="stop asking handoff questions",
+        recent_turns=[],
+        thread_state=RawLabThreadState(
+            user_steering=["avoid reflexive handoff questions"],
+            do_not_repeat=["what's next", "what's on your mind"],
+        ),
+    )
+    response = provider.raw_lab(request)
+    assert len(finalize_calls) >= 2
+    assert not has_handoff_ending(
+        response.answer,
+        do_not_repeat=request.thread_state.do_not_repeat,
+    )

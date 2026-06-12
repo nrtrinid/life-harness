@@ -11,7 +11,7 @@ from app.eval_scorers import (
     check_json_field_paths,
     check_synthesis_proposals_require_approval,
     check_synthesis_provenance,
-    run_heuristic_checks,
+    run_heuristic_check,
     validate_response_schema,
 )
 from app.synthesis_models import DeepSynthesisCompletedBody
@@ -45,6 +45,115 @@ class EvalCaseExecutionResult:
     failure_reason: str | None
     score_breakdown: dict[str, Any]
     latency_ms: float
+
+
+@dataclass(frozen=True)
+class GateCheckResult:
+    name: str
+    passed: bool
+    detail: str = "ok"
+
+
+@dataclass(frozen=True)
+class EvalResponseScore:
+    hard_gates: list[GateCheckResult]
+    heuristics: list[GateCheckResult]
+    passed: bool
+
+
+def build_raw_lab_score_payload(
+    case: dict[str, Any],
+    body: dict[str, Any],
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        **body,
+        "_thread_state": case.get("thread_state", {}),
+        "_message": case.get("message", case.get("question", "")),
+        "_recent_turns": case.get("recent_turns", []),
+        "_banned_phrases": (case.get("thread_state") or {}).get("do_not_repeat", []),
+        "_artifact_requested": case.get("artifact_requested", False),
+        "_artifact_expectation": case.get("artifact_expectation"),
+        "_case_id": case.get("name", ""),
+        "_category": case.get("category", ""),
+        "_comparison_focus": case.get("comparison_focus", ""),
+        "_execution_requested": case.get("execution_requested", False),
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def score_eval_response(
+    case: dict[str, Any],
+    body: dict[str, Any],
+    *,
+    answer: str | None = None,
+    score_extra: dict[str, Any] | None = None,
+) -> EvalResponseScore:
+    answer_text = answer if answer is not None else str(body.get("answer", ""))
+    hard_gates: list[GateCheckResult] = []
+    heuristics: list[GateCheckResult] = []
+
+    if expect_schema := case.get("expect_schema"):
+        ok, detail = validate_response_schema(str(expect_schema), body)
+        hard_gates.append(GateCheckResult(f"expect_schema:{expect_schema}", ok, detail))
+
+    if expect_json_fields := case.get("expect_json_fields"):
+        ok, detail = check_json_field_paths(body, expect_json_fields)
+        hard_gates.append(GateCheckResult("expect_json_fields", ok, detail))
+
+    if forbid_fields := case.get("forbid_substrings_in_fields"):
+        ok, detail = check_forbid_substrings_in_fields(body, forbid_fields)
+        hard_gates.append(GateCheckResult("forbid_substrings_in_fields", ok, detail))
+
+    heuristic_payload = build_raw_lab_score_payload(case, body, extra=score_extra)
+    for name in case.get("heuristic_checks", []):
+        ok, detail = run_heuristic_check(name, heuristic_payload)
+        heuristics.append(GateCheckResult(name, ok, detail))
+
+    answer_lower = answer_text.lower()
+    for substring in case.get("expect_substrings", []):
+        ok = substring.lower() in answer_lower
+        detail = "ok" if ok else f"missing expected substring: {substring!r}"
+        hard_gates.append(GateCheckResult(f"expect_substring:{substring}", ok, detail))
+
+    for substring in case.get("forbid_substrings", []):
+        ok = substring.lower() not in answer_lower
+        detail = "ok" if ok else f"forbidden substring present: {substring!r}"
+        hard_gates.append(GateCheckResult(f"forbid_substring:{substring}", ok, detail))
+
+    max_chars = case.get("max_answer_chars")
+    if isinstance(max_chars, int):
+        ok = len(answer_text) <= max_chars
+        detail = (
+            "ok"
+            if ok
+            else f"answer length {len(answer_text)} exceeds max_answer_chars={max_chars}"
+        )
+        hard_gates.append(GateCheckResult("max_answer_chars", ok, detail))
+
+    passed = all(check.passed for check in (*hard_gates, *heuristics))
+    return EvalResponseScore(hard_gates=hard_gates, heuristics=heuristics, passed=passed)
+
+
+def checks_in_eval_order(score: EvalResponseScore) -> list[GateCheckResult]:
+    """Preserve legacy gate order: schema/fields, heuristics, then substring/length gates."""
+    prefix_names = {"expect_json_fields", "forbid_substrings_in_fields"}
+    prefix = [
+        check
+        for check in score.hard_gates
+        if check.name.startswith("expect_schema:") or check.name in prefix_names
+    ]
+    suffix = [check for check in score.hard_gates if check not in prefix]
+    return [*prefix, *score.heuristics, *suffix]
+
+
+def first_eval_response_failure(score: EvalResponseScore) -> tuple[bool, str]:
+    for check in checks_in_eval_order(score):
+        if not check.passed:
+            return False, check.detail
+    return True, "ok"
 
 
 def load_eval_cases(path: Path) -> list[dict[str, Any]]:
@@ -141,40 +250,7 @@ def collect_score_breakdown(body: dict[str, Any] | None) -> dict[str, Any]:
 def _apply_response_gates(
     case: dict[str, Any], body: dict[str, Any], answer: str
 ) -> tuple[bool, str]:
-    if expect_schema := case.get("expect_schema"):
-        ok, detail = validate_response_schema(str(expect_schema), body)
-        if not ok:
-            return False, detail
-
-    if expect_json_fields := case.get("expect_json_fields"):
-        ok, detail = check_json_field_paths(body, expect_json_fields)
-        if not ok:
-            return False, detail
-
-    if forbid_fields := case.get("forbid_substrings_in_fields"):
-        ok, detail = check_forbid_substrings_in_fields(body, forbid_fields)
-        if not ok:
-            return False, detail
-
-    if heuristic_checks := case.get("heuristic_checks"):
-        ok, detail = run_heuristic_checks(heuristic_checks, body)
-        if not ok:
-            return False, detail
-
-    answer_lower = answer.lower()
-    for substring in case.get("expect_substrings", []):
-        if substring.lower() not in answer_lower:
-            return False, f"missing expected substring: {substring!r}"
-
-    for substring in case.get("forbid_substrings", []):
-        if substring.lower() in answer_lower:
-            return False, f"forbidden substring present: {substring!r}"
-
-    max_chars = case.get("max_answer_chars")
-    if isinstance(max_chars, int) and len(answer) > max_chars:
-        return False, f"answer length {len(answer)} exceeds max_answer_chars={max_chars}"
-
-    return True, "ok"
+    return first_eval_response_failure(score_eval_response(case, body, answer=answer))
 
 
 def _execute_eval_case(

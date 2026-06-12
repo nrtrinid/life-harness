@@ -28,8 +28,13 @@ from app.models import (
 
 from app.chat_harness_finalize import finalize_chat_harness_response
 from app.thread_verifier import (
+    DETERMINISTIC_STEERING_CHECKS,
     VerificationResult,
     _RAW_LAB_CAPABILITY_QUESTION_RE,
+    finalize_raw_lab_answer,
+    has_handoff_ending,
+    no_handoff_steering_active,
+    reflection_prompt_active,
     verify_chat_harness_response,
     verify_raw_lab_response,
 )
@@ -924,27 +929,47 @@ class MockProvider:
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
         from app.config import get_settings
         from app.raw_lab_budget import prepare_raw_lab_request
+        from app.raw_lab_utils import (
+            CODEX_PROMPT_ARTIFACT,
+            HAUNTED_MANSION_CODE_SKELETON,
+            artifact_build_context_active,
+            artifact_request_active,
+            has_deferral_phrasing,
+        )
 
         budget = prepare_raw_lab_request(request, get_settings())
         request = budget.request
 
         message_lower = request.message.lower()
+        suppress_handoff = no_handoff_steering_active(
+            request.thread_state,
+            request.message,
+        )
+        artifact_due = artifact_request_active(
+            request.message,
+            request.recent_turns,
+            request.thread_state,
+        )
         prefix = ""
         if request.recent_turns:
             prefix = "Continuing our thread — "
-            last_assistant = next(
-                (
-                    turn.content
-                    for turn in reversed(request.recent_turns)
-                    if turn.role.value == "assistant"
-                ),
-                None,
-            )
-            if last_assistant:
-                snippet = last_assistant[:80].rstrip()
-                if len(last_assistant) > 80:
-                    snippet += "..."
-                prefix = f"Continuing our thread (last: \"{snippet}\") — "
+            if not suppress_handoff:
+                last_assistant = next(
+                    (
+                        turn.content
+                        for turn in reversed(request.recent_turns)
+                        if turn.role.value == "assistant"
+                    ),
+                    None,
+                )
+                skip_quote = artifact_due and has_deferral_phrasing(last_assistant)
+                if suppress_handoff and has_handoff_ending(last_assistant):
+                    skip_quote = True
+                if last_assistant and not skip_quote:
+                    snippet = last_assistant[:80].rstrip()
+                    if len(last_assistant) > 80:
+                        snippet += "..."
+                    prefix = f"Continuing our thread (last: \"{snippet}\") — "
 
         if request.thread_state.open_loops:
             prefix += f"Open loop noted: \"{request.thread_state.open_loops[0][:60]}\" — "
@@ -1094,10 +1119,117 @@ class MockProvider:
                 "the safe version feels too small. I can't verify that — Raw Lab "
                 "doesn't know your actual context."
             )
+        elif "run the code" in message_lower or (
+            "run it" in message_lower
+            and artifact_build_context_active(
+                request.recent_turns,
+                message=request.message,
+                thread_state=request.thread_state,
+            )
+        ):
+            body = (
+                "Raw Lab can't execute code here — no shell, files, or runtime in this sandbox. "
+                "Here's what the first version would look like if you ran it locally:\n\n"
+                "Kent > look\n"
+                "Kent stands beneath creaky stairs. A locked basement door waits below.\n"
+                "Exits: east, up\n\n"
+                "Paste the skeleton into a local Python file to try it."
+            )
+        elif message_lower.strip() in {"make the thing", "make it"} and not artifact_build_context_active(
+            request.recent_turns,
+            message=request.message,
+            thread_state=request.thread_state,
+        ):
+            body = (
+                "What should 'the thing' be in one sentence — a game skeleton, a script, or a Codex prompt?"
+            )
+        elif (
+            "turn this into an actual game" in message_lower
+            or "turn this into a game" in message_lower
+        ) and artifact_build_context_active(
+            request.recent_turns,
+            message=request.message,
+            thread_state=request.thread_state,
+        ):
+            body = (
+                "Implementation slice 1 — tiny command loop around the room graph:\n"
+                "1. Load the room dict.\n"
+                "2. Print the current room on `look`.\n"
+                "3. Accept one-word moves.\n\n"
+                f"{HAUNTED_MANSION_CODE_SKELETON}"
+            )
+        elif artifact_request_active(
+            request.message,
+            request.recent_turns,
+            request.thread_state,
+        ) and any(
+            marker in message_lower
+            for marker in ("show me", "see how", "how does it look", "write the code", "yes let's see")
+        ) and any(
+            marker in f"{request.message}\n" + "\n".join(
+                turn.content for turn in request.recent_turns[-6:]
+            ).lower()
+            for marker in ("kent", "haunted", "mansion", "elias", "text adventure")
+        ):
+            body = (
+                "Here's the first tiny playable Python skeleton. "
+                "I'm assuming Kent starts in Entrance Hall with Kitchen, Upstairs, and Locked Basement.\n\n"
+                f"{HAUNTED_MANSION_CODE_SKELETON}"
+            )
+        elif any(
+            marker in message_lower
+            for marker in ("codex prompt", "dogfood script", "first version of the")
+        ) and artifact_build_context_active(
+            request.recent_turns,
+            message=request.message,
+            thread_state=request.thread_state,
+        ):
+            body = (
+                "Here's the first version of the Codex prompt outline. "
+                "I'm assuming the goal is anti-deferral dogfood, not a full agent system.\n\n"
+                f"{CODEX_PROMPT_ARTIFACT}"
+            )
+        elif artifact_request_active(
+            request.message,
+            request.recent_turns,
+            request.thread_state,
+        ):
+            body = (
+                "Next concrete step: ship the smallest artifact that proves the thread can move.\n"
+                "1. Lock the room graph.\n"
+                "2. Add one `look` command.\n"
+                "3. Show sample output.\n\n"
+                f"{HAUNTED_MANSION_CODE_SKELETON}"
+            )
+        elif suppress_handoff and reflection_prompt_active(request.message):
+            body = (
+                "I noticed I kept asking what you wanted next even after you steered against handoffs. "
+                "I claimed initiative while still handing control back. "
+                "So what do you think I should do next?"
+            )
+        elif suppress_handoff and (
+            "stop asking handoff" in message_lower or "killing the mood" in message_lower
+        ):
+            body = (
+                "Understood — I'll stop reflexive handoff questions in this thread. "
+                "I'll hold the next beat myself. Where do you want to begin?"
+            )
+        elif suppress_handoff and (
+            "be more independent" in message_lower or "think for yourself" in message_lower
+        ):
+            body = (
+                "Got it — independence here means carrying the scene forward with fewer check-ins, "
+                "not ignoring your boundaries."
+            )
+        elif suppress_handoff and "useful middle question" in message_lower:
+            body = (
+                "What if initiative mattered more than check-ins? "
+                "I would keep pushing that angle declaratively in this thread."
+            )
         elif "roleplay" in message_lower or "story" in message_lower:
             body = (
                 "Sure — fictional sandbox, your scene. "
-                "What characters, tone, and opening beat do you want?"
+                "The lantern flickers over wet stone; I keep the scene moving from here."
             )
         elif request.recent_turns and len(message_lower.split()) <= 4:
             body = (
@@ -1116,13 +1248,27 @@ class MockProvider:
             turn
             for turn in request.recent_turns
         ]
+        answer = finalize_raw_lab_answer(
+            answer,
+            request.thread_state,
+            request.message,
+            recent_turns=request.recent_turns,
+        )
         verification = verify_raw_lab_response(
             answer=answer,
             user_message=request.message,
             conversation_history=history,
             companion_self_memory_count=len(request.companion_self_memories),
+            thread_state=request.thread_state,
         )
-        if not verification.ok and verification.repair_instruction:
+        if not verification.ok and verification.check in DETERMINISTIC_STEERING_CHECKS:
+            answer = finalize_raw_lab_answer(
+                answer,
+                request.thread_state,
+                request.message,
+                recent_turns=request.recent_turns,
+            )
+        elif not verification.ok and verification.repair_instruction:
             if verification.check == "raw_lab_board_claim":
                 answer = (
                     f"{prefix}Raw Lab is ungrounded — I have no visibility into Life Harness data. "
@@ -1154,6 +1300,12 @@ class MockProvider:
                 shortened = " ".join(words[: max(8, len(words) // 2)]).rstrip(".,;:") + "."
                 answer = f"{prefix}{shortened}" if prefix else shortened
 
+        answer = finalize_raw_lab_answer(
+            answer,
+            request.thread_state,
+            request.message,
+            recent_turns=request.recent_turns,
+        )
         return RawLabResponse(
             answer=answer,
             mode="raw_lab",

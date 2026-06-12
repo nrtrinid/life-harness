@@ -503,6 +503,8 @@ def test_sanitize_raw_lab_text_strips_thinking_and_fences():
     raw = "Hello"
     assert sanitize_raw_lab_text(raw) == "Hello"
     assert sanitize_raw_lab_text("  ```\nHi\n```  ") == "Hi"
+    fenced = "```python\nimport x\nprint(x)\n```"
+    assert sanitize_raw_lab_text(fenced) == fenced
 
 
 def test_estimate_raw_lab_input_chars_includes_system_history_and_message():
@@ -516,6 +518,91 @@ def test_estimate_raw_lab_input_chars_includes_system_history_and_message():
     )
     total = estimate_raw_lab_input_chars(system=system, request=request)
     assert total >= len(system) + len("prior") + len("hello") + len("digest")
+
+
+def test_raw_lab_prompt_includes_concrete_initiative_guidance():
+    prompt = build_raw_lab_system_prompt().lower()
+    assert "concrete initiative" in prompt
+    assert "produce the next conversational artifact" in prompt
+    assert "ready to see" in prompt
+
+
+def test_raw_lab_prompt_allows_fences_for_requested_artifacts():
+    prompt = build_raw_lab_system_prompt().lower()
+    assert "fenced markdown code blocks" in prompt
+    assert "concrete artifact" in prompt
+    assert "temporary raw lab" in prompt
+
+
+def test_raw_lab_mock_haunted_mansion_returns_code_skeleton(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "yes let's see how it looks",
+            "recent_turns": [
+                {
+                    "role": "user",
+                    "content": "Let's make a haunted mansion text adventure with Kent and Elias.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "I'll write the code step-by-step for rooms and exits.",
+                },
+                {"role": "user", "content": "yeah start with rooms and exits"},
+            ],
+            "thread_state": {
+                "open_loops": ["Haunted mansion text adventure with Kent and Elias"],
+                "recurring_topics": ["text adventure"],
+            },
+        },
+    )
+    assert response.status_code == 200
+    answer = response.json()["answer"].lower()
+    assert "```python" in answer
+    assert "kent" in answer
+    assert "entrance_hall" in answer
+    assert "ready to see" not in answer
+
+
+def test_raw_lab_mock_run_code_does_not_claim_execution(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "run the code",
+            "recent_turns": [
+                {
+                    "role": "user",
+                    "content": "Show me the Python skeleton for Kent in the mansion.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Here's a room dict with entrance_hall and exits.",
+                },
+            ],
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    answer = response.json()["answer"].lower()
+    assert "can't execute" in answer or "cannot execute" in answer
+    assert "i ran the code" not in answer
+    assert "i executed" not in answer
+
+
+def test_raw_lab_mock_naming_gets_temporary_boundary(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "In this thread can I call you Luna?",
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    answer = response.json()["answer"]
+    lowered = answer.lower()
+    assert "raw lab" in lowered
+    assert "temporary" in lowered
+    assert "saved to memory" not in lowered
 
 
 def test_s3_still_rejects_chat_harness_before_provider(client):
