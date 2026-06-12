@@ -95,10 +95,11 @@ import {
   type FeatureSprintPlanUpdateInput,
   type FeatureSprintStepUpdateInput
 } from "../core/featureSprintOrchestrator";
-import type { FeatureSprintRunnerResponse } from "../core/featureSprintRunner";
+import type { FeatureSprintRunnerResponse, FeatureSprintWorktreeCleanupResponse } from "../core/featureSprintRunner";
 import {
   completeFeatureSprintRunnerRun,
   createFeatureSprintRunnerRun,
+  markFeatureSprintRunnerRunWorktreeCleanup,
   markMostRecentFeatureSprintRunnerRunImported,
   type FeatureSprintRunnerRunCreateInput,
   type FeatureSprintRunnerRunImportMarkFilter
@@ -267,6 +268,10 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   markMostRecentFeatureSprintRunnerRunImported: (
     filter: FeatureSprintRunnerRunImportMarkFilter
   ) => { ok: boolean; message?: string; runId?: string };
+  markFeatureSprintRunnerRunWorktreeCleanup: (
+    runId: string,
+    response: FeatureSprintWorktreeCleanupResponse
+  ) => { ok: boolean; message?: string };
   confirmAssistantAction: (
     action: AssistantProposedAction
   ) => { ok: boolean; message?: string };
@@ -892,6 +897,18 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const markFeatureSprintRunnerRunWorktreeCleanupAction = useCallback(
+    (runId: string, response: FeatureSprintWorktreeCleanupResponse) => {
+      const result = markFeatureSprintRunnerRunWorktreeCleanup(stateRef.current, runId, response);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: response.message };
+    },
+    []
+  );
+
   const confirmAssistantAction = useCallback((action: AssistantProposedAction) => {
     const result = applyConfirmedAssistantAction(stateRef.current, action);
     if (!result.ok) {
@@ -1121,6 +1138,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImported:
         markMostRecentFeatureSprintRunnerRunImportedAction,
+      markFeatureSprintRunnerRunWorktreeCleanup:
+        markFeatureSprintRunnerRunWorktreeCleanupAction,
       confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,
@@ -1176,6 +1195,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImportedAction,
+      markFeatureSprintRunnerRunWorktreeCleanupAction,
       confirmAssistantAction,
       isBatchRunning,
       batchRunProgress,
