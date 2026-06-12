@@ -132,7 +132,7 @@ export default function ProofLedgerScreen() {
               </Text>
               {entry.route ? (
                 <Link href={entry.route as Href} asChild>
-                  <Pressable style={[styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }]}>
+                  <Pressable style={StyleSheet.flatten([styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }])}>
                     <Text style={styles.secondaryActionText}>
                       {entry.cardTitle ? `Open ${entry.cardTitle}` : "Open card"}
                     </Text>

@@ -8,13 +8,19 @@ State persists locally on web via JSON snapshot (v0.5). No auth, cloud sync, or 
 
 ```bash
 npm install
-npm run scout:runner   # terminal 1 — local Job Scout runner on 127.0.0.1:8122
-npm run web            # terminal 2
+npm run web            # starts dev launcher + Expo web (use Start runner in Sources if needed)
+```
+
+Or run the runner manually:
+
+```bash
+npm run scout:runner   # local Job Scout runner on 127.0.0.1:8122
+npm run web            # if not using the combined script above
 ```
 
 Other targets: `npm run android`, `npm run ios`.
 
-Navigation is grouped into **Primary** (Today, Board, Career, Playback), **Career Tools** (Intake, Paste, Queue, Career Pack, Bank, Sources), and **Backroom** (Companion, Replay, Raw Signal, Tape Archive, Log, Setup) surfaces.
+Navigation is grouped into **Primary** (Today, Board, Jobs, Playback), **Career Tools** (Bank), and **Backroom** (Companion, Replay, Raw Signal, Tape Archive, Log, Setup) surfaces. Job discovery and review live on **Jobs** (`/career`) — see [`docs/career-full-pipeline-ux-v0.14.md`](docs/career-full-pipeline-ux-v0.14.md).
 
 The core app loop remains rules-only. Companion, Raw Signal, and Deep Synthesis are optional local ai-gateway surfaces; the board still works without starting ai-gateway.
 

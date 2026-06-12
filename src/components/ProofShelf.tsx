@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { buildProofShelfEntries } from "../core/proof";
 import { useLifeHarness } from "../state/LifeHarnessState";
@@ -35,7 +35,7 @@ export function ProofShelf({
         <Text style={styles.emptyText}>No proof yet. Capture a win on Today or preserve the day.</Text>
         {showLedgerLink ? (
           <Link href="/proof-ledger" asChild>
-            <Pressable style={[styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }]}>
+            <Pressable style={StyleSheet.flatten([styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }])}>
               <Text style={styles.secondaryActionText}>View ledger</Text>
             </Pressable>
           </Link>
@@ -66,7 +66,7 @@ export function ProofShelf({
         if (entry.cardId) {
           return (
             <Link key={entry.id} href={`/card/${entry.cardId}`} asChild>
-              <Pressable style={itemStyle} accessibilityRole="link">
+              <Pressable style={StyleSheet.flatten(itemStyle)} accessibilityRole="link">
                 {content}
               </Pressable>
             </Link>
@@ -81,7 +81,7 @@ export function ProofShelf({
       })}
       {showLedgerLink ? (
         <Link href="/proof-ledger" asChild>
-          <Pressable style={[styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }]}>
+          <Pressable style={StyleSheet.flatten([styles.secondaryAction, { marginTop: 12, alignSelf: "flex-start" }])}>
             <Text style={styles.secondaryActionText}>View ledger</Text>
           </Pressable>
         </Link>
