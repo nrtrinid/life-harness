@@ -4,18 +4,17 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { CollapsibleSection } from "../src/components/CollapsibleSection";
-import { CareerNextContractCard } from "../src/components/career/CareerNextContractCard";
+import { CareerMorningLoopCard } from "../src/components/career/CareerMorningLoopCard";
 import { CareerQueuePreview } from "../src/components/career/CareerQueuePreview";
 import { CareerStatusChip } from "../src/components/career/CareerStatusChip";
 import { CareerToolCard } from "../src/components/career/CareerToolCard";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
-import { Section } from "../src/components/Section";
 import { colors, lofiColors, styles } from "../src/components/styles";
+import { buildCareerMorningLoop } from "../src/core/careerMorningLoop";
 import { buildCareerHubSummary } from "../src/core/careerHub";
 import { buildJobFindingsSummary, formatJobRunFinding } from "../src/core/jobFindings";
-import { formatFitScore } from "../src/core/jobScout";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 function HubSection({ title, children }: { title: string; children: ReactNode }) {
@@ -41,6 +40,8 @@ export default function CareerScreen() {
     careerSourcePack,
     proofItems,
     runFitFinder,
+    runDueJobSources,
+    runAllEnabledJobSources,
     isBatchRunning,
     batchRunProgress
   } = useLifeHarness();
@@ -61,6 +62,17 @@ export default function CareerScreen() {
     hasCareerPack: Boolean(careerSourcePack),
     now
   });
+  const morningLoop = buildCareerMorningLoop({
+    jobCandidates,
+    cards,
+    jobSources,
+    jobSourceRuns,
+    resumeModules,
+    careerSourcePack: careerSourcePack?.pack,
+    now,
+    isBatchRunning,
+    batchRunProgress
+  });
   const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, now);
   const careerProofItems = proofItems.filter((item) => item.area === "social_career");
 
@@ -74,6 +86,22 @@ export default function CareerScreen() {
     { label: `${summary.dueSourceCount} due sources`, accent: summary.dueSourceCount > 0 },
     { label: summary.hasCareerPack ? "pack imported" : "no pack" }
   ];
+
+  async function handleRunDueSources() {
+    const result = await runDueJobSources();
+    setNotice({
+      kind: result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
+      message: result.message
+    });
+  }
+
+  async function handleRunAllEnabledSources() {
+    const result = await runAllEnabledJobSources();
+    setNotice({
+      kind: result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
+      message: result.message
+    });
+  }
 
   async function handleFindFitJobs() {
     const result = await runFitFinder();
@@ -101,7 +129,12 @@ export default function CareerScreen() {
         chips={chips}
       />
 
-      <CareerNextContractCard action={summary.nextAction} />
+      <CareerMorningLoopCard
+        loop={morningLoop}
+        onRunDueSources={() => void handleRunDueSources()}
+        onRunAllEnabledSources={() => void handleRunAllEnabledSources()}
+        batchBusy={isBatchRunning}
+      />
 
       <HubSection title="Application queue">
         <View style={styles.lofiCard}>
@@ -139,33 +172,6 @@ export default function CareerScreen() {
           </Link>
         </View>
       </HubSection>
-
-      {findings.nextMove.targetRoute !== summary.nextAction.href ||
-      findings.nextMove.ctaLabel !== summary.nextAction.ctaLabel ? (
-        <Section title="Also surfaced">
-          <Text style={styles.titleText}>{findings.nextMove.title}</Text>
-          <Text style={styles.bodyText}>{findings.nextMove.body}</Text>
-          {findings.nextMove.kind === "review_candidate" ? (
-            <>
-              <Text style={styles.helpText}>
-                {formatFitScore(
-                  findings.nextMove.candidate.fitScore,
-                  findings.nextMove.candidate.fitLabel
-                )}
-                {findings.nextMove.sourceName ? ` - ${findings.nextMove.sourceName}` : ""}
-              </Text>
-              {findings.nextMove.candidate.fitReasons[0] ? (
-                <Text style={styles.listItem}>{findings.nextMove.candidate.fitReasons[0]}</Text>
-              ) : null}
-            </>
-          ) : null}
-          <Link href={findings.nextMove.targetRoute as Href} asChild>
-            <Pressable style={StyleSheet.flatten([styles.secondaryAction, { alignSelf: "flex-start" }])}>
-              <Text style={styles.secondaryActionText}>{findings.nextMove.ctaLabel}</Text>
-            </Pressable>
-          </Link>
-        </Section>
-      ) : null}
 
       <CollapsibleSection title="Backroom — setup & sources" defaultOpen={false}>
       <HubSection title="Start the next contract">

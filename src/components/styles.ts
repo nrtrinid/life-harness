@@ -176,14 +176,17 @@ export const styles = StyleSheet.create({
   appShellWide: {
     backgroundColor: colors.bgPrimary,
     flex: 1,
-    flexDirection: "row"
+    flexDirection: "row",
+    minHeight: 0
   },
   appShellNarrow: {
     backgroundColor: colors.bgPrimary,
-    flex: 1
+    flex: 1,
+    minHeight: 0
   },
   appShellContent: {
-    flex: 1
+    flex: 1,
+    minHeight: 0
   },
   sidebar: {
     backgroundColor: lofiColors.sidebar,
@@ -460,6 +463,72 @@ export const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.sm,
     marginTop: spacing.xs
+  },
+  primaryMovePanel: {
+    backgroundColor: colors.bgTertiary,
+    borderColor: colors.borderAccent,
+    borderLeftColor: colors.borderAccent,
+    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg
+  },
+  primaryMoveTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.headingLarge,
+    fontWeight: "700",
+    lineHeight: 28
+  },
+  primaryMoveReason: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyLarge,
+    lineHeight: 24
+  },
+  primaryMoveFootnote: {
+    color: colors.textMuted,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
+  },
+  proofNugget: {
+    backgroundColor: colors.bgTertiary,
+    borderColor: colors.borderSubtle,
+    borderLeftColor: lofiColors.fadedRose,
+    borderLeftWidth: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    gap: 3,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  proofNuggetTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.bodyMedium,
+    fontWeight: "700",
+    lineHeight: 20
+  },
+  proofNuggetMeta: {
+    color: colors.textTertiary,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
+  },
+  usefulEmptyState: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 4,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md
+  },
+  usefulEmptyTitle: {
+    color: colors.textSecondary,
+    fontSize: typography.bodyMedium,
+    fontWeight: "700"
+  },
+  usefulEmptyCopy: {
+    color: colors.textMuted,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
   },
   todayActStack: {
     gap: spacing.lg
@@ -999,6 +1068,7 @@ export const styles = StyleSheet.create({
   },
   chatThreadToolbar: {
     flexDirection: "row",
+    flexShrink: 0,
     flexWrap: "wrap",
     gap: spacing.sm,
     paddingHorizontal: spacing.sm,
@@ -1009,8 +1079,10 @@ export const styles = StyleSheet.create({
     minHeight: 0
   },
   chatThreadContent: {
-    gap: spacing.lg,
+    flexGrow: 1,
+    gap: spacing.md,
     paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm
   },
   chatEmptyState: {
@@ -1056,39 +1128,68 @@ export const styles = StyleSheet.create({
   },
   chatBubbleUser: {
     alignSelf: "flex-end",
-    backgroundColor: "rgba(36,36,40,0.92)",
-    borderRadius: 8,
-    gap: spacing.xs,
-    maxWidth: "72%",
+    backgroundColor: lofiColors.surfaceRaised,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderRightColor: lofiColors.actionAmber,
+    borderRightWidth: 3,
+    borderWidth: 1,
+    gap: spacing.sm,
+    maxWidth: "78%",
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
+    paddingVertical: spacing.md
   },
   chatBubbleAssistant: {
     alignSelf: "flex-start",
-    backgroundColor: colors.bgCard,
+    backgroundColor: lofiColors.surfaceQuiet,
     borderColor: colors.borderSubtle,
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 1,
     gap: spacing.sm,
-    maxWidth: "88%",
-    paddingHorizontal: spacing.lg,
+    maxWidth: "85%",
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md
+  },
+  chatBubbleAssistantCompanion: {
+    borderLeftColor: lofiColors.softViolet,
+    borderLeftWidth: 3
+  },
+  chatBubbleAssistantRawSignal: {
+    borderLeftColor: lofiColors.dustyBlue,
+    borderLeftWidth: 3
+  },
+  chatBubbleFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+    marginTop: spacing.xs
+  },
+  chatBubbleFooterTrailing: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: spacing.xs
   },
   chatBubbleError: {
     alignSelf: "stretch",
-    backgroundColor: colors.bgSecondary,
+    backgroundColor: lofiColors.surfaceQuiet,
     borderColor: "rgba(220,80,50,0.35)",
+    borderLeftColor: colors.accentDanger,
+    borderLeftWidth: 3,
     borderRadius: 6,
     borderWidth: 1,
-    gap: spacing.xs,
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
+    paddingVertical: spacing.md
   },
   chatSpeakerLabel: {
     color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
     fontSize: typography.labelSmall,
     fontWeight: "600",
-    letterSpacing: 0.4
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
   },
   chatAnswerText: {
     color: colors.textPrimary,
@@ -1181,13 +1282,155 @@ export const styles = StyleSheet.create({
     flexDirection: "column",
     overflow: "hidden"
   },
-  chatSurfaceThreadSlot: {
+  chatSurfaceFrameFill: {
     flex: 1,
     minHeight: 0
   },
+  chatScreenFill: {
+    flex: 1,
+    gap: spacing.md,
+    minHeight: 0,
+    padding: spacing.lg,
+    paddingBottom: 0
+  },
+  chatPrimaryColumnFill: {
+    flex: 1,
+    minHeight: 0
+  },
+  chatReasoningPanel: {
+    alignSelf: "stretch",
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    padding: spacing.md
+  },
+  chatReasoningPanelRawSignal: {
+    borderLeftColor: lofiColors.dustyBlue,
+    borderLeftWidth: 3
+  },
+  chatReasoningHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between"
+  },
+  chatReasoningHeaderText: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  chatReasoningTitle: {
+    color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
+  },
+  chatReasoningStatus: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall
+  },
+  chatReasoningChevron: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontWeight: "600"
+  },
+  chatReasoningSteps: {
+    gap: spacing.xs,
+    paddingTop: spacing.xs
+  },
+  chatReasoningStep: {
+    color: colors.textMuted,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
+  },
+  chatReasoningStepActive: {
+    color: colors.textSecondary,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
+  },
+  chatReasoningPlaceholderNote: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    fontStyle: "italic",
+    marginTop: spacing.xs
+  },
+  chatReasoningDepthPillCompanion: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(155, 139, 184, 0.12)",
+    borderColor: lofiColors.softViolet,
+    borderRadius: 2,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  },
+  chatReasoningDepthPillRawSignal: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(107, 143, 163, 0.12)",
+    borderColor: lofiColors.dustyBlue,
+    borderRadius: 2,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  },
+  chatReasoningDepthPillTextCompanion: {
+    color: lofiColors.softViolet,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4
+  },
+  chatReasoningDepthPillTextRawSignal: {
+    color: lofiColors.dustyBlue,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4
+  },
+  signalStrip: {
+    backgroundColor: lofiColors.surfaceQuiet,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md
+  },
+  signalStripCompanion: {
+    borderLeftColor: lofiColors.softViolet,
+    borderLeftWidth: 3
+  },
+  signalStripWarning: {
+    borderLeftColor: lofiColors.warningAmber,
+    borderLeftWidth: 3
+  },
+  signalStripProof: {
+    borderLeftColor: lofiColors.actionAmber,
+    borderLeftWidth: 3
+  },
+  signalStripLabel: {
+    color: colors.textMuted,
+    fontFamily: lofiTypography.fontLofiMono,
+    fontSize: typography.labelSmall,
+    fontWeight: "600",
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  signalStripText: {
+    color: colors.textSecondary,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
+  },
+  chatSurfaceThreadSlot: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden"
+  },
   chatSurfaceComposerSlot: {
     borderTopColor: colors.borderSubtle,
-    borderTopWidth: 1
+    borderTopWidth: 1,
+    flexShrink: 0
   },
   chatAdvancedPanel: {
     gap: spacing.xs,
@@ -1250,6 +1493,190 @@ export const styles = StyleSheet.create({
     fontSize: typography.labelSmall,
     letterSpacing: 0.3
   },
+  chatComposerHintCentered: {
+    textAlign: "center"
+  },
+  chatComposerCentered: {
+    alignItems: "center"
+  },
+  chatComposerBodyNarrow: {
+    gap: spacing.sm,
+    width: "58%"
+  },
+  chatComposerShell: {
+    alignItems: "center",
+    backgroundColor: colors.bgPrimary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10
+  },
+  chatComposerShellExpanded: {
+    alignItems: "flex-end"
+  },
+  chatComposerInputWrap: {
+    flex: 1,
+    justifyContent: "center",
+    minWidth: 0
+  },
+  chatComposerInputWrapExpanded: {
+    alignSelf: "stretch",
+    justifyContent: "flex-start"
+  },
+  chatComposerInputInline: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    color: colors.inputText,
+    flex: 1,
+    fontSize: typography.bodyMedium,
+    lineHeight: 22,
+    minHeight: 32,
+    paddingHorizontal: 0,
+    paddingVertical: 0
+  },
+  chatComposerTrailing: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: spacing.sm
+  },
+  chatComposerSendCircle: {
+    alignItems: "center",
+    backgroundColor: colors.accentPrimary,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36
+  },
+  chatComposerSendCircleDisabled: {
+    backgroundColor: "rgba(200,168,75,0.25)",
+    opacity: 0.55
+  },
+  chatComposerSendArrow: {
+    color: "#0E100A",
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 20
+  },
+  chatComposerQuickWrap: {
+    flexShrink: 0,
+    position: "relative",
+    zIndex: 2
+  },
+  chatComposerQuickMenu: {
+    backgroundColor: colors.bgCard,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    bottom: "100%",
+    gap: spacing.xs,
+    left: 0,
+    marginBottom: spacing.xs,
+    minWidth: 240,
+    padding: spacing.xs,
+    position: "absolute",
+    zIndex: 10
+  },
+  chatComposerQuickMenuItem: {
+    borderRadius: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  chatComposerQuickMenuItemLabel: {
+    color: colors.textSecondary,
+    fontSize: typography.bodySmall,
+    lineHeight: 18
+  },
+  chatComposerQuickTrigger: {
+    alignItems: "center",
+    backgroundColor: colors.bgPrimary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: "center",
+    width: 36
+  },
+  chatComposerQuickTriggerText: {
+    color: colors.textSecondary,
+    fontSize: 20,
+    fontWeight: "400",
+    lineHeight: 22
+  },
+  chatComposerDepthWrap: {
+    flexShrink: 0,
+    position: "relative",
+    zIndex: 2
+  },
+  chatComposerDepthMenu: {
+    backgroundColor: colors.bgCard,
+    borderColor: colors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    bottom: "100%",
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+    minWidth: 220,
+    padding: spacing.xs,
+    position: "absolute",
+    right: 0,
+    zIndex: 10
+  },
+  chatComposerDepthMenuItem: {
+    borderRadius: 4,
+    gap: 2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  chatComposerDepthMenuItemActive: {
+    backgroundColor: "rgba(200,168,75,0.1)",
+    borderRadius: 4,
+    gap: 2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  chatComposerDepthMenuItemLabel: {
+    color: colors.textSecondary,
+    fontSize: typography.labelMedium,
+    fontWeight: "600"
+  },
+  chatComposerDepthMenuItemLabelActive: {
+    color: colors.accentPrimary,
+    fontSize: typography.labelMedium,
+    fontWeight: "700"
+  },
+  chatComposerDepthMenuItemHint: {
+    color: colors.textMuted,
+    fontSize: typography.labelSmall,
+    lineHeight: 16
+  },
+  chatComposerDepthTrigger: {
+    alignItems: "center",
+    backgroundColor: colors.bgPrimary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    height: 36,
+    justifyContent: "center",
+    minWidth: 72,
+    paddingHorizontal: spacing.sm
+  },
+  chatComposerDepthTriggerText: {
+    color: colors.textSecondary,
+    fontSize: typography.labelMedium,
+    fontWeight: "600"
+  },
+  chatComposerDepthChevron: {
+    color: colors.textMuted,
+    fontSize: 10,
+    lineHeight: 12
+  },
   chatComposerRow: {
     alignItems: "flex-end",
     flexDirection: "row",
@@ -1305,6 +1732,7 @@ export const styles = StyleSheet.create({
   },
   chatBubbleToggleText: {
     color: colors.textTertiary,
+    fontFamily: lofiTypography.fontLofiMono,
     fontSize: typography.labelSmall,
     fontWeight: "600",
     letterSpacing: 0.4
@@ -1484,6 +1912,15 @@ export const styles = StyleSheet.create({
     flexShrink: 1,
     gap: spacing.md,
     minWidth: 0
+  },
+  chatBackroomChatRowFill: {
+    alignItems: "stretch",
+    flex: 1,
+    minHeight: 0
+  },
+  chatBackroomChatColumnFill: {
+    flex: 1,
+    minHeight: 0
   }
 });
 

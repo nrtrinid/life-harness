@@ -9,24 +9,24 @@ import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
 import type { JobSourceInput } from "../src/core/actions";
 import {
-  getJobSourceHealth,
-  WORKDAY_WEAK_PASS_HEALTH_HINT
-} from "../src/core/jobSourceHealth";
+  deriveBatchRunnerLifecycle,
+  deriveSourceLifecycle,
+  formatLastRunDetailLine,
+  summarizeLastRunOutcome
+} from "../src/core/jobRunnerLifecycle";
+import { WORKDAY_WEAK_PASS_HEALTH_HINT } from "../src/core/jobSourceHealth";
 import {
   APPROVED_SOURCE_FETCHING_BANNER,
   JOB_SOURCE_CADENCE_LABELS,
   JOB_SOURCE_KIND_LABELS,
-  JOB_SOURCE_RUN_STATUS_LABELS,
   SOURCE_HEALTH_LABELS
 } from "../src/core/labels";
 import {
   buildSourceScheduleStats,
-  getSourceDueBadge,
   SOURCE_DUE_BADGE_LABELS
 } from "../src/core/jobSourceSchedule";
 import {
   buildJobFindingsSummary,
-  buildJobRunFinding,
   formatJobRunFinding,
   getLatestJobSourceRun
 } from "../src/core/jobFindings";
@@ -81,6 +81,13 @@ export default function JobSourcesScreen() {
 
   const now = new Date();
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
+  const batchLifecycle = deriveBatchRunnerLifecycle(
+    jobSources,
+    jobSourceRuns,
+    jobCandidates,
+    now,
+    { isBatchRunning }
+  );
   const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, now);
 
   async function handleRunSource(sourceId: string) {
@@ -113,7 +120,7 @@ export default function JobSourcesScreen() {
 
   function handleRunAllEnabled() {
     if (scheduleStats.runnableSources === 0) {
-      setNotice({ kind: "warning", message: "No enabled runnable sources." });
+      setNotice({ kind: "warning", message: batchLifecycle.enabledRunEmptyMessage });
       return;
     }
 
@@ -302,14 +309,24 @@ export default function JobSourcesScreen() {
           const guard = canRunJobSource(source);
           const isRunning =
             runningId === source.id || source.runStatus === "running" || isBatchRunning;
-          const dueBadge = getSourceDueBadge(source, now);
-          const health = getJobSourceHealth(source, jobSourceRuns, jobCandidates, now);
+          const lifecycle = deriveSourceLifecycle({
+            source,
+            runs: jobSourceRuns,
+            candidates: jobCandidates,
+            now,
+            isBatchRunning,
+            activelyRunningSourceId: runningId
+          });
           const latestRun = getLatestJobSourceRun(jobSourceRuns, source.id);
-          const latestFinding = latestRun ? buildJobRunFinding(latestRun, jobSources) : undefined;
+          const lastRunSummary = latestRun
+            ? summarizeLastRunOutcome(latestRun, jobSources)
+            : undefined;
           return (
             <View key={source.id} style={styles.cardTile}>
               <Text style={styles.titleText}>{source.name}</Text>
-              <Text style={styles.helpText}>Health: {SOURCE_HEALTH_LABELS[health]}</Text>
+              <Text style={styles.helpText}>
+                Health: {SOURCE_HEALTH_LABELS[lifecycle.health]}
+              </Text>
               <Text style={styles.bodyText}>{source.url}</Text>
               <Text style={styles.helpText}>
                 {JOB_SOURCE_KIND_LABELS[source.kind]} · {source.enabled ? "Enabled" : "Disabled"}{" "}
@@ -323,23 +340,23 @@ export default function JobSourcesScreen() {
                     : ""}
                 </Text>
               ) : null}
-              {health === "weak_pass" && source.kind === "workday" ? (
+              {lifecycle.health === "weak_pass" && source.kind === "workday" ? (
                 <Text style={styles.bodyText}>{WORKDAY_WEAK_PASS_HEALTH_HINT}</Text>
               ) : null}
-              <Text style={styles.helpText}>Schedule: {SOURCE_DUE_BADGE_LABELS[dueBadge]}</Text>
               <Text style={styles.helpText}>
-                Run status: {JOB_SOURCE_RUN_STATUS_LABELS[source.runStatus ?? "idle"]}
+                Schedule: {SOURCE_DUE_BADGE_LABELS[lifecycle.dueBadge]}
               </Text>
-              {latestFinding ? (
+              <Text style={styles.helpText}>Status: {lifecycle.statusLine}</Text>
+              {lastRunSummary && latestRun ? (
                 <Text style={styles.helpText}>
-                  Last run: {latestFinding.fetchedAt.slice(0, 16).replace("T", " ")} -{" "}
-                  {formatJobRunFinding(latestFinding)}
+                  Last run: {latestRun.fetchedAt.slice(0, 16).replace("T", " ")} -{" "}
+                  {formatLastRunDetailLine(lastRunSummary)}
                 </Text>
               ) : (
                 <Text style={styles.helpText}>Last run: never</Text>
               )}
-              {latestFinding?.message ? (
-                <Text style={styles.bodyText}>{latestFinding.message}</Text>
+              {lastRunSummary?.message ? (
+                <Text style={styles.bodyText}>{lastRunSummary.message}</Text>
               ) : null}
               {source.adapterNotes ? <Text style={styles.helpText}>{source.adapterNotes}</Text> : null}
               {source.notes ? <Text style={styles.helpText}>{source.notes}</Text> : null}
