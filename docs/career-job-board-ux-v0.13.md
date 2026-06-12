@@ -57,3 +57,9 @@ Find jobs → Review matches → Start applications → Follow up
 
 - No new scout features, AI, or auto-apply
 - Sources operator UI stays at `/job-sources` (linked from Find tab)
+
+## Follow-on
+
+v0.14 enriches the Find tab with inline paste, source runs, and a pipeline stepper — see [`career-full-pipeline-ux-v0.14.md`](career-full-pipeline-ux-v0.14.md).
+
+v0.15 simplifies application **card detail** after Start application — see [`ux/career-application-card-detail-v0.15.md`](ux/career-application-card-detail-v0.15.md).

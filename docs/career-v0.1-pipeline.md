@@ -1,5 +1,7 @@
 # Career v0.1 Pipeline
 
+For the in-app Jobs UX, see [`career-unified-workflow-v0.16.md`](career-unified-workflow-v0.16.md) (implements v0.13 tab model + inline Find). Application card detail UX: [`ux/career-application-card-detail-v0.15.md`](ux/career-application-card-detail-v0.15.md). Morning check-in: [`career-morning-loop-v0.1.md`](career-morning-loop-v0.1.md).
+
 Career v0.1 is a rules-only pipeline for turning one found role into one safer application artifact:
 
 ```text

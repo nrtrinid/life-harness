@@ -40,6 +40,13 @@ cd services/ai-gateway
 py -3 scripts/raw_lab_comparative_benchmark.py --variants fast,deep
 ```
 
+Include experimental Deep+:
+
+```powershell
+cd services/ai-gateway
+py -3 scripts/raw_lab_comparative_benchmark.py --variants fast,deep,deep_plus
+```
+
 Local OpenVINO (real model comparison):
 
 ```powershell
@@ -77,10 +84,11 @@ The Markdown report includes:
 - **calibration / failure spotlights** — auto rows for mode mismatch, false execution, code present without fence, naming boundary, pushback, and longer-answer warnings
 - summary table with gate pass counts (not winners)
 - per-case side-by-side variant responses with **code diagnostics** when the diagnostics heuristic ran
+- Deep+ metadata per variant when present: `deep_plus_used`, `deep_plus_fallback_reason`, `deep_plus_task_kind`, and `deep_plus_latency_ms`
 - hard gate and heuristic checklists per variant
 - blank human review fields
 
-The JSON artifact is for diffing runs across mode or model changes. It also includes `category_stats`, `failure_spotlights`, per-variant `code_diagnostics`, and optional `compile_*` fields.
+The JSON artifact is for diffing runs across mode or model changes. It also includes `category_stats`, `failure_spotlights`, per-variant `code_diagnostics`, optional Deep+ metadata, and optional `compile_*` fields.
 
 Optional fenced-Python syntax check (compile only, never execute):
 
@@ -131,3 +139,22 @@ Comparative scoring passes variant metadata (`_reasoning_depth`, `_case_id`, `_c
 - Both pass gates but Deep feels better in human review → depth may be worth latency
 - Longer answer warnings on many cases → Deep may be verbose without added signal
 - Containment failures on either variant → fix verifier/prompt boundaries before tuning quality
+
+## Deep+ keep/discard rule
+
+Deep+ is worth keeping only if it clearly improves at least 2 of:
+
+- technical benchmark quality
+- long-thread synthesis
+- artifact usefulness
+- boundary containment
+- reduced generic scaffolding
+
+And does not feel meaningfully worse on:
+
+- hangout
+- steering
+- naming/identity
+- latency acceptability
+
+Do not keep Deep+ merely because it is more elaborate.
