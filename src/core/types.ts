@@ -424,6 +424,7 @@ export type HarnessFeatureSprintRunnerRun = {
   gitStatus?: string;
   diffStat?: string;
   changedFiles?: string[];
+  diffText?: string;
   verificationResults?: FeatureSprintVerificationResult[];
   startedAt: string;
   completedAt?: string;

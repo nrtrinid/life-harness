@@ -49,6 +49,7 @@ export type FeatureSprintRunnerResponse = {
   gitStatus?: string;
   diffStat?: string;
   changedFiles?: string[];
+  diffText?: string;
   verificationResults?: FeatureSprintVerificationResult[];
 };
 
@@ -66,6 +67,7 @@ export const FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS = 3_000;
 export const FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX = 8_000;
 export const FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX = 8_000;
 export const FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX = 200;
+export const FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX = 50_000;
 export const FEATURE_SPRINT_VERIFY_MAX_COMMANDS = 5;
 export const FEATURE_SPRINT_VERIFY_MAX_OUTPUT_CHARS = 12_000;
 
@@ -114,6 +116,30 @@ function parseWorktreeRequest(
   return worktree;
 }
 
+export const FEATURE_SPRINT_RUNNER_DIFF_TRUNCATION_MARKER = `[truncated at ${FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX.toLocaleString()} characters]`;
+
+export function capDiffText(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (value.length <= FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX) {
+    return value;
+  }
+
+  const marker = `\n${FEATURE_SPRINT_RUNNER_DIFF_TRUNCATION_MARKER}`;
+  const sliceEnd = Math.max(0, FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX - marker.length);
+  return `${value.slice(0, sliceEnd)}${marker}`;
+}
+
+export function isDiffTextTruncated(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return value.endsWith(FEATURE_SPRINT_RUNNER_DIFF_TRUNCATION_MARKER);
+}
+
 export function capGitMetadataFields(response: FeatureSprintRunnerResponse): FeatureSprintRunnerResponse {
   return {
     ...response,
@@ -126,6 +152,7 @@ export function capGitMetadataFields(response: FeatureSprintRunnerResponse): Fea
     changedFiles: response.changedFiles
       ? response.changedFiles.slice(0, FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX)
       : undefined,
+    diffText: capDiffText(response.diffText),
     verificationResults: capVerificationResults(response.verificationResults)
   };
 }

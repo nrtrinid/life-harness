@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  capDiffText,
   capVerificationResults,
   composeImplementationRunnerOutputSummary,
+  FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX,
   FEATURE_SPRINT_RUNNER_DEFAULT_TIMEOUT_MS,
   FEATURE_SPRINT_RUNNER_MAX_PROMPT_CHARS,
   FEATURE_SPRINT_VERIFY_MAX_COMMANDS,
+  isDiffTextTruncated,
   summarizeVerificationResults,
   validateFeatureSprintRunnerRequest
 } from "./featureSprintRunner";
@@ -342,7 +345,8 @@ describe("featureSprintRunnerClient", () => {
           branchName: "life-harness/feature-step-card",
           changedFiles: ["src/a.ts"],
           diffStat: " src/a.ts | 1 +",
-          gitStatus: "?? src/a.ts"
+          gitStatus: "?? src/a.ts",
+          diffText: "diff --git a/src/a.ts b/src/a.ts"
         })
       })
     );
@@ -356,6 +360,14 @@ describe("featureSprintRunnerClient", () => {
 
     expect(result.worktreePath).toBe("/tmp/worktree");
     expect(result.changedFiles).toEqual(["src/a.ts"]);
+    expect(result.diffText).toBe("diff --git a/src/a.ts b/src/a.ts");
+  });
+
+  it("caps diffText and marks truncation", () => {
+    const longDiff = "d".repeat(FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX + 100);
+    const capped = capDiffText(longDiff);
+    expect(capped).toBeTruthy();
+    expect(isDiffTextTruncated(capped)).toBe(true);
   });
 
   it("forwards verification results from runner response", async () => {

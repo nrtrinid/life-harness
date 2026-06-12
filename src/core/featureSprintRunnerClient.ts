@@ -188,6 +188,7 @@ export async function runFeatureSprintPacket(
       gitStatus: typeof body.gitStatus === "string" ? body.gitStatus : undefined,
       diffStat: typeof body.diffStat === "string" ? body.diffStat : undefined,
       changedFiles,
+      diffText: typeof body.diffText === "string" ? body.diffText : undefined,
       verificationResults
     });
   } catch {

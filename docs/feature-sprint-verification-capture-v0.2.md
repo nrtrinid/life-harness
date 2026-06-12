@@ -80,6 +80,8 @@ When agent output includes `## Verification`, review packets embed it via existi
 
 See [feature-sprint-dogfood-checklist-v0.1.md](./feature-sprint-dogfood-checklist-v0.1.md) for the Backroom checklist that surfaces verification readiness.
 
+Card Detail **View details** on runner history rows shows verification excerpts; see [feature-runner-output-diff-viewer-v0.1.md](./feature-runner-output-diff-viewer-v0.1.md).
+
 ## Future
 
 - Quoted-arg parser for `-e` one-liners

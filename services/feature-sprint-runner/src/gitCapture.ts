@@ -3,7 +3,8 @@ import { spawn } from "node:child_process";
 import {
   FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX,
   FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX,
-  FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX
+  FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX,
+  capDiffText
 } from "../../../src/core/featureSprintRunner";
 
 function truncate(text: string, maxChars: number): string {
@@ -93,16 +94,36 @@ export async function captureChangedFiles(worktreePath: string): Promise<string[
   return [...files].slice(0, FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX);
 }
 
+export async function captureDiffText(worktreePath: string): Promise<string | undefined> {
+  try {
+    const result = await runGit(worktreePath, ["diff", "--"]);
+    if (!result.ok) {
+      return undefined;
+    }
+
+    const text = result.stdout.trim();
+    if (!text) {
+      return undefined;
+    }
+
+    return capDiffText(text);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function captureGitMetadata(worktreePath: string): Promise<{
   gitStatus: string;
   diffStat: string;
   changedFiles: string[];
+  diffText?: string;
 }> {
-  const [gitStatus, diffStat, changedFiles] = await Promise.all([
+  const [gitStatus, diffStat, changedFiles, diffText] = await Promise.all([
     captureGitStatus(worktreePath),
     captureDiffStat(worktreePath),
-    captureChangedFiles(worktreePath)
+    captureChangedFiles(worktreePath),
+    captureDiffText(worktreePath)
   ]);
 
-  return { gitStatus, diffStat, changedFiles };
+  return { gitStatus, diffStat, changedFiles, diffText };
 }

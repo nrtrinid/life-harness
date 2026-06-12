@@ -20,7 +20,7 @@ Key fields:
 - `status` — `running` | `succeeded` | `failed`
 - `cardId`, optional `planId` / `stepId`, optional `repoPath`
 - `commandPreview`, `error`, `exitCode`
-- implementation runs may also store `worktreePath`, `branchName`, `gitStatus`, `diffStat`, `changedFiles`, `verificationResults`
+- implementation runs may also store `worktreePath`, `branchName`, `gitStatus`, `diffStat`, `diffText` (50k cap), `changedFiles`, `verificationResults`
 - `outputExcerpt` — short list UI field (~280 chars)
 - `outputText` — capped full output (50k max) for copy
 - `startedAt`, `completedAt`, `importedAt`
@@ -56,6 +56,8 @@ Runner output still fills textareas only. User must click Import. `importedAt` i
 - Repo edits, git commands, auto-import, auto-advance
 - Background queue, workbench controls
 - ai-gateway / Raw Lab / Project Hub changes
+
+Card Detail **View details** inspects stored runs; see [feature-runner-output-diff-viewer-v0.1.md](./feature-runner-output-diff-viewer-v0.1.md).
 
 ## Future
 

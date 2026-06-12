@@ -89,6 +89,7 @@ async function attachImplementationMetadata(
     gitStatus: git.gitStatus,
     diffStat: git.diffStat,
     changedFiles: git.changedFiles,
+    diffText: git.diffText,
     verificationResults
   });
 }

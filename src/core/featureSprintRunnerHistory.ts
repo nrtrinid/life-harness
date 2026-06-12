@@ -220,6 +220,7 @@ export function completeFeatureSprintRunnerRun(
     gitStatus: cleanOptional(metadata.gitStatus),
     diffStat: cleanOptional(metadata.diffStat),
     changedFiles: metadata.changedFiles,
+    diffText: cleanOptional(metadata.diffText),
     verificationResults: capVerificationResults(metadata.verificationResults),
     completedAt: response.completedAt,
     updatedAt: now

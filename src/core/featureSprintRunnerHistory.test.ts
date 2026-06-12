@@ -544,6 +544,42 @@ describe("featureSprintRunnerHistory", () => {
     expect(run?.branchName).toContain("life-harness/feature-step");
     expect(run?.changedFiles).toEqual([".life-harness/mock-implementation-result.md"]);
     expect(run?.diffStat).toContain("mock-implementation-result");
+    expect(run?.diffText).toBeUndefined();
+  });
+
+  it("stores diffText on complete when present", () => {
+    const created = createFeatureSprintRunnerRun(
+      baseData(),
+      {
+        profile: "codex_implementation",
+        cardId: "card-build-test"
+      },
+      FIXED_NOW.toISOString()
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const completed = completeFeatureSprintRunnerRun(
+      created.state,
+      created.runId,
+      {
+        ok: true,
+        profile: "codex_implementation",
+        outputText: "Implemented.",
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString(),
+        diffText: "diff --git a/src/example.ts b/src/example.ts"
+      },
+      FIXED_NOW.toISOString()
+    );
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) {
+      return;
+    }
+
+    expect(completed.state.featureSprintRunnerRuns[0]?.diffText).toContain("diff --git");
   });
 
   it("stores verification results without failing implementation complete", () => {

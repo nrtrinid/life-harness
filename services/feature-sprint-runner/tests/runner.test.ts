@@ -195,6 +195,7 @@ describe("feature-sprint-runner", () => {
     expect(result.body.changedFiles?.length).toBeGreaterThan(0);
     expect(result.body.diffStat).toBeTruthy();
     expect(result.body.gitStatus).toBeTruthy();
+    expect(result.body.diffText).toBeFalsy();
   });
 
   it("runs verification commands after mock implementation and continues after failure", async () => {

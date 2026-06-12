@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { CardStateButtons } from "../../src/components/CardStateButtons";
+import { FeatureRunnerOutputDetails } from "../../src/components/featureSprint/FeatureRunnerOutputDetails";
 import { CollapsibleSection } from "../../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../../src/components/Notice";
 import { ProgressBar } from "../../src/components/ProgressBar";
@@ -35,6 +36,7 @@ import {
   type FeatureSprintDogfoodCheckStatus
 } from "../../src/core/featureSprintDogfood";
 import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintRunnerHistory";
+import { buildFeatureSprintRunnerOutputView } from "../../src/core/featureSprintRunnerOutputView";
 import {
   checkFeatureSprintRunnerHealth,
   composeImplementationRunnerOutputSummary,
@@ -241,6 +243,7 @@ export default function CardDetailScreen() {
   const [isRunningScoping, setIsRunningScoping] = useState(false);
   const [isRunningReview, setIsRunningReview] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
+  const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
   const [detailMode, setDetailMode] = useState<CardDetailMode>("act");
   const card = cards.find((item) => item.id === id);
 
@@ -464,6 +467,13 @@ export default function CardDetailScreen() {
   );
   const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
   const recentRunnerRuns = getFeatureSprintRunnerRunsForCard(lifeHarnessData, card.id, 5);
+  const latestSuccessfulImplementationRun = recentRunnerRuns.find(
+    (run) => run.profile === "codex_implementation" && run.status === "succeeded"
+  );
+  const showAgentOutputReadyHelper =
+    !agentOutputText.trim() &&
+    latestSuccessfulImplementationRun !== undefined &&
+    (!selectedRunnerRunId || selectedRunnerRunId === latestSuccessfulImplementationRun.id);
   const now = new Date();
   const nextMove = buildNextMoveSummary(lifeHarnessData, { now });
   const todayMoveForCard = [nextMove.primary, nextMove.backup, ...nextMove.candidates].find(
@@ -1112,7 +1122,13 @@ export default function CardDetailScreen() {
           {recentRunnerRuns.length === 0 ? (
             <Text style={[styles.emptyText, { marginTop: 8 }]}>No runner history yet.</Text>
           ) : (
-            recentRunnerRuns.map((run) => (
+            recentRunnerRuns.map((run) => {
+              const runnerOutputView =
+                selectedRunnerRunId === run.id
+                  ? buildFeatureSprintRunnerOutputView(lifeHarnessData, run.id)
+                  : undefined;
+
+              return (
               <View key={run.id} style={{ marginTop: 10 }}>
                 <Text style={styles.bodyText}>
                   {RUNNER_PROFILE_LABELS[run.profile]} · {run.status} ·{" "}
@@ -1160,25 +1176,76 @@ export default function CardDetailScreen() {
                 {run.status === "succeeded" && run.outputExcerpt && !run.diffStat ? (
                   <Text style={[styles.helpText, { marginTop: 4 }]}>{run.outputExcerpt}</Text>
                 ) : null}
-                {canCopyTextToClipboard() && (run.outputText || run.outputExcerpt) ? (
+                <View style={[styles.cardActionsRow, { marginTop: 8, alignItems: "center" }]}>
                   <Pressable
-                    style={[styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }]}
+                    style={styles.secondaryAction}
                     onPress={() => {
-                      void copyTextToClipboard(run.outputText ?? run.outputExcerpt ?? "").then(
-                        (copied) => {
-                          showNotice(
-                            copied ? "success" : "warning",
-                            copied ? "Runner output copied." : "Clipboard unavailable."
-                          );
-                        }
-                      );
+                      setSelectedRunnerRunId((current) => (current === run.id ? null : run.id));
                     }}
                   >
-                    <Text style={styles.secondaryActionText}>Copy output</Text>
+                    <Text style={styles.secondaryActionText}>
+                      {selectedRunnerRunId === run.id ? "Hide details" : "View details"}
+                    </Text>
                   </Pressable>
+                  {canCopyTextToClipboard() && (run.outputText || run.outputExcerpt) ? (
+                    <Pressable
+                      style={styles.secondaryAction}
+                      onPress={() => {
+                        void copyTextToClipboard(run.outputText ?? run.outputExcerpt ?? "").then(
+                          (copied) => {
+                            showNotice(
+                              copied ? "success" : "warning",
+                              copied ? "Runner output copied." : "Clipboard unavailable."
+                            );
+                          }
+                        );
+                      }}
+                    >
+                      <Text style={styles.secondaryActionText}>Copy output</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                {runnerOutputView ? (
+                  <FeatureRunnerOutputDetails
+                    view={runnerOutputView}
+                    profileLabel={RUNNER_PROFILE_LABELS[run.profile]}
+                    formattedStartedAt={formatRunnerStartedAt(run.startedAt)}
+                    canCopy={canCopyTextToClipboard()}
+                    onCopyOutput={() => {
+                      void copyTextToClipboard(
+                        runnerOutputView.outputText ?? runnerOutputView.outputExcerpt ?? ""
+                      ).then((copied) => {
+                        showNotice(
+                          copied ? "success" : "warning",
+                          copied ? "Runner output copied." : "Clipboard unavailable."
+                        );
+                      });
+                    }}
+                    onCopyDiff={
+                      runnerOutputView.diffText
+                        ? () => {
+                            void copyTextToClipboard(runnerOutputView.diffText ?? "").then((copied) => {
+                              showNotice(
+                                copied ? "success" : "warning",
+                                copied ? "Diff copied." : "Clipboard unavailable."
+                              );
+                            });
+                          }
+                        : undefined
+                    }
+                    onCopyVerificationSummary={() => {
+                      void copyTextToClipboard(runnerOutputView.verificationSummary).then((copied) => {
+                        showNotice(
+                          copied ? "success" : "warning",
+                          copied ? "Verification summary copied." : "Clipboard unavailable."
+                        );
+                      });
+                    }}
+                  />
                 ) : null}
               </View>
-            ))
+            );
+            })
           )}
         </View>
 
@@ -1340,6 +1407,12 @@ export default function CardDetailScreen() {
         {activeFeatureSprintPlan ? (
           <>
             <Text style={[styles.label, { marginTop: 12 }]}>Agent output</Text>
+            {showAgentOutputReadyHelper ? (
+              <Text style={[styles.helpText, { marginBottom: 8 }]}>
+                This run is ready to save as agent output after inspection. Use “Save agent output” below
+                when ready.
+              </Text>
+            ) : null}
             <TextInput
               style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
               value={agentOutputText}

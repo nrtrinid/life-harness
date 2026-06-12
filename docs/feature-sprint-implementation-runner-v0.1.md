@@ -85,6 +85,8 @@ Runner history stores worktree path, branch, git status, diff stat, and changed 
 
 Card Backroom **Builder readiness** panel tracks this loop; see [feature-sprint-dogfood-checklist-v0.1.md](./feature-sprint-dogfood-checklist-v0.1.md).
 
+Inspect runner output, diff, and verification in Backroom via [feature-runner-output-diff-viewer-v0.1.md](./feature-runner-output-diff-viewer-v0.1.md).
+
 ## Future
 
 - Verification command capture in worktree
