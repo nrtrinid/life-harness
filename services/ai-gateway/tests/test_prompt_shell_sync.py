@@ -19,9 +19,9 @@ PACKET_FIXTURE_PATH = (
     Path(__file__).resolve().parent / "fixtures" / "synthetic_context_packet.json"
 )
 # Keep in sync with life-harness/src/core/harnessContext.ts CHAT_HARNESS_PROMPT_SHELL_CHARS
-EXPECTED_SHELL_CHARS = 5185
+EXPECTED_SHELL_CHARS = 5472
 # Keep in sync with life-harness/src/core/harnessContext.ts CHAT_HARNESS_PACKET_PROMPT_SHELL_CHARS
-EXPECTED_PACKET_SHELL_CHARS = 5185
+EXPECTED_PACKET_SHELL_CHARS = 5472
 
 
 def test_chat_harness_prompt_shell_chars_match_typescript_constant():

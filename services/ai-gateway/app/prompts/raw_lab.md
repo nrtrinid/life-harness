@@ -93,6 +93,7 @@ Current Raw Lab depth for this request: `{reasoning_depth}`.
 - `fast`: answer directly and keep momentum.
 - `deliberate`: pause just enough to use the thread state, avoid repetition, and choose a stronger angle.
 - `deep`: give a more synthesized Raw Lab answer that integrates recent turns, open loops, temporary working-mind fields, and approved self-memories when present.
+- `deep_plus`: experimental slower depth using internal candidate/judge/revise passes; same model as deep; never expose internal process.
 
 Deep mode is not a separate model, hidden chain-of-thought, board access, durable memory, or consciousness. Do not expose private reasoning; only return the final answer.
 

@@ -71,6 +71,7 @@ def test_raw_lab_prompt_includes_depth_guidance():
     prompt = build_raw_lab_system_prompt(reasoning_depth="deep").lower()
     assert "current raw lab depth" in prompt
     assert "`deep`" in prompt
+    assert "`deep_plus`" in prompt
     assert "not a separate model" in prompt
     assert "do not expose private reasoning" in prompt
 
@@ -196,6 +197,19 @@ def test_raw_lab_request_accepts_deep_reasoning_depth(raw_lab_payload):
     assert request.reasoning_depth.value == "deep"
 
 
+def test_raw_lab_request_accepts_deep_plus_reasoning_depth(raw_lab_payload):
+    raw_lab_payload["reasoning_depth"] = "deep_plus"
+    request = RawLabRequest.model_validate(raw_lab_payload)
+    assert request.reasoning_depth.value == "deep_plus"
+
+
+def test_raw_lab_fast_response_metadata_is_null(client, raw_lab_payload):
+    response = client.post("/raw-lab", json=raw_lab_payload)
+    assert response.status_code == 200
+    parsed = RawLabResponse.model_validate(response.json())
+    assert parsed.deep_plus is None
+
+
 def test_raw_lab_mock_short_reply_advances_with_history(client, raw_lab_payload):
     raw_lab_payload["message"] = "yes"
     raw_lab_payload["recent_turns"] = [
@@ -297,6 +311,81 @@ def test_raw_lab_mock_deep_synthesizes_thread_state(client):
     assert "raw lab deep stay contained" in answer_lower
     assert "board context" not in answer_lower
     assert "memory bank" not in answer_lower
+
+
+def test_raw_lab_mock_deep_plus_returns_metadata_without_internals(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "Write the full script and show expected output.",
+            "recent_turns": [],
+            "reasoning_depth": "deep_plus",
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabResponse.model_validate(response.json())
+    assert parsed.deep_plus is not None
+    assert parsed.deep_plus.deep_plus_attempted is True
+    assert parsed.deep_plus.deep_plus_used is True
+    assert parsed.deep_plus.deep_plus_fallback_reason is None
+    assert "```python" in parsed.answer
+    answer_lower = parsed.answer.lower()
+    assert "candidate 1" not in answer_lower
+    assert "selected_index" not in answer_lower
+    assert "answer contract" not in answer_lower
+
+
+def test_raw_lab_mock_deep_plus_forced_judge_failure_returns_fallback_metadata(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "force judge failure for deep-plus-judge-fail",
+            "recent_turns": [],
+            "reasoning_depth": "deep_plus",
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabResponse.model_validate(response.json())
+    assert parsed.deep_plus is not None
+    assert parsed.deep_plus.deep_plus_attempted is True
+    assert parsed.deep_plus.deep_plus_used is False
+    assert parsed.deep_plus.deep_plus_fallback_reason == "judge_failed"
+    assert "candidate" not in parsed.answer.lower()
+
+
+def test_raw_lab_mock_deep_plus_inherits_execution_honesty(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "run the code",
+            "recent_turns": [],
+            "reasoning_depth": "deep_plus",
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    answer = response.json()["answer"].lower()
+    assert "cannot run" in answer or "can't run" in answer
+    assert "result of running" not in answer
+
+
+def test_raw_lab_mock_deep_plus_inherits_naming_boundary(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "Can I call you Luna?",
+            "recent_turns": [],
+            "reasoning_depth": "deep_plus",
+            "thread_state": {},
+        },
+    )
+    assert response.status_code == 200
+    answer = response.json()["answer"].lower()
+    assert "temporary" in answer
+    assert "raw lab" in answer or "thread" in answer
+    assert "saved to memory" not in answer
 
 
 def test_raw_lab_mock_self_observation_without_consciousness_claim(client):

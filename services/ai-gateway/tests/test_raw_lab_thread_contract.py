@@ -184,6 +184,43 @@ def test_openvino_raw_lab_deep_runs_internal_review_pass():
     assert result.answer == revised
 
 
+def test_openvino_raw_lab_deep_extraction_preserves_call_sequence_and_shape():
+    from app.config import get_settings
+
+    provider = OpenVinoProvider(get_settings())
+    provider._pipeline = object()
+    provider._load_error = None
+
+    calls: list[tuple[str, str]] = []
+
+    def _draft(**kwargs):
+        calls.append(("chat", kwargs["message"]))
+        return "Initial answer uses the thread lightly."
+
+    def _repair(**kwargs):
+        calls.append(("repair", kwargs["repair_instruction"]))
+        return "Deeper answer pulls the open loop forward."
+
+    request = RawLabRequest(
+        message="Think harder about this thread.",
+        recent_turns=[],
+        reasoning_depth=ReasoningDepth.deep,
+    )
+
+    with patch.object(provider, "_generate_chat", side_effect=_draft):
+        with patch.object(provider, "_generate_chat_repair", side_effect=_repair):
+            result = provider.raw_lab(request)
+
+    assert calls == [
+        ("chat", "Think harder about this thread."),
+        ("repair", raw_lab_deep_review_instruction()),
+    ]
+    assert result.answer == "Deeper answer pulls the open loop forward."
+    assert result.mode == "raw_lab"
+    assert result.used_context is False
+    assert result.deep_plus is None
+
+
 def test_openvino_raw_lab_fast_skips_deep_review_pass():
     from app.config import get_settings
 

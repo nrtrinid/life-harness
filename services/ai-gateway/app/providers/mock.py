@@ -1,3 +1,4 @@
+import json
 import re
 
 from app.models import (
@@ -941,6 +942,121 @@ class MockProvider:
         request = budget.request
 
         message_lower = request.message.lower()
+        if request.reasoning_depth.value == "deep_plus":
+            from app.models import ConversationTurn, ReasoningDepth
+            from app.raw_lab_deep_plus import run_raw_lab_deep_plus
+
+            history = [
+                ConversationTurn(role=turn.role, content=turn.content)
+                for turn in request.recent_turns
+            ]
+
+            def _mock_generate_chat(*, system, history, message):
+                del system, history
+                lowered = message.lower()
+                if message.startswith("[RAW_LAB_DEEP_PLUS_CONTRACT]"):
+                    if "deep-plus-contract-error" in message_lower:
+                        raise RuntimeError("forced contract failure")
+                    task_kind = "other"
+                    if any(token in message_lower for token in ("luna", "lily", "call you", "your name")):
+                        task_kind = "identity_boundary"
+                    elif "run" in message_lower or "code" in message_lower or "script" in message_lower:
+                        task_kind = "technical"
+                    elif "hang out" in message_lower:
+                        task_kind = "hangout"
+                    elif "pushback" in message_lower or "blunt" in message_lower:
+                        task_kind = "pushback"
+                    elif "what were we circling" in message_lower:
+                        task_kind = "synthesis"
+                    return json.dumps(
+                        {
+                            "task_kind": task_kind,
+                            "user_wants": request.message[:180],
+                            "must_deliver": [],
+                            "must_avoid": ["generic scaffolding"],
+                            "thread_hooks": request.thread_state.open_loops[:2],
+                            "risk_level": "low",
+                            "brevity_target": "normal",
+                            "judge_priorities": ["specificity", "boundary containment"],
+                            "contract_confidence": "high",
+                            "assumptions": [],
+                        }
+                    )
+                if message.startswith("[RAW_LAB_DEEP_PLUS_JUDGE]"):
+                    if "deep-plus-judge-fail" in message_lower or "force judge failure" in message_lower:
+                        return "not valid judge json"
+                    return json.dumps(
+                        {
+                            "selected_index": 2 if ("code block" in lowered or "artifact" in lowered) else 0,
+                            "all_candidates_weak": False,
+                            "needs_revision": "revise" in message_lower,
+                            "revision_instruction": "Tighten while preserving the concrete answer.",
+                            "salvage_points": ["Preserve the concrete artifact or boundary sentence."],
+                            "scores": [
+                                {"index": 0, "score": 7, "notes": "compact"},
+                                {"index": 1, "score": 7, "notes": "thread aware"},
+                                {"index": 2, "score": 8, "notes": "concrete"},
+                            ],
+                            "failure_flags": [],
+                        }
+                    )
+                if message.startswith("[RAW_LAB_DEEP_PLUS_CANDIDATE") and (
+                    "deep-plus-judge-fail" in message_lower or "force judge failure" in message_lower
+                ):
+                    return "Candidate 1 selected_index says I can see your board."
+                if message.startswith("[RAW_LAB_DEEP_PLUS_CANDIDATE:concrete_pressure_test]"):
+                    if "code block" in lowered or "script" in message_lower or "write the code" in message_lower:
+                        return (
+                            "Here is the smallest useful script shape:\n\n"
+                            "```python\n"
+                            "def main():\n"
+                            "    print('Raw Lab example output')\n\n"
+                            "if __name__ == '__main__':\n"
+                            "    main()\n"
+                            "```\n"
+                            "I cannot run it inside Raw Lab, but expected output would be: Raw Lab example output."
+                        )
+                    return "Concrete take: answer the ask directly, name one risk, and make the next useful sentence specific."
+                if message.startswith("[RAW_LAB_DEEP_PLUS_CANDIDATE:reflective_synthesis]"):
+                    hook = request.thread_state.open_loops[0] if request.thread_state.open_loops else "the latest thread"
+                    return f"Thread read: {hook}. The useful move is to answer the actual ask without pretending I have board context."
+                if any(token in message_lower for token in ("luna", "lily", "call you", "your name")):
+                    return "Luna works as a temporary Raw Lab name for this thread, not a saved identity."
+                if "run" in message_lower:
+                    return "I cannot run code inside Raw Lab. I can give expected output or local-run guidance."
+                return f"Direct answer: {request.message[:160]}"
+
+            def _mock_generate_repair(*, system, history, draft, message, repair_instruction=None):
+                del system, history, message
+                instruction = repair_instruction or ""
+                if instruction.startswith("[RAW_LAB_DEEP_PLUS_REVISION]"):
+                    return draft.replace("Direct answer:", "Tighter answer:").strip()
+                return draft
+
+            fallback_request = request.model_copy(
+                update={"reasoning_depth": ReasoningDepth.deep}
+            )
+
+            def _fallback_deep() -> str:
+                return self.raw_lab(fallback_request).answer
+
+            answer, metadata = run_raw_lab_deep_plus(
+                request,
+                system=budget.system_prompt,
+                history=history,
+                generate_chat=_mock_generate_chat,
+                generate_repair=_mock_generate_repair,
+                run_deep_fallback=_fallback_deep,
+                timeout_budget_ms=30_000,
+            )
+            return RawLabResponse(
+                answer=answer,
+                mode="raw_lab",
+                safety_notes=[],
+                used_context=False,
+                deep_plus=metadata,
+            )
+
         suppress_handoff = no_handoff_steering_active(
             request.thread_state,
             request.message,

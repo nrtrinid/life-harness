@@ -168,10 +168,10 @@ export const GATEWAY_PROMPT_SAFETY_MARGIN_CHARS = 250;
  * chat_harness.md with empty context/history and placeholder mode/sensitivity/message.
  * Keep in sync with `services/ai-gateway/app/prompts/chat_harness.md`.
  */
-export const CHAT_HARNESS_PROMPT_SHELL_CHARS = 5185;
+export const CHAT_HARNESS_PROMPT_SHELL_CHARS = 5472;
 
 /** chat_harness.md shell when context is rendered from context_packet sections. */
-export const CHAT_HARNESS_PACKET_PROMPT_SHELL_CHARS = 5185;
+export const CHAT_HARNESS_PACKET_PROMPT_SHELL_CHARS = 5472;
 
 /** Reserve user-message chars when trimming context for OpenVINO prompt budget. */
 export const COMPACT_MESSAGE_RESERVE_CHARS = 400;

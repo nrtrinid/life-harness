@@ -172,7 +172,7 @@ pytest -q
 
 **CI-safe:** MockProvider only. Deterministic fixtures: `reference_resolution`, `anti_repeat`, `raw_lab_no_board_access`, `style_steering`, `grounded_context_vs_thread`. Manual-only comparative deck: `raw_lab_comparative_deck.json` (`tags: manual_only` — excluded from CI; see [docs/raw-lab-comparative-benchmark.md](../../docs/raw-lab-comparative-benchmark.md)).
 
-**Raw Lab comparative benchmark (manual):** `python scripts/raw_lab_comparative_benchmark.py --variants fast,deep` — side-by-side Fast vs Deep report to `tmp/raw-lab-comparative-benchmark-results.md` (see doc for OpenVINO run). v0.2 adds calibration scorers, category summary, failure spotlights, and optional `--check-python-artifacts`.
+**Raw Lab comparative benchmark (manual):** `python scripts/raw_lab_comparative_benchmark.py --variants fast,deep` — side-by-side Fast vs Deep report to `tmp/raw-lab-comparative-benchmark-results.md` (see doc for OpenVINO run). To include experimental Deep+, run `python scripts/raw_lab_comparative_benchmark.py --variants fast,deep,deep_plus`. v0.2 adds calibration scorers, category summary, failure spotlights, and optional `--check-python-artifacts`.
 
 **OpenVINO manual smoke** (not in CI — run before prompt/model changes):
 
@@ -307,22 +307,42 @@ Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from syn
 
 **Unrestricted** isolated sandbox chat. **Not** Ask Harness or Chat Harness. App-side prompt policy is direct and unhedged; only Life Harness isolation constraints apply (no board, no tools, no mutations).
 
-**Request:** `{ message, recent_turns?, thread_state?, companion_self_memories? }`
+**Request:** `{ message, recent_turns?, thread_state?, companion_self_memories?, reasoning_depth? }`
 
 - `recent_turns`: prior user/assistant turns for this chat (not the latest `message`).
 - `thread_state`: temporary in-request thread memory (`recent_digest`, `pinned_facts`, `decisions`, `open_loops`, `tone_preferences`, `do_not_repeat`, `personality`, `updated_at`). `recent_digest` is an extractive snippet, not a semantic summary.
 - `thread_state.personality`: emergent in-session style (`voice_traits`, `conversational_instincts`, `recurring_interests`, `user_responds_well_to`, `user_dislikes`, `current_stance`, `growth_notes`, `updated_at`). Not consciousness, not persistent memory, not exported to Ask Harness.
 - `companion_self_memories`: approved persistent Raw Lab self-memories (`id`, `kind`, `subject`, `scope`, `text`, `confidence`, `sensitivity`). Not board context, not Memory Bank. Visible/editable/deletable in the app. Compacted on send when over budget.
+- `reasoning_depth`: `fast` (default), `deliberate`, `deep`, or experimental `deep_plus`. `deep_plus` uses the same model/provider as Deep with internal contract, candidate, judge, optional revision, and final verification passes. It never exposes candidates, judge JSON, prompts, scores, or hidden reasoning.
 
 **Runtime awareness:** The system prompt includes a **Runtime awareness** section so capability questions ("what memories/tools do you have?") distinguish approved Companion Self-Memories from board context, Memory Bank, files, internet, and hidden memory. The prompt also shows an active self-memory count preface before the JSON block.
 
-**Response:** `{ answer, mode: "raw_lab", safety_notes, used_context: false }`
+**Response:** `{ answer, mode: "raw_lab", safety_notes, used_context: false, deep_plus? }`
+
+When `reasoning_depth="deep_plus"`, `deep_plus` is always present and includes:
+
+```json
+{
+  "deep_plus_attempted": true,
+  "deep_plus_used": true,
+  "deep_plus_task_kind": "technical",
+  "deep_plus_contract_confidence": "high",
+  "deep_plus_selected_index": 1,
+  "deep_plus_revised": false,
+  "deep_plus_fallback_reason": null,
+  "deep_plus_latency_ms": 12345
+}
+```
+
+`deep_plus_used=false` means the request fell back to current Deep. Fallback reasons are `contract_failed`, `candidate_generation_failed`, `judge_failed`, `revision_failed`, `timeout`, and `final_contract_failed`. For fast/deliberate/deep responses, `deep_plus` is omitted or null.
 
 **Isolation:** No `context`, `board_context`, `memory_context`, `proposed_card_updates`, `tools_enabled`, `save_summary`, or `conversation_history` — unknown fields rejected with HTTP 422. Always returns `used_context: false`. Does not use ask-harness or chat-harness prompts.
 
 **Sensitivity:** v0.1 has no `sensitivity` field. Do not paste secrets or S3-style private data into Raw Lab. If `sensitivity` is added later, `S3` must be rejected with HTTP 422 before the provider runs.
 
 **Inference:** Native multi-turn chat (system prompt includes `thread_state` JSON + companion self-memory preface/JSON + prior user/assistant `recent_turns` + latest `message`). Plain-text replies in `answer` — no JSON parse. Before generation, `raw_lab_budget.prepare_raw_lab_request` may deterministically compact `recent_turns` and `thread_state` when input exceeds `SCOUT_RAW_LAB_MAX_INPUT_CHARS` (falls back to `SCOUT_MAX_INPUT_CHARS` when unset; rebuilds system prompt after state compaction; logs length/count only). OpenVINO may run one internal hedging-repair pass, one anti-repeat repair pass, and one `raw_lab_runtime_awareness` verifier repair for capability-accuracy only; repair prompts never enter `recent_turns` or the app thread. Set `SCOUT_PROVIDER=openvino` with a loaded model for real chat; mock is dev-only heuristics.
+
+**Deep+ inference note:** `deep_plus` is experimental and slower. It uses the same model/provider as Deep with internal contract -> 3 candidates -> deterministic flags -> judge JSON -> optional one-shot revision -> finalizer/verifier -> final contract check. On timeout or unsafe/invalid intermediate output it falls back to current Deep with metadata. Worst-case timeout fallback may be expensive because standard Deep can run after Deep+ has already spent budget.
 
 **Provider note:** Output may still be limited by the underlying model; Raw Lab does not add Harness-side refusal layers.
 
@@ -410,6 +430,7 @@ Requirements: gateway and llama-server must already be running; model files are 
 | `SCOUT_RAW_LAB_MAX_NEW_TOKENS` | `2048` | Max tokens for Raw Lab replies |
 | `SCOUT_RAW_LAB_TEMPERATURE` | `0.7` | Sampling temperature for Raw Lab |
 | `SCOUT_RAW_LAB_REPETITION_PENALTY` | `1.12` | Repetition penalty for Raw Lab (when supported by OpenVINO) |
+| `SCOUT_RAW_LAB_DEEP_PLUS_TIMEOUT_MS` | `120000` | Overall experimental Raw Lab Deep+ budget before deterministic finish or Deep fallback |
 | `SCOUT_DEEP_ENABLED` | `true` | Enable structured deep critic pass for Chat Harness |
 | `SCOUT_DEEP_MAX_EXTRA_PASSES` | `2` | Max extra provider passes after draft (1 = critic only, 2 = critic + final revision) |
 | `SCOUT_DEBUG_THINKING_TRACE` | `false` | Log structured deep-mode pass metadata to gateway logs (`chat_harness_thinking_trace`); does not change HTTP response |

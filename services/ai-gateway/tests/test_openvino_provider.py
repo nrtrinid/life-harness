@@ -200,3 +200,48 @@ def test_openvino_raw_lab_finalize_runs_after_verifier_repair(openvino_settings,
         response.answer,
         do_not_repeat=request.thread_state.do_not_repeat,
     )
+
+
+def test_openvino_raw_lab_deep_plus_branch_called_early(openvino_settings, monkeypatch):
+    from app.models import (
+        RawLabDeepPlusMetadata,
+        RawLabRequest,
+        RawLabTaskKind,
+        ReasoningDepth,
+    )
+
+    provider = OpenVinoProvider(openvino_settings)
+    monkeypatch.setattr(provider, "_ensure_pipeline", lambda: None)
+    monkeypatch.setattr(
+        provider,
+        "_generate_chat",
+        lambda **_: (_ for _ in ()).throw(AssertionError("normal draft skipped")),
+    )
+
+    metadata = RawLabDeepPlusMetadata(
+        deep_plus_used=True,
+        deep_plus_task_kind=RawLabTaskKind.technical,
+        deep_plus_contract_confidence="high",
+        deep_plus_selected_index=1,
+        deep_plus_revised=True,
+        deep_plus_fallback_reason=None,
+        deep_plus_latency_ms=12,
+    )
+
+    def _fake_deep_plus(request, **kwargs):
+        assert request.reasoning_depth == ReasoningDepth.deep_plus
+        assert kwargs["system"]
+        assert kwargs["history"] == []
+        return "deep plus answer", metadata
+
+    monkeypatch.setattr(
+        "app.providers.openvino_provider.run_raw_lab_deep_plus",
+        _fake_deep_plus,
+    )
+
+    response = provider.raw_lab(
+        RawLabRequest(message="use deep plus", reasoning_depth=ReasoningDepth.deep_plus)
+    )
+
+    assert response.answer == "deep plus answer"
+    assert response.deep_plus == metadata

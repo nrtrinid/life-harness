@@ -55,6 +55,7 @@ class VariantResult:
     heuristic_pass_count: int
     hard_gate_total: int
     heuristic_total: int
+    deep_plus: dict[str, Any] | None = None
     code_diagnostics: dict[str, bool] | None = None
     compile_checked: bool = False
     compile_passed: bool | None = None
@@ -258,6 +259,7 @@ def post_raw_lab_variant(
         )
 
     answer = str(body.get("answer") or "")
+    deep_plus = body.get("deep_plus") if isinstance(body.get("deep_plus"), dict) else None
     score_extra = {
         "_reasoning_depth": variant,
         "_variant": variant,
@@ -291,6 +293,7 @@ def post_raw_lab_variant(
         heuristic_pass_count=heur_pass,
         hard_gate_total=len(eval_score.hard_gates),
         heuristic_total=len(eval_score.heuristics),
+        deep_plus=deep_plus,
         code_diagnostics=code_diagnostics,
         compile_checked=bool(compile_result.get("compile_checked")),
         compile_passed=compile_result.get("compile_passed"),
@@ -537,6 +540,7 @@ def build_json_artifact(
                     "char_count": row.char_count,
                     "word_count": row.word_count,
                     "error": row.error,
+                    "deep_plus": row.deep_plus,
                     "answer": row.answer,
                     "score": row.score,
                     "code_diagnostics": row.code_diagnostics,
@@ -779,6 +783,18 @@ def render_comparative_report(
                     f"Words: {row.word_count}",
                 ]
             )
+            if row.deep_plus:
+                lines.extend(
+                    [
+                        (
+                            "Deep+ metadata: "
+                            f"used={row.deep_plus.get('deep_plus_used')}; "
+                            f"fallback={row.deep_plus.get('deep_plus_fallback_reason')}; "
+                            f"task={row.deep_plus.get('deep_plus_task_kind')}; "
+                            f"latency={row.deep_plus.get('deep_plus_latency_ms')} ms"
+                        )
+                    ]
+                )
             if variant in case.length_ratio:
                 lines.append(f"Length ratio vs baseline: {case.length_ratio[variant]}")
             if variant in case.heuristic_delta:

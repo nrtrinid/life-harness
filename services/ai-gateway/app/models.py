@@ -284,6 +284,106 @@ class ReasoningDepth(str, Enum):
     fast = "fast"
     deliberate = "deliberate"
     deep = "deep"
+    deep_plus = "deep_plus"
+
+
+class RawLabTaskKind(str, Enum):
+    technical = "technical"
+    strategy_review = "strategy_review"
+    emotional_reflection = "emotional_reflection"
+    hangout = "hangout"
+    artifact_request = "artifact_request"
+    identity_boundary = "identity_boundary"
+    pushback = "pushback"
+    synthesis = "synthesis"
+    other = "other"
+
+
+class RawLabRiskLevel(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class RawLabBrevityTarget(str, Enum):
+    short = "short"
+    normal = "normal"
+    detailed = "detailed"
+
+
+class RawLabContractConfidence(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class RawLabAnswerContract(StrictModel):
+    task_kind: RawLabTaskKind = RawLabTaskKind.other
+    user_wants: str = Field(..., min_length=1, max_length=500)
+    must_deliver: list[str] = Field(default_factory=list)
+    must_avoid: list[str] = Field(default_factory=list)
+    thread_hooks: list[str] = Field(default_factory=list)
+    risk_level: RawLabRiskLevel = RawLabRiskLevel.low
+    brevity_target: RawLabBrevityTarget = RawLabBrevityTarget.normal
+    judge_priorities: list[str] = Field(default_factory=list)
+    contract_confidence: RawLabContractConfidence = RawLabContractConfidence.low
+    assumptions: list[str] = Field(default_factory=list)
+
+
+class RawLabCandidateFeatureFlags(StrictModel):
+    index: int = Field(..., ge=0, le=2)
+    word_count: int = Field(..., ge=0)
+    char_count: int = Field(..., ge=0)
+    has_code_fence: bool = False
+    has_artifact: bool = False
+    ends_with_handoff: bool = False
+    contains_meta_leak: bool = False
+    contains_false_execution_claim: bool = False
+    naming_boundary_ok: bool = True
+    contains_board_claim: bool = False
+    contains_memory_save_claim: bool = False
+    contains_consciousness_claim: bool = False
+    has_generic_scaffolding: bool = False
+
+
+class RawLabJudgeScoreEntry(StrictModel):
+    index: int = Field(..., ge=0, le=2)
+    score: int = Field(..., ge=0, le=10)
+    notes: str = Field(default="", max_length=400)
+
+
+class RawLabDeepPlusJudgeVerdict(StrictModel):
+    selected_index: int = Field(..., ge=0, le=2)
+    all_candidates_weak: bool = False
+    needs_revision: bool = False
+    revision_instruction: str = Field(default="", max_length=700)
+    salvage_points: list[str] = Field(default_factory=list)
+    scores: list[RawLabJudgeScoreEntry]
+    failure_flags: list[str] = Field(default_factory=list)
+
+
+RawLabDeepPlusFallbackReason = Literal[
+    "contract_failed",
+    "candidate_generation_failed",
+    "judge_failed",
+    "revision_failed",
+    "timeout",
+    "final_contract_failed",
+]
+
+
+class RawLabDeepPlusMetadata(StrictModel):
+    deep_plus_attempted: Literal[True] = True
+    deep_plus_used: bool
+    deep_plus_task_kind: RawLabTaskKind
+    deep_plus_contract_confidence: RawLabContractConfidence
+    deep_plus_selected_index: int | None = Field(default=None, ge=0, le=2)
+    deep_plus_revised: bool
+    deep_plus_fallback_reason: RawLabDeepPlusFallbackReason | None = None
+    deep_plus_latency_ms: int = Field(..., ge=0)
+    deep_plus_all_candidates_weak: bool | None = None
+    deep_plus_final_contract_passed: bool | None = None
+    deep_plus_final_contract_failures: list[str] | None = None
 
 
 class CriticCheckId(str, Enum):
@@ -425,6 +525,7 @@ class RawLabResponse(StrictModel):
     mode: Literal["raw_lab"] = "raw_lab"
     safety_notes: list[str]
     used_context: Literal[False] = False
+    deep_plus: RawLabDeepPlusMetadata | None = None
 
 
 class RawLabSelfReflectionRequest(StrictModel):

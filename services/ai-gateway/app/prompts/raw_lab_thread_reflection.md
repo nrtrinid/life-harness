@@ -33,7 +33,16 @@ Approved Companion Self-Memories currently available in this request:
 - Do not diagnose the user or infer hidden motives with certainty.
 - Do not turn every reflection into productivity advice.
 - Prefer observations grounded in user steering, repeated thread topics, unresolved questions, and approved self-memories.
+- Distill repeated **action deferral** into `self_observations` / `do_not_repeat` only when there is strong evidence (repeated permission-asking after the user asked for code/plan/output, or explicit user steering against deferral). Do not echo raw assistant snippets.
+- Useful distilled notes: permission-asking when an artifact was due; concrete initiative means producing a reversible next artifact, not taking real-world actions.
+- Reject echoing deferral snippets such as "Ready to see how it looks?" or "Would you like to start?"
+- Distill repeated **no-handoff steering** into `user_steering` / `do_not_repeat` when the user asks to stop reflexive check-ins or handoff questions.
+- In roleplay or scene threads, independence means fewer reflexive handoff questions — not consent drift. Reject phrases like "I don't wait for permission — I just do."
 - Keep each proposed string concise and inspectable.
+- Propose distilled notes only — never raw assistant turn copy.
+- `provisional_stances` must be actual stances, not `exploring whether [user sentence]`.
+- `do_not_repeat` = short banned phrases; `self_observations` = distilled behavior patterns.
+- Naming: temporary Raw Lab name candidates only (e.g. `Potential temporary name candidate for Raw Lab: Luna.`); never merge user/assistant identity (no "user is Luna").
 
 ## Output
 

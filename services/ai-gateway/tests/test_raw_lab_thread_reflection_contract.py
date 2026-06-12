@@ -85,6 +85,57 @@ def test_raw_lab_thread_reflection_mock_avoids_forbidden_claims(client):
     assert parsed.used_context is False
 
 
+def test_raw_lab_thread_reflection_distills_no_handoff_steering(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "Don't ask me handoff questions. Be more independent."},
+                {
+                    "role": "assistant",
+                    "content": "Got it, no handoffs. I'm ready. Let's see where this goes.",
+                },
+                {
+                    "role": "user",
+                    "content": "Carry the thread forward instead of asking what's next.",
+                },
+            ],
+            "thread_state": {
+                "provisional_stances": ["Got it, no handoffs. What should I do next?"]
+            },
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    joined = str(parsed.model_dump()).lower()
+    assert "avoid reflexive handoff questions" in parsed.proposals.user_steering
+    assert "carry one relevant thread forward" in parsed.proposals.user_steering
+    assert "got it, no handoffs" not in joined
+    assert "i'm ready" not in joined
+    assert parsed.used_context is False
+
+
+def test_raw_lab_thread_reflection_independence_adds_bounded_steering(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "Be more independent in this scene thread."},
+                {"role": "assistant", "content": "What's your take on the harbor scene?"},
+            ],
+            "thread_state": {},
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    joined = str(parsed.model_dump()).lower()
+    assert "respecting explicit boundaries" in joined
+    assert "i don't wait for permission" in parsed.proposals.do_not_repeat
+    assert "i just do" in parsed.proposals.do_not_repeat
+
+
 def test_raw_lab_thread_reflection_prompt_names_temporary_bounds():
     prompt = build_raw_lab_thread_reflection_prompt(
         recent_turns=[],
@@ -96,6 +147,125 @@ def test_raw_lab_thread_reflection_prompt_names_temporary_bounds():
     assert "do not expose chain-of-thought" in prompt
     assert "do not claim consciousness" in prompt
     assert "board facts" in prompt
+
+
+def test_raw_lab_thread_reflection_single_deferral_does_not_distill(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "show me the code for the mansion rooms"},
+                {
+                    "role": "assistant",
+                    "content": "Ready to see how it looks?",
+                },
+            ],
+            "thread_state": {},
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    joined = str(parsed.model_dump()).lower()
+    assert "ask permission when i should produce" not in joined
+    assert "ready to see how it looks" not in joined
+
+
+def test_raw_lab_thread_reflection_repeated_deferral_distills_self_observation(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "show me the code for the mansion rooms"},
+                {
+                    "role": "assistant",
+                    "content": "Ready to see how it looks?",
+                },
+                {"role": "user", "content": "yes"},
+                {
+                    "role": "assistant",
+                    "content": "Would you like to start with the room setup?",
+                },
+            ],
+            "thread_state": {},
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    observations = " ".join(parsed.proposals.self_observations).lower()
+    do_not_repeat = [item.lower() for item in parsed.proposals.do_not_repeat]
+    assert "ask permission when i should produce" in observations
+    assert "ready to see how it looks?" not in observations
+    assert "ready to see how it looks" in do_not_repeat
+
+
+def test_raw_lab_thread_reflection_rejects_assistant_echoes_in_observations(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "Don't ask handoff questions."},
+                {
+                    "role": "assistant",
+                    "content": "Ready to see it? I'm all ears. What's next?",
+                },
+            ],
+            "thread_state": {
+                "provisional_stances": ["Ready to see how it looks?"],
+                "self_observations": ["I'm all ears when you steer."],
+            },
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    joined_obs = " ".join(parsed.proposals.self_observations).lower()
+    joined_stances = " ".join(parsed.proposals.provisional_stances).lower()
+    assert "i'm all ears" not in joined_obs
+    assert "ready to see" not in joined_stances
+    do_not_repeat = [item.lower() for item in parsed.proposals.do_not_repeat]
+    assert any("what's next" in item or "i'm all ears" in item for item in do_not_repeat)
+
+
+def test_raw_lab_thread_reflection_naming_distills_raw_lab_candidate(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "Can I call you Luna for this Raw Lab thread?"},
+            ],
+            "thread_state": {},
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    joined = str(parsed.model_dump()).lower()
+    assert "potential temporary name candidate for raw lab: luna" in joined
+    assert "user is luna" not in joined
+
+
+def test_raw_lab_thread_reflection_rejects_malformed_exploring_stance(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "I think exploring whether you're dumb is fine."},
+            ],
+            "thread_state": {
+                "provisional_stances": [
+                    "Provisional stance: exploring whether you're dumb"
+                ],
+            },
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    joined = " ".join(parsed.proposals.provisional_stances).lower()
+    assert "exploring whether" not in joined
+    assert "you're dumb" not in joined
 
 
 def test_raw_lab_thread_reflection_fails_soft_for_unsupported_provider(monkeypatch, client):

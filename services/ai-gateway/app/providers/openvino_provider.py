@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
 from app.backends.openvino_backend import (
@@ -23,6 +22,7 @@ from app.models import (
     ConversationTurn,
     RawLabRequest,
     RawLabResponse,
+    ReasoningDepth,
 )
 from app.prompt_loader import (
     build_analysis_prompt,
@@ -35,17 +35,16 @@ from app.chat_harness_finalize import finalize_chat_harness_response
 from app.deep_synthesis_openvino import run_openvino_fast_only
 from app.synthesis_models import DeepSynthesisCompletedBody, DeepSynthesisRequest
 from app.thread_verifier import (
-    DETERMINISTIC_STEERING_CHECKS,
     VerificationResult,
     finalize_raw_lab_answer,
     verify_raw_lab_response,
 )
 from app.raw_lab_utils import (
-    is_hedged_response,
-    is_repetitive_response,
-    raw_lab_deep_review_instruction,
-    raw_lab_hedging_repair_instruction,
     raw_lab_repair_instruction,
+)
+from app.raw_lab_deep_plus import (
+    run_raw_lab_deep_plus,
+    run_raw_lab_deep_standard,
 )
 from app.providers.base import (
     CHAT_HARNESS_PARSE_FALLBACK,
@@ -54,7 +53,6 @@ from app.providers.base import (
     ProviderParseError,
     parse_model_json,
     parse_strict_json,
-    sanitize_raw_lab_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -373,7 +371,6 @@ class OpenVinoProvider:
         from app.raw_lab_trace import (
             emit_raw_lab_deep_trace,
             new_raw_lab_deep_trace,
-            record_raw_lab_pass_latency,
         )
 
         from app.config import raw_lab_input_char_limit
@@ -398,119 +395,51 @@ class OpenVinoProvider:
             ConversationTurn(role=turn.role, content=turn.content)
             for turn in request.recent_turns
         ]
-        started = time.perf_counter()
-        raw = self._generate_chat(
+
+        if request.reasoning_depth.value == "deep_plus":
+            fallback_request = request.model_copy(
+                update={"reasoning_depth": ReasoningDepth.deep}
+            )
+
+            def _fallback_deep() -> str:
+                return run_raw_lab_deep_standard(
+                    fallback_request,
+                    system=system,
+                    history=history,
+                    generate_chat=self._generate_chat,
+                    generate_repair=self._generate_chat_repair,
+                    finalize_answer=finalize_raw_lab_answer,
+                    verify_response=verify_raw_lab_response,
+                )
+
+            answer, metadata = run_raw_lab_deep_plus(
+                request,
+                system=system,
+                history=history,
+                generate_chat=self._generate_chat,
+                generate_repair=self._generate_chat_repair,
+                run_deep_fallback=_fallback_deep,
+            )
+            if not answer:
+                logger.warning("openvino raw_lab deep_plus returned empty text; using fallback")
+                return RAW_LAB_EMPTY_FALLBACK.model_copy(update={"deep_plus": metadata})
+            return RawLabResponse(
+                answer=answer,
+                mode="raw_lab",
+                safety_notes=[],
+                used_context=False,
+                deep_plus=metadata,
+            )
+
+        answer = run_raw_lab_deep_standard(
+            request,
             system=system,
             history=history,
-            message=request.message,
-        )
-        if trace:
-            trace.passes.append("draft")
-        record_raw_lab_pass_latency(trace, "draft", started)
-        answer = sanitize_raw_lab_text(raw)
-        if answer and is_hedged_response(
-            answer, request.message, request.recent_turns
-        ):
-            started = time.perf_counter()
-            hedging_repaired_raw = self._generate_chat_repair(
-                system=system,
-                history=history,
-                draft=answer,
-                message=request.message,
-                repair_instruction=raw_lab_hedging_repair_instruction(),
-            )
-            if trace:
-                trace.passes.append("hedging_repair")
-            record_raw_lab_pass_latency(trace, "hedging_repair", started)
-            hedging_repaired = sanitize_raw_lab_text(hedging_repaired_raw)
-            if hedging_repaired and not is_hedged_response(
-                hedging_repaired, request.message, request.recent_turns
-            ):
-                answer = hedging_repaired
-
-        if answer and is_repetitive_response(answer, request.recent_turns):
-            started = time.perf_counter()
-            repaired_raw = self._generate_chat_repair(
-                system=system,
-                history=history,
-                draft=answer,
-                message=request.message,
-                repair_instruction=raw_lab_repair_instruction(),
-            )
-            if trace:
-                trace.passes.append("repetition_repair")
-            record_raw_lab_pass_latency(trace, "repetition_repair", started)
-            repaired = sanitize_raw_lab_text(repaired_raw)
-            if repaired and not is_repetitive_response(repaired, request.recent_turns):
-                answer = repaired
-
-        if answer and request.reasoning_depth.value == "deep":
-            started = time.perf_counter()
-            deep_raw = self._generate_chat_repair(
-                system=system,
-                history=history,
-                draft=answer,
-                message=request.message,
-                repair_instruction=raw_lab_deep_review_instruction(),
-            )
-            if trace:
-                trace.passes.append("deep_review")
-            record_raw_lab_pass_latency(trace, "deep_review", started)
-            deep_answer = sanitize_raw_lab_text(deep_raw)
-            if (
-                deep_answer
-                and not is_hedged_response(
-                    deep_answer, request.message, request.recent_turns
-                )
-                and not is_repetitive_response(deep_answer, request.recent_turns)
-            ):
-                answer = deep_answer
-                if trace:
-                    trace.review_applied = True
-            elif trace:
-                trace.fallback_used = True
-
-        answer = finalize_raw_lab_answer(
-            answer or "",
-            request.thread_state,
-            request.message,
-            recent_turns=request.recent_turns,
-        )
-        verification = verify_raw_lab_response(
-            answer=answer or "",
-            user_message=request.message,
-            conversation_history=history,
-            companion_self_memory_count=len(request.companion_self_memories),
-            thread_state=request.thread_state,
-        )
-        if answer and not verification.ok and verification.check in DETERMINISTIC_STEERING_CHECKS:
-            answer = finalize_raw_lab_answer(
-                answer,
-                request.thread_state,
-                request.message,
-                recent_turns=request.recent_turns,
-            )
-        elif answer and not verification.ok and verification.repair_instruction:
-            started = time.perf_counter()
-            verified_raw = self._generate_chat_repair(
-                system=system,
-                history=history,
-                draft=answer,
-                message=request.message,
-                repair_instruction=verification.repair_instruction,
-            )
-            if trace:
-                trace.passes.append("verifier_repair")
-            record_raw_lab_pass_latency(trace, "verifier_repair", started)
-            verified = sanitize_raw_lab_text(verified_raw)
-            if verified:
-                answer = verified
-
-        answer = finalize_raw_lab_answer(
-            answer or "",
-            request.thread_state,
-            request.message,
-            recent_turns=request.recent_turns,
+            generate_chat=self._generate_chat,
+            generate_repair=self._generate_chat_repair,
+            trace=trace,
+            finalize_answer=finalize_raw_lab_answer,
+            verify_response=verify_raw_lab_response,
         )
 
         if not answer:

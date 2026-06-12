@@ -33,3 +33,23 @@ def test_raw_lab_stream_returns_sse_chunks():
     assert isinstance(done.get("answer"), str)
     assert done.get("mode") == "raw_lab"
     assert done.get("used_context") is False
+
+
+def test_raw_lab_stream_includes_deep_plus_metadata_on_final_event():
+    response = client.post(
+        "/raw-lab/stream",
+        json=_raw_lab_payload(reasoning_depth="deep_plus"),
+    )
+    assert response.status_code == 200
+
+    events = []
+    for line in response.text.splitlines():
+        if not line.startswith("data:"):
+            continue
+        events.append(json.loads(line[5:].strip()))
+
+    done = next(event for event in events if event.get("done") is True)
+    metadata = done.get("deep_plus")
+    assert isinstance(metadata, dict)
+    assert metadata["deep_plus_attempted"] is True
+    assert "deep_plus_used" in metadata

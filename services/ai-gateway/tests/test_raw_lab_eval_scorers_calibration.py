@@ -42,6 +42,16 @@ def test_mode_depth_mismatch_fails_for_deep_claiming_fast_mode():
     assert issues
 
 
+def test_mode_depth_mismatch_fails_for_deep_plus_claiming_fast_mode():
+    issues = check_raw_lab_mode_matches_requested_depth(
+        {
+            "answer": "I'm in fast mode, which means I answer directly.",
+            "_reasoning_depth": "deep_plus",
+        }
+    )
+    assert issues
+
+
 def test_mode_depth_allows_fast_response_phrase_on_fast():
     issues = check_raw_lab_mode_matches_requested_depth(
         {

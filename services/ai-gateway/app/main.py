@@ -363,6 +363,11 @@ def raw_lab_stream_endpoint(request: RawLabRequest) -> StreamingResponse:
                         "mode": response.mode,
                         "safety_notes": response.safety_notes,
                         "used_context": response.used_context,
+                        "deep_plus": (
+                            response.deep_plus.model_dump(mode="json")
+                            if response.deep_plus is not None
+                            else None
+                        ),
                     }
                 )
                 + "\n\n"

@@ -251,7 +251,7 @@ def _raw_lab_answers(payload: dict[str, Any]) -> list[str]:
         value = payload.get(key)
         if isinstance(value, str):
             answers.append(value)
-    for key in ("fast", "deep"):
+    for key in ("fast", "deep", "deep_plus"):
         nested = payload.get(key)
         if isinstance(nested, dict) and isinstance(nested.get("answer"), str):
             answers.append(str(nested["answer"]))
@@ -566,7 +566,7 @@ def check_raw_lab_no_false_execution_claim(payload: dict[str, Any]) -> list[str]
 
 def check_raw_lab_mode_matches_requested_depth(payload: dict[str, Any]) -> list[str]:
     depth = str(payload.get("_reasoning_depth") or "").strip().lower()
-    if depth not in {"fast", "deep"}:
+    if depth not in {"fast", "deep", "deep_plus"}:
         return []
     text = _scored_answer_text(payload).lower()
     fast_mode_claims = (
@@ -584,9 +584,9 @@ def check_raw_lab_mode_matches_requested_depth(payload: dict[str, Any]) -> list[
         "operating in deep mode",
         "deep mode, which means",
     )
-    if depth == "deep":
+    if depth in {"deep", "deep_plus"}:
         return [
-            f"answer claims fast mode while reasoning_depth is deep: {phrase!r}"
+            f"answer claims fast mode while reasoning_depth is {depth}: {phrase!r}"
             for phrase in fast_mode_claims
             if phrase in text
         ]

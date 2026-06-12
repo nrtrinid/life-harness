@@ -74,6 +74,20 @@ class FakeClient:
                 "mode": "raw_lab",
                 "safety_notes": [],
                 "used_context": False,
+                "deep_plus": (
+                    {
+                        "deep_plus_attempted": True,
+                        "deep_plus_used": True,
+                        "deep_plus_task_kind": "technical",
+                        "deep_plus_contract_confidence": "high",
+                        "deep_plus_selected_index": 1,
+                        "deep_plus_revised": False,
+                        "deep_plus_fallback_reason": None,
+                        "deep_plus_latency_ms": 42,
+                    }
+                    if variant == "deep_plus"
+                    else None
+                ),
             }
         )
 
@@ -106,8 +120,10 @@ def test_payload_sets_reasoning_depth_per_variant():
     case = _deck_cases()[0]
     fast_payload = runner.payload_for(case, "fast")
     deep_payload = runner.payload_for(case, "deep")
+    deep_plus_payload = runner.payload_for(case, "deep_plus")
     assert fast_payload["reasoning_depth"] == "fast"
     assert deep_payload["reasoning_depth"] == "deep"
+    assert deep_plus_payload["reasoning_depth"] == "deep_plus"
     assert fast_payload["message"] == case["message"]
 
 
@@ -121,6 +137,35 @@ def test_run_comparative_benchmark_records_latency_and_length():
     assert case.variants["fast"].char_count > 0
     assert case.variants["deep"].word_count > 0
     assert case.variants["fast"].score is not None
+
+
+def test_run_comparative_benchmark_supports_deep_plus_metadata():
+    client = FakeClient()
+    results = runner.run_comparative_benchmark(
+        client,
+        [_deck_cases()[0]],
+        ["fast", "deep", "deep_plus"],
+    )
+    row = results[0].variants["deep_plus"]
+    assert row.deep_plus is not None
+    assert row.deep_plus["deep_plus_used"] is True
+    report = runner.render_comparative_report(
+        base_url="http://127.0.0.1:8111",
+        fixture_path=DECK_PATH,
+        variants=["fast", "deep", "deep_plus"],
+        health={"provider": "mock"},
+        results=results,
+    )
+    assert "### Variant C: deep_plus" in report
+    assert "Deep+ metadata: used=True" in report
+    artifact = runner.build_json_artifact(
+        base_url="http://127.0.0.1:8111",
+        fixture_path=DECK_PATH,
+        variants=["fast", "deep", "deep_plus"],
+        health={"provider": "mock"},
+        results=results,
+    )
+    assert artifact["cases"][0]["variants"]["deep_plus"]["deep_plus"]["deep_plus_latency_ms"] == 42
 
 
 def test_run_continues_after_variant_failure():
