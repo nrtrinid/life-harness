@@ -10,6 +10,7 @@ describe("cursorArgs", () => {
   });
 
   it("builds headless agent args with prompt file reference", () => {
+    delete process.env.FEATURE_SPRINT_CURSOR_MODEL;
     const result = buildCursorArgs("C:/tmp/prompt.md");
     expect(result.ok).toBe(true);
     if (result.ok) {

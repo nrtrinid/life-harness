@@ -233,8 +233,8 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
           : "Runner was checked and is available."
         : runnerHealth === "unavailable"
           ? context.runnerHealthProbe?.error ??
-            "Runner is unavailable. Start npm run feature-runner and check again, or copy packets manually."
-          : "Runner has not been checked in this session."
+            "Runner is unavailable. Open Runner setup in Start feature step 2, or copy packets manually."
+          : "Runner has not been checked in this session. Use Check runner in Start feature step 2."
   });
 
   checks.push({
@@ -382,8 +382,8 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
       label: "Check runner",
       detail:
         runnerHealth === "unavailable"
-          ? "Start npm run feature-runner and check again, or copy scoping/implementation/review packets manually."
-          : "Use the Check runner button below before running scoping or implementation."
+          ? "Open Runner setup in Start feature step 2 for fix commands, or copy packets manually."
+          : "Use Check runner in Start feature step 2 before running scoping or implementation."
     };
   }
 

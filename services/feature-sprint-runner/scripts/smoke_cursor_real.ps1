@@ -31,7 +31,8 @@ $required = @(
   "CURSOR_API_KEY"
 )
 foreach ($name in $required) {
-  if (-not $env:$name) {
+  $value = [Environment]::GetEnvironmentVariable($name, "Process")
+  if (-not $value) {
     Write-Error "Missing env var: $name"
   }
 }

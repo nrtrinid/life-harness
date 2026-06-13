@@ -17,6 +17,7 @@ import {
   resolveRunnerMode,
   runFeatureSprintPacketOnRunner
 } from "./runPacket";
+import { buildSetupDiagnostics } from "./setupDiagnostics";
 import { cleanupFeatureSprintWorktree } from "./worktreeCleanup";
 
 export const RUNNER_HOST = "127.0.0.1";
@@ -101,6 +102,12 @@ function resolveHealthStatus(): {
   return { ok: true, mode, codexAvailable, cursorAvailable };
 }
 
+async function resolveHealthPayload() {
+  const health = resolveHealthStatus();
+  const setup = await buildSetupDiagnostics();
+  return { ...health, setup, port: RUNNER_PORT };
+}
+
 export function createServer() {
   return http.createServer(async (request, response) => {
     if (request.method === "OPTIONS") {
@@ -119,7 +126,7 @@ export function createServer() {
     }
 
     if (request.method === "GET" && request.url === "/health") {
-      const health = resolveHealthStatus();
+      const health = await resolveHealthPayload();
       sendJson(response, health.ok ? 200 : 503, health);
       return;
     }

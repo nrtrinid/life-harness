@@ -14,15 +14,42 @@ import {
 } from "../../../src/core/featureSprintRunner";
 import { buildCodexArgs } from "./codexArgs";
 import { buildCursorArgs } from "./cursorArgs";
-import { resolveRunnerToken } from "./auth";
 import { captureGitMetadata } from "./gitCapture";
 import { buildMockRunnerOutput } from "./mockOutput";
+import {
+  checkRealCodexGate,
+  checkRealCursorGate,
+  checkRealImplementationGate
+} from "./providerGates";
+import type { RunnerMode } from "./providerGates";
 import { createFeatureWorktree } from "./worktree";
 import { runVerificationCommands } from "./verification";
 
-export type RunnerMode = "mock" | "codex" | "cursor" | "real";
+export type { RunnerMode } from "./providerGates";
 
 const MOCK_IMPLEMENTATION_MARKER = ".life-harness/mock-implementation-result.md";
+
+export type AgentSpawnSpec = {
+  file: string;
+  args: string[];
+};
+
+export function buildAgentSpawn(
+  bin: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform
+): AgentSpawnSpec {
+  const ext = path.extname(bin).toLowerCase();
+  if (platform === "win32" && (ext === ".cmd" || ext === ".bat")) {
+    return {
+      file: process.env.ComSpec ?? "cmd.exe",
+      args: ["/d", "/s", "/c", bin, ...args]
+    };
+  }
+
+  return { file: bin, args };
+}
+
 
 export function resolveRunnerMode(): RunnerMode {
   const mode = process.env.FEATURE_SPRINT_RUNNER_MODE?.trim().toLowerCase();
@@ -52,31 +79,13 @@ function truncateOutput(text: string, maxChars: number): string {
 }
 
 function assertRealCodexAllowed(): string | undefined {
-  if (process.env.FEATURE_SPRINT_RUNNER_ENABLE_CODEX !== "1") {
-    return "Real Codex mode requires FEATURE_SPRINT_RUNNER_ENABLE_CODEX=1.";
-  }
-
-  if (!resolveRunnerToken()) {
-    return "Real Codex mode requires FEATURE_SPRINT_RUNNER_TOKEN.";
-  }
-
-  return undefined;
+  const gate = checkRealCodexGate();
+  return gate.ok ? undefined : gate.error;
 }
 
 function assertRealCursorAllowed(): string | undefined {
-  if (process.env.FEATURE_SPRINT_RUNNER_ENABLE_CURSOR !== "1") {
-    return "Real Cursor mode requires FEATURE_SPRINT_RUNNER_ENABLE_CURSOR=1.";
-  }
-
-  if (!resolveRunnerToken()) {
-    return "Real Cursor mode requires FEATURE_SPRINT_RUNNER_TOKEN.";
-  }
-
-  if (!process.env.CURSOR_API_KEY?.trim()) {
-    return "Real Cursor mode requires CURSOR_API_KEY.";
-  }
-
-  return undefined;
+  const gate = checkRealCursorGate();
+  return gate.ok ? undefined : gate.error;
 }
 
 function assertRealImplementationAllowed(profile: FeatureSprintRunnerProfile): string | undefined {
@@ -86,11 +95,8 @@ function assertRealImplementationAllowed(profile: FeatureSprintRunnerProfile): s
     return providerGate;
   }
 
-  if (process.env.FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION !== "1") {
-    return "Real implementation mode requires FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION=1.";
-  }
-
-  return undefined;
+  const implGate = checkRealImplementationGate();
+  return implGate.ok ? undefined : implGate.error;
 }
 
 export function assertRealRunAllowed(profile: FeatureSprintRunnerProfile): string | undefined {
@@ -232,13 +238,15 @@ async function spawnAgentInWorktree(
     const timeoutMs = request.timeoutMs ?? FEATURE_SPRINT_RUNNER_DEFAULT_TIMEOUT_MS;
     const maxOutputChars = resolveMaxOutputChars();
 
+    const spawnSpec = buildAgentSpawn(argsResult.bin, argsResult.args);
+
     const result = await new Promise<{
       exitCode: number | null;
       stdout: string;
       stderr: string;
       timedOut: boolean;
     }>((resolve) => {
-      const child = spawn(argsResult.bin, argsResult.args, {
+      const child = spawn(spawnSpec.file, spawnSpec.args, {
         shell: false,
         cwd: worktreePath,
         env: process.env

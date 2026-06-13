@@ -14,6 +14,8 @@ import {
   validateFeatureSprintWorktreeCleanupRequest
 } from "./featureSprintRunner";
 import {
+  FEATURE_SPRINT_RUNNER_UNAUTHORIZED_MESSAGE,
+  FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
   parseFeatureSprintRunnerHealthBody,
   type FeatureSprintRunnerHealthProbe
 } from "./featureSprintRunnerHealth";
@@ -21,6 +23,9 @@ import {
 export type { FeatureSprintRunnerHealthProbe } from "./featureSprintRunnerHealth";
 export {
   buildRunnerAgentUnavailableHint,
+  classifyRunnerHealthFailure,
+  FEATURE_SPRINT_RUNNER_UNAUTHORIZED_MESSAGE,
+  FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
   formatRunnerHealthCapabilityLine,
   guardRunnerAgentAvailability,
   isRunnerAgentAvailable,
@@ -31,9 +36,6 @@ export {
   composeImplementationRunnerOutputSummary,
   summarizeVerificationResults
 } from "./featureSprintRunner";
-
-export const FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE =
-  "Local Feature Sprint Runner is not running. Start it with npm run feature-runner.";
 
 export function resolveFeatureSprintRunnerToken(): string | undefined {
   const token = process.env.EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN?.trim();
@@ -127,18 +129,38 @@ export async function checkFeatureSprintRunnerHealth(
 
     const body = await response.json().catch(() => null);
     const parsed = parseFeatureSprintRunnerHealthBody(body);
+    const httpStatus = response.status;
+
+    if (httpStatus === 401) {
+      return {
+        ok: false,
+        httpStatus,
+        failureKind: "unauthorized",
+        error: FEATURE_SPRINT_RUNNER_UNAUTHORIZED_MESSAGE
+      };
+    }
 
     if (!response.ok) {
       return {
         ...parsed,
         ok: false,
+        httpStatus,
+        failureKind: parsed.setup?.missingEnv.length ? "misconfigured" : "misconfigured",
         error: parsed.error ?? FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE
       };
     }
 
-    return parsed;
+    return {
+      ...parsed,
+      httpStatus,
+      failureKind: parsed.ok ? "ready" : "misconfigured"
+    };
   } catch {
-    return { ok: false, error: FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE };
+    return {
+      ok: false,
+      failureKind: "unreachable",
+      error: FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE
+    };
   } finally {
     clearTimeout(timeout);
   }
