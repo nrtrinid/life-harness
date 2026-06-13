@@ -28,6 +28,8 @@ export type FeatureSprintActionGuideInput = {
   stepImplementationProofSaved?: boolean;
   /** Step review accepted — gates advance_step in checklist */
   stepReviewAccepted?: boolean;
+  /** Current reviewed step has its own imported spec update and approved revised spec */
+  currentStepSpecUpdateSatisfied?: boolean;
   /** Succeeded codex_prompt_audit run output exists for current step */
   stepPromptAuditRunnerSucceeded?: boolean;
 };
@@ -93,7 +95,9 @@ function implementationLoopSteps(input: FeatureSprintActionGuideInput): FeatureS
     step(
       "advance_step",
       "Advance step",
-      input.stepReviewAccepted ? "current" : "upcoming"
+      input.stepReviewAccepted && input.currentStepSpecUpdateSatisfied !== false
+        ? "current"
+        : "upcoming"
     )
   ];
 
@@ -264,14 +268,20 @@ export function buildFeatureSprintActionGuide(
       });
       break;
     case "advance_step":
-      steps = markCurrent([
-        step("advance_step", "Click Advance step", "current"),
+      steps = [
+        step(
+          "advance_step",
+          "Click Advance step",
+          input.stepReviewAccepted && input.currentStepSpecUpdateSatisfied !== false
+            ? "current"
+            : "upcoming"
+        ),
         step(
           "next_slice",
           "Repeat implement → inspect → save → review for the next step",
           "upcoming"
         )
-      ]);
+      ];
       break;
     case "complete_feature":
       steps = markCurrent([

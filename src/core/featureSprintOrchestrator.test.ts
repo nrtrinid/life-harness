@@ -25,6 +25,7 @@ import {
   importFeaturePromptAuditFromText,
   importFeaturePromptLocalizationFromText,
   importFeatureReviewVerdictFromText,
+  importFeatureSpecUpdateFromText,
   importFeatureSprintPlanFromText,
   isFeatureSpecApproved,
   normalizeImplementationProofForStep,
@@ -845,6 +846,297 @@ describe("featureSprintOrchestrator", () => {
 
       const plan = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test");
       expect(canRunFeatureSprintImplementation(plan)).toBe(true);
+    });
+
+    it("rejects advancing an accepted reviewed step until its spec update is imported and approved", () => {
+      const saved = saveFeatureSpecForCard(
+        baseData(),
+        "card-build-test",
+        { body: "Approved initial spec." },
+        FIXED_NOW
+      );
+      expect(saved.ok).toBe(true);
+      if (!saved.ok) {
+        return;
+      }
+      const approved = approveFeatureSpecForPlan(saved.state, saved.planId!, FIXED_NOW);
+      expect(approved.ok).toBe(true);
+      if (!approved.ok) {
+        return;
+      }
+      const imported = importFeatureSprintPlanFromText(
+        approved.state,
+        "card-build-test",
+        SAMPLE_PLAN_BLOCK,
+        FIXED_NOW
+      );
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+      const plan = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test");
+      const stepId = plan?.currentStepId;
+      expect(stepId).toBeTruthy();
+      if (!stepId) {
+        return;
+      }
+      const reviewed = updateFeatureSprintStep(
+        imported.state,
+        imported.planId!,
+        stepId,
+        { reviewStatus: "accepted", reviewVerdict: "Accepted.", status: "reviewing" },
+        FIXED_NOW
+      );
+      expect(reviewed.ok).toBe(true);
+      if (!reviewed.ok) {
+        return;
+      }
+
+      const rejected = advanceFeatureSprintStep(reviewed.state, imported.planId!, stepId, FIXED_NOW);
+      expect(rejected.ok).toBe(false);
+
+      const specUpdateText = `\`\`\`feature-spec-update
+{
+  "revisedSpec": "Revised spec after step 1.",
+  "changelog": ["Step 1 complete"],
+  "completedSliceSummary": "Core module landed.",
+  "remainingWork": ["UI"],
+  "nextSlice": {
+    "title": "UI",
+    "goal": "Backroom section",
+    "acceptanceCriteria": ["Buttons copy packets"],
+    "nonGoals": ["New automation"],
+    "riskTier": "normal"
+  },
+  "featureComplete": false
+}
+\`\`\``;
+      const updated = importFeatureSpecUpdateFromText(
+        reviewed.state,
+        imported.planId!,
+        specUpdateText,
+        stepId,
+        FIXED_NOW
+      );
+      expect(updated.ok).toBe(true);
+      if (!updated.ok) {
+        return;
+      }
+      const rejectedUnapproved = advanceFeatureSprintStep(
+        updated.state,
+        imported.planId!,
+        stepId,
+        FIXED_NOW
+      );
+      expect(rejectedUnapproved.ok).toBe(false);
+
+      const approvedUpdate = approveFeatureSpecForPlan(
+        updated.state,
+        imported.planId!,
+        new Date("2026-06-09T12:01:00.000Z")
+      );
+      expect(approvedUpdate.ok).toBe(true);
+      if (!approvedUpdate.ok) {
+        return;
+      }
+      const advanced = advanceFeatureSprintStep(
+        approvedUpdate.state,
+        imported.planId!,
+        stepId,
+        FIXED_NOW
+      );
+      expect(advanced.ok).toBe(true);
+    });
+
+    it("does not let step 1 spec update satisfy step 2 spec update gate", () => {
+      const saved = saveFeatureSpecForCard(
+        baseData(),
+        "card-build-test",
+        { body: "Approved initial spec." },
+        FIXED_NOW
+      );
+      expect(saved.ok).toBe(true);
+      if (!saved.ok) {
+        return;
+      }
+      const approved = approveFeatureSpecForPlan(saved.state, saved.planId!, FIXED_NOW);
+      expect(approved.ok).toBe(true);
+      if (!approved.ok) {
+        return;
+      }
+      const imported = importFeatureSprintPlanFromText(
+        approved.state,
+        "card-build-test",
+        SAMPLE_PLAN_BLOCK,
+        FIXED_NOW
+      );
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+      const step1Id = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test")?.currentStepId;
+      if (!step1Id) {
+        return;
+      }
+      const reviewedStep1 = updateFeatureSprintStep(
+        imported.state,
+        imported.planId!,
+        step1Id,
+        { reviewStatus: "accepted", reviewVerdict: "Accepted.", status: "reviewing" },
+        FIXED_NOW
+      );
+      expect(reviewedStep1.ok).toBe(true);
+      if (!reviewedStep1.ok) {
+        return;
+      }
+      const updateStep1 = importFeatureSpecUpdateFromText(
+        reviewedStep1.state,
+        imported.planId!,
+        `\`\`\`feature-spec-update
+{"revisedSpec":"Spec after step 1.","changelog":["Step 1"],"completedSliceSummary":"Step 1 done.","remainingWork":["Step 2"],"featureComplete":false}
+\`\`\``,
+        step1Id,
+        FIXED_NOW
+      );
+      expect(updateStep1.ok).toBe(true);
+      if (!updateStep1.ok) {
+        return;
+      }
+      const approvedStep1Update = approveFeatureSpecForPlan(
+        updateStep1.state,
+        imported.planId!,
+        new Date("2026-06-09T12:01:00.000Z")
+      );
+      expect(approvedStep1Update.ok).toBe(true);
+      if (!approvedStep1Update.ok) {
+        return;
+      }
+      const advancedStep1 = advanceFeatureSprintStep(
+        approvedStep1Update.state,
+        imported.planId!,
+        step1Id,
+        FIXED_NOW
+      );
+      expect(advancedStep1.ok).toBe(true);
+      if (!advancedStep1.ok) {
+        return;
+      }
+
+      const step2Id = getActiveFeatureSprintPlanForCard(advancedStep1.state, "card-build-test")?.currentStepId;
+      expect(step2Id).toBeTruthy();
+      if (!step2Id) {
+        return;
+      }
+      const reviewedStep2 = updateFeatureSprintStep(
+        advancedStep1.state,
+        imported.planId!,
+        step2Id,
+        { reviewStatus: "accepted", reviewVerdict: "Accepted.", status: "reviewing" },
+        FIXED_NOW
+      );
+      expect(reviewedStep2.ok).toBe(true);
+      if (!reviewedStep2.ok) {
+        return;
+      }
+      const rejected = advanceFeatureSprintStep(
+        reviewedStep2.state,
+        imported.planId!,
+        step2Id,
+        FIXED_NOW
+      );
+      expect(rejected.ok).toBe(false);
+      expect(getActiveFeatureSprintPlanForCard(reviewedStep2.state, "card-build-test")?.latestSpecUpdate?.stepId).toBe(
+        step1Id
+      );
+    });
+
+    it("allows legacy plans without featureSpec to advance accepted reviewed steps", () => {
+      const imported = importFeatureSprintPlanFromText(
+        baseData(),
+        "card-build-test",
+        SAMPLE_PLAN_BLOCK,
+        FIXED_NOW
+      );
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+      const stepId = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test")?.currentStepId;
+      if (!stepId) {
+        return;
+      }
+      const reviewed = updateFeatureSprintStep(
+        imported.state,
+        imported.planId!,
+        stepId,
+        { reviewStatus: "accepted", reviewVerdict: "Accepted.", status: "reviewing" },
+        FIXED_NOW
+      );
+      expect(reviewed.ok).toBe(true);
+      if (!reviewed.ok) {
+        return;
+      }
+      expect(advanceFeatureSprintStep(reviewed.state, imported.planId!, stepId, FIXED_NOW).ok).toBe(true);
+    });
+
+    it("keeps nextSliceProposal preview-only and featureComplete non-mutating", () => {
+      const saved = saveFeatureSpecForCard(
+        baseData(),
+        "card-build-test",
+        { body: "Approved initial spec." },
+        FIXED_NOW
+      );
+      expect(saved.ok).toBe(true);
+      if (!saved.ok) {
+        return;
+      }
+      const imported = importFeatureSprintPlanFromText(
+        saved.state,
+        "card-build-test",
+        SAMPLE_PLAN_BLOCK,
+        FIXED_NOW
+      );
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+      const stepId = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test")?.currentStepId;
+      if (!stepId) {
+        return;
+      }
+      const updated = importFeatureSpecUpdateFromText(
+        imported.state,
+        imported.planId!,
+        `\`\`\`feature-spec-update
+{
+  "revisedSpec": "Feature is complete in the spec.",
+  "changelog": ["All work complete"],
+  "completedSliceSummary": "Completed final slice.",
+  "remainingWork": [],
+  "nextSlice": {
+    "title": "Do not create me",
+    "goal": "Preview only",
+    "acceptanceCriteria": ["No plan step is added"],
+    "nonGoals": [],
+    "riskTier": "tiny"
+  },
+  "featureComplete": true
+}
+\`\`\``,
+        stepId,
+        FIXED_NOW
+      );
+      expect(updated.ok).toBe(true);
+      if (!updated.ok) {
+        return;
+      }
+      const plan = getActiveFeatureSprintPlanForCard(updated.state, "card-build-test");
+      expect(plan?.status).toBe("in_progress");
+      expect(plan?.steps).toHaveLength(2);
+      expect(plan?.steps.some((step) => step.title === "Do not create me")).toBe(false);
+      expect(plan?.nextSliceProposal?.title).toBe("Do not create me");
+      expect(plan?.latestSpecUpdate?.featureComplete).toBe(true);
+      expect(plan?.completedAt).toBeUndefined();
     });
 
     it("includes draft spec in scoping packet and approved spec in implementation packet", () => {
@@ -1865,14 +2157,43 @@ Changed files
       const afterImport = getActiveFeatureSprintPlanForCard(verdict.state, "card-build-test");
       expect(afterImport?.automationPhase).toBeUndefined();
 
-      const advanced = advanceFeatureSprintStep(verdict.state, imported.planId!, stepId, FIXED_NOW);
+      const specUpdateText = `\`\`\`feature-spec-update\n${JSON.stringify({
+        revisedSpec: "Approved revised spec.",
+        changelog: ["Completed first slice."],
+        completedSliceSummary: "First slice is done.",
+        remainingWork: ["Next slice"],
+        featureComplete: false
+      })}\n\`\`\``;
+      const specUpdated = importFeatureSpecUpdateFromText(
+        verdict.state,
+        imported.planId!,
+        specUpdateText,
+        stepId,
+        new Date("2026-06-09T12:00:01.000Z")
+      );
+      expect(specUpdated.ok).toBe(true);
+      if (!specUpdated.ok) {
+        return;
+      }
+
+      const approvedSpecUpdate = approveFeatureSpecForPlan(
+        specUpdated.state,
+        imported.planId!,
+        new Date("2026-06-09T12:00:02.000Z")
+      );
+      expect(approvedSpecUpdate.ok).toBe(true);
+      if (!approvedSpecUpdate.ok) {
+        return;
+      }
+
+      const advanced = advanceFeatureSprintStep(approvedSpecUpdate.state, imported.planId!, stepId, FIXED_NOW);
       expect(advanced.ok).toBe(true);
       if (!advanced.ok) {
         return;
       }
 
       const nextPlan = getActiveFeatureSprintPlanForCard(advanced.state, "card-build-test");
-      expect(nextPlan?.automationPhase).toBeUndefined();
+      expect(nextPlan?.automationPhase).toBe("spec_approved");
     });
 
     it("keeps feature-review-verdict import schema unchanged", () => {

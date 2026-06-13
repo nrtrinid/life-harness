@@ -30,6 +30,7 @@ import type {
   HarnessFeatureSprintPlan,
   HarnessFeatureSprintReviewStatus,
   HarnessFeatureSprintStatus,
+  HarnessFeatureSprintNextSliceProposal,
   HarnessFeatureSprintStep,
   HarnessFeatureSprintStepImplementationProof,
   HarnessFeatureSprintStepLocalization,
@@ -44,6 +45,7 @@ export const FEATURE_SPRINT_PLAN_FENCE_LABEL = "feature-sprint-plan";
 export const FEATURE_REVIEW_VERDICT_FENCE_LABEL = "feature-review-verdict";
 export const FEATURE_PROMPT_LOCALIZATION_FENCE_LABEL = "feature-prompt-localization";
 export const FEATURE_PROMPT_CRITIQUE_FENCE_LABEL = "feature-prompt-critique";
+export const FEATURE_SPEC_UPDATE_FENCE_LABEL = "feature-spec-update";
 
 const FEATURE_SPRINT_PLAN_FENCE = new RegExp(
   `\`\`\`${FEATURE_SPRINT_PLAN_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
@@ -64,6 +66,13 @@ const FEATURE_PROMPT_CRITIQUE_FENCE = new RegExp(
   `\`\`\`${FEATURE_PROMPT_CRITIQUE_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
   "g"
 );
+
+const FEATURE_SPEC_UPDATE_FENCE = new RegExp(
+  `\`\`\`${FEATURE_SPEC_UPDATE_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
+  "g"
+);
+
+const SPEC_UPDATE_RISK_TIERS = new Set(["tiny", "normal", "risky"]);
 
 const PROMPT_AUDIT_VERDICTS = new Set<HarnessFeatureSprintPromptAuditVerdict>([
   "ready",
@@ -150,6 +159,15 @@ export type FeaturePromptCritiqueImport = {
   finalImplementationPrompt: string;
   mustCheckFiles: string[];
   verificationCommands: string[];
+};
+
+export type FeatureSpecUpdateImport = {
+  revisedSpec: string;
+  changelog: string[];
+  completedSliceSummary: string;
+  remainingWork: string[];
+  nextSlice?: HarnessFeatureSprintNextSliceProposal;
+  featureComplete: boolean;
 };
 
 export type FeatureSprintPlanCreateInput = {
@@ -304,6 +322,32 @@ export function isFeatureSpecApproved(plan: HarnessFeatureSprintPlan | undefined
 
 export function hasPersistedFeatureSpec(plan: HarnessFeatureSprintPlan | undefined): boolean {
   return Boolean(plan?.featureSpec?.body?.trim());
+}
+
+export function doesFeatureSprintStepRequireSpecUpdate(
+  plan: HarnessFeatureSprintPlan | undefined,
+  step: HarnessFeatureSprintStep | undefined
+): boolean {
+  return Boolean(
+    plan &&
+      step &&
+      hasPersistedFeatureSpec(plan) &&
+      step.reviewStatus === "accepted" &&
+      step.status !== "done"
+  );
+}
+
+export function hasApprovedSpecUpdateForStep(
+  plan: HarnessFeatureSprintPlan | undefined,
+  step: HarnessFeatureSprintStep | undefined
+): boolean {
+  if (!doesFeatureSprintStepRequireSpecUpdate(plan, step)) {
+    return true;
+  }
+  if (!plan || !step || plan.latestSpecUpdate?.stepId !== step.id || !plan.featureSpec?.approvedAt) {
+    return false;
+  }
+  return plan.featureSpec.approvedAt.localeCompare(plan.latestSpecUpdate.importedAt) >= 0;
 }
 
 export function hasStepPromptLocalization(step: HarnessFeatureSprintStep | undefined): boolean {
@@ -664,6 +708,10 @@ export function updateFeatureSprintPlan(
     evidenceLogId: patch.evidenceLogId ?? existing.evidenceLogId,
     evidenceProofItemId: patch.evidenceProofItemId ?? existing.evidenceProofItemId,
     featureSpec: patch.featureSpec !== undefined ? patch.featureSpec : existing.featureSpec,
+    latestSpecUpdate:
+      patch.latestSpecUpdate !== undefined ? patch.latestSpecUpdate : existing.latestSpecUpdate,
+    nextSliceProposal:
+      patch.nextSliceProposal !== undefined ? patch.nextSliceProposal : existing.nextSliceProposal,
     automationPhase:
       patch.automationPhase === null
         ? undefined
@@ -778,6 +826,18 @@ export function advanceFeatureSprintStep(
   const stepIndex = existing.steps.findIndex((step) => step.id === stepId);
   if (stepIndex < 0) {
     return { ok: false, error: `Step not found: ${stepId}` };
+  }
+
+  const currentStep = existing.steps[stepIndex];
+  if (
+    doesFeatureSprintStepRequireSpecUpdate(existing, currentStep) &&
+    !hasApprovedSpecUpdateForStep(existing, currentStep)
+  ) {
+    return {
+      ok: false,
+      error:
+        "Import a spec update for this reviewed step and approve the revised feature spec before advancing."
+    };
   }
 
   const timestamp = resolveNow(now);
@@ -1061,6 +1121,57 @@ export function importFeatureReviewVerdictFromText(
   }, now);
 }
 
+export function importFeatureSpecUpdateFromText(
+  data: LifeHarnessData,
+  planId: string,
+  text: string,
+  stepId?: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const specUpdate = parseFeatureSpecUpdateBlock(text);
+  if (!specUpdate) {
+    return { ok: false, error: "No valid feature-spec-update block found." };
+  }
+
+  const resolvedStepId = stepId ?? plan.currentStepId;
+  if (!resolvedStepId) {
+    return { ok: false, error: "No current step to attach spec update." };
+  }
+  if (!plan.steps.some((step) => step.id === resolvedStepId)) {
+    return { ok: false, error: `Step not found: ${resolvedStepId}` };
+  }
+
+  const timestamp = resolveNow(now);
+  return updateFeatureSprintPlan(
+    data,
+    planId,
+    {
+      featureSpec: {
+        body: specUpdate.revisedSpec,
+        source: plan.featureSpec?.source ?? "chatgpt_web",
+        updatedAt: timestamp
+      },
+      latestSpecUpdate: {
+        stepId: resolvedStepId,
+        revisedSpec: specUpdate.revisedSpec,
+        changelog: specUpdate.changelog,
+        completedSliceSummary: specUpdate.completedSliceSummary,
+        remainingWork: specUpdate.remainingWork,
+        featureComplete: specUpdate.featureComplete,
+        importedAt: timestamp
+      },
+      nextSliceProposal: specUpdate.nextSlice,
+      automationPhase: "spec_unapproved"
+    },
+    now
+  );
+}
+
 function parseStringList(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -1087,6 +1198,68 @@ function parseStepImport(value: unknown): FeatureSprintPlanStepImport | undefine
     suggestedPrompt:
       typeof item.suggestedPrompt === "string" ? item.suggestedPrompt.trim() : undefined
   };
+}
+
+function parseNextSliceProposal(
+  value: unknown
+): HarnessFeatureSprintNextSliceProposal | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const item = value as Record<string, unknown>;
+  const title = typeof item.title === "string" ? item.title.trim() : "";
+  const goal = typeof item.goal === "string" ? item.goal.trim() : "";
+  const acceptanceCriteria = parseStringList(item.acceptanceCriteria) ?? [];
+  if (!title || !goal || acceptanceCriteria.length === 0) {
+    return undefined;
+  }
+  const riskTier =
+    typeof item.riskTier === "string" && SPEC_UPDATE_RISK_TIERS.has(item.riskTier)
+      ? (item.riskTier as HarnessFeatureSprintNextSliceProposal["riskTier"])
+      : undefined;
+  return {
+    title,
+    goal,
+    acceptanceCriteria,
+    nonGoals: parseStringList(item.nonGoals) ?? [],
+    riskTier
+  };
+}
+
+export function parseFeatureSpecUpdateBlock(text: string): FeatureSpecUpdateImport | undefined {
+  const pattern = new RegExp(FEATURE_SPEC_UPDATE_FENCE.source, "g");
+  let match: RegExpExecArray | null = pattern.exec(text);
+  while (match) {
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        match = pattern.exec(text);
+        continue;
+      }
+      const item = parsed as Record<string, unknown>;
+      const revisedSpec = typeof item.revisedSpec === "string" ? item.revisedSpec.trim() : "";
+      const completedSliceSummary =
+        typeof item.completedSliceSummary === "string"
+          ? item.completedSliceSummary.trim()
+          : "";
+      if (!revisedSpec || !completedSliceSummary || typeof item.featureComplete !== "boolean") {
+        match = pattern.exec(text);
+        continue;
+      }
+      return {
+        revisedSpec,
+        changelog: parseStringList(item.changelog) ?? [],
+        completedSliceSummary,
+        remainingWork: parseStringList(item.remainingWork) ?? [],
+        nextSlice: parseNextSliceProposal(item.nextSlice),
+        featureComplete: item.featureComplete
+      };
+    } catch {
+      // ignore invalid JSON
+    }
+    match = pattern.exec(text);
+  }
+  return undefined;
 }
 
 export function parseFeatureSprintPlanBlock(text: string): FeatureSprintPlanImport | undefined {
@@ -1608,6 +1781,7 @@ export function stripFeatureSprintBlocks(text: string): string {
     .replace(FEATURE_REVIEW_VERDICT_FENCE, "")
     .replace(FEATURE_PROMPT_LOCALIZATION_FENCE, "")
     .replace(FEATURE_PROMPT_CRITIQUE_FENCE, "")
+    .replace(FEATURE_SPEC_UPDATE_FENCE, "")
     .trim();
 }
 
