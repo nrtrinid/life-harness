@@ -1,4 +1,5 @@
 import type { LifeHarnessData } from "./lifeHarnessData";
+import { normalizeResumeDate } from "./resumeDateFormat";
 import type { ResumeDocxDraft, ResumeEntry, ResumeProfile } from "./resumeDocx";
 import { validateResumeDocxDraft } from "./resumeDocx";
 import {
@@ -66,7 +67,7 @@ function mapProjectLike(module: ResumeModule, errors: string[]): ResumeEntry | u
   return {
     title: placement.heading,
     meta: placement.detail,
-    date: placement.date!,
+    date: normalizeResumeDate(placement.date!),
     bullets
   };
 }
@@ -111,7 +112,7 @@ export function buildApplicationResumeDocxDraft(
       }
       return {
         degree: placement.detail ?? module.summary,
-        date: placement.date ?? "",
+        date: normalizeResumeDate(placement.date ?? ""),
         school: placement.heading,
         details: module.bullets.filter(hasText)
       };

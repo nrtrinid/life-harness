@@ -1,7 +1,9 @@
 import {
   AlignmentType,
+  BorderStyle,
   convertInchesToTwip,
   Document,
+  LevelFormat,
   Packer,
   PageOrientation,
   Paragraph,
@@ -10,6 +12,8 @@ import {
   TextRun,
   type ISectionOptions
 } from "docx";
+
+import { normalizeResumeDate } from "./resumeDateFormat";
 
 export interface ResumeProfile {
   name: string;
@@ -57,6 +61,15 @@ const RIGHT_TAB = convertInchesToTwip(7.5);
 const PAGE_WIDTH = convertInchesToTwip(8.5);
 const PAGE_HEIGHT = convertInchesToTwip(11);
 const HALF_INCH = convertInchesToTwip(0.5);
+const BULLET_INDENT_LEFT = convertInchesToTwip(0.5);
+const BULLET_INDENT_HANGING = convertInchesToTwip(0.25);
+const BULLET_NUMBERING_REF = "resume-bullets";
+
+const SECTION_HEADING_SPACING = { before: 120, after: 60, line: 240 };
+const TITLE_ROW_SPACING = { before: 40, after: 0, line: 240 };
+const BODY_SPACING = { before: 0, after: 0, line: 240 };
+
+const DUPLICATE_SKILL_LABELS = [/^technical\s+skills:?$/i, /^skills:?$/i];
 
 function clean(value: string): string {
   return value.trim();
@@ -70,6 +83,19 @@ function assertNonEmptyArray<T>(items: T[], label: string): void {
   if (items.length === 0) {
     throw new Error(`${label} must include at least one item.`);
   }
+}
+
+export function formatSkillGroupLabel(label: string): string {
+  const trimmed = clean(label);
+  if (!trimmed) {
+    return "";
+  }
+  for (const pattern of DUPLICATE_SKILL_LABELS) {
+    if (pattern.test(trimmed)) {
+      return "";
+    }
+  }
+  return trimmed.replace(/:$/, "");
 }
 
 export function validateResumeDocxDraft(draft: ResumeDocxDraft): void {
@@ -101,34 +127,59 @@ function bodyRun(text: string, options?: { bold?: boolean }): TextRun {
   });
 }
 
-function paragraph(children: TextRun[], options?: { alignment?: (typeof AlignmentType)[keyof typeof AlignmentType]; tabbed?: boolean }): Paragraph {
+function paragraph(
+  children: TextRun[],
+  options?: {
+    alignment?: (typeof AlignmentType)[keyof typeof AlignmentType];
+    tabbed?: boolean;
+    spacing?: { before?: number; after?: number; line?: number };
+    border?: {
+      bottom?: { style: (typeof BorderStyle)[keyof typeof BorderStyle]; size?: number; space?: number; color?: string };
+    };
+  }
+): Paragraph {
   return new Paragraph({
     children,
     alignment: options?.alignment,
-    spacing: { before: 0, after: 0, line: 240 },
+    spacing: options?.spacing ?? BODY_SPACING,
+    border: options?.border,
     tabStops: options?.tabbed ? [{ type: TabStopType.RIGHT, position: RIGHT_TAB }] : undefined
   });
 }
 
-function spacer(): Paragraph {
-  return paragraph([bodyRun("")]);
+function sectionHeading(label: string): Paragraph {
+  return paragraph([bodyRun(label.toUpperCase(), { bold: true })], {
+    spacing: SECTION_HEADING_SPACING,
+    border: {
+      bottom: { style: BorderStyle.SINGLE, size: 6, space: 1, color: "000000" }
+    }
+  });
 }
 
-function sectionHeading(label: string): Paragraph {
-  return paragraph([bodyRun(label.toUpperCase(), { bold: true })]);
+function bulletParagraph(text: string): Paragraph {
+  return new Paragraph({
+    numbering: { reference: BULLET_NUMBERING_REF, level: 0 },
+    spacing: BODY_SPACING,
+    children: [bodyRun(text)]
+  });
 }
 
 function entryHeading(entry: ResumeEntry): Paragraph {
   const left = entry.meta ? `${entry.title} | ${entry.meta}` : entry.title;
-  return paragraph([bodyRun(left, { bold: true }), new TextRun({ children: [new Tab()] }), bodyRun(entry.date)], {
-    tabbed: true
-  });
+  return paragraph(
+    [bodyRun(left, { bold: true }), new TextRun({ children: [new Tab()] }), bodyRun(normalizeResumeDate(entry.date))],
+    { tabbed: true, spacing: TITLE_ROW_SPACING }
+  );
 }
 
 function educationHeading(entry: ResumeEducationEntry): Paragraph {
   return paragraph(
-    [bodyRun(entry.degree, { bold: true }), new TextRun({ children: [new Tab()] }), bodyRun(entry.date)],
-    { tabbed: true }
+    [
+      bodyRun(entry.degree, { bold: true }),
+      new TextRun({ children: [new Tab()] }),
+      bodyRun(normalizeResumeDate(entry.date))
+    ],
+    { tabbed: true, spacing: TITLE_ROW_SPACING }
   );
 }
 
@@ -141,11 +192,18 @@ function educationSchool(entry: ResumeEducationEntry): Paragraph {
 }
 
 function skillLine(group: ResumeSkillGroup): Paragraph {
-  return paragraph([bodyRun(`${clean(group.label)}: `, { bold: true }), bodyRun(clean(group.skills))]);
+  const label = formatSkillGroupLabel(group.label);
+  if (!label) {
+    return paragraph([bodyRun(clean(group.skills))]);
+  }
+  return paragraph([bodyRun(`${label}: `, { bold: true }), bodyRun(clean(group.skills))]);
 }
 
 function entryParagraphs(entry: ResumeEntry): Paragraph[] {
-  return [entryHeading(entry), ...entry.bullets.filter((bullet) => !isBlank(bullet)).map((bullet) => paragraph([bodyRun(clean(bullet))]))];
+  return [
+    entryHeading(entry),
+    ...entry.bullets.filter((bullet) => !isBlank(bullet)).map((bullet) => bulletParagraph(clean(bullet)))
+  ];
 }
 
 function buildChildren(draft: ResumeDocxDraft): { children: Paragraph[]; sectionOrder: string[] } {
@@ -153,13 +211,14 @@ function buildChildren(draft: ResumeDocxDraft): { children: Paragraph[]; section
     new Paragraph({
       children: [new TextRun({ text: clean(draft.profile.name), bold: true, font: FONT_FACE, size: NAME_SIZE })],
       alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 0, line: 240 }
+      spacing: { before: 0, after: 40, line: 240 }
     }),
-    paragraph([bodyRun(draft.profile.contactItems.map(clean).join(" • "))], { alignment: AlignmentType.CENTER }),
-    spacer(),
+    paragraph([bodyRun(draft.profile.contactItems.map(clean).join(" • "))], {
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 80, line: 240 }
+    }),
     sectionHeading("Summary"),
     paragraph([bodyRun(clean(draft.summary))]),
-    spacer(),
     sectionHeading("Education")
   ];
 
@@ -170,18 +229,18 @@ function buildChildren(draft: ResumeDocxDraft): { children: Paragraph[]; section
     }
   }
 
-  children.push(spacer(), sectionHeading("Technical Skills"));
+  children.push(sectionHeading("Technical Skills"));
   for (const group of draft.skills) {
     children.push(skillLine(group));
   }
 
-  children.push(spacer(), sectionHeading("Projects"));
+  children.push(sectionHeading("Projects"));
   for (const project of draft.projects) {
     children.push(...entryParagraphs(project));
   }
 
   if (draft.additionalExperience.length > 0) {
-    children.push(spacer(), sectionHeading("Additional Experience & Activities"));
+    children.push(sectionHeading("Additional Experience & Activities"));
     for (const entry of draft.additionalExperience) {
       children.push(...entryParagraphs(entry));
     }
@@ -217,9 +276,29 @@ export function buildResumeDocx(draft: ResumeDocxDraft): ResumeDocxBuildResult {
         default: {
           document: {
             run: { font: FONT_FACE, size: BODY_SIZE },
-            paragraph: { spacing: { before: 0, after: 0, line: 240 } }
+            paragraph: { spacing: BODY_SPACING }
           }
         }
+      },
+      numbering: {
+        config: [
+          {
+            reference: BULLET_NUMBERING_REF,
+            levels: [
+              {
+                level: 0,
+                format: LevelFormat.BULLET,
+                text: "\u2022",
+                alignment: AlignmentType.LEFT,
+                style: {
+                  paragraph: {
+                    indent: { left: BULLET_INDENT_LEFT, hanging: BULLET_INDENT_HANGING }
+                  }
+                }
+              }
+            ]
+          }
+        ]
       },
       sections: [section]
     }),

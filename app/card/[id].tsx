@@ -30,9 +30,21 @@ import {
 } from "../../src/core/agentSessionLog";
 import {
   buildFeatureScopingPacket,
+  buildFeatureReviewVerdictFenceDraft,
   buildFeatureStepImplementationPacket,
+  buildFeatureStepLocalizationPacket,
+  buildFeatureStepPromptAuditPacket,
   buildFeatureStepReviewPacket,
-  getActiveFeatureSprintPlanForCard
+  canRunFeatureSprintImplementation,
+  getActiveFeatureSprintPlanForCard,
+  hasPersistedFeatureSpec,
+  hasStepPromptAudit,
+  hasStepImplementationProof,
+  hasStepPromptLocalization,
+  isFeatureSpecApproved,
+  resolveAutomationPhaseDisplay,
+  resolveStepImplementationPrompt,
+  resolveStepImplementationPromptSource
 } from "../../src/core/featureSprintOrchestrator";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
@@ -43,6 +55,7 @@ import {
   buildRunnerProfile,
   formatRunnerProfileLabel,
   isImplementationProfile,
+  isPromptAuditProfile,
   isReviewProfile,
   isScopingProfile,
   runnerAgentLabel,
@@ -60,6 +73,7 @@ import {
   type FeatureSprintRunnerHealthProbe
 } from "../../src/core/featureSprintRunnerClient";
 import {
+  promptAuditFenceReadinessNotice,
   reviewFenceReadinessNotice,
   scopingFenceReadinessNotice
 } from "../../src/core/featureSprintRunnerOutputFence";
@@ -77,6 +91,7 @@ import { buildApplicationResumeReadiness } from "../../src/core/resumeReadiness"
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
 import type { ResumeModulePatch } from "../../src/core/actions";
+import type { HarnessFeatureSpecSource } from "../../src/core/types";
 import type {
   HarnessAgentSession,
   HarnessFeatureSprintRunnerRun,
@@ -253,10 +268,16 @@ export default function CardDetailScreen() {
     completeFeatureSprintPlan,
     deleteFeatureSprintPlan,
     importFeatureSprintPlanForCard,
+    saveFeatureSpecForCard,
+    approveFeatureSpecForPlan,
     importFeatureReviewVerdictForPlan,
+    importFeaturePromptLocalizationForPlan,
+    importFeaturePromptAuditForPlan,
+    normalizeImplementationProofForPlan,
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
     markMostRecentFeatureSprintRunnerRunImported,
+    markReviewRunnerRunImportedForVerdict,
     markFeatureSprintRunnerRunWorktreeCleanup,
     logResumeExportForCard,
     backfillResumeDraftPacket,
@@ -264,7 +285,8 @@ export default function CardDetailScreen() {
     setResumeDraftPacketModuleForSection,
     addDefaultResumeModulesToPacket,
     patchResumeModule,
-    setCardState
+    setCardState,
+    setMainQuest
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
@@ -287,7 +309,10 @@ export default function CardDetailScreen() {
   const [isCopyLogging, setIsCopyLogging] = useState(false);
   const [planImportText, setPlanImportText] = useState("");
   const [featureSpecText, setFeatureSpecText] = useState("");
+  const [featureSpecSource, setFeatureSpecSource] = useState<HarnessFeatureSpecSource>("chatgpt_web");
   const [reviewImportText, setReviewImportText] = useState("");
+  const [localizationImportText, setLocalizationImportText] = useState("");
+  const [promptAuditImportText, setPromptAuditImportText] = useState("");
   const [agentOutputText, setAgentOutputText] = useState("");
   const [runnerHealth, setRunnerHealth] = useState<"unknown" | "available" | "unavailable">(
     "unknown"
@@ -301,6 +326,8 @@ export default function CardDetailScreen() {
   const [isCheckingRunner, setIsCheckingRunner] = useState(false);
   const [isRunningScoping, setIsRunningScoping] = useState(false);
   const [isRunningReview, setIsRunningReview] = useState(false);
+  const [isRunningPromptAudit, setIsRunningPromptAudit] = useState(false);
+  const [isNormalizingProof, setIsNormalizingProof] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
   const [forceCleanEligibleRunId, setForceCleanEligibleRunId] = useState<string | null>(null);
@@ -566,6 +593,83 @@ export default function CardDetailScreen() {
   const currentFeatureStep = activeFeatureSprintPlan?.steps.find(
     (step) => step.id === activeFeatureSprintPlan.currentStepId
   );
+  const persistedFeatureSpecBody = activeFeatureSprintPlan?.featureSpec?.body ?? "";
+  const featureSpecDirty =
+    featureSpecText.trim() !== persistedFeatureSpecBody.trim() ||
+    (featureSpecSource !== (activeFeatureSprintPlan?.featureSpec?.source ?? "chatgpt_web") &&
+      Boolean(activeFeatureSprintPlan?.featureSpec?.body?.trim()));
+  const featureSpecApproved = isFeatureSpecApproved(activeFeatureSprintPlan);
+  const persistedFeatureSpec = hasPersistedFeatureSpec(activeFeatureSprintPlan);
+  const canRunImplementation = canRunFeatureSprintImplementation(activeFeatureSprintPlan);
+  const stepLocalizationSaved = hasStepPromptLocalization(currentFeatureStep);
+  const stepPromptAuditSaved = hasStepPromptAudit(currentFeatureStep);
+  const stepImplementationProofSaved = hasStepImplementationProof(currentFeatureStep);
+  const agentOutputDirty =
+    Boolean(agentOutputText.trim()) &&
+    agentOutputText.trim() !== (currentFeatureStep?.outputSummary?.trim() ?? "");
+  const proofStatusLabel = !currentFeatureStep?.outputSummary?.trim()
+    ? "None (save agent output first)"
+    : agentOutputDirty
+      ? "Stale (re-save output, then re-normalize)"
+      : !stepImplementationProofSaved
+        ? "None"
+        : `Normalized (${currentFeatureStep?.implementationProof?.verificationResult ?? "unknown"})`;
+  const localizationStatusLabel = stepLocalizationSaved
+    ? `Saved for current step (${currentFeatureStep?.promptLocalization?.likelyFiles.length ?? 0} files mapped)`
+    : "None";
+  const promptAuditStatusLabel = !stepPromptAuditSaved
+    ? "None"
+    : currentFeatureStep?.promptAudit?.verdict === "tighten_first"
+      ? "Saved (review needed — tighten first)"
+      : "Saved (ready)";
+  const implementationPromptSourceLabel = currentFeatureStep
+    ? (
+        {
+          audited: "Using: audited prompt",
+          suggested: "Using: suggested prompt",
+          goal: "Using: step goal"
+        } as const
+      )[resolveStepImplementationPromptSource(currentFeatureStep)]
+    : "Using: step goal";
+  const resolvedImplementationPromptExcerpt = currentFeatureStep
+    ? resolveStepImplementationPrompt(currentFeatureStep).slice(0, 120)
+    : "";
+  const automationPhaseDisplay = activeFeatureSprintPlan
+    ? resolveAutomationPhaseDisplay(activeFeatureSprintPlan, currentFeatureStep)
+    : undefined;
+
+  useEffect(() => {
+    setFeatureSpecText(activeFeatureSprintPlan?.featureSpec?.body ?? "");
+    setFeatureSpecSource(activeFeatureSprintPlan?.featureSpec?.source ?? "chatgpt_web");
+  }, [
+    activeFeatureSprintPlan?.id,
+    activeFeatureSprintPlan?.featureSpec?.body,
+    activeFeatureSprintPlan?.featureSpec?.source
+  ]);
+
+  useEffect(() => {
+    setLocalizationImportText(currentFeatureStep?.promptLocalization?.rawOutput ?? "");
+  }, [activeFeatureSprintPlan?.currentStepId, currentFeatureStep?.promptLocalization?.rawOutput]);
+
+  useEffect(() => {
+    setPromptAuditImportText(currentFeatureStep?.promptAudit?.rawOutput ?? "");
+  }, [activeFeatureSprintPlan?.currentStepId, currentFeatureStep?.promptAudit?.rawOutput]);
+
+  const featureSprintPlanId = activeFeatureSprintPlan?.id;
+  const featureSprintCurrentStepId = activeFeatureSprintPlan?.currentStepId;
+
+  useEffect(() => {
+    setReviewImportText("");
+    setSelectedRunnerRunId(null);
+    if (!featureSprintPlanId || !featureSprintCurrentStepId) {
+      setAgentOutputText("");
+      return;
+    }
+    const plan = getActiveFeatureSprintPlanForCard(lifeHarnessData, card.id);
+    const step = plan?.steps.find((item) => item.id === featureSprintCurrentStepId);
+    setAgentOutputText(step?.outputSummary ?? "");
+  }, [featureSprintPlanId, featureSprintCurrentStepId, card.id]);
+
   const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
   const recentRunnerRuns = getFeatureSprintRunnerRunsForCard(lifeHarnessData, card.id, 5);
   const latestScopingRun = recentRunnerRuns.find(
@@ -585,6 +689,13 @@ export default function CardDetailScreen() {
       run.planId === activeFeatureSprintPlan?.id &&
       run.stepId === activeFeatureSprintPlan?.currentStepId
   );
+  const latestPromptAuditRunForStep = recentRunnerRuns.find(
+    (run) =>
+      isPromptAuditProfile(run.profile) &&
+      run.status === "succeeded" &&
+      run.planId === activeFeatureSprintPlan?.id &&
+      run.stepId === activeFeatureSprintPlan?.currentStepId
+  );
   const implementationRunViewed =
     latestImplementationRunForStep !== undefined &&
     selectedRunnerRunId === latestImplementationRunForStep.id;
@@ -598,11 +709,20 @@ export default function CardDetailScreen() {
         reviewOutputReady: Boolean(
           reviewImportText.trim() || latestReviewRunForStep?.outputText || latestReviewRunForStep?.outputExcerpt
         ),
-        reviewVerdictImported: currentFeatureStep?.reviewStatus === "accepted",
+        reviewVerdictImported: currentFeatureStep?.reviewStatus != null,
+        stepReviewAccepted: currentFeatureStep?.reviewStatus === "accepted",
         scopingOutputReady: Boolean(
           latestScopingRun?.outputText?.trim() || latestScopingRun?.outputExcerpt?.trim()
         ),
-        planImportTextReady: Boolean(planImportText.trim())
+        planImportTextReady: Boolean(planImportText.trim()),
+        featureSpecDirty,
+        stepLocalizationSaved,
+        stepPromptAuditSaved,
+        stepImplementationProofSaved,
+        stepPromptAuditRunnerSucceeded: Boolean(
+          latestPromptAuditRunForStep?.outputText?.trim() ||
+            latestPromptAuditRunForStep?.outputExcerpt?.trim()
+        )
       }),
     [
       featureSprintDogfood.nextAction.kind,
@@ -613,7 +733,11 @@ export default function CardDetailScreen() {
       reviewImportText,
       latestReviewRunForStep,
       latestScopingRun,
-      planImportText
+      planImportText,
+      featureSpecDirty,
+      stepLocalizationSaved,
+      stepPromptAuditSaved,
+      stepImplementationProofSaved
     ]
   );
   const showAgentOutputReadyHelper =
@@ -701,6 +825,26 @@ export default function CardDetailScreen() {
     }
   }
 
+  function handleSaveFeatureSpec() {
+    const result = saveFeatureSpecForCard(cardId, {
+      body: featureSpecText,
+      source: featureSpecSource
+    });
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save feature spec.");
+  }
+
+  function handleApproveFeatureSpec() {
+    if (!activeFeatureSprintPlan) {
+      showNotice("warning", "Save a feature spec before approving.");
+      return;
+    }
+    const result = approveFeatureSpecForPlan(activeFeatureSprintPlan.id);
+    showNotice(
+      result.ok ? "success" : "warning",
+      result.message ?? "Could not approve feature spec."
+    );
+  }
+
   function handleImportFeaturePlan() {
     const result = importFeatureSprintPlanForCard(cardId, planImportText);
     if (!result.ok) {
@@ -713,6 +857,42 @@ export default function CardDetailScreen() {
     });
     setPlanImportText("");
     showNotice("success", result.message ?? "Feature sprint plan imported.");
+  }
+
+  function handleImportLocalization() {
+    if (!activeFeatureSprintPlan) {
+      showNotice("warning", "No active feature sprint plan.");
+      return;
+    }
+    const result = importFeaturePromptLocalizationForPlan(
+      activeFeatureSprintPlan.id,
+      localizationImportText,
+      activeFeatureSprintPlan.currentStepId
+    );
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not import localization.");
+  }
+
+  function handleImportPromptAudit() {
+    if (!activeFeatureSprintPlan) {
+      showNotice("warning", "No active feature sprint plan.");
+      return;
+    }
+    const result = importFeaturePromptAuditForPlan(
+      activeFeatureSprintPlan.id,
+      promptAuditImportText,
+      activeFeatureSprintPlan.currentStepId
+    );
+    if (!result.ok) {
+      showNotice("warning", result.message ?? "Could not import prompt audit.");
+      return;
+    }
+    markMostRecentFeatureSprintRunnerRunImported({
+      cardId,
+      profile: "codex_prompt_audit",
+      planId: activeFeatureSprintPlan.id,
+      stepId: activeFeatureSprintPlan.currentStepId
+    });
+    showNotice("success", result.message ?? "Prompt audit imported.");
   }
 
   function handleSaveAgentOutput() {
@@ -731,9 +911,32 @@ export default function CardDetailScreen() {
     showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save agent output.");
   }
 
+  function handleNormalizeProof() {
+    if (!activeFeatureSprintPlan?.currentStepId || isNormalizingProof) {
+      return;
+    }
+    setIsNormalizingProof(true);
+    try {
+      const result = normalizeImplementationProofForPlan(
+        activeFeatureSprintPlan.id,
+        activeFeatureSprintPlan.currentStepId
+      );
+      showNotice(
+        result.ok ? "success" : "warning",
+        result.message ?? "Could not normalize implementation proof."
+      );
+    } finally {
+      setIsNormalizingProof(false);
+    }
+  }
+
   function handleImportReviewVerdict() {
     if (!activeFeatureSprintPlan) {
       showNotice("warning", "No active feature sprint plan.");
+      return;
+    }
+    if (!activeFeatureSprintPlan.currentStepId) {
+      showNotice("warning", "No current step to import review verdict on.");
       return;
     }
     const result = importFeatureReviewVerdictForPlan(
@@ -745,11 +948,13 @@ export default function CardDetailScreen() {
       showNotice("warning", result.message ?? "Could not import review verdict.");
       return;
     }
-    markMostRecentFeatureSprintRunnerRunImported({
+    markReviewRunnerRunImportedForVerdict({
       cardId,
-      profile: "codex_review",
       planId: activeFeatureSprintPlan.id,
-      stepId: activeFeatureSprintPlan.currentStepId
+      stepId: activeFeatureSprintPlan.currentStepId,
+      reviewImportText,
+      selectedRunId: selectedRunnerRunId,
+      runnerAgent
     });
     setReviewImportText("");
     showNotice("success", result.message ?? "Review verdict imported.");
@@ -808,6 +1013,85 @@ export default function CardDetailScreen() {
       return false;
     }
     return true;
+  }
+
+  function ensureCodexRunnerAvailable(): boolean {
+    const guardMessage = guardRunnerAgentAvailability("codex", runnerHealthProbe);
+    if (guardMessage) {
+      showNotice("warning", guardMessage);
+      return false;
+    }
+    return true;
+  }
+
+  async function handleRunPromptAudit() {
+    if (!activeFeatureSprintPlan?.currentStepId || isRunningPromptAudit) {
+      return;
+    }
+
+    if (!ensureCodexRunnerAvailable()) {
+      return;
+    }
+
+    const profile = "codex_prompt_audit" as const;
+    const packet = buildFeatureStepPromptAuditPacket(
+      lifeHarnessData,
+      activeFeatureSprintPlan.id,
+      activeFeatureSprintPlan.currentStepId
+    );
+    if (!packet.ok) {
+      showNotice("warning", packet.error);
+      return;
+    }
+
+    const project = getProjectForCard(lifeHarnessData, cardId);
+    const historyCreate = createFeatureSprintRunnerRun({
+      profile,
+      cardId,
+      planId: activeFeatureSprintPlan.id,
+      stepId: activeFeatureSprintPlan.currentStepId,
+      repoPath: project?.repoPath
+    });
+    if (!historyCreate.ok) {
+      showNotice("warning", historyCreate.message ?? "Could not start runner history.");
+      if (historyCreate.safetyBlocked) {
+        return;
+      }
+    }
+
+    setIsRunningPromptAudit(true);
+    try {
+      const result = await runFeatureSprintPacket({
+        profile,
+        promptMarkdown: packet.markdown,
+        cardId,
+        planId: activeFeatureSprintPlan.id,
+        stepId: activeFeatureSprintPlan.currentStepId,
+        repoPath: project?.repoPath
+      });
+
+      if (historyCreate.ok && historyCreate.runId) {
+        completeFeatureSprintRunnerRun(historyCreate.runId, result);
+      }
+
+      if (!result.ok || !result.outputText) {
+        showNotice("warning", result.error ?? "Codex prompt audit run failed.");
+        return;
+      }
+
+      setPromptAuditImportText(result.outputText);
+      if (historyCreate.ok && historyCreate.runId) {
+        setSelectedRunnerRunId(historyCreate.runId);
+      }
+      const preview = result.commandPreview ? ` (${result.commandPreview})` : "";
+      const fenceNotice = promptAuditFenceReadinessNotice(result.outputText);
+      showNotice(
+        fenceNotice ? "warning" : "success",
+        `Prompt audit output loaded below. Click Import prompt audit when ready.${preview}${fenceNotice ? ` ${fenceNotice}` : ""}`
+      );
+    } finally {
+      setIsRunningPromptAudit(false);
+    }
   }
 
   async function handleRunScoping() {
@@ -883,6 +1167,41 @@ export default function CardDetailScreen() {
       setSelectedRunnerRunId(latestScopingRun.id);
     }
     showNotice("success", "Latest scoping output loaded into Import plan.");
+  }
+
+  function handleLoadLatestReviewOutput() {
+    const output =
+      latestReviewRunForStep?.outputText?.trim() || latestReviewRunForStep?.outputExcerpt?.trim();
+    if (!output) {
+      showNotice("warning", "No review output found for this step. Run review first.");
+      return;
+    }
+    setReviewImportText(latestReviewRunForStep?.outputText ?? latestReviewRunForStep?.outputExcerpt ?? "");
+    if (latestReviewRunForStep) {
+      setSelectedRunnerRunId(latestReviewRunForStep.id);
+    }
+    const fenceNotice = reviewFenceReadinessNotice(
+      latestReviewRunForStep?.outputText ?? latestReviewRunForStep?.outputExcerpt
+    );
+    showNotice(
+      fenceNotice ? "warning" : "success",
+      fenceNotice
+        ? `Latest review output loaded. ${fenceNotice} Try Wrap as verdict block.`
+        : "Latest review output loaded into Import review verdict."
+    );
+  }
+
+  function handleWrapReviewVerdictFence() {
+    const wrapped = buildFeatureReviewVerdictFenceDraft(reviewImportText);
+    if (!wrapped) {
+      showNotice(
+        "warning",
+        "Could not wrap this text. Load the full review output first, or paste prose starting with accepted/needs_changes/blocked."
+      );
+      return;
+    }
+    setReviewImportText(wrapped);
+    showNotice("success", "Wrapped output in a feature-review-verdict block. Inspect, then Import review verdict.");
   }
 
   async function handleRunReview() {
@@ -1166,6 +1485,21 @@ export default function CardDetailScreen() {
         <Text style={styles.label}>Why It Matters</Text>
         <Text style={styles.bodyText}>{card.whyItMatters}</Text>
         <CardStateButtons cardId={card.id} currentState={card.state} />
+        {card.state === "active" ? (
+          dailyState.mainQuestId === card.id ? (
+            <Text style={[styles.mainQuestBadge, { marginTop: 8 }]}>Main quest</Text>
+          ) : (
+            <Pressable
+              style={[styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }]}
+              onPress={() => {
+                const result = setMainQuest(card.id);
+                showNotice(result.ok ? "success" : "warning", result.message ?? "Could not set main quest.");
+              }}
+            >
+              <Text style={styles.secondaryActionText}>Set as main quest</Text>
+            </Pressable>
+          )
+        ) : null}
       </Section>
 
       {todayMoveForCard ? (
@@ -1305,6 +1639,13 @@ export default function CardDetailScreen() {
               ? () => setFeatureSpecText(card.nextTinyAction)
               : undefined
           }
+          featureSpecSource={featureSpecSource}
+          onSelectFeatureSpecSource={setFeatureSpecSource}
+          isFeatureSpecDirty={featureSpecDirty}
+          isFeatureSpecApproved={featureSpecApproved}
+          hasPersistedFeatureSpec={persistedFeatureSpec}
+          onSaveFeatureSpec={handleSaveFeatureSpec}
+          onApproveFeatureSpec={handleApproveFeatureSpec}
           runnerAgent={runnerAgent}
           onSelectRunnerAgent={setRunnerAgent}
           runnerHealth={runnerHealth}
@@ -1540,6 +1881,52 @@ export default function CardDetailScreen() {
             <Text style={styles.titleText}>
               {activeFeatureSprintPlan.title} · {activeFeatureSprintPlan.status}
             </Text>
+            {automationPhaseDisplay ? (
+              <Text style={[styles.helpText, { marginTop: 4 }]}>
+                Automation phase: {automationPhaseDisplay.replaceAll("_", " ")}
+              </Text>
+            ) : null}
+            {activeFeatureSprintPlan.currentStepId ? (
+              <Text style={[styles.helpText, { marginTop: 4 }]}>
+                Localization: {localizationStatusLabel}
+              </Text>
+            ) : null}
+            {stepLocalizationSaved && currentFeatureStep?.promptLocalization ? (
+              <Text style={[styles.helpText, { marginTop: 4 }]}>
+                Revised prompt:{" "}
+                {currentFeatureStep.promptLocalization.revisedImplementationPrompt.slice(0, 120)}
+                {currentFeatureStep.promptLocalization.revisedImplementationPrompt.length > 120
+                  ? "…"
+                  : ""}
+              </Text>
+            ) : null}
+            {activeFeatureSprintPlan.currentStepId ? (
+              <Text style={[styles.helpText, { marginTop: 4 }]}>
+                Prompt audit: {promptAuditStatusLabel}
+              </Text>
+            ) : null}
+            {currentFeatureStep ? (
+              <>
+                <Text style={[styles.helpText, { marginTop: 4 }]}>
+                  Proof: {proofStatusLabel}
+                </Text>
+                {stepImplementationProofSaved && currentFeatureStep.implementationProof ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>
+                    {currentFeatureStep.implementationProof.filesChanged.length} file(s) changed ·{" "}
+                    {currentFeatureStep.implementationProof.knownRisks.length} risk note(s)
+                  </Text>
+                ) : null}
+                <Text style={[styles.helpText, { marginTop: 4 }]}>
+                  {implementationPromptSourceLabel}
+                </Text>
+                {resolvedImplementationPromptExcerpt ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>
+                    Final prompt: {resolvedImplementationPromptExcerpt}
+                    {resolveStepImplementationPrompt(currentFeatureStep).length > 120 ? "…" : ""}
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
             <Text style={[styles.bodyText, { marginTop: 8 }]}>{activeFeatureSprintPlan.goal}</Text>
             {activeFeatureSprintPlan.whyNow ? (
               <>
@@ -1587,29 +1974,136 @@ export default function CardDetailScreen() {
           <Text style={[styles.emptyText, { marginTop: 12 }]}>No active feature sprint plan yet.</Text>
         )}
 
-        {activeFeatureSprintPlan || canCopyTextToClipboard() ? (
-          <View style={[styles.cardActionsRow, { marginTop: 12, flexWrap: "wrap" }]}>
-            {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
+        {activeFeatureSprintPlan?.currentStepId ? (
+          <>
+            <Text style={[styles.label, { marginTop: 12 }]}>Current step — optional prep</Text>
+            <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+              {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
+                <Pressable
+                  style={styles.secondaryAction}
+                  onPress={() => {
+                    void copyMarkdownToClipboard(
+                      () =>
+                        buildFeatureStepLocalizationPacket(
+                          lifeHarnessData,
+                          activeFeatureSprintPlan.id,
+                          activeFeatureSprintPlan.currentStepId
+                        ),
+                      "Localization packet copied."
+                    );
+                  }}
+                >
+                  <Text style={styles.secondaryActionText}>Copy for Cursor localization</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Text style={[styles.label, { marginTop: 12 }]}>
+              Import localization (Cursor output)
+            </Text>
+            <Text style={styles.helpText}>
+              Paste Cursor output with a feature-prompt-localization fenced block. Read-only repo
+              inspection — not implementation.
+            </Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top", marginTop: 8 }]}
+              value={localizationImportText}
+              onChangeText={setLocalizationImportText}
+              placeholder="Paste output with a feature-prompt-localization fenced block"
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Pressable
+              style={[styles.secondaryAction, { marginTop: 12 }]}
+              onPress={handleImportLocalization}
+            >
+              <Text style={styles.secondaryActionText}>Import localization</Text>
+            </Pressable>
+
+            <View style={[styles.cardActionsRow, { marginTop: 12, flexWrap: "wrap" }]}>
+              {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
+                <Pressable
+                  style={styles.secondaryAction}
+                  onPress={() => {
+                    void copyMarkdownToClipboard(
+                      () =>
+                        buildFeatureStepPromptAuditPacket(
+                          lifeHarnessData,
+                          activeFeatureSprintPlan.id,
+                          activeFeatureSprintPlan.currentStepId
+                        ),
+                      "Prompt audit packet copied."
+                    );
+                  }}
+                >
+                  <Text style={styles.secondaryActionText}>Copy for GPT/Codex prompt audit</Text>
+                </Pressable>
+              ) : null}
               <Pressable
-                style={styles.secondaryAction}
+                style={[styles.secondaryAction, isRunningPromptAudit && { opacity: 0.5 }]}
+                disabled={isRunningPromptAudit}
                 onPress={() => {
-                  void copyMarkdownToClipboard(
-                    () =>
-                      buildFeatureStepImplementationPacket(
-                        lifeHarnessData,
-                        activeFeatureSprintPlan.id
-                      ),
-                    "Implementation prompt copied."
-                  );
+                  void handleRunPromptAudit();
                 }}
               >
-                <Text style={styles.secondaryActionText}>Copy implementation prompt</Text>
+                <Text style={styles.secondaryActionText}>
+                  {isRunningPromptAudit ? "Running…" : "Run prompt audit with Codex"}
+                </Text>
               </Pressable>
-            ) : null}
-            {activeFeatureSprintPlan?.currentStepId ? (
+            </View>
+            <Text style={[styles.label, { marginTop: 12 }]}>
+              Import prompt audit (GPT/Codex output)
+            </Text>
+            <Text style={styles.helpText}>
+              Paste GPT/Codex output with a feature-prompt-critique fenced block. Review needed
+              verdicts warn only — they do not block implementation. Codex prompt audit is intended to
+              be read-only. The runner does not create an implementation worktree, but real Codex
+              execution still happens in the repo context; check git status if concerned.
+            </Text>
+            <TextInput
+              style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top", marginTop: 8 }]}
+              value={promptAuditImportText}
+              onChangeText={setPromptAuditImportText}
+              placeholder="Paste output with a feature-prompt-critique fenced block"
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Pressable
+              style={[styles.secondaryAction, { marginTop: 12 }]}
+              onPress={handleImportPromptAudit}
+            >
+              <Text style={styles.secondaryActionText}>Import prompt audit</Text>
+            </Pressable>
+
+            <Text style={[styles.label, { marginTop: 16 }]}>Current step — implement & review</Text>
+            <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+              {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
+                <Pressable
+                  style={styles.secondaryAction}
+                  onPress={() => {
+                    void copyMarkdownToClipboard(
+                      () =>
+                        buildFeatureStepImplementationPacket(
+                          lifeHarnessData,
+                          activeFeatureSprintPlan.id
+                        ),
+                      "Implementation prompt copied."
+                    );
+                  }}
+                >
+                  <Text style={styles.secondaryActionText}>Copy implementation prompt</Text>
+                </Pressable>
+              ) : null}
+              {!canRunImplementation ? (
+                <Text style={[styles.helpText, { marginTop: 8 }]}>
+                  Approve the persisted feature spec before running implementation in worktree.
+                </Text>
+              ) : null}
               <Pressable
-                style={[styles.secondaryAction, isRunningImplementation && { opacity: 0.5 }]}
-                disabled={isRunningImplementation}
+                style={[
+                  styles.secondaryAction,
+                  (isRunningImplementation || !canRunImplementation) && { opacity: 0.5 }
+                ]}
+                disabled={isRunningImplementation || !canRunImplementation}
                 onPress={() => {
                   void handleRunImplementationInWorktree();
                 }}
@@ -1620,27 +2114,25 @@ export default function CardDetailScreen() {
                     : `Run implementation with ${runnerAgentLabel(runnerAgent)}`}
                 </Text>
               </Pressable>
-            ) : null}
-            {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
-              <Pressable
-                style={styles.secondaryAction}
-                onPress={() => {
-                  void copyMarkdownToClipboard(
-                    () =>
-                      buildFeatureStepReviewPacket(
-                        lifeHarnessData,
-                        activeFeatureSprintPlan.id,
-                        undefined,
-                        agentOutputText
-                      ),
-                    "Review packet copied."
-                  );
-                }}
-              >
-                <Text style={styles.secondaryActionText}>Copy review packet</Text>
-              </Pressable>
-            ) : null}
-            {activeFeatureSprintPlan ? (
+              {activeFeatureSprintPlan && canCopyTextToClipboard() ? (
+                <Pressable
+                  style={styles.secondaryAction}
+                  onPress={() => {
+                    void copyMarkdownToClipboard(
+                      () =>
+                        buildFeatureStepReviewPacket(
+                          lifeHarnessData,
+                          activeFeatureSprintPlan.id,
+                          undefined,
+                          agentOutputText
+                        ),
+                      "Review packet copied."
+                    );
+                  }}
+                >
+                  <Text style={styles.secondaryActionText}>Copy review packet</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 style={[styles.secondaryAction, isRunningReview && { opacity: 0.5 }]}
                 disabled={isRunningReview}
@@ -1652,8 +2144,13 @@ export default function CardDetailScreen() {
                   {isRunningReview ? "Running…" : `Run review with ${runnerAgentLabel(runnerAgent)}`}
                 </Text>
               </Pressable>
-            ) : null}
-          </View>
+            </View>
+            <Text style={[styles.helpText, { marginTop: 8 }]}>
+              Uses the enriched review packet (normalized proof when saved). Output fills Import review
+              verdict below — import remains manual.
+              {stepImplementationProofSaved ? " Review packet will include normalized proof." : ""}
+            </Text>
+          </>
         ) : null}
 
         <FeatureSprintActionGuide
@@ -1686,13 +2183,14 @@ export default function CardDetailScreen() {
           <>
             <Text style={[styles.label, { marginTop: 12 }]}>Agent output</Text>
             <Text style={styles.helpText}>
-              Runner filled this box. Inspect the expanded run in Recent runner runs, then click Save agent
-              output. Continue with review → import verdict → advance step.
+              Runner filled this box. Inspect the expanded run in Recent runner runs, then Save agent
+              output. Normalize for review before running review. Normalization is rules-only — re-run
+              after re-saving output if runner metadata changed.
             </Text>
             {showAgentOutputReadyHelper ? (
               <Text style={[styles.helpText, { marginTop: 4, marginBottom: 8, color: colors.accentPrimary }]}>
                 Ready to save — follow the checklist above: View details (if collapsed) → Save agent output →
-                Run review → Import review verdict → Advance step.
+                Normalize for review → Run review → Import review verdict → Advance step.
               </Text>
             ) : null}
             <TextInput
@@ -1709,8 +2207,37 @@ export default function CardDetailScreen() {
             >
               <Text style={styles.secondaryActionText}>Save agent output</Text>
             </Pressable>
+            <Pressable
+              style={[
+                styles.secondaryAction,
+                { marginTop: 12 },
+                (isNormalizingProof || !currentFeatureStep?.outputSummary?.trim()) && { opacity: 0.5 }
+              ]}
+              disabled={isNormalizingProof || !currentFeatureStep?.outputSummary?.trim()}
+              onPress={handleNormalizeProof}
+            >
+              <Text style={styles.secondaryActionText}>
+                {isNormalizingProof ? "Normalizing…" : "Normalize for review"}
+              </Text>
+            </Pressable>
 
             <Text style={[styles.label, { marginTop: 12 }]}>Import review verdict</Text>
+            <Text style={styles.helpText}>
+              Paste reviewer output with a feature-review-verdict fenced block. Codex often returns prose
+              only — load the full run output, then Wrap as verdict block before importing.
+            </Text>
+            {latestReviewRunForStep ? (
+              <View style={[styles.cardActionsRow, { marginTop: 8, alignItems: "center" }]}>
+                <Pressable style={styles.secondaryAction} onPress={handleLoadLatestReviewOutput}>
+                  <Text style={styles.secondaryActionText}>Load latest review output</Text>
+                </Pressable>
+                {reviewFenceReadinessNotice(reviewImportText) ? (
+                  <Pressable style={styles.secondaryAction} onPress={handleWrapReviewVerdictFence}>
+                    <Text style={styles.secondaryActionText}>Wrap as verdict block</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
             <TextInput
               style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
               value={reviewImportText}
