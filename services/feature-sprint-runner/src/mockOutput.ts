@@ -1,8 +1,9 @@
-import type { FeatureSprintRunnerProfile } from "../../../src/core/featureSprintRunner";
+import {
+  isScopingProfile,
+  type FeatureSprintRunnerProfile
+} from "../../../src/core/featureSprintRunner";
 
-export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): string {
-  if (profile === "codex_scoping") {
-    return `Here is a scoped feature sprint plan for your card.
+const MOCK_SCOPING_OUTPUT = `Here is a scoped feature sprint plan for your card.
 
 \`\`\`feature-sprint-plan
 {
@@ -11,7 +12,7 @@ export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): stri
   "whyNow": "Reduce copy/paste friction while keeping import gates manual",
   "acceptanceCriteria": ["Runner fills import textareas", "User still clicks Import"],
   "nonGoals": ["Implementation runner", "Auto-import", "Repo mutation"],
-  "constraints": ["Mock mode must pass in CI", "Real Codex is experimental"],
+  "constraints": ["Mock mode must pass in CI", "Real agent CLI is experimental"],
   "steps": [
     {
       "title": "Runner protocol",
@@ -27,9 +28,8 @@ export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): stri
 }
 \`\`\`
 `;
-  }
 
-  return `Review complete. The implementation output looks acceptable for this slice.
+const MOCK_REVIEW_OUTPUT = `Review complete. The implementation output looks acceptable for this slice.
 
 \`\`\`feature-review-verdict
 {
@@ -40,4 +40,11 @@ export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): stri
 }
 \`\`\`
 `;
+
+export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): string {
+  if (isScopingProfile(profile)) {
+    return MOCK_SCOPING_OUTPUT;
+  }
+
+  return MOCK_REVIEW_OUTPUT;
 }

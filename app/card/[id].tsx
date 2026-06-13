@@ -39,15 +39,30 @@ import {
   buildFeatureSprintDogfoodSummary,
   type FeatureSprintDogfoodCheckStatus
 } from "../../src/core/featureSprintDogfood";
+import {
+  buildRunnerProfile,
+  formatRunnerProfileLabel,
+  isImplementationProfile,
+  isReviewProfile,
+  isScopingProfile,
+  runnerAgentLabel,
+  type FeatureSprintRunnerAgent
+} from "../../src/core/featureSprintRunner";
 import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintRunnerHistory";
 import { buildFeatureSprintRunnerOutputView } from "../../src/core/featureSprintRunnerOutputView";
 import {
   checkFeatureSprintRunnerHealth,
   cleanupFeatureSprintWorktree,
   composeImplementationRunnerOutputSummary,
+  guardRunnerAgentAvailability,
   runFeatureSprintPacket,
-  summarizeVerificationResults
+  summarizeVerificationResults,
+  type FeatureSprintRunnerHealthProbe
 } from "../../src/core/featureSprintRunnerClient";
+import {
+  reviewFenceReadinessNotice,
+  scopingFenceReadinessNotice
+} from "../../src/core/featureSprintRunnerOutputFence";
 import { buildCardContextPacket } from "../../src/core/harnessContextGraph";
 import {
   formatListField,
@@ -127,12 +142,6 @@ function buildSessionFormFromSession(session: HarnessAgentSession): SessionFormS
   };
 }
 
-const RUNNER_PROFILE_LABELS = {
-  codex_scoping: "Codex scoping",
-  codex_review: "Codex review",
-  codex_implementation: "Codex implementation"
-} as const;
-
 const DOGFOOD_STATUS_LABELS = {
   not_ready: "not ready",
   ready: "ready",
@@ -146,7 +155,7 @@ function formatRunnerStartedAt(iso: string): string {
 }
 
 function formatRunnerWorktreeCleanupLine(run: HarnessFeatureSprintRunnerRun): string | undefined {
-  if (!run.worktreePath || run.profile !== "codex_implementation") {
+  if (!run.worktreePath || !isImplementationProfile(run.profile)) {
     return undefined;
   }
   if (run.worktreeCleanedAt || run.worktreeCleanupStatus === "cleaned") {
@@ -283,6 +292,12 @@ export default function CardDetailScreen() {
   const [runnerHealth, setRunnerHealth] = useState<"unknown" | "available" | "unavailable">(
     "unknown"
   );
+  const [runnerHealthProbe, setRunnerHealthProbe] = useState<
+    FeatureSprintRunnerHealthProbe | undefined
+  >(undefined);
+  const [runnerAgent, setRunnerAgent] = useState<FeatureSprintRunnerAgent>("codex");
+  const [projectDefaultRunnerAgent, setProjectDefaultRunnerAgent] =
+    useState<FeatureSprintRunnerAgent>("codex");
   const [isCheckingRunner, setIsCheckingRunner] = useState(false);
   const [isRunningScoping, setIsRunningScoping] = useState(false);
   const [isRunningReview, setIsRunningReview] = useState(false);
@@ -325,6 +340,9 @@ export default function CardDetailScreen() {
     setLikelyFilesText(formatListField(project?.likelyFiles));
     setVerificationCommandsText(formatListField(project?.verificationCommands));
     setProjectNotes(project?.notes ?? "");
+    const defaultAgent = project?.defaultRunnerAgent ?? "codex";
+    setProjectDefaultRunnerAgent(defaultAgent);
+    setRunnerAgent(defaultAgent);
   }, [
     card,
     cards,
@@ -415,9 +433,11 @@ export default function CardDetailScreen() {
   const featureSprintDogfood = useMemo(
     () =>
       buildFeatureSprintDogfoodSummary(lifeHarnessData, card?.id ?? id ?? "", {
-        runnerHealth
+        runnerHealth,
+        runnerHealthProbe,
+        runnerAgent
       }),
-    [lifeHarnessData, card?.id, id, runnerHealth]
+    [lifeHarnessData, card?.id, id, runnerHealth, runnerHealthProbe, runnerAgent]
   );
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
@@ -549,18 +569,18 @@ export default function CardDetailScreen() {
   const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
   const recentRunnerRuns = getFeatureSprintRunnerRunsForCard(lifeHarnessData, card.id, 5);
   const latestScopingRun = recentRunnerRuns.find(
-    (run) => run.profile === "codex_scoping" && run.status === "succeeded"
+    (run) => isScopingProfile(run.profile) && run.status === "succeeded"
   );
   const latestImplementationRunForStep = recentRunnerRuns.find(
     (run) =>
-      run.profile === "codex_implementation" &&
+      isImplementationProfile(run.profile) &&
       run.status === "succeeded" &&
       run.planId === activeFeatureSprintPlan?.id &&
       run.stepId === activeFeatureSprintPlan?.currentStepId
   );
   const latestReviewRunForStep = recentRunnerRuns.find(
     (run) =>
-      run.profile === "codex_review" &&
+      isReviewProfile(run.profile) &&
       run.status === "succeeded" &&
       run.planId === activeFeatureSprintPlan?.id &&
       run.stepId === activeFeatureSprintPlan?.currentStepId
@@ -572,6 +592,7 @@ export default function CardDetailScreen() {
     () =>
       buildFeatureSprintActionGuide({
         nextActionKind: featureSprintDogfood.nextAction.kind,
+        runnerAgent,
         implementationRunViewed,
         stepOutputSaved: Boolean(currentFeatureStep?.outputSummary?.trim()),
         reviewOutputReady: Boolean(
@@ -585,6 +606,7 @@ export default function CardDetailScreen() {
       }),
     [
       featureSprintDogfood.nextAction.kind,
+      runnerAgent,
       implementationRunViewed,
       currentFeatureStep?.outputSummary,
       currentFeatureStep?.reviewStatus,
@@ -769,6 +791,7 @@ export default function CardDetailScreen() {
     setIsCheckingRunner(true);
     try {
       const health = await checkFeatureSprintRunnerHealth();
+      setRunnerHealthProbe(health);
       setRunnerHealth(health.ok ? "available" : "unavailable");
       if (!health.ok) {
         showNotice("warning", health.error ?? "Local runner unavailable.");
@@ -778,11 +801,25 @@ export default function CardDetailScreen() {
     }
   }
 
-  async function handleRunScopingWithCodex() {
+  function ensureRunnerAgentAvailable(): boolean {
+    const guardMessage = guardRunnerAgentAvailability(runnerAgent, runnerHealthProbe);
+    if (guardMessage) {
+      showNotice("warning", guardMessage);
+      return false;
+    }
+    return true;
+  }
+
+  async function handleRunScoping() {
     if (isRunningScoping) {
       return;
     }
 
+    if (!ensureRunnerAgentAvailable()) {
+      return;
+    }
+
+    const profile = buildRunnerProfile(runnerAgent, "scoping");
     const packet = buildScopingPacketForCard();
     if (!packet.ok) {
       showNotice("warning", packet.error);
@@ -791,7 +828,7 @@ export default function CardDetailScreen() {
 
     const project = getProjectForCard(lifeHarnessData, cardId);
     const historyCreate = createFeatureSprintRunnerRun({
-      profile: "codex_scoping",
+      profile,
       cardId,
       repoPath: project?.repoPath
     });
@@ -805,7 +842,7 @@ export default function CardDetailScreen() {
     setIsRunningScoping(true);
     try {
       const result = await runFeatureSprintPacket({
-        profile: "codex_scoping",
+        profile,
         promptMarkdown: packet.markdown,
         cardId,
         repoPath: project?.repoPath
@@ -816,7 +853,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? "Codex scoping run failed.");
+        showNotice("warning", result.error ?? `${runnerAgentLabel(runnerAgent)} scoping run failed.`);
         return;
       }
 
@@ -825,7 +862,11 @@ export default function CardDetailScreen() {
         setSelectedRunnerRunId(historyCreate.runId);
       }
       const preview = result.commandPreview ? ` (${result.commandPreview})` : "";
-      showNotice("success", `Scoping output loaded below. Click Import plan when ready.${preview}`);
+      const fenceNotice = scopingFenceReadinessNotice(result.outputText);
+      showNotice(
+        fenceNotice ? "warning" : "success",
+        `Scoping output loaded below. Click Import plan when ready.${preview}${fenceNotice ? ` ${fenceNotice}` : ""}`
+      );
     } finally {
       setIsRunningScoping(false);
     }
@@ -844,11 +885,16 @@ export default function CardDetailScreen() {
     showNotice("success", "Latest scoping output loaded into Import plan.");
   }
 
-  async function handleRunReviewWithCodex() {
+  async function handleRunReview() {
     if (!activeFeatureSprintPlan || isRunningReview) {
       return;
     }
 
+    if (!ensureRunnerAgentAvailable()) {
+      return;
+    }
+
+    const profile = buildRunnerProfile(runnerAgent, "review");
     const packet = buildFeatureStepReviewPacket(
       lifeHarnessData,
       activeFeatureSprintPlan.id,
@@ -862,7 +908,7 @@ export default function CardDetailScreen() {
 
     const project = getProjectForCard(lifeHarnessData, cardId);
     const historyCreate = createFeatureSprintRunnerRun({
-      profile: "codex_review",
+      profile,
       cardId,
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
@@ -878,7 +924,7 @@ export default function CardDetailScreen() {
     setIsRunningReview(true);
     try {
       const result = await runFeatureSprintPacket({
-        profile: "codex_review",
+        profile,
         promptMarkdown: packet.markdown,
         cardId,
         planId: activeFeatureSprintPlan.id,
@@ -891,7 +937,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? "Codex review run failed.");
+        showNotice("warning", result.error ?? `${runnerAgentLabel(runnerAgent)} review run failed.`);
         return;
       }
 
@@ -900,7 +946,11 @@ export default function CardDetailScreen() {
         setSelectedRunnerRunId(historyCreate.runId);
       }
       const preview = result.commandPreview ? ` (${result.commandPreview})` : "";
-      showNotice("success", `Review output ready. Click Import review verdict.${preview}`);
+      const fenceNotice = reviewFenceReadinessNotice(result.outputText);
+      showNotice(
+        fenceNotice ? "warning" : "success",
+        `Review output ready. Click Import review verdict.${preview}${fenceNotice ? ` ${fenceNotice}` : ""}`
+      );
     } finally {
       setIsRunningReview(false);
     }
@@ -908,6 +958,10 @@ export default function CardDetailScreen() {
 
   async function handleRunImplementationInWorktree() {
     if (!activeFeatureSprintPlan?.currentStepId || isRunningImplementation) {
+      return;
+    }
+
+    if (!ensureRunnerAgentAvailable()) {
       return;
     }
 
@@ -927,8 +981,9 @@ export default function CardDetailScreen() {
       return;
     }
 
+    const profile = buildRunnerProfile(runnerAgent, "implementation");
     const historyCreate = createFeatureSprintRunnerRun({
-      profile: "codex_implementation",
+      profile,
       cardId,
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
@@ -944,7 +999,7 @@ export default function CardDetailScreen() {
     setIsRunningImplementation(true);
     try {
       const result = await runFeatureSprintPacket({
-        profile: "codex_implementation",
+        profile,
         promptMarkdown: packet.markdown,
         cardId,
         planId: activeFeatureSprintPlan.id,
@@ -1250,7 +1305,10 @@ export default function CardDetailScreen() {
               ? () => setFeatureSpecText(card.nextTinyAction)
               : undefined
           }
+          runnerAgent={runnerAgent}
+          onSelectRunnerAgent={setRunnerAgent}
           runnerHealth={runnerHealth}
+          runnerHealthProbe={runnerHealthProbe}
           isCheckingRunner={isCheckingRunner}
           isRunningScoping={isRunningScoping}
           hasProjectMetadata={Boolean(cardProject)}
@@ -1264,7 +1322,7 @@ export default function CardDetailScreen() {
             void copyMarkdownToClipboard(buildScopingPacketForCard, "Scoping packet copied.");
           }}
           onRunScoping={() => {
-            void handleRunScopingWithCodex();
+            void handleRunScoping();
           }}
         />
 
@@ -1325,7 +1383,7 @@ export default function CardDetailScreen() {
               return (
               <View key={run.id} style={{ marginTop: 10 }}>
                 <Text style={styles.bodyText}>
-                  {RUNNER_PROFILE_LABELS[run.profile]} · {run.status} ·{" "}
+                  {formatRunnerProfileLabel(run.profile)} · {run.status} ·{" "}
                   {formatRunnerStartedAt(run.startedAt)}
                   {run.importedAt ? " · Imported" : ""}
                 </Text>
@@ -1345,12 +1403,12 @@ export default function CardDetailScreen() {
                     Changed files: {run.changedFiles.length}
                   </Text>
                 ) : null}
-                {run.profile === "codex_implementation" && run.verificationResults ? (
+                {isImplementationProfile(run.profile) && run.verificationResults ? (
                   <Text style={[styles.helpText, { marginTop: 4 }]}>
                     Verification: {summarizeVerificationResults(run.verificationResults)}
                   </Text>
                 ) : null}
-                {run.profile === "codex_implementation" &&
+                {isImplementationProfile(run.profile) &&
                 run.verificationResults
                   ?.filter((row) => row.status === "failed")
                   .slice(0, 1)
@@ -1407,7 +1465,7 @@ export default function CardDetailScreen() {
                 {runnerOutputView ? (
                   <FeatureRunnerOutputDetails
                     view={runnerOutputView}
-                    profileLabel={RUNNER_PROFILE_LABELS[run.profile]}
+                    profileLabel={formatRunnerProfileLabel(run.profile)}
                     formattedStartedAt={formatRunnerStartedAt(run.startedAt)}
                     canCopy={canCopyTextToClipboard()}
                     onCopyOutput={() => {
@@ -1557,7 +1615,9 @@ export default function CardDetailScreen() {
                 }}
               >
                 <Text style={styles.secondaryActionText}>
-                  {isRunningImplementation ? "Running…" : "Run implementation in worktree"}
+                  {isRunningImplementation
+                    ? "Running…"
+                    : `Run implementation with ${runnerAgentLabel(runnerAgent)}`}
                 </Text>
               </Pressable>
             ) : null}
@@ -1585,11 +1645,11 @@ export default function CardDetailScreen() {
                 style={[styles.secondaryAction, isRunningReview && { opacity: 0.5 }]}
                 disabled={isRunningReview}
                 onPress={() => {
-                  void handleRunReviewWithCodex();
+                  void handleRunReview();
                 }}
               >
                 <Text style={styles.secondaryActionText}>
-                  {isRunningReview ? "Running…" : "Run review with Codex"}
+                  {isRunningReview ? "Running…" : `Run review with ${runnerAgentLabel(runnerAgent)}`}
                 </Text>
               </Pressable>
             ) : null}
@@ -1601,7 +1661,7 @@ export default function CardDetailScreen() {
           title="Current step checklist"
         />
 
-        <Text style={[styles.label, { marginTop: 12 }]}>Import plan (ChatGPT/Codex output)</Text>
+        <Text style={[styles.label, { marginTop: 12 }]}>Import plan (ChatGPT/Codex/Cursor output)</Text>
         {!activeFeatureSprintPlan && latestScopingRun ? (
           <Pressable
             style={[styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }]}
@@ -1737,6 +1797,24 @@ export default function CardDetailScreen() {
           placeholderTextColor={colors.inputPlaceholder}
           multiline
         />
+        <Text style={[styles.label, { marginTop: 12 }]}>Default runner agent</Text>
+        <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+          {(["codex", "cursor"] as const).map((agent) => (
+            <Pressable
+              key={agent}
+              style={[
+                styles.secondaryAction,
+                projectDefaultRunnerAgent === agent && { borderColor: colors.accentPrimary }
+              ]}
+              onPress={() => setProjectDefaultRunnerAgent(agent)}
+            >
+              <Text style={styles.secondaryActionText}>{runnerAgentLabel(agent)}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[styles.helpText, { marginTop: 6 }]}>
+          Saved with project metadata. Start feature uses this as the default runner agent toggle.
+        </Text>
         <Text style={[styles.label, { marginTop: 12 }]}>Notes</Text>
         <TextInput
           style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
@@ -1757,8 +1835,12 @@ export default function CardDetailScreen() {
                 docs: parseListField(docsText),
                 likelyFiles: parseListField(likelyFilesText),
                 verificationCommands: parseListField(verificationCommandsText),
-                notes: projectNotes.trim() || undefined
+                notes: projectNotes.trim() || undefined,
+                defaultRunnerAgent: projectDefaultRunnerAgent
               });
+              if (result.ok) {
+                setRunnerAgent(projectDefaultRunnerAgent);
+              }
               showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save project.");
             }}
           >
@@ -1774,6 +1856,8 @@ export default function CardDetailScreen() {
               setLikelyFilesText("");
               setVerificationCommandsText("");
               setProjectNotes("");
+              setProjectDefaultRunnerAgent("codex");
+              setRunnerAgent("codex");
               showNotice(result.ok ? "success" : "warning", result.message ?? "Could not clear project.");
             }}
           >

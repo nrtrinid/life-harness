@@ -47,7 +47,7 @@ Status rows (plain ready/missing labels):
 ### Step 3 — Scope it
 
 - **Copy scoping packet** when clipboard is available; otherwise helper: *Clipboard copy unavailable in this environment.*
-- **Run scoping with Codex** always shown (disabled while running)
+- **Run scoping with Codex** or **Run scoping with Cursor** always shown (disabled while running; agent picked in step 3)
 - Helper: output fills the Import plan box below; import is still manual
 
 ## Deduped controls

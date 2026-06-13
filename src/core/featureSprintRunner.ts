@@ -1,4 +1,18 @@
-export type FeatureSprintRunnerProfile = "codex_scoping" | "codex_review" | "codex_implementation";
+export type FeatureSprintRunnerProfile =
+  | "codex_scoping"
+  | "codex_review"
+  | "codex_implementation"
+  | "cursor_scoping"
+  | "cursor_review"
+  | "cursor_implementation";
+
+export type FeatureSprintRunnerAgent = "codex" | "cursor";
+
+export function isFeatureSprintRunnerAgent(value: unknown): value is FeatureSprintRunnerAgent {
+  return value === "codex" || value === "cursor";
+}
+
+export type FeatureSprintRunnerPhase = "scoping" | "review" | "implementation";
 
 export type FeatureSprintRunnerStatus = "idle" | "running" | "succeeded" | "failed";
 
@@ -82,7 +96,10 @@ export type FeatureSprintWorktreeCleanupResponse = {
 export const FEATURE_SPRINT_RUNNER_PROFILES: FeatureSprintRunnerProfile[] = [
   "codex_scoping",
   "codex_review",
-  "codex_implementation"
+  "codex_implementation",
+  "cursor_scoping",
+  "cursor_review",
+  "cursor_implementation"
 ];
 
 export const FEATURE_SPRINT_RUNNER_DEFAULT_PORT = 8127;
@@ -103,11 +120,49 @@ function cleanOptional(value: string | undefined): string | undefined {
 }
 
 export function isFeatureSprintRunnerProfile(value: unknown): value is FeatureSprintRunnerProfile {
-  return (
-    value === "codex_scoping" ||
-    value === "codex_review" ||
-    value === "codex_implementation"
-  );
+  return FEATURE_SPRINT_RUNNER_PROFILES.includes(value as FeatureSprintRunnerProfile);
+}
+
+export function resolveProfileProvider(
+  profile: FeatureSprintRunnerProfile
+): FeatureSprintRunnerAgent {
+  return profile.startsWith("cursor_") ? "cursor" : "codex";
+}
+
+export function isImplementationProfile(profile: FeatureSprintRunnerProfile): boolean {
+  return profile === "codex_implementation" || profile === "cursor_implementation";
+}
+
+export function isScopingProfile(profile: FeatureSprintRunnerProfile): boolean {
+  return profile === "codex_scoping" || profile === "cursor_scoping";
+}
+
+export function isReviewProfile(profile: FeatureSprintRunnerProfile): boolean {
+  return profile === "codex_review" || profile === "cursor_review";
+}
+
+export function buildRunnerProfile(
+  agent: FeatureSprintRunnerAgent,
+  phase: FeatureSprintRunnerPhase
+): FeatureSprintRunnerProfile {
+  return `${agent}_${phase}` as FeatureSprintRunnerProfile;
+}
+
+export const FEATURE_SPRINT_RUNNER_PROFILE_LABELS: Record<FeatureSprintRunnerProfile, string> = {
+  codex_scoping: "Codex scoping",
+  codex_review: "Codex review",
+  codex_implementation: "Codex implementation",
+  cursor_scoping: "Cursor scoping",
+  cursor_review: "Cursor review",
+  cursor_implementation: "Cursor implementation"
+};
+
+export function formatRunnerProfileLabel(profile: FeatureSprintRunnerProfile): string {
+  return FEATURE_SPRINT_RUNNER_PROFILE_LABELS[profile];
+}
+
+export function runnerAgentLabel(agent: FeatureSprintRunnerAgent): string {
+  return agent === "cursor" ? "Cursor" : "Codex";
 }
 
 function parseWorktreeRequest(
@@ -369,17 +424,17 @@ export function validateFeatureSprintRunnerRequest(
     runVerification = record.runVerification;
   }
 
-  if (record.profile === "codex_implementation") {
+  if (isImplementationProfile(record.profile)) {
     if (!repoPath) {
-      return { ok: false, error: "codex_implementation requires repoPath." };
+      return { ok: false, error: `${record.profile} requires repoPath.` };
     }
     if (worktree?.enabled !== true) {
-      return { ok: false, error: "codex_implementation requires worktree.enabled === true." };
+      return { ok: false, error: `${record.profile} requires worktree.enabled === true.` };
     }
   } else if (runVerification || verificationParsed.commands.length > 0) {
     return {
       ok: false,
-      error: "verificationCommands and runVerification are only allowed for codex_implementation."
+      error: "verificationCommands and runVerification are only allowed for implementation profiles."
     };
   }
 
@@ -394,7 +449,7 @@ export function validateFeatureSprintRunnerRequest(
     worktree
   };
 
-  if (record.profile === "codex_implementation") {
+  if (isImplementationProfile(record.profile)) {
     if (verificationParsed.commands.length > 0) {
       request.verificationCommands = verificationParsed.commands;
     }

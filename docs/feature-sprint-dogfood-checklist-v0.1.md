@@ -76,12 +76,12 @@ Use the mock runner path for safe loop testing:
 ```text
 1. Start runner: npm run feature-runner
 2. Open card → Start feature panel → Check runner (step 2)
-3. Run scoping with Codex (step 3)
+3. Run scoping with Codex or Cursor (toggle in Start feature step 3)
 4. Import plan
 5. Run implementation in worktree
 6. View details → inspect output / changed files / diff / verification
 7. Save agent output
-8. Run review with Codex
+8. Run review with the selected runner agent
 9. Import verdict
 10. Advance step
 11. Mark feature complete
@@ -90,22 +90,42 @@ Use the mock runner path for safe loop testing:
 
 Every step still requires an explicit user action.
 
+## Cursor mock loop
+
+Same manual gates as above, but pick **Cursor** in Start feature step 3 so runner history uses `cursor_*` profiles:
+
+```text
+1. Start runner: npm run feature-runner
+2. Open card → Start feature → pick Cursor → Check runner
+3. Run scoping with Cursor
+4. Import plan
+5. Run implementation with Cursor
+6. View details → inspect output / changed files / diff / verification
+7. Save agent output
+8. Run review with Cursor
+9. Import verdict
+10. Advance step
+11. Mark feature complete
+12. Clean worktree when done
+```
+
+Every step still requires an explicit user action.
+
 ## What this intentionally does not add
 
-- no new runner profiles
-- no CLI execution surface
-- no Cursor runner
 - no PC/browser automation
-- no commits, merge, push, or cleanup
+- no commits, merge, push, or cleanup from the app
 - no automatic import
 - no automatic save
 - no automatic review
 - no automatic advance
 - no automatic completion
-- no new app data model
+- no new app data model beyond runner profiles
 - no ai-gateway changes
 - no Raw Lab changes
 - no Project Hub
+
+Cursor and Codex runner profiles are supported via the local runner — pick **Codex** or **Cursor** in the Start feature panel. See [feature-sprint-cursor-runner-v0.1.md](./feature-sprint-cursor-runner-v0.1.md).
 
 ## Future path
 

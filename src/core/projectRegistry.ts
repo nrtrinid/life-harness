@@ -2,6 +2,9 @@ import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
 import type { HarnessProject } from "./types";
 
+import type { FeatureSprintRunnerAgent } from "./featureSprintRunner";
+import { isFeatureSprintRunnerAgent } from "./featureSprintRunner";
+
 export type HarnessProjectUpsertInput = {
   cardId: string;
   name?: string;
@@ -11,6 +14,7 @@ export type HarnessProjectUpsertInput = {
   likelyFiles?: string[];
   verificationCommands?: string[];
   notes?: string;
+  defaultRunnerAgent?: FeatureSprintRunnerAgent;
 };
 
 export type CardProjectContextSummary = {
@@ -23,6 +27,7 @@ export type CardProjectContextSummary = {
   likelyFiles: string[];
   verificationCommands: string[];
   notes?: string;
+  defaultRunnerAgent?: FeatureSprintRunnerAgent;
 };
 
 export function parseListField(text: string): string[] {
@@ -71,7 +76,8 @@ export function buildProjectContextForCard(
     docs: project.docs ?? [],
     likelyFiles: project.likelyFiles ?? [],
     verificationCommands: project.verificationCommands ?? [],
-    notes: project.notes
+    notes: project.notes,
+    defaultRunnerAgent: project.defaultRunnerAgent
   };
 }
 
@@ -96,6 +102,12 @@ export function upsertProjectForCard(
     likelyFiles: cleanStringList(input.likelyFiles),
     verificationCommands: cleanStringList(input.verificationCommands),
     notes: cleanOptional(input.notes),
+    defaultRunnerAgent:
+      input.defaultRunnerAgent !== undefined
+        ? isFeatureSprintRunnerAgent(input.defaultRunnerAgent)
+          ? input.defaultRunnerAgent
+          : existing?.defaultRunnerAgent
+        : existing?.defaultRunnerAgent,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
   };

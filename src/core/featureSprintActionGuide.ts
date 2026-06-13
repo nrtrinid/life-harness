@@ -1,4 +1,5 @@
 import type { FeatureSprintDogfoodNextActionKind } from "./featureSprintDogfood";
+import { runnerAgentLabel, type FeatureSprintRunnerAgent } from "./featureSprintRunner";
 
 export type FeatureSprintActionGuideStepStatus = "done" | "current" | "upcoming";
 
@@ -10,6 +11,7 @@ export type FeatureSprintActionGuideStep = {
 
 export type FeatureSprintActionGuideInput = {
   nextActionKind: FeatureSprintDogfoodNextActionKind;
+  runnerAgent?: FeatureSprintRunnerAgent;
   implementationRunViewed: boolean;
   stepOutputSaved: boolean;
   reviewOutputReady: boolean;
@@ -40,7 +42,12 @@ function markCurrent(steps: FeatureSprintActionGuideStep[]): FeatureSprintAction
   });
 }
 
+function resolveRunnerAgent(input: FeatureSprintActionGuideInput): FeatureSprintRunnerAgent {
+  return input.runnerAgent ?? "codex";
+}
+
 function implementationLoopSteps(input: FeatureSprintActionGuideInput): FeatureSprintActionGuideStep[] {
+  const agentLabel = runnerAgentLabel(resolveRunnerAgent(input));
   const steps: FeatureSprintActionGuideStep[] = [
     step(
       "view_details",
@@ -54,7 +61,7 @@ function implementationLoopSteps(input: FeatureSprintActionGuideInput): FeatureS
     ),
     step(
       "run_review",
-      "Run review with Codex",
+      `Run review with ${agentLabel}`,
       input.reviewOutputReady || input.reviewVerdictImported ? "done" : input.stepOutputSaved ? "current" : "upcoming"
     ),
     step(
@@ -75,6 +82,8 @@ function implementationLoopSteps(input: FeatureSprintActionGuideInput): FeatureS
 export function buildFeatureSprintActionGuide(
   input: FeatureSprintActionGuideInput
 ): FeatureSprintActionGuideStep[] {
+  const agentLabel = runnerAgentLabel(resolveRunnerAgent(input));
+
   switch (input.nextActionKind) {
     case "add_project_metadata":
       return markCurrent([
@@ -91,7 +100,11 @@ export function buildFeatureSprintActionGuide(
     case "run_scoping":
       return markCurrent([
         step("rough_spec", "Paste a rough spec in Start feature (optional)", "current"),
-        step("run_scoping", "Run scoping with Codex or copy scoping packet", "upcoming"),
+        step(
+          "run_scoping",
+          `Run scoping with ${agentLabel} or copy scoping packet`,
+          "upcoming"
+        ),
         step("import_plan", "Import plan", "upcoming")
       ]);
     case "import_plan":
@@ -107,7 +120,7 @@ export function buildFeatureSprintActionGuide(
       ]);
     case "run_implementation":
       return markCurrent([
-        step("run_implementation", "Run implementation in worktree", "current"),
+        step("run_implementation", `Run implementation with ${agentLabel}`, "current"),
         ...implementationLoopSteps({
           ...input,
           implementationRunViewed: false,

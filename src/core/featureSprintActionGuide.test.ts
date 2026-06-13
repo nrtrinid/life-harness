@@ -24,6 +24,21 @@ describe("buildFeatureSprintActionGuide", () => {
     });
   });
 
+  it("guides post-implementation save flow with cursor agent labels", () => {
+    const steps = buildFeatureSprintActionGuide({
+      nextActionKind: "save_agent_output",
+      runnerAgent: "cursor",
+      implementationRunViewed: false,
+      stepOutputSaved: false,
+      reviewOutputReady: false,
+      reviewVerdictImported: false,
+      scopingOutputReady: false,
+      planImportTextReady: false
+    });
+
+    expect(steps.find((item) => item.id === "run_review")?.label).toBe("Run review with Cursor");
+  });
+
   it("guides post-implementation save flow", () => {
     const steps = buildFeatureSprintActionGuide({
       nextActionKind: "save_agent_output",

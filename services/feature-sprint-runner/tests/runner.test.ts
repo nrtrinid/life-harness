@@ -155,6 +155,7 @@ describe("feature-sprint-runner", () => {
     delete process.env.FEATURE_SPRINT_RUNNER_MODE;
     delete process.env.FEATURE_SPRINT_RUNNER_ENABLE_CODEX;
     delete process.env.FEATURE_SPRINT_RUNNER_ENABLE_IMPLEMENTATION;
+    delete process.env.FEATURE_SPRINT_RUNNER_ENABLE_CURSOR;
     delete process.env.FEATURE_SPRINT_RUNNER_TOKEN;
 
     tempWorktreeRoot = await mkdtemp(path.join(os.tmpdir(), "feature-runner-worktrees-"));
@@ -326,7 +327,7 @@ describe("feature-sprint-runner", () => {
 
     expect(result.statusCode).toBe(400);
     expect(result.body).toMatchObject({
-      error: expect.stringContaining("codex_implementation")
+      error: expect.stringContaining("implementation profiles")
     });
   });
 
@@ -370,6 +371,96 @@ describe("feature-sprint-runner", () => {
       promptMarkdown: "nope"
     });
     expect(result.statusCode).toBe(400);
+  });
+
+  it("returns mock scoping fence for cursor_scoping", async () => {
+    const result = await postRun(port, {
+      profile: "cursor_scoping",
+      promptMarkdown: "Scope this feature sprint."
+    });
+    expect(result.statusCode).toBe(200);
+    if ("outputText" in result.body && result.body.outputText) {
+      expect(parseFeatureSprintPlanBlock(result.body.outputText)?.title).toBeTruthy();
+    }
+  });
+
+  it("returns mock review fence for cursor_review", async () => {
+    const result = await postRun(port, {
+      profile: "cursor_review",
+      promptMarkdown: "Review this output."
+    });
+    expect(result.statusCode).toBe(200);
+    if ("outputText" in result.body && result.body.outputText) {
+      expect(parseFeatureReviewVerdictBlock(result.body.outputText)?.status).toBe("accepted");
+    }
+  });
+
+  it("returns mock implementation output for cursor_implementation", async () => {
+    const result = await postRun(port, {
+      profile: "cursor_implementation",
+      promptMarkdown: "Implement this bounded slice.",
+      cardId: "card-build-test",
+      repoPath: tempRepoPath,
+      worktree: { enabled: true }
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({
+      ok: true,
+      profile: "cursor_implementation"
+    });
+  });
+
+  it("rejects MODE=cursor without ENABLE_CURSOR=1", async () => {
+    process.env.FEATURE_SPRINT_RUNNER_MODE = "cursor";
+
+    const result = await postRun(port, {
+      profile: "cursor_scoping",
+      promptMarkdown: "Scope packet"
+    });
+    expect(result.statusCode).toBe(403);
+    expect(result.body).toMatchObject({
+      error: expect.stringContaining("FEATURE_SPRINT_RUNNER_ENABLE_CURSOR=1")
+    });
+  });
+
+  it("rejects codex profile when MODE=cursor", async () => {
+    process.env.FEATURE_SPRINT_RUNNER_MODE = "cursor";
+    process.env.FEATURE_SPRINT_RUNNER_ENABLE_CURSOR = "1";
+    process.env.FEATURE_SPRINT_RUNNER_TOKEN = "secret-token";
+    process.env.CURSOR_API_KEY = "cursor-key";
+
+    const result = await postRun(
+      port,
+      {
+        profile: "codex_scoping",
+        promptMarkdown: "Scope packet"
+      },
+      { Authorization: "Bearer secret-token" }
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(result.body).toMatchObject({
+      error: expect.stringContaining("FEATURE_SPRINT_RUNNER_MODE=codex or real")
+    });
+  });
+
+  it("allows codex profile when MODE=real and codex enabled", async () => {
+    process.env.FEATURE_SPRINT_RUNNER_MODE = "real";
+    process.env.FEATURE_SPRINT_RUNNER_ENABLE_CODEX = "1";
+    process.env.FEATURE_SPRINT_RUNNER_TOKEN = "secret-token";
+
+    const result = await postRun(
+      port,
+      {
+        profile: "codex_scoping",
+        promptMarkdown: "Scope packet"
+      },
+      { Authorization: "Bearer secret-token" }
+    );
+
+    expect(result.statusCode).toBe(500);
+    expect(result.body).toMatchObject({ ok: false, profile: "codex_scoping" });
   });
 
   it("rejects MODE=codex without ENABLE_CODEX=1", async () => {

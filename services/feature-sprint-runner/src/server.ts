@@ -11,7 +11,12 @@ import {
   type FeatureSprintRunnerResponse
 } from "../../../src/core/featureSprintRunner";
 import { isAuthorizedRequest } from "./auth";
-import { resolveRunnerMode, runFeatureSprintPacketOnRunner } from "./runCodex";
+import {
+  assertRealRunAllowed,
+  resolveProviderAvailability,
+  resolveRunnerMode,
+  runFeatureSprintPacketOnRunner
+} from "./runPacket";
 import { cleanupFeatureSprintWorktree } from "./worktreeCleanup";
 
 export const RUNNER_HOST = "127.0.0.1";
@@ -47,20 +52,53 @@ function readJsonBody(request: http.IncomingMessage): Promise<unknown> {
   });
 }
 
-function assertCodexModeAllowed(): string | undefined {
-  if (resolveRunnerMode() !== "codex") {
-    return undefined;
+function resolveHealthStatus(): {
+  ok: boolean;
+  mode: ReturnType<typeof resolveRunnerMode>;
+  codexAvailable: boolean;
+  cursorAvailable: boolean;
+  error?: string;
+} {
+  const mode = resolveRunnerMode();
+  const { codexAvailable, cursorAvailable } = resolveProviderAvailability();
+
+  if (mode === "mock") {
+    return { ok: true, mode, codexAvailable, cursorAvailable };
   }
 
-  if (process.env.FEATURE_SPRINT_RUNNER_ENABLE_CODEX !== "1") {
-    return "Real Codex mode requires FEATURE_SPRINT_RUNNER_ENABLE_CODEX=1.";
+  if (mode === "codex" && !codexAvailable) {
+    return {
+      ok: false,
+      mode,
+      codexAvailable,
+      cursorAvailable,
+      error: "Real Codex mode requires FEATURE_SPRINT_RUNNER_ENABLE_CODEX=1 and FEATURE_SPRINT_RUNNER_TOKEN."
+    };
   }
 
-  if (!process.env.FEATURE_SPRINT_RUNNER_TOKEN?.trim()) {
-    return "Real Codex mode requires FEATURE_SPRINT_RUNNER_TOKEN.";
+  if (mode === "cursor" && !cursorAvailable) {
+    return {
+      ok: false,
+      mode,
+      codexAvailable,
+      cursorAvailable,
+      error:
+        "Real Cursor mode requires FEATURE_SPRINT_RUNNER_ENABLE_CURSOR=1, FEATURE_SPRINT_RUNNER_TOKEN, and CURSOR_API_KEY."
+    };
   }
 
-  return undefined;
+  if (mode === "real" && !codexAvailable && !cursorAvailable) {
+    return {
+      ok: false,
+      mode,
+      codexAvailable,
+      cursorAvailable,
+      error:
+        "Real mode requires at least one enabled provider (Codex and/or Cursor env flags, token, and CURSOR_API_KEY for Cursor)."
+    };
+  }
+
+  return { ok: true, mode, codexAvailable, cursorAvailable };
 }
 
 export function createServer() {
@@ -81,13 +119,8 @@ export function createServer() {
     }
 
     if (request.method === "GET" && request.url === "/health") {
-      const codexGate = assertCodexModeAllowed();
-      sendJson(response, codexGate ? 503 : 200, {
-        ok: !codexGate,
-        mode: resolveRunnerMode(),
-        port: RUNNER_PORT,
-        error: codexGate
-      });
+      const health = resolveHealthStatus();
+      sendJson(response, health.ok ? 200 : 503, health);
       return;
     }
 
@@ -100,9 +133,9 @@ export function createServer() {
           return;
         }
 
-        const codexGate = assertCodexModeAllowed();
-        if (codexGate) {
-          sendJson(response, 403, { error: codexGate } satisfies ErrorResponseBody);
+        const runGate = assertRealRunAllowed(validated.request.profile);
+        if (runGate) {
+          sendJson(response, 403, { error: runGate } satisfies ErrorResponseBody);
           return;
         }
 

@@ -19,7 +19,7 @@ Run → View details → inspect → save → review → advance → complete �
 ## Mental model
 
 ```text
-Runner fills textareas.
+Runner fills textareas for Codex or Cursor (toggle in Start feature).
 You still import, save, and advance manually.
 Feature Sprints Workbench is a dashboard.
 Card Backroom is the control surface.
@@ -31,7 +31,7 @@ Use the [Start feature panel](./start-feature-flow-v0.2.md):
 
 1. **Describe the feature** — optional rough spec (local only)
 2. **Check setup** — project metadata, repo path, runner
-3. **Scope it** — copy scoping packet or run scoping with Codex
+3. **Scope it** — copy scoping packet or run scoping with Codex/Cursor (pick agent in Start feature panel)
 4. **Import plan** — inspect output, then click Import plan manually
 
 ## After you import a plan

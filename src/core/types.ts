@@ -1,4 +1,5 @@
 import type {
+  FeatureSprintRunnerAgent,
   FeatureSprintRunnerProfile,
   FeatureSprintVerificationResult,
   FeatureSprintWorktreeCleanupStatus
@@ -340,6 +341,7 @@ export interface HarnessProject {
   likelyFiles?: string[];
   verificationCommands?: string[];
   notes?: string;
+  defaultRunnerAgent?: FeatureSprintRunnerAgent;
   createdAt: string;
   updatedAt: string;
 }

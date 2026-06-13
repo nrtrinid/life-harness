@@ -1,6 +1,7 @@
 import {
   FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX,
   isDiffTextTruncated,
+  isImplementationProfile,
   summarizeVerificationResults,
   type FeatureSprintRunnerProfile
 } from "./featureSprintRunner";
@@ -71,7 +72,7 @@ function buildSafetyNotes(
   profile: FeatureSprintRunnerProfile,
   cleanedAt?: string
 ): string[] {
-  if (profile === "codex_implementation") {
+  if (isImplementationProfile(profile)) {
     const notes = [
       "This run used an isolated worktree.",
       "No commit, merge, or push is performed by Life Harness.",
@@ -135,7 +136,7 @@ function mapRun(run: HarnessFeatureSprintRunnerRun): FeatureSprintRunnerOutputVi
     worktreeCleanupStatus: run.worktreeCleanupStatus,
     worktreeCleanupMessage: run.worktreeCleanupMessage,
     canCleanWorktree:
-      run.profile === "codex_implementation" &&
+      isImplementationProfile(run.profile) &&
       Boolean(run.worktreePath?.trim()) &&
       !run.worktreeCleanedAt,
     safetyNotes: buildSafetyNotes(run.profile, run.worktreeCleanedAt)

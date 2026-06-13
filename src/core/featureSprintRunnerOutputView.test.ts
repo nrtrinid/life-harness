@@ -348,4 +348,30 @@ describe("buildFeatureSprintRunnerOutputView", () => {
     expect(view?.worktreeCleanedAt).toBeUndefined();
     expect(view?.canCleanWorktree).toBe(true);
   });
+
+  it("allows worktree cleanup for cursor_implementation runs", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "cursor_implementation",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "cursor_implementation",
+      outputText: "Done.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      worktreePath: "/tmp/worktree-cursor"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(completed.state, created.runId);
+    expect(view?.canCleanWorktree).toBe(true);
+    expect(view?.safetyNotes.some((note) => note.includes("isolated worktree"))).toBe(true);
+  });
 });

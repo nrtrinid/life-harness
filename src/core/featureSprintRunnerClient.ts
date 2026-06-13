@@ -13,6 +13,19 @@ import {
   validateFeatureSprintRunnerRequest,
   validateFeatureSprintWorktreeCleanupRequest
 } from "./featureSprintRunner";
+import {
+  parseFeatureSprintRunnerHealthBody,
+  type FeatureSprintRunnerHealthProbe
+} from "./featureSprintRunnerHealth";
+
+export type { FeatureSprintRunnerHealthProbe } from "./featureSprintRunnerHealth";
+export {
+  buildRunnerAgentUnavailableHint,
+  formatRunnerHealthCapabilityLine,
+  guardRunnerAgentAvailability,
+  isRunnerAgentAvailable,
+  parseFeatureSprintRunnerHealthBody
+} from "./featureSprintRunnerHealth";
 
 export {
   composeImplementationRunnerOutputSummary,
@@ -101,7 +114,7 @@ function buildFailureResponse(
 
 export async function checkFeatureSprintRunnerHealth(
   baseUrl?: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<FeatureSprintRunnerHealthProbe> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS);
 
@@ -112,11 +125,18 @@ export async function checkFeatureSprintRunnerHealth(
       signal: controller.signal
     });
 
+    const body = await response.json().catch(() => null);
+    const parsed = parseFeatureSprintRunnerHealthBody(body);
+
     if (!response.ok) {
-      return { ok: false, error: FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE };
+      return {
+        ...parsed,
+        ok: false,
+        error: parsed.error ?? FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE
+      };
     }
 
-    return { ok: true };
+    return parsed;
   } catch {
     return { ok: false, error: FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE };
   } finally {

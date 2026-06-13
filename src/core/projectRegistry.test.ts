@@ -107,6 +107,24 @@ describe("projectRegistry", () => {
     expect(second?.likelyFiles).toBeUndefined();
   });
 
+  it("persists defaultRunnerAgent on project metadata", () => {
+    const card = fixtureCard();
+    const data = baseData({ cards: [card] });
+
+    const created = upsertProjectForCard(data, {
+      cardId: card.id,
+      defaultRunnerAgent: "cursor"
+    });
+
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    expect(getProjectForCard(created.state, card.id)?.defaultRunnerAgent).toBe("cursor");
+    expect(buildProjectContextForCard(created.state, card.id)?.defaultRunnerAgent).toBe("cursor");
+  });
+
   it("deletes the project for a card", () => {
     const card = fixtureCard();
     const created = upsertProjectForCard(baseData({ cards: [card] }), {

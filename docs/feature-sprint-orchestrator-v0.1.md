@@ -123,7 +123,6 @@ Feature Sprint UI is **Backroom-only** — not shown in Act mode.
 
 ## Intentionally not added (v0.1)
 
-- Codex/Cursor CLI runner
 - PC/browser automation
 - ChatGPT web control
 - Parallel agent execution
@@ -135,9 +134,11 @@ Feature Sprint UI is **Backroom-only** — not shown in Act mode.
 - Agent Workbench feature-step display (deferred)
 - Next Move feature-sprint collector (deferred)
 
+Local runner profiles (Codex and Cursor CLI) ship separately — see [feature-sprint-local-runner-v0.1.md](./feature-sprint-local-runner-v0.1.md) and [feature-sprint-cursor-runner-v0.1.md](./feature-sprint-cursor-runner-v0.1.md).
+
 ## Future path
 
-- Codex CLI / Cursor CLI runner with stdout/diff/test capture
+- Streaming partial runner output to UI
 - Worktree/branch isolation per slice
 - `Copy implementation prompt + log sent` if trivial atop agent session helpers
 - Feature-step Next Move collector

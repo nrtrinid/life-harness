@@ -1,7 +1,17 @@
 import { shouldIncludeCard } from "./contextPacketRedaction";
 import { getActiveFeatureSprintPlanForCard } from "./featureSprintOrchestrator";
 import { getFeatureSprintRunnerRunsForCard } from "./featureSprintRunnerHistory";
-import type { FeatureSprintRunnerProfile } from "./featureSprintRunner";
+import type { FeatureSprintRunnerHealthProbe } from "./featureSprintRunnerHealth";
+import { formatRunnerHealthCapabilityLine } from "./featureSprintRunnerHealth";
+import type { FeatureSprintRunnerPhase } from "./featureSprintRunner";
+import {
+  isImplementationProfile,
+  isReviewProfile,
+  isScopingProfile,
+  runnerAgentLabel,
+  type FeatureSprintRunnerAgent,
+  type FeatureSprintRunnerProfile
+} from "./featureSprintRunner";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { getProjectForCard } from "./projectRegistry";
 import type {
@@ -70,6 +80,8 @@ type BuildContext = {
   plan?: HarnessFeatureSprintPlan;
   step?: HarnessFeatureSprintStep;
   runnerHealth: RunnerHealth;
+  runnerHealthProbe?: FeatureSprintRunnerHealthProbe;
+  runnerAgent: FeatureSprintRunnerAgent;
   latestScopingRun?: HarnessFeatureSprintRunnerRun;
   latestImplementationRun?: HarnessFeatureSprintRunnerRun;
   latestReviewRun?: HarnessFeatureSprintRunnerRun;
@@ -119,13 +131,23 @@ function getLatestFeatureSprintPlanForCard(
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
 }
 
-function latestRun(
+function matchesRunnerPhase(profile: FeatureSprintRunnerProfile, phase: FeatureSprintRunnerPhase): boolean {
+  if (phase === "scoping") {
+    return isScopingProfile(profile);
+  }
+  if (phase === "review") {
+    return isReviewProfile(profile);
+  }
+  return isImplementationProfile(profile);
+}
+
+function latestRunForPhase(
   runs: HarnessFeatureSprintRunnerRun[],
-  profile: FeatureSprintRunnerProfile,
+  phase: FeatureSprintRunnerPhase,
   options: { planId?: string; stepId?: string } = {}
 ): HarnessFeatureSprintRunnerRun | undefined {
   return runs.find((run) => {
-    if (run.profile !== profile) {
+    if (!matchesRunnerPhase(run.profile, phase)) {
       return false;
     }
     if (options.planId !== undefined && run.planId !== options.planId) {
@@ -206,9 +228,12 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
     status: runnerHealth === "available" ? "ready" : "warning",
     detail:
       runnerHealth === "available"
-        ? "Runner was checked and is available."
+        ? context.runnerHealthProbe
+          ? `Runner checked: ${formatRunnerHealthCapabilityLine(context.runnerHealthProbe)}`
+          : "Runner was checked and is available."
         : runnerHealth === "unavailable"
-          ? "Runner is unavailable. Start npm run feature-runner and check again, or copy packets manually."
+          ? context.runnerHealthProbe?.error ??
+            "Runner is unavailable. Start npm run feature-runner and check again, or copy packets manually."
           : "Runner has not been checked in this session."
   });
 
@@ -331,6 +356,7 @@ function blockedBySetup(context: BuildContext): boolean {
 
 function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction {
   const { data, cardId, plan, step, runnerHealth } = context;
+  const agentLabel = runnerAgentLabel(context.runnerAgent);
   const project = getProjectForCard(data, cardId);
   const repoPath = cleanOptional(project?.repoPath);
 
@@ -374,7 +400,7 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
       kind: "run_scoping",
       label: "Run scoping",
       detail:
-        "Use the Start feature panel: paste a rough spec if helpful, then run scoping with Codex or copy the scoping packet."
+        "Use the Start feature panel: paste a rough spec if helpful, then run scoping with the selected runner agent or copy the scoping packet."
     };
   }
 
@@ -399,7 +425,7 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
     return {
       kind: "run_implementation",
       label: "Run implementation in worktree",
-      detail: "Use Run implementation in worktree below, or copy the implementation prompt for manual agent work."
+      detail: `Use Run implementation with ${agentLabel} below, or copy the implementation prompt for manual agent work.`
     };
   }
 
@@ -415,7 +441,7 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
     return {
       kind: "run_review",
       label: "Run review",
-      detail: "Use Run review with Codex below, or copy the review packet for manual review."
+      detail: `Use Run review with ${agentLabel} below, or copy the review packet for manual review.`
     };
   }
 
@@ -469,6 +495,8 @@ export function buildFeatureSprintDogfoodSummary(
   cardId: string,
   options: {
     runnerHealth?: RunnerHealth;
+    runnerHealthProbe?: FeatureSprintRunnerHealthProbe;
+    runnerAgent?: FeatureSprintRunnerAgent;
     now?: Date;
   } = {}
 ): FeatureSprintDogfoodSummary {
@@ -496,9 +524,11 @@ export function buildFeatureSprintDogfoodSummary(
     plan,
     step,
     runnerHealth: options.runnerHealth ?? "unknown",
-    latestScopingRun: latestRun(recentRuns, "codex_scoping"),
-    latestImplementationRun: latestRun(recentRuns, "codex_implementation", runScope),
-    latestReviewRun: latestRun(recentRuns, "codex_review", runScope)
+    runnerHealthProbe: options.runnerHealthProbe,
+    runnerAgent: options.runnerAgent ?? "codex",
+    latestScopingRun: latestRunForPhase(recentRuns, "scoping"),
+    latestImplementationRun: latestRunForPhase(recentRuns, "implementation", runScope),
+    latestReviewRun: latestRunForPhase(recentRuns, "review", runScope)
   };
 
   const checks = buildChecks(context);

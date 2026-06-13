@@ -95,4 +95,4 @@ Inspect runner output, diff, and verification in Backroom via [feature-runner-ou
 - Automatic review packet from diff/output
 - Commit approval gate before advance
 - Worktree cleanup UI
-- Cursor runner
+- Cursor runner — see [feature-sprint-cursor-runner-v0.1.md](./feature-sprint-cursor-runner-v0.1.md)

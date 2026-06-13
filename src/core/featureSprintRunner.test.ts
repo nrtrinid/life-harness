@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildRunnerProfile,
   capDiffText,
   capVerificationResults,
   composeImplementationRunnerOutputSummary,
@@ -9,6 +10,7 @@ import {
   FEATURE_SPRINT_RUNNER_MAX_PROMPT_CHARS,
   FEATURE_SPRINT_VERIFY_MAX_COMMANDS,
   isDiffTextTruncated,
+  resolveProfileProvider,
   summarizeVerificationResults,
   validateFeatureSprintRunnerRequest,
   validateFeatureSprintWorktreeCleanupRequest
@@ -39,6 +41,19 @@ describe("featureSprintRunner validation", () => {
       promptMarkdown: "hello"
     });
     expect(result.ok).toBe(false);
+  });
+
+  it("accepts cursor_implementation with repoPath and worktree enabled", () => {
+    const result = validateFeatureSprintRunnerRequest({
+      profile: "cursor_implementation",
+      promptMarkdown: "implement slice",
+      repoPath: "C:/repo/life-harness",
+      worktree: { enabled: true }
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.request.profile).toBe("cursor_implementation");
+    }
   });
 
   it("accepts codex_implementation with repoPath and worktree enabled", () => {
@@ -157,7 +172,12 @@ describe("featureSprintRunner validation", () => {
   });
 
   it("rejects verification fields on scoping and review profiles", () => {
-    for (const profile of ["codex_scoping", "codex_review"] as const) {
+    for (const profile of [
+      "codex_scoping",
+      "codex_review",
+      "cursor_scoping",
+      "cursor_review"
+    ] as const) {
       const withCommands = validateFeatureSprintRunnerRequest({
         profile,
         promptMarkdown: "packet",
@@ -266,6 +286,16 @@ describe("featureSprintRunner validation", () => {
     ]);
     expect(capped?.[0]?.stdoutExcerpt?.length).toBeLessThanOrEqual(12_000);
   });
+
+  it("buildRunnerProfile maps agent and phase", () => {
+    expect(buildRunnerProfile("cursor", "scoping")).toBe("cursor_scoping");
+    expect(buildRunnerProfile("codex", "implementation")).toBe("codex_implementation");
+  });
+
+  it("resolveProfileProvider returns agent from profile", () => {
+    expect(resolveProfileProvider("cursor_review")).toBe("cursor");
+    expect(resolveProfileProvider("codex_scoping")).toBe("codex");
+  });
 });
 
 describe("featureSprintRunnerClient", () => {
@@ -275,17 +305,22 @@ describe("featureSprintRunnerClient", () => {
   });
 
   it("checks runner health via /health", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
         ok: true,
-        status: 200
+        mode: "mock",
+        codexAvailable: true,
+        cursorAvailable: true
       })
-    );
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
     const healthy = await checkFeatureSprintRunnerHealth();
     expect(healthy.ok).toBe(true);
-    expect(fetch).toHaveBeenCalledWith(
+    expect(healthy.mode).toBe("mock");
+    expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:8127/health",
       expect.objectContaining({ method: "GET" })
     );
@@ -297,6 +332,30 @@ describe("featureSprintRunnerClient", () => {
     const unhealthy = await checkFeatureSprintRunnerHealth();
     expect(unhealthy.ok).toBe(false);
     expect(unhealthy.error).toBe(FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE);
+  });
+
+  it("parses health probe capabilities from runner", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          mode: "real",
+          codexAvailable: true,
+          cursorAvailable: false
+        })
+      })
+    );
+
+    const result = await checkFeatureSprintRunnerHealth();
+    expect(result).toEqual({
+      ok: true,
+      mode: "real",
+      codexAvailable: true,
+      cursorAvailable: false
+    });
   });
 
   it("sends Authorization header when token env is set", async () => {

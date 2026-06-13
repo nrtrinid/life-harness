@@ -193,6 +193,28 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     expect(summary.checks.find((check) => check.id === "runner_health")?.status).toBe("warning");
   });
 
+  it("uses cursor agent in run_review next action detail", () => {
+    const data = baseData({
+      featureSprintPlans: [
+        fixturePlan({
+          steps: [
+            {
+              ...fixtureStep(),
+              outputSummary: "Implemented slice.",
+              reviewStatus: undefined
+            }
+          ]
+        })
+      ]
+    });
+    const summary = buildFeatureSprintDogfoodSummary(data, CARD_ID, {
+      runnerHealth: "available",
+      runnerAgent: "cursor"
+    });
+    expect(summary.nextAction.kind).toBe("run_review");
+    expect(summary.nextAction.detail).toContain("Cursor");
+  });
+
   it("points project-backed cards with available runner and no plan to run_scoping", () => {
     expect(nextKind(baseData(), "available")).toBe("run_scoping");
   });

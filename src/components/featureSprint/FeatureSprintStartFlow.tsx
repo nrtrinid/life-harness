@@ -1,5 +1,9 @@
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import type { FeatureSprintRunnerAgent } from "../../core/featureSprintRunner";
+import { runnerAgentLabel } from "../../core/featureSprintRunner";
+import type { FeatureSprintRunnerHealthProbe } from "../../core/featureSprintRunnerHealth";
+import { formatRunnerHealthCapabilityLine } from "../../core/featureSprintRunnerHealth";
 import { colors, styles } from "../styles";
 
 export type FeatureSprintStartFlowProps = {
@@ -10,7 +14,10 @@ export type FeatureSprintStartFlowProps = {
   onClearSpec: () => void;
   onUseNextActionAsSpec?: () => void;
 
+  runnerAgent: FeatureSprintRunnerAgent;
+  onSelectRunnerAgent: (agent: FeatureSprintRunnerAgent) => void;
   runnerHealth: "unknown" | "available" | "unavailable";
+  runnerHealthProbe?: FeatureSprintRunnerHealthProbe;
   isCheckingRunner: boolean;
   isRunningScoping: boolean;
 
@@ -24,12 +31,17 @@ export type FeatureSprintStartFlowProps = {
   onRunScoping: () => void;
 };
 
-function runnerStatusLabel(runnerHealth: FeatureSprintStartFlowProps["runnerHealth"]): string {
+function runnerStatusLabel(
+  runnerHealth: FeatureSprintStartFlowProps["runnerHealth"],
+  runnerHealthProbe?: FeatureSprintRunnerHealthProbe
+): string {
   if (runnerHealth === "available") {
-    return "available";
+    return runnerHealthProbe
+      ? formatRunnerHealthCapabilityLine(runnerHealthProbe)
+      : "available";
   }
   if (runnerHealth === "unavailable") {
-    return "unavailable";
+    return runnerHealthProbe?.error ?? "unavailable";
   }
   return "not checked";
 }
@@ -43,6 +55,31 @@ function SetupStatusRow({ label, ready }: { label: string; ready: boolean }) {
   );
 }
 
+function RunnerAgentToggle({
+  runnerAgent,
+  onSelectRunnerAgent
+}: {
+  runnerAgent: FeatureSprintRunnerAgent;
+  onSelectRunnerAgent: (agent: FeatureSprintRunnerAgent) => void;
+}) {
+  return (
+    <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+      {(["codex", "cursor"] as const).map((agent) => (
+        <Pressable
+          key={agent}
+          style={[
+            styles.secondaryAction,
+            runnerAgent === agent && { borderColor: colors.accentPrimary }
+          ]}
+          onPress={() => onSelectRunnerAgent(agent)}
+        >
+          <Text style={styles.secondaryActionText}>{runnerAgentLabel(agent)}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 export function FeatureSprintStartFlow({
   cardTitle,
   nextTinyAction,
@@ -50,7 +87,10 @@ export function FeatureSprintStartFlow({
   onChangeRoughSpec,
   onClearSpec,
   onUseNextActionAsSpec,
+  runnerAgent,
+  onSelectRunnerAgent,
   runnerHealth,
+  runnerHealthProbe,
   isCheckingRunner,
   isRunningScoping,
   hasProjectMetadata,
@@ -78,7 +118,7 @@ export function FeatureSprintStartFlow({
         <Text style={styles.label}>1. Describe the feature</Text>
         <Text style={styles.helpText}>
           Paste the feature idea here. Life Harness will wrap it with card/project context for
-          ChatGPT or Codex.
+          ChatGPT, Codex, or Cursor.
         </Text>
         <Text style={styles.helpText}>
           This rough spec is local only. Import the generated plan to keep it.
@@ -109,7 +149,7 @@ export function FeatureSprintStartFlow({
         <SetupStatusRow label="Repo path" ready={hasRepoPath} />
         <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12, marginTop: 4 }}>
           <Text style={styles.bodyText}>Runner</Text>
-          <Text style={styles.helpText}>{runnerStatusLabel(runnerHealth)}</Text>
+          <Text style={styles.helpText}>{runnerStatusLabel(runnerHealth, runnerHealthProbe)}</Text>
         </View>
         <Text style={[styles.helpText, { marginTop: 6 }]}>
           Missing project metadata does not block scoping, but repo path is needed later for
@@ -130,6 +170,8 @@ export function FeatureSprintStartFlow({
 
       <View style={{ marginTop: 16, gap: 4 }}>
         <Text style={styles.label}>3. Scope it</Text>
+        <Text style={styles.helpText}>Runner agent for scoping, review, and implementation:</Text>
+        <RunnerAgentToggle runnerAgent={runnerAgent} onSelectRunnerAgent={onSelectRunnerAgent} />
         <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
           {canCopyScopingPacket ? (
             <Pressable style={styles.secondaryAction} onPress={onCopyScopingPacket}>
@@ -144,7 +186,7 @@ export function FeatureSprintStartFlow({
             onPress={onRunScoping}
           >
             <Text style={styles.secondaryActionText}>
-              {isRunningScoping ? "Running…" : "Run scoping with Codex"}
+              {isRunningScoping ? "Running…" : `Run scoping with ${runnerAgentLabel(runnerAgent)}`}
             </Text>
           </Pressable>
         </View>
