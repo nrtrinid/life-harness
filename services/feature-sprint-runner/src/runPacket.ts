@@ -12,6 +12,7 @@ import {
   type FeatureSprintRunnerRequest,
   type FeatureSprintRunnerResponse
 } from "../../../src/core/featureSprintRunner";
+import { buildAgentSpawnSpec } from "./agentSpawn";
 import { buildCodexArgs } from "./codexArgs";
 import { buildCursorArgs } from "./cursorArgs";
 import { resolveRunnerToken } from "./auth";
@@ -175,16 +176,17 @@ async function attachImplementationMetadata(
 }
 
 type SpawnAgentArgs =
-  | { ok: true; bin: string; args: string[]; preview: string }
+  | { ok: true; bin: string; args: string[]; preview: string; feedPromptViaStdin?: boolean }
   | { ok: false; error: string };
 
 function buildAgentArgs(
   profile: FeatureSprintRunnerProfile,
-  promptPath: string
+  promptPath: string,
+  workspacePath: string
 ): SpawnAgentArgs {
   const provider = resolveProfileProvider(profile);
   if (provider === "cursor") {
-    const cursorArgs = buildCursorArgs(promptPath);
+    const cursorArgs = buildCursorArgs(promptPath, { workspacePath });
     if (!cursorArgs.ok) {
       return cursorArgs;
     }
@@ -200,7 +202,13 @@ function buildAgentArgs(
   if (!codexArgs.ok) {
     return codexArgs;
   }
-  return codexArgs;
+  return {
+    ok: true,
+    bin: codexArgs.bin,
+    args: codexArgs.args,
+    preview: codexArgs.preview,
+    feedPromptViaStdin: codexArgs.feedPromptViaStdin
+  };
 }
 
 function agentFailureLabel(profile: FeatureSprintRunnerProfile): string {
@@ -218,7 +226,7 @@ async function spawnAgentInWorktree(
 
   try {
     await writeFile(promptPath, request.promptMarkdown, "utf8");
-    const argsResult = buildAgentArgs(request.profile, promptPath);
+    const argsResult = buildAgentArgs(request.profile, promptPath, worktreePath);
     if (!argsResult.ok) {
       return {
         ok: false,
@@ -232,26 +240,56 @@ async function spawnAgentInWorktree(
     const timeoutMs = request.timeoutMs ?? FEATURE_SPRINT_RUNNER_DEFAULT_TIMEOUT_MS;
     const maxOutputChars = resolveMaxOutputChars();
 
+    const spawnSpec = buildAgentSpawnSpec(argsResult.bin, argsResult.args);
+
     const result = await new Promise<{
       exitCode: number | null;
       stdout: string;
       stderr: string;
       timedOut: boolean;
     }>((resolve) => {
-      const child = spawn(argsResult.bin, argsResult.args, {
-        shell: false,
-        cwd: worktreePath,
-        env: process.env
-      });
-
       let stdout = "";
       let stderr = "";
       let killed = false;
+      let child: ReturnType<typeof spawn>;
+
+      try {
+        child = spawn(spawnSpec.file, spawnSpec.args, {
+          shell: false,
+          cwd: worktreePath,
+          env: process.env,
+          stdio: argsResult.feedPromptViaStdin ? ["pipe", "pipe", "pipe"] : undefined
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        resolve({
+          exitCode: 1,
+          stdout: "",
+          stderr: `Failed to spawn ${agentLabel} CLI: ${message}`,
+          timedOut: false
+        });
+        return;
+      }
 
       const timer = setTimeout(() => {
         killed = true;
         child.kill("SIGTERM");
       }, timeoutMs);
+
+      if (argsResult.feedPromptViaStdin) {
+        if (!child.stdin) {
+          clearTimeout(timer);
+          resolve({
+            exitCode: 1,
+            stdout: "",
+            stderr: `Failed to pipe prompt to ${agentLabel} CLI: stdin unavailable.`,
+            timedOut: false
+          });
+          return;
+        }
+        child.stdin.write(request.promptMarkdown, "utf8");
+        child.stdin.end();
+      }
 
       child.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString("utf8");
@@ -272,12 +310,12 @@ async function spawnAgentInWorktree(
         resolve({ exitCode, stdout, stderr, timedOut: killed });
       });
 
-      child.on("error", () => {
+      child.on("error", (error) => {
         clearTimeout(timer);
         resolve({
           exitCode: 1,
           stdout,
-          stderr: `${stderr}\nFailed to spawn ${agentLabel} CLI.`,
+          stderr: `${stderr}\nFailed to spawn ${agentLabel} CLI: ${error.message}`.trim(),
           timedOut: false
         });
       });

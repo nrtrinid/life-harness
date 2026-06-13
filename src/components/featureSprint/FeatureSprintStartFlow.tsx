@@ -4,6 +4,7 @@ import type { FeatureSprintRunnerAgent } from "../../core/featureSprintRunner";
 import { runnerAgentLabel } from "../../core/featureSprintRunner";
 import type { FeatureSprintRunnerHealthProbe } from "../../core/featureSprintRunnerHealth";
 import { formatRunnerHealthCapabilityLine } from "../../core/featureSprintRunnerHealth";
+import type { HarnessFeatureSpecSource } from "../../core/types";
 import { colors, styles } from "../styles";
 
 export type FeatureSprintStartFlowProps = {
@@ -13,6 +14,14 @@ export type FeatureSprintStartFlowProps = {
   onChangeRoughSpec: (value: string) => void;
   onClearSpec: () => void;
   onUseNextActionAsSpec?: () => void;
+
+  featureSpecSource: HarnessFeatureSpecSource;
+  onSelectFeatureSpecSource: (source: HarnessFeatureSpecSource) => void;
+  isFeatureSpecDirty: boolean;
+  isFeatureSpecApproved: boolean;
+  hasPersistedFeatureSpec: boolean;
+  onSaveFeatureSpec: () => void;
+  onApproveFeatureSpec: () => void;
 
   runnerAgent: FeatureSprintRunnerAgent;
   onSelectRunnerAgent: (agent: FeatureSprintRunnerAgent) => void;
@@ -30,6 +39,18 @@ export type FeatureSprintStartFlowProps = {
   onCopyScopingPacket: () => void;
   onRunScoping: () => void;
 };
+
+const FEATURE_SPEC_SOURCES: HarnessFeatureSpecSource[] = ["chatgpt_web", "manual", "other"];
+
+function featureSpecSourceLabel(source: HarnessFeatureSpecSource): string {
+  if (source === "chatgpt_web") {
+    return "ChatGPT web";
+  }
+  if (source === "manual") {
+    return "Manual";
+  }
+  return "Other";
+}
 
 function runnerStatusLabel(
   runnerHealth: FeatureSprintStartFlowProps["runnerHealth"],
@@ -80,6 +101,31 @@ function RunnerAgentToggle({
   );
 }
 
+function FeatureSpecSourceToggle({
+  featureSpecSource,
+  onSelectFeatureSpecSource
+}: {
+  featureSpecSource: HarnessFeatureSpecSource;
+  onSelectFeatureSpecSource: (source: HarnessFeatureSpecSource) => void;
+}) {
+  return (
+    <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+      {FEATURE_SPEC_SOURCES.map((source) => (
+        <Pressable
+          key={source}
+          style={[
+            styles.secondaryAction,
+            featureSpecSource === source && { borderColor: colors.accentPrimary }
+          ]}
+          onPress={() => onSelectFeatureSpecSource(source)}
+        >
+          <Text style={styles.secondaryActionText}>{featureSpecSourceLabel(source)}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 export function FeatureSprintStartFlow({
   cardTitle,
   nextTinyAction,
@@ -87,6 +133,13 @@ export function FeatureSprintStartFlow({
   onChangeRoughSpec,
   onClearSpec,
   onUseNextActionAsSpec,
+  featureSpecSource,
+  onSelectFeatureSpecSource,
+  isFeatureSpecDirty,
+  isFeatureSpecApproved,
+  hasPersistedFeatureSpec,
+  onSaveFeatureSpec,
+  onApproveFeatureSpec,
   runnerAgent,
   onSelectRunnerAgent,
   runnerHealth,
@@ -105,7 +158,8 @@ export function FeatureSprintStartFlow({
     <View style={[styles.cardTile, { marginTop: 12 }]}>
       <Text style={styles.label}>Start feature</Text>
       <Text style={[styles.helpText, { marginTop: 4 }]}>
-        Guided path for {cardTitle}. Paste a spec, check setup, then scope the feature.
+        Guided path for {cardTitle}. Paste a ChatGPT web spec, save and approve it, then scope or
+        import a plan.
       </Text>
 
       {hasActivePlan ? (
@@ -117,21 +171,58 @@ export function FeatureSprintStartFlow({
       <View style={{ marginTop: 12, gap: 4 }}>
         <Text style={styles.label}>1. Describe the feature</Text>
         <Text style={styles.helpText}>
-          Paste the feature idea here. Life Harness will wrap it with card/project context for
-          ChatGPT, Codex, or Cursor.
+          Paste the feature spec from ChatGPT web or another architect session. Save it to the plan
+          before approving.
         </Text>
-        <Text style={styles.helpText}>
-          This rough spec is local only. Import the generated plan to keep it.
-        </Text>
+        <Text style={styles.helpText}>Spec source:</Text>
+        <FeatureSpecSourceToggle
+          featureSpecSource={featureSpecSource}
+          onSelectFeatureSpecSource={onSelectFeatureSpecSource}
+        />
         <TextInput
           style={[styles.captureInput, { minHeight: 88, marginTop: 8, textAlignVertical: "top" }]}
           value={roughSpec}
           onChangeText={onChangeRoughSpec}
-          placeholder="Example: Build a safe worktree cleanup button that removes old runner worktrees after review."
+          placeholder="Paste your ChatGPT web feature spec here."
           placeholderTextColor={colors.inputPlaceholder}
           multiline
         />
+        {isFeatureSpecDirty ? (
+          <Text style={[styles.helpText, { marginTop: 4, color: colors.accentPrimary }]}>
+            Unsaved changes — save the spec before approving.
+          </Text>
+        ) : null}
+        {hasPersistedFeatureSpec && isFeatureSpecApproved ? (
+          <Text style={[styles.helpText, { marginTop: 4, color: colors.accentSuccess }]}>
+            Spec approved and ready for implementation gating.
+          </Text>
+        ) : hasPersistedFeatureSpec ? (
+          <Text style={[styles.helpText, { marginTop: 4 }]}>
+            Spec saved. Approve it before running implementation.
+          </Text>
+        ) : null}
         <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
+          <Pressable
+            style={[
+              styles.secondaryAction,
+              isFeatureSpecDirty && { borderColor: colors.accentPrimary }
+            ]}
+            onPress={onSaveFeatureSpec}
+          >
+            <Text style={styles.secondaryActionText}>Save feature spec</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.secondaryAction,
+              (!hasPersistedFeatureSpec || isFeatureSpecDirty || isFeatureSpecApproved) && {
+                opacity: 0.5
+              }
+            ]}
+            disabled={!hasPersistedFeatureSpec || isFeatureSpecDirty || isFeatureSpecApproved}
+            onPress={onApproveFeatureSpec}
+          >
+            <Text style={styles.secondaryActionText}>Approve feature spec</Text>
+          </Pressable>
           <Pressable style={styles.secondaryAction} onPress={onClearSpec}>
             <Text style={styles.secondaryActionText}>Clear spec</Text>
           </Pressable>

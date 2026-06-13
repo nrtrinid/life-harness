@@ -11,11 +11,30 @@ function resolveCursorOutputFormat(): "text" | "json" {
   return configured === "json" ? "json" : "text";
 }
 
-export function buildCursorArgs(promptFilePath: string): CursorArgsResult {
+export type BuildCursorArgsOptions = {
+  /** Isolated worktree or repo root the agent should treat as workspace. */
+  workspacePath?: string;
+};
+
+export function buildCursorArgs(
+  promptFilePath: string,
+  options?: BuildCursorArgsOptions
+): CursorArgsResult {
   const bin = process.env.FEATURE_SPRINT_CURSOR_BIN?.trim() || "agent";
   const normalizedPath = normalizePromptFilePathForCursor(promptFilePath);
 
-  const args: string[] = ["-p", "--force", "--output-format", resolveCursorOutputFormat()];
+  const args: string[] = [
+    "-p",
+    "--force",
+    "--trust",
+    "--output-format",
+    resolveCursorOutputFormat()
+  ];
+
+  const workspacePath = options?.workspacePath?.trim();
+  if (workspacePath) {
+    args.push("--workspace", normalizePromptFilePathForCursor(workspacePath));
+  }
 
   const model = process.env.FEATURE_SPRINT_CURSOR_MODEL?.trim();
   if (model) {

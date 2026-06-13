@@ -2,6 +2,7 @@ export type FeatureSprintRunnerProfile =
   | "codex_scoping"
   | "codex_review"
   | "codex_implementation"
+  | "codex_prompt_audit"
   | "cursor_scoping"
   | "cursor_review"
   | "cursor_implementation";
@@ -12,7 +13,7 @@ export function isFeatureSprintRunnerAgent(value: unknown): value is FeatureSpri
   return value === "codex" || value === "cursor";
 }
 
-export type FeatureSprintRunnerPhase = "scoping" | "review" | "implementation";
+export type FeatureSprintRunnerPhase = "scoping" | "review" | "implementation" | "prompt_audit";
 
 export type FeatureSprintRunnerStatus = "idle" | "running" | "succeeded" | "failed";
 
@@ -97,6 +98,7 @@ export const FEATURE_SPRINT_RUNNER_PROFILES: FeatureSprintRunnerProfile[] = [
   "codex_scoping",
   "codex_review",
   "codex_implementation",
+  "codex_prompt_audit",
   "cursor_scoping",
   "cursor_review",
   "cursor_implementation"
@@ -141,6 +143,10 @@ export function isReviewProfile(profile: FeatureSprintRunnerProfile): boolean {
   return profile === "codex_review" || profile === "cursor_review";
 }
 
+export function isPromptAuditProfile(profile: FeatureSprintRunnerProfile): boolean {
+  return profile === "codex_prompt_audit";
+}
+
 export function buildRunnerProfile(
   agent: FeatureSprintRunnerAgent,
   phase: FeatureSprintRunnerPhase
@@ -152,6 +158,7 @@ export const FEATURE_SPRINT_RUNNER_PROFILE_LABELS: Record<FeatureSprintRunnerPro
   codex_scoping: "Codex scoping",
   codex_review: "Codex review",
   codex_implementation: "Codex implementation",
+  codex_prompt_audit: "Codex prompt audit",
   cursor_scoping: "Cursor scoping",
   cursor_review: "Cursor review",
   cursor_implementation: "Cursor implementation"

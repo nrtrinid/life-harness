@@ -1,11 +1,19 @@
 import { shouldIncludeCard } from "./contextPacketRedaction";
-import { getActiveFeatureSprintPlanForCard } from "./featureSprintOrchestrator";
+import {
+  getActiveFeatureSprintPlanForCard,
+  hasPersistedFeatureSpec,
+  hasStepPromptAudit,
+  hasStepImplementationProof,
+  hasStepPromptLocalization,
+  isFeatureSpecApproved
+} from "./featureSprintOrchestrator";
 import { getFeatureSprintRunnerRunsForCard } from "./featureSprintRunnerHistory";
 import type { FeatureSprintRunnerHealthProbe } from "./featureSprintRunnerHealth";
 import { formatRunnerHealthCapabilityLine } from "./featureSprintRunnerHealth";
 import type { FeatureSprintRunnerPhase } from "./featureSprintRunner";
 import {
   isImplementationProfile,
+  isPromptAuditProfile,
   isReviewProfile,
   isScopingProfile,
   runnerAgentLabel,
@@ -44,6 +52,7 @@ export type FeatureSprintDogfoodNextAction = {
     | "check_runner"
     | "run_scoping"
     | "import_plan"
+    | "approve_feature_spec"
     | "run_implementation"
     | "save_agent_output"
     | "run_review"
@@ -137,6 +146,9 @@ function matchesRunnerPhase(profile: FeatureSprintRunnerProfile, phase: FeatureS
   }
   if (phase === "review") {
     return isReviewProfile(profile);
+  }
+  if (phase === "prompt_audit") {
+    return isPromptAuditProfile(profile);
   }
   return isImplementationProfile(profile);
 }
@@ -249,6 +261,30 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
   });
 
   checks.push({
+    id: "feature_spec",
+    label: "Persisted feature spec",
+    status: hasPersistedFeatureSpec(plan) ? "ready" : "missing",
+    detail: hasPersistedFeatureSpec(plan)
+      ? `Spec saved (${plan?.featureSpec?.source ?? "manual"}).`
+      : "Save a ChatGPT web spec on the plan before approving."
+  });
+
+  checks.push({
+    id: "feature_spec_approval",
+    label: "Feature spec approval",
+    status: !hasPersistedFeatureSpec(plan)
+      ? "missing"
+      : isFeatureSpecApproved(plan)
+        ? "done"
+        : "warning",
+    detail: !hasPersistedFeatureSpec(plan)
+      ? "No persisted spec yet."
+      : isFeatureSpecApproved(plan)
+        ? "Spec is approved for implementation."
+        : "Approve the persisted spec before running implementation."
+  });
+
+  checks.push({
     id: "current_step",
     label: "Current step",
     status: step ? (step.status === "done" ? "done" : "ready") : plan && (plan.status === "reviewing" || allStepsDone(plan)) ? "done" : "missing",
@@ -257,6 +293,40 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
       : plan
         ? "No current step is selected; the plan is at completion/review gate."
         : "Import a plan before choosing an implementation step."
+  });
+
+  checks.push({
+    id: "step_localization",
+    label: "Cursor localization",
+    status: !step
+      ? "missing"
+      : hasStepPromptLocalization(step)
+        ? "ready"
+        : "warning",
+    detail: !step
+      ? "No current step for localization."
+      : hasStepPromptLocalization(step)
+        ? "Localization saved on the current step (optional inner loop)."
+        : "Optional: copy localization packet, run Cursor read-only, then import."
+  });
+
+  checks.push({
+    id: "step_prompt_audit",
+    label: "Prompt audit",
+    status: !step
+      ? "missing"
+      : hasStepPromptAudit(step)
+        ? step.promptAudit?.verdict === "tighten_first"
+          ? "warning"
+          : "ready"
+        : "warning",
+    detail: !step
+      ? "No current step for prompt audit."
+      : hasStepPromptAudit(step)
+        ? step.promptAudit?.verdict === "tighten_first"
+          ? "Audit saved (review needed — tighten first). Implementation is not blocked."
+          : "Audited implementation prompt saved for this step."
+        : "Optional: copy prompt audit packet, run GPT/Codex, then import."
   });
 
   checks.push({
@@ -297,6 +367,21 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
     label: "Saved step output",
     status: step?.outputSummary ? "ready" : "missing",
     detail: step?.outputSummary ? "Current step has saved agent output." : "Save agent output after inspecting the runner result."
+  });
+
+  checks.push({
+    id: "step_implementation_proof",
+    label: "Implementation proof",
+    status: !step?.outputSummary
+      ? "missing"
+      : hasStepImplementationProof(step)
+        ? "ready"
+        : "warning",
+    detail: !step?.outputSummary
+      ? "Save agent output before normalizing proof."
+      : hasStepImplementationProof(step)
+        ? "Normalized proof saved for review (optional but recommended)."
+        : "Optional: normalize proof for review before running review."
   });
 
   checks.push({
@@ -421,11 +506,27 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
     };
   }
 
+  if (
+    plan &&
+    hasPersistedFeatureSpec(plan) &&
+    !isFeatureSpecApproved(plan) &&
+    step &&
+    (step.status === "ready" || step.status === "planned") &&
+    !step.outputSummary
+  ) {
+    return {
+      kind: "approve_feature_spec",
+      label: "Approve feature spec",
+      detail:
+        "Persisted feature spec is not approved yet. Approve it before running implementation in worktree."
+    };
+  }
+
   if (step && (step.status === "ready" || step.status === "planned") && !step.outputSummary) {
     return {
       kind: "run_implementation",
       label: "Run implementation in worktree",
-      detail: `Use Run implementation with ${agentLabel} below, or copy the implementation prompt for manual agent work.`
+      detail: `Optional: copy/import localization and prompt audit first. Then use Run implementation with ${agentLabel} below, or copy the implementation prompt for manual agent work.`
     };
   }
 

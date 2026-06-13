@@ -1,7 +1,10 @@
 import { shouldIncludeCard } from "./contextPacketRedaction";
 import {
+  buildRunnerProfile,
   capGitMetadataFields,
   capVerificationResults,
+  isReviewProfile,
+  type FeatureSprintRunnerAgent,
   type FeatureSprintRunnerProfile,
   type FeatureSprintRunnerResponse,
   type FeatureSprintWorktreeCleanupResponse
@@ -35,6 +38,15 @@ export type FeatureSprintRunnerRunImportMarkFilter = {
   profile: FeatureSprintRunnerProfile;
   planId?: string;
   stepId?: string;
+};
+
+export type ReviewRunnerRunImportMarkInput = {
+  cardId: string;
+  planId: string;
+  stepId: string;
+  reviewImportText?: string;
+  selectedRunId?: string | null;
+  runnerAgent: FeatureSprintRunnerAgent;
 };
 
 function cleanOptional(value: string | undefined): string | undefined {
@@ -306,6 +318,78 @@ export function markMostRecentFeatureSprintRunnerRunImported(
   }
 
   return { ok: true, state: marked.state, runId: candidate.id };
+}
+
+function isImportableReviewRunForStep(
+  run: HarnessFeatureSprintRunnerRun,
+  cardId: string,
+  planId: string,
+  stepId: string
+): boolean {
+  return (
+    isReviewProfile(run.profile) &&
+    run.cardId === cardId &&
+    run.planId === planId &&
+    run.stepId === stepId &&
+    run.status === "succeeded" &&
+    !run.importedAt
+  );
+}
+
+export function resolveReviewRunnerRunForImportMark(
+  data: LifeHarnessData,
+  input: ReviewRunnerRunImportMarkInput
+): string | undefined {
+  const { cardId, planId, stepId, selectedRunId, reviewImportText } = input;
+
+  if (selectedRunId) {
+    const selected = data.featureSprintRunnerRuns.find((run) => run.id === selectedRunId);
+    if (selected && isImportableReviewRunForStep(selected, cardId, planId, stepId)) {
+      return selected.id;
+    }
+  }
+
+  const importableReviewRuns = sortRunsNewestFirst(
+    data.featureSprintRunnerRuns.filter((run) =>
+      isImportableReviewRunForStep(run, cardId, planId, stepId)
+    )
+  );
+
+  const trimmedImport = reviewImportText?.trim();
+  if (trimmedImport) {
+    const outputMatch = importableReviewRuns.find((run) => run.outputText?.trim() === trimmedImport);
+    if (outputMatch) {
+      return outputMatch.id;
+    }
+  }
+
+  return importableReviewRuns[0]?.id;
+}
+
+export function markReviewRunnerRunImportedForVerdict(
+  data: LifeHarnessData,
+  input: ReviewRunnerRunImportMarkInput,
+  now: string = nowIso()
+): { ok: true; state: LifeHarnessData; runId?: string } | { ok: false; error: string } {
+  const resolvedRunId = resolveReviewRunnerRunForImportMark(data, input);
+  if (resolvedRunId) {
+    const marked = markFeatureSprintRunnerRunImported(data, resolvedRunId, now);
+    if (!marked.ok) {
+      return marked;
+    }
+    return { ok: true, state: marked.state, runId: resolvedRunId };
+  }
+
+  return markMostRecentFeatureSprintRunnerRunImported(
+    data,
+    {
+      cardId: input.cardId,
+      profile: buildRunnerProfile(input.runnerAgent, "review"),
+      planId: input.planId,
+      stepId: input.stepId
+    },
+    now
+  );
 }
 
 export function markFeatureSprintRunnerRunWorktreeCleanup(

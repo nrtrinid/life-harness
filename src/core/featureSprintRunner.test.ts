@@ -10,6 +10,8 @@ import {
   FEATURE_SPRINT_RUNNER_MAX_PROMPT_CHARS,
   FEATURE_SPRINT_VERIFY_MAX_COMMANDS,
   isDiffTextTruncated,
+  isImplementationProfile,
+  isPromptAuditProfile,
   resolveProfileProvider,
   summarizeVerificationResults,
   validateFeatureSprintRunnerRequest,
@@ -171,10 +173,11 @@ describe("featureSprintRunner validation", () => {
     }
   });
 
-  it("rejects verification fields on scoping and review profiles", () => {
+  it("rejects verification fields on scoping, review, and prompt audit profiles", () => {
     for (const profile of [
       "codex_scoping",
       "codex_review",
+      "codex_prompt_audit",
       "cursor_scoping",
       "cursor_review"
     ] as const) {
@@ -290,6 +293,21 @@ describe("featureSprintRunner validation", () => {
   it("buildRunnerProfile maps agent and phase", () => {
     expect(buildRunnerProfile("cursor", "scoping")).toBe("cursor_scoping");
     expect(buildRunnerProfile("codex", "implementation")).toBe("codex_implementation");
+    expect(buildRunnerProfile("codex", "prompt_audit")).toBe("codex_prompt_audit");
+  });
+
+  it("classifies codex_prompt_audit as prompt audit and non-implementation", () => {
+    expect(isPromptAuditProfile("codex_prompt_audit")).toBe(true);
+    expect(isImplementationProfile("codex_prompt_audit")).toBe(false);
+  });
+
+  it("accepts codex_prompt_audit without worktree", () => {
+    const result = validateFeatureSprintRunnerRequest({
+      profile: "codex_prompt_audit",
+      promptMarkdown: "Audit this prompt.",
+      repoPath: "C:/repo"
+    });
+    expect(result.ok).toBe(true);
   });
 
   it("resolveProfileProvider returns agent from profile", () => {

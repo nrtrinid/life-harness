@@ -233,6 +233,40 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     expect(nextKind(data)).toBe("run_implementation");
   });
 
+  it("points unapproved persisted spec to approve_feature_spec before run_implementation", () => {
+    const data = baseData({
+      featureSprintPlans: [
+        fixturePlan({
+          featureSpec: {
+            body: "ChatGPT web spec.",
+            source: "chatgpt_web",
+            updatedAt: FIXED_NOW
+          },
+          automationPhase: "spec_unapproved"
+        })
+      ]
+    });
+    expect(nextKind(data)).toBe("approve_feature_spec");
+  });
+
+  it("allows run_implementation when persisted spec is approved", () => {
+    const data = baseData({
+      featureSprintPlans: [
+        fixturePlan({
+          featureSpec: {
+            body: "Approved spec.",
+            source: "chatgpt_web",
+            updatedAt: FIXED_NOW,
+            approvedAt: FIXED_NOW,
+            approvedBy: "user"
+          },
+          automationPhase: "spec_approved"
+        })
+      ]
+    });
+    expect(nextKind(data)).toBe("run_implementation");
+  });
+
   it("points implementation output awaiting save to save_agent_output", () => {
     const data = baseData({
       featureSprintPlans: [fixturePlan()],
@@ -256,6 +290,53 @@ describe("buildFeatureSprintDogfoodSummary", () => {
       ]
     });
     expect(nextKind(data)).toBe("run_review");
+  });
+
+  it("warns when proof is not normalized but does not block review", () => {
+    const data = baseData({
+      featureSprintPlans: [
+        fixturePlan({
+          steps: [fixtureStep({ status: "sent", outputSummary: "Implemented core." })]
+        })
+      ]
+    });
+    const summary = buildFeatureSprintDogfoodSummary(data, CARD_ID, { runnerHealth: "available" });
+    expect(summary.checks.find((check) => check.id === "step_implementation_proof")).toMatchObject({
+      status: "warning"
+    });
+    expect(summary.checks.find((check) => check.id === "advance_gate")?.status).toBe("missing");
+    expect(nextKind(data)).toBe("run_review");
+  });
+
+  it("marks implementation proof ready when normalized", () => {
+    const data = baseData({
+      featureSprintPlans: [
+        fixturePlan({
+          steps: [
+            fixtureStep({
+              status: "sent",
+              outputSummary: "Implemented core.",
+              implementationProof: {
+                rawOutput: "Implemented core.",
+                filesChanged: ["src/core/foo.ts"],
+                behaviorChanged: ["See raw implementation output."],
+                testsRun: ["npm test"],
+                testsNotRun: [],
+                verificationResult: "pass",
+                knownRisks: [],
+                suggestedReviewFocus: ["Confirm behavior matches step acceptance criteria."],
+                createdAt: FIXED_NOW,
+                updatedAt: FIXED_NOW
+              }
+            })
+          ]
+        })
+      ]
+    });
+    const summary = buildFeatureSprintDogfoodSummary(data, CARD_ID, { runnerHealth: "available" });
+    expect(summary.checks.find((check) => check.id === "step_implementation_proof")).toMatchObject({
+      status: "ready"
+    });
   });
 
   it("points review output awaiting import to import_review", () => {
@@ -345,11 +426,16 @@ describe("buildFeatureSprintDogfoodSummary", () => {
       "verification_commands",
       "runner_health",
       "active_plan",
+      "feature_spec",
+      "feature_spec_approval",
       "current_step",
+      "step_localization",
+      "step_prompt_audit",
       "implementation_run",
       "implementation_metadata",
       "verification_results",
       "step_output",
+      "step_implementation_proof",
       "review_output",
       "review_verdict",
       "advance_gate",

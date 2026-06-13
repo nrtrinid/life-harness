@@ -3,6 +3,15 @@ import {
   buildCardContextPacket,
   formatCardContextPacketMarkdown
 } from "./harnessContextGraph";
+import {
+  buildImplementationProofFromSources,
+  capRawOutputExcerptForReviewPacket,
+  capStringListForReviewPacket,
+  FEATURE_SPRINT_REVIEW_PACKET_MAX_BULLETS,
+  FEATURE_SPRINT_REVIEW_PACKET_MAX_FILES,
+  normalizeImplementationProofRecord,
+  resolveLatestImplementationRunForStep
+} from "./featureSprintImplementationProof";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
 import { buildNextMoveSummary } from "./nextMoveContract";
@@ -10,10 +19,17 @@ import { createProofItem } from "./proof";
 import { buildProjectContextForCard, getProjectForCard } from "./projectRegistry";
 import { computeXP } from "./scoring";
 import type {
+  HarnessFeatureSpec,
+  HarnessFeatureSpecSource,
+  HarnessFeatureSprintAutomationPhase,
   HarnessFeatureSprintPlan,
   HarnessFeatureSprintReviewStatus,
   HarnessFeatureSprintStatus,
   HarnessFeatureSprintStep,
+  HarnessFeatureSprintStepImplementationProof,
+  HarnessFeatureSprintStepLocalization,
+  HarnessFeatureSprintStepPromptAudit,
+  HarnessFeatureSprintPromptAuditVerdict,
   HarnessFeatureSprintStepStatus,
   LifeCard,
   LifeLogEntry
@@ -21,6 +37,8 @@ import type {
 
 export const FEATURE_SPRINT_PLAN_FENCE_LABEL = "feature-sprint-plan";
 export const FEATURE_REVIEW_VERDICT_FENCE_LABEL = "feature-review-verdict";
+export const FEATURE_PROMPT_LOCALIZATION_FENCE_LABEL = "feature-prompt-localization";
+export const FEATURE_PROMPT_CRITIQUE_FENCE_LABEL = "feature-prompt-critique";
 
 const FEATURE_SPRINT_PLAN_FENCE = new RegExp(
   `\`\`\`${FEATURE_SPRINT_PLAN_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
@@ -31,6 +49,21 @@ const FEATURE_REVIEW_VERDICT_FENCE = new RegExp(
   `\`\`\`${FEATURE_REVIEW_VERDICT_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
   "g"
 );
+
+const FEATURE_PROMPT_LOCALIZATION_FENCE = new RegExp(
+  `\`\`\`${FEATURE_PROMPT_LOCALIZATION_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
+  "g"
+);
+
+const FEATURE_PROMPT_CRITIQUE_FENCE = new RegExp(
+  `\`\`\`${FEATURE_PROMPT_CRITIQUE_FENCE_LABEL}(?:\\s|$)([\\s\\S]*?)\`\`\``,
+  "g"
+);
+
+const PROMPT_AUDIT_VERDICTS = new Set<HarnessFeatureSprintPromptAuditVerdict>([
+  "ready",
+  "tighten_first"
+]);
 
 const ACTIVE_PLAN_STATUSES = new Set<HarnessFeatureSprintStatus>([
   "planning",
@@ -97,6 +130,23 @@ export type FeatureReviewVerdictImport = {
   followUps?: string[];
 };
 
+export type FeaturePromptLocalizationImport = {
+  likelyFiles: string[];
+  existingHelpers: string[];
+  testsToRun: string[];
+  risks: string[];
+  revisedImplementationPrompt: string;
+};
+
+export type FeaturePromptCritiqueImport = {
+  verdict: HarnessFeatureSprintPromptAuditVerdict;
+  risks: string[];
+  requiredPromptChanges: string[];
+  finalImplementationPrompt: string;
+  mustCheckFiles: string[];
+  verificationCommands: string[];
+};
+
 export type FeatureSprintPlanCreateInput = {
   cardId: string;
   title: string;
@@ -110,14 +160,42 @@ export type FeatureSprintPlanCreateInput = {
 };
 
 export type FeatureSprintPlanUpdateInput = Partial<
-  Omit<HarnessFeatureSprintPlan, "id" | "cardId" | "createdAt" | "steps">
+  Omit<HarnessFeatureSprintPlan, "id" | "cardId" | "createdAt" | "steps" | "automationPhase">
 > & {
   steps?: HarnessFeatureSprintStep[];
+  /** Pass null to clear automationPhase on the plan. */
+  automationPhase?: HarnessFeatureSprintAutomationPhase | null;
 };
 
 export type FeatureSprintStepUpdateInput = Partial<
-  Omit<HarnessFeatureSprintStep, "id" | "createdAt">
->;
+  Omit<
+    HarnessFeatureSprintStep,
+    "id" | "createdAt" | "promptAudit" | "implementationProof"
+  >
+> & {
+  /** Pass null to clear promptAudit on the step. */
+  promptAudit?: HarnessFeatureSprintStepPromptAudit | null;
+  /** Pass null to clear implementationProof on the step. */
+  implementationProof?: HarnessFeatureSprintStepImplementationProof | null;
+};
+
+export type FeatureSpecSaveInput = {
+  body: string;
+  source?: HarnessFeatureSpecSource;
+};
+
+const VALID_AUTOMATION_PHASES = new Set<HarnessFeatureSprintAutomationPhase>([
+  "spec_unapproved",
+  "spec_approved",
+  "slice_scoping",
+  "localizing",
+  "prompt_auditing",
+  "implementing",
+  "proof_normalizing",
+  "reviewing",
+  "spec_updating",
+  "awaiting_user_approval"
+]);
 
 function cleanOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -212,6 +290,265 @@ export function getActiveFeatureSprintPlanForCard(
 ): HarnessFeatureSprintPlan | undefined {
   return getFeatureSprintPlansForCard(data, cardId).find((plan) =>
     ACTIVE_PLAN_STATUSES.has(plan.status)
+  );
+}
+
+export function isFeatureSpecApproved(plan: HarnessFeatureSprintPlan | undefined): boolean {
+  return Boolean(plan?.featureSpec?.approvedAt?.trim());
+}
+
+export function hasPersistedFeatureSpec(plan: HarnessFeatureSprintPlan | undefined): boolean {
+  return Boolean(plan?.featureSpec?.body?.trim());
+}
+
+export function hasStepPromptLocalization(step: HarnessFeatureSprintStep | undefined): boolean {
+  return Boolean(step?.promptLocalization?.revisedImplementationPrompt?.trim());
+}
+
+export function hasStepPromptAudit(step: HarnessFeatureSprintStep | undefined): boolean {
+  return Boolean(step?.promptAudit?.finalImplementationPrompt?.trim());
+}
+
+export function hasStepImplementationProof(step: HarnessFeatureSprintStep | undefined): boolean {
+  return Boolean(step?.implementationProof?.rawOutput?.trim());
+}
+
+export function resolveStepImplementationPrompt(step: HarnessFeatureSprintStep): string {
+  return (
+    step.promptAudit?.finalImplementationPrompt?.trim() ||
+    step.suggestedPrompt?.trim() ||
+    step.goal.trim()
+  );
+}
+
+export type StepImplementationPromptSource = "audited" | "suggested" | "goal";
+
+export function resolveStepImplementationPromptSource(
+  step: HarnessFeatureSprintStep
+): StepImplementationPromptSource {
+  if (step.promptAudit?.finalImplementationPrompt?.trim()) {
+    return "audited";
+  }
+  if (step.suggestedPrompt?.trim()) {
+    return "suggested";
+  }
+  return "goal";
+}
+
+function coercePromptAuditVerdict(value: unknown): HarnessFeatureSprintPromptAuditVerdict | undefined {
+  if (typeof value !== "string" || !PROMPT_AUDIT_VERDICTS.has(value as HarnessFeatureSprintPromptAuditVerdict)) {
+    return undefined;
+  }
+  return value as HarnessFeatureSprintPromptAuditVerdict;
+}
+
+function mergeVerificationCommandsForPacket(
+  auditCommands: string[],
+  projectCommands: string[]
+): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const command of [...auditCommands, ...projectCommands]) {
+    const trimmed = command.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    merged.push(trimmed);
+  }
+  return merged;
+}
+
+export function canRunFeatureSprintImplementation(
+  plan: HarnessFeatureSprintPlan | undefined
+): boolean {
+  if (!plan?.featureSpec?.body?.trim()) {
+    return true;
+  }
+  return isFeatureSpecApproved(plan);
+}
+
+export function coerceAutomationPhase(
+  value: unknown
+): HarnessFeatureSprintAutomationPhase | undefined {
+  if (typeof value !== "string" || !VALID_AUTOMATION_PHASES.has(value as HarnessFeatureSprintAutomationPhase)) {
+    return undefined;
+  }
+  return value as HarnessFeatureSprintAutomationPhase;
+}
+
+export function normalizeFeatureSpecBody(
+  raw: string
+): { body: string; truncated: boolean } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.length <= FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS) {
+    return { body: trimmed, truncated: false };
+  }
+  return {
+    body: trimmed.slice(0, FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS),
+    truncated: true
+  };
+}
+
+function resolveFeatureSpecSource(
+  source: HarnessFeatureSpecSource | undefined,
+  existing?: HarnessFeatureSpec
+): HarnessFeatureSpecSource {
+  return source ?? existing?.source ?? "chatgpt_web";
+}
+
+function shouldClearFeatureSpecApproval(
+  existing: HarnessFeatureSpec | undefined,
+  nextBody: string,
+  nextSource: HarnessFeatureSpecSource
+): boolean {
+  if (!existing?.approvedAt) {
+    return false;
+  }
+  if (existing.body.trim() !== nextBody.trim()) {
+    return true;
+  }
+  const existingSource = existing.source ?? "chatgpt_web";
+  return existingSource !== nextSource;
+}
+
+function buildNextFeatureSpec(
+  existing: HarnessFeatureSpec | undefined,
+  body: string,
+  source: HarnessFeatureSpecSource,
+  timestamp: string
+): HarnessFeatureSpec {
+  const clearApproval = shouldClearFeatureSpecApproval(existing, body, source);
+  const next: HarnessFeatureSpec = {
+    body,
+    source,
+    updatedAt: timestamp
+  };
+  if (existing?.approvedAt && !clearApproval) {
+    next.approvedAt = existing.approvedAt;
+    next.approvedBy = existing.approvedBy;
+  }
+  return next;
+}
+
+export function resolveAutomationPhaseDisplay(
+  plan: HarnessFeatureSprintPlan,
+  step?: HarnessFeatureSprintStep
+): HarnessFeatureSprintAutomationPhase | undefined {
+  if (plan.automationPhase) {
+    return plan.automationPhase;
+  }
+  if (plan.featureSpec?.body?.trim() && !plan.featureSpec.approvedAt) {
+    return "spec_unapproved";
+  }
+  if (plan.featureSpec?.approvedAt) {
+    return "spec_approved";
+  }
+  if (plan.status === "reviewing" || step?.reviewStatus) {
+    return "reviewing";
+  }
+  if (plan.status === "in_progress" && step) {
+    return "implementing";
+  }
+  return undefined;
+}
+
+export function ensureFeatureSpecPlanningShellForCard(
+  data: LifeHarnessData,
+  cardId: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const active = getActiveFeatureSprintPlanForCard(data, cardId);
+  if (active) {
+    return { ok: true, state: data, planId: active.id };
+  }
+
+  const cardResult = validateCard(data, cardId);
+  if ("error" in cardResult) {
+    return { ok: false, error: cardResult.error };
+  }
+
+  return createFeatureSprintPlanForCard(
+    data,
+    {
+      cardId,
+      title: cardResult.title,
+      goal: cleanOptional(cardResult.nextTinyAction) ?? cardResult.title,
+      acceptanceCriteria: ["Approved feature spec drives implementation"]
+    },
+    now
+  );
+}
+
+export function saveFeatureSpecForCard(
+  data: LifeHarnessData,
+  cardId: string,
+  input: FeatureSpecSaveInput,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const normalized = normalizeFeatureSpecBody(input.body);
+  if (!normalized) {
+    return { ok: false, error: "Feature spec body is required." };
+  }
+
+  const shellResult = ensureFeatureSpecPlanningShellForCard(data, cardId, now);
+  if (!shellResult.ok) {
+    return shellResult;
+  }
+
+  const planId = shellResult.planId;
+  const plan = findPlan(shellResult.state, planId);
+  if (!plan) {
+    return { ok: false, error: "Feature sprint plan not found after shell ensure." };
+  }
+
+  const timestamp = resolveNow(now);
+  const source = resolveFeatureSpecSource(input.source, plan.featureSpec);
+  const featureSpec = buildNextFeatureSpec(plan.featureSpec, normalized.body, source, timestamp);
+  const automationPhase: HarnessFeatureSprintAutomationPhase = featureSpec.approvedAt
+    ? "spec_approved"
+    : "spec_unapproved";
+
+  return updateFeatureSprintPlan(
+    shellResult.state,
+    planId,
+    { featureSpec, automationPhase },
+    now
+  );
+}
+
+export function approveFeatureSpecForPlan(
+  data: LifeHarnessData,
+  planId: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+  if (!plan.featureSpec?.body?.trim()) {
+    return { ok: false, error: "Save a feature spec before approving." };
+  }
+  if (plan.featureSpec.approvedAt) {
+    return { ok: true, state: data, planId };
+  }
+
+  const timestamp = resolveNow(now);
+  return updateFeatureSprintPlan(
+    data,
+    planId,
+    {
+      featureSpec: {
+        ...plan.featureSpec,
+        approvedAt: timestamp,
+        approvedBy: "user"
+      },
+      automationPhase: "spec_approved"
+    },
+    now
   );
 }
 
@@ -321,6 +658,13 @@ export function updateFeatureSprintPlan(
     completedAt: patch.completedAt ?? existing.completedAt,
     evidenceLogId: patch.evidenceLogId ?? existing.evidenceLogId,
     evidenceProofItemId: patch.evidenceProofItemId ?? existing.evidenceProofItemId,
+    featureSpec: patch.featureSpec !== undefined ? patch.featureSpec : existing.featureSpec,
+    automationPhase:
+      patch.automationPhase === null
+        ? undefined
+        : patch.automationPhase !== undefined
+          ? patch.automationPhase
+          : existing.automationPhase,
     updatedAt: timestamp
   };
 
@@ -360,6 +704,14 @@ export function updateFeatureSprintStep(
     nextStatus = patch.status ?? "reviewing";
   }
 
+  const nextOutputSummary =
+    patch.outputSummary !== undefined
+      ? cleanOptional(patch.outputSummary)
+      : current.outputSummary;
+  const outputSummaryChanged =
+    patch.outputSummary !== undefined &&
+    nextOutputSummary !== (current.outputSummary?.trim() || undefined);
+
   const updatedStep: HarnessFeatureSprintStep = {
     ...current,
     title: patch.title !== undefined ? patch.title.trim() : current.title,
@@ -374,15 +726,29 @@ export function updateFeatureSprintStep(
         ? cleanOptional(patch.suggestedPrompt)
         : current.suggestedPrompt,
     agentSessionId: patch.agentSessionId ?? current.agentSessionId,
-    outputSummary:
-      patch.outputSummary !== undefined
-        ? cleanOptional(patch.outputSummary)
-        : current.outputSummary,
+    outputSummary: nextOutputSummary,
     reviewVerdict:
       patch.reviewVerdict !== undefined
         ? cleanOptional(patch.reviewVerdict)
         : current.reviewVerdict,
     reviewStatus: patch.reviewStatus ?? current.reviewStatus,
+    promptLocalization:
+      patch.promptLocalization !== undefined
+        ? patch.promptLocalization
+        : current.promptLocalization,
+    promptAudit:
+      patch.promptAudit === null
+        ? undefined
+        : patch.promptAudit !== undefined
+          ? patch.promptAudit
+          : current.promptAudit,
+    implementationProof: outputSummaryChanged
+      ? undefined
+      : patch.implementationProof === null
+        ? undefined
+        : patch.implementationProof !== undefined
+          ? patch.implementationProof
+          : current.implementationProof,
     completedAt: patch.completedAt ?? current.completedAt,
     updatedAt: timestamp
   };
@@ -443,11 +809,20 @@ export function advanceFeatureSprintStep(
     currentStepId = undefined;
   }
 
-  return updateFeatureSprintPlan(data, planId, {
+  const planPatch: FeatureSprintPlanUpdateInput = {
     steps,
     status: planStatus,
     currentStepId
-  }, now);
+  };
+  if (
+    existing.automationPhase === "localizing" ||
+    existing.automationPhase === "prompt_auditing" ||
+    existing.automationPhase === "proof_normalizing"
+  ) {
+    planPatch.automationPhase = isFeatureSpecApproved(existing) ? "spec_approved" : null;
+  }
+
+  return updateFeatureSprintPlan(data, planId, planPatch, now);
 }
 
 function createFeatureSprintLog(input: {
@@ -590,7 +965,9 @@ export function replaceActiveFeatureSprintPlanFromImport(
       constraints: cleanStringList(imported.constraints),
       steps,
       currentStepId: steps[0]?.id,
-      status: "in_progress"
+      status: "in_progress",
+      featureSpec: active.featureSpec,
+      automationPhase: active.automationPhase
     }, now);
   }
 
@@ -642,7 +1019,7 @@ export function importFeatureReviewVerdictFromText(
 
   const verdictImport = parseFeatureReviewVerdictBlock(text);
   if (!verdictImport) {
-    return { ok: false, error: "No valid feature-review-verdict block found." };
+    return { ok: false, error: describeReviewVerdictImportFailure(text) };
   }
 
   const resolvedStepId = stepId ?? plan.currentStepId;
@@ -674,7 +1051,8 @@ export function importFeatureReviewVerdictFromText(
 
   return updateFeatureSprintPlan(stepResult.state, planId, {
     latestReviewStatus: verdictImport.status,
-    latestReviewVerdict: reviewVerdict
+    latestReviewVerdict: reviewVerdict,
+    automationPhase: null
   }, now);
 }
 
@@ -751,6 +1129,55 @@ export function parseFeatureSprintPlanBlock(text: string): FeatureSprintPlanImpo
   return undefined;
 }
 
+export function describeReviewVerdictImportFailure(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return "Paste review output first, or click Load latest review output.";
+  }
+
+  if (trimmed.includes("```feature-review-verdict")) {
+    return "Found a feature-review-verdict fence but JSON is invalid or missing status/verdict. Fix the block and try again.";
+  }
+
+  if (/^["{]|^\s*"(followUps|status|verdict)"/m.test(trimmed)) {
+    return "This looks like a JSON fragment without the ```feature-review-verdict fence. Click Load latest review output or Copy output from the review run.";
+  }
+
+  if (/^(accepted|needs_changes|blocked)\b/im.test(trimmed)) {
+    return "Review prose is present but no ```feature-review-verdict fence found. Click Wrap as verdict block or Load latest review output.";
+  }
+
+  return "No valid feature-review-verdict block found. Load the full Codex review output, then Wrap as verdict block if needed.";
+}
+
+export function buildFeatureReviewVerdictFenceDraft(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (!trimmed || parseFeatureReviewVerdictBlock(trimmed)) {
+    return undefined;
+  }
+
+  const statusMatch = trimmed.match(/^(accepted|needs_changes|blocked)\b/im);
+  const status = (statusMatch?.[1]?.toLowerCase() ?? "needs_changes") as HarnessFeatureSprintReviewStatus;
+  const verdictBody = statusMatch ? trimmed.slice(statusMatch[0].length).trim() : trimmed;
+  if (!verdictBody) {
+    return undefined;
+  }
+
+  return [
+    "```feature-review-verdict",
+    JSON.stringify(
+      {
+        status,
+        verdict: verdictBody.slice(0, 8_000),
+        followUps: [] as string[]
+      },
+      null,
+      2
+    ),
+    "```"
+  ].join("\n");
+}
+
 export function parseFeatureReviewVerdictBlock(text: string): FeatureReviewVerdictImport | undefined {
   const pattern = new RegExp(FEATURE_REVIEW_VERDICT_FENCE.source, "g");
   let match: RegExpExecArray | null = pattern.exec(text);
@@ -782,10 +1209,400 @@ export function parseFeatureReviewVerdictBlock(text: string): FeatureReviewVerdi
   return undefined;
 }
 
+export function parseFeaturePromptLocalizationBlock(
+  text: string
+): FeaturePromptLocalizationImport | undefined {
+  const pattern = new RegExp(FEATURE_PROMPT_LOCALIZATION_FENCE.source, "g");
+  let match: RegExpExecArray | null = pattern.exec(text);
+  while (match) {
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        match = pattern.exec(text);
+        continue;
+      }
+      const item = parsed as Record<string, unknown>;
+      const revisedImplementationPrompt =
+        typeof item.revisedImplementationPrompt === "string"
+          ? item.revisedImplementationPrompt.trim()
+          : "";
+      if (!revisedImplementationPrompt) {
+        match = pattern.exec(text);
+        continue;
+      }
+      return {
+        likelyFiles: parseStringList(item.likelyFiles) ?? [],
+        existingHelpers: parseStringList(item.existingHelpers) ?? [],
+        testsToRun: parseStringList(item.testsToRun) ?? [],
+        risks: parseStringList(item.risks) ?? [],
+        revisedImplementationPrompt
+      };
+    } catch {
+      // ignore invalid JSON
+    }
+    match = pattern.exec(text);
+  }
+  return undefined;
+}
+
+function capLocalizationText(raw: string): string {
+  const normalized = normalizeFeatureSpecBody(raw);
+  if (normalized) {
+    return normalized.body;
+  }
+  return raw.trim().slice(0, FEATURE_SCOPING_ROUGH_SPEC_MAX_CHARS);
+}
+
+export function normalizeFeatureSprintStep(
+  step: HarnessFeatureSprintStep
+): HarnessFeatureSprintStep {
+  const next: HarnessFeatureSprintStep = { ...step };
+
+  const revised = step.promptLocalization?.revisedImplementationPrompt?.trim();
+  if (revised && step.promptLocalization) {
+    next.promptLocalization = {
+      ...step.promptLocalization,
+      rawOutput: step.promptLocalization.rawOutput?.trim() ?? "",
+      revisedImplementationPrompt: revised,
+      likelyFiles: cleanStringList(step.promptLocalization.likelyFiles),
+      existingHelpers: cleanStringList(step.promptLocalization.existingHelpers),
+      testsToRun: cleanStringList(step.promptLocalization.testsToRun),
+      risks: cleanStringList(step.promptLocalization.risks)
+    };
+  } else {
+    delete next.promptLocalization;
+  }
+
+  const finalPrompt = step.promptAudit?.finalImplementationPrompt?.trim();
+  const verdict = coercePromptAuditVerdict(step.promptAudit?.verdict);
+  if (finalPrompt && step.promptAudit && verdict) {
+    next.promptAudit = {
+      ...step.promptAudit,
+      rawOutput: step.promptAudit.rawOutput?.trim() ?? "",
+      verdict,
+      finalImplementationPrompt: finalPrompt,
+      risks: cleanStringList(step.promptAudit.risks),
+      requiredPromptChanges: cleanStringList(step.promptAudit.requiredPromptChanges),
+      mustCheckFiles: cleanStringList(step.promptAudit.mustCheckFiles),
+      verificationCommands: cleanStringList(step.promptAudit.verificationCommands)
+    };
+  } else {
+    delete next.promptAudit;
+  }
+
+  if (step.implementationProof?.rawOutput?.trim()) {
+    next.implementationProof = normalizeImplementationProofRecord(step.implementationProof);
+  } else {
+    delete next.implementationProof;
+  }
+
+  return next;
+}
+
+export function normalizeImplementationProofForStep(
+  data: LifeHarnessData,
+  planId: string,
+  stepId?: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const resolvedStepId = stepId ?? plan.currentStepId;
+  if (!resolvedStepId) {
+    return { ok: false, error: "No current step to normalize proof." };
+  }
+
+  const step = plan.steps.find((item) => item.id === resolvedStepId);
+  if (!step) {
+    return { ok: false, error: `Step not found: ${resolvedStepId}` };
+  }
+
+  const rawOutput = step.outputSummary?.trim();
+  if (!rawOutput) {
+    return { ok: false, error: "Save agent output before normalizing proof." };
+  }
+
+  const project = buildProjectContextForCard(data, plan.cardId);
+  const projectVerificationCommands =
+    project?.verificationCommands?.length ? project.verificationCommands : DEFAULT_VERIFY_COMMANDS;
+  const matchingRun = resolveLatestImplementationRunForStep(data, planId, resolvedStepId);
+  const timestamp = resolveNow(now);
+
+  const proof = buildImplementationProofFromSources({
+    rawOutput,
+    step,
+    projectVerificationCommands,
+    matchingRun,
+    timestamp,
+    existingProof: step.implementationProof
+  });
+
+  const stepResult = updateFeatureSprintStep(
+    data,
+    planId,
+    resolvedStepId,
+    { implementationProof: proof },
+    now
+  );
+  if (!stepResult.ok) {
+    return stepResult;
+  }
+
+  return updateFeatureSprintPlan(stepResult.state, planId, { automationPhase: "proof_normalizing" }, now);
+}
+
+function formatImplementationProofPacketSections(step: HarnessFeatureSprintStep): string[] {
+  const proof = step.implementationProof;
+  if (!proof) {
+    return [
+      "## Normalized implementation proof",
+      "Normalized proof: not generated — review raw output only.",
+      ""
+    ];
+  }
+
+  const files = capStringListForReviewPacket(proof.filesChanged, FEATURE_SPRINT_REVIEW_PACKET_MAX_FILES);
+  const behavior = capStringListForReviewPacket(
+    proof.behaviorChanged,
+    FEATURE_SPRINT_REVIEW_PACKET_MAX_BULLETS
+  );
+  const testsRun = capStringListForReviewPacket(proof.testsRun, FEATURE_SPRINT_REVIEW_PACKET_MAX_BULLETS);
+  const testsNotRun = capStringListForReviewPacket(
+    proof.testsNotRun,
+    FEATURE_SPRINT_REVIEW_PACKET_MAX_BULLETS
+  );
+  const risks = capStringListForReviewPacket(proof.knownRisks, FEATURE_SPRINT_REVIEW_PACKET_MAX_BULLETS);
+  const focus = capStringListForReviewPacket(
+    proof.suggestedReviewFocus,
+    FEATURE_SPRINT_REVIEW_PACKET_MAX_BULLETS
+  );
+
+  const lines: string[] = [
+    "## Normalized implementation proof",
+    "Normalized proof: included",
+    `- Verification result: ${proof.verificationResult}`,
+    ""
+  ];
+
+  lines.push(
+    ...formatBulletSection("### Files changed", files.lines),
+    ...formatBulletSection("### Behavior changed", behavior.lines),
+    ...formatBulletSection("### Tests run", testsRun.lines),
+    ...formatBulletSection("### Tests not run", testsNotRun.lines),
+    ...formatBulletSection("### Known risks", risks.lines),
+    ...formatBulletSection("### Suggested review focus", focus.lines)
+  );
+
+  return lines;
+}
+
+function formatRunnerEvidencePacketSections(
+  data: LifeHarnessData,
+  step: HarnessFeatureSprintStep
+): string[] {
+  const proof = step.implementationProof;
+  if (!proof) {
+    return [];
+  }
+
+  const snapshot = proof.runnerEvidence;
+  const run = proof.sourceRunnerRunId
+    ? data.featureSprintRunnerRuns.find((item) => item.id === proof.sourceRunnerRunId)
+    : undefined;
+
+  if (!snapshot && !run) {
+    if (proof.sourceRunnerRunId) {
+      return ["## Runner evidence", "Runner evidence unavailable (history lookup failed).", ""];
+    }
+    return [];
+  }
+
+  const lines: string[] = ["## Runner evidence"];
+  if (run?.worktreePath) {
+    lines.push(`- Worktree: ${run.worktreePath}`);
+  }
+  if (snapshot?.diffStat) {
+    lines.push("", "### Diff stat", snapshot.diffStat);
+  } else if (run?.diffStat?.trim()) {
+    lines.push("", "### Diff stat", capRawOutputExcerptForReviewPacket(run.diffStat));
+  }
+  if (snapshot?.gitStatus) {
+    lines.push("", "### Git status", snapshot.gitStatus);
+  } else if (run?.gitStatus?.trim()) {
+    lines.push("", "### Git status", capRawOutputExcerptForReviewPacket(run.gitStatus));
+  }
+
+  const verificationLines = snapshot?.verificationSummary ?? [];
+  if (verificationLines.length > 0) {
+    lines.push("", "### Verification summary");
+    lines.push(...verificationLines.map((item) => `- ${item}`));
+  }
+
+  lines.push("");
+  return lines;
+}
+
+function formatImplementationPromptPacketSection(step: HarnessFeatureSprintStep): string[] {
+  const source = resolveStepImplementationPromptSource(step);
+  const sourceLabel =
+    source === "audited" ? "audited" : source === "suggested" ? "suggested" : "step goal";
+  return ["## Implementation prompt", `- Source: ${sourceLabel}`, resolveStepImplementationPrompt(step), ""];
+}
+
+export function importFeaturePromptLocalizationFromText(
+  data: LifeHarnessData,
+  planId: string,
+  text: string,
+  stepId?: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const localizationImport = parseFeaturePromptLocalizationBlock(text);
+  if (!localizationImport) {
+    return { ok: false, error: "No valid feature-prompt-localization block found." };
+  }
+
+  const resolvedStepId = stepId ?? plan.currentStepId;
+  if (!resolvedStepId) {
+    return { ok: false, error: "No current step to attach localization." };
+  }
+
+  const existingStep = plan.steps.find((step) => step.id === resolvedStepId);
+  const timestamp = resolveNow(now);
+  const cappedRawOutput = capLocalizationText(text);
+  const promptLocalization: HarnessFeatureSprintStepLocalization = {
+    rawOutput: cappedRawOutput,
+    likelyFiles: localizationImport.likelyFiles,
+    existingHelpers: localizationImport.existingHelpers,
+    testsToRun: localizationImport.testsToRun,
+    risks: localizationImport.risks,
+    revisedImplementationPrompt: capLocalizationText(localizationImport.revisedImplementationPrompt),
+    createdAt: existingStep?.promptLocalization?.createdAt ?? timestamp,
+    updatedAt: timestamp
+  };
+
+  const clearStaleAudit =
+    Boolean(existingStep?.promptAudit) &&
+    existingStep?.promptLocalization?.rawOutput !== cappedRawOutput;
+
+  const stepResult = updateFeatureSprintStep(
+    data,
+    planId,
+    resolvedStepId,
+    {
+      promptLocalization,
+      ...(clearStaleAudit ? { promptAudit: null } : {})
+    },
+    now
+  );
+  if (!stepResult.ok) {
+    return stepResult;
+  }
+
+  return updateFeatureSprintPlan(stepResult.state, planId, { automationPhase: "localizing" }, now);
+}
+
+export function parseFeaturePromptCritiqueBlock(
+  text: string
+): FeaturePromptCritiqueImport | undefined {
+  const pattern = new RegExp(FEATURE_PROMPT_CRITIQUE_FENCE.source, "g");
+  let match: RegExpExecArray | null = pattern.exec(text);
+  while (match) {
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        match = pattern.exec(text);
+        continue;
+      }
+      const item = parsed as Record<string, unknown>;
+      const verdict = coercePromptAuditVerdict(item.verdict);
+      const finalImplementationPrompt =
+        typeof item.finalImplementationPrompt === "string"
+          ? item.finalImplementationPrompt.trim()
+          : "";
+      if (!verdict || !finalImplementationPrompt) {
+        match = pattern.exec(text);
+        continue;
+      }
+      return {
+        verdict,
+        risks: parseStringList(item.risks) ?? [],
+        requiredPromptChanges: parseStringList(item.requiredPromptChanges) ?? [],
+        finalImplementationPrompt,
+        mustCheckFiles: parseStringList(item.mustCheckFiles) ?? [],
+        verificationCommands: parseStringList(item.verificationCommands) ?? []
+      };
+    } catch {
+      // ignore invalid JSON
+    }
+    match = pattern.exec(text);
+  }
+  return undefined;
+}
+
+export function importFeaturePromptAuditFromText(
+  data: LifeHarnessData,
+  planId: string,
+  text: string,
+  stepId?: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const critiqueImport = parseFeaturePromptCritiqueBlock(text);
+  if (!critiqueImport) {
+    return { ok: false, error: "No valid feature-prompt-critique block found." };
+  }
+
+  const resolvedStepId = stepId ?? plan.currentStepId;
+  if (!resolvedStepId) {
+    return { ok: false, error: "No current step to attach prompt audit." };
+  }
+
+  const existingStep = plan.steps.find((step) => step.id === resolvedStepId);
+  const timestamp = resolveNow(now);
+  const promptAudit: HarnessFeatureSprintStepPromptAudit = {
+    rawOutput: capLocalizationText(text),
+    verdict: critiqueImport.verdict,
+    risks: critiqueImport.risks,
+    requiredPromptChanges: critiqueImport.requiredPromptChanges,
+    finalImplementationPrompt: capLocalizationText(critiqueImport.finalImplementationPrompt),
+    mustCheckFiles: critiqueImport.mustCheckFiles,
+    verificationCommands: critiqueImport.verificationCommands,
+    createdAt: existingStep?.promptAudit?.createdAt ?? timestamp,
+    updatedAt: timestamp
+  };
+
+  const stepResult = updateFeatureSprintStep(
+    data,
+    planId,
+    resolvedStepId,
+    { promptAudit },
+    now
+  );
+  if (!stepResult.ok) {
+    return stepResult;
+  }
+
+  return updateFeatureSprintPlan(stepResult.state, planId, { automationPhase: "prompt_auditing" }, now);
+}
+
 export function stripFeatureSprintBlocks(text: string): string {
   return text
     .replace(FEATURE_SPRINT_PLAN_FENCE, "")
     .replace(FEATURE_REVIEW_VERDICT_FENCE, "")
+    .replace(FEATURE_PROMPT_LOCALIZATION_FENCE, "")
+    .replace(FEATURE_PROMPT_CRITIQUE_FENCE, "")
     .trim();
 }
 
@@ -833,6 +1650,30 @@ function formatRoughSpecSections(normalized: { body: string; truncated: boolean 
   return lines;
 }
 
+function formatApprovedFeatureSpecSections(spec: HarnessFeatureSpec): string[] {
+  return [
+    "## Approved feature spec (source of truth)",
+    "",
+    spec.body,
+    ""
+  ];
+}
+
+function formatDraftFeatureSpecSections(spec: HarnessFeatureSpec): string[] {
+  return [
+    "## Draft feature spec (not yet approved)",
+    "",
+    spec.body,
+    "",
+    "This spec is not approved yet. Do not treat it as implementation authority until the user approves it in Life Harness.",
+    ""
+  ];
+}
+
+function formatApprovedFeatureSpecPacketSection(spec: HarnessFeatureSpec): string[] {
+  return formatApprovedFeatureSpecSections(spec);
+}
+
 export function buildFeatureScopingPacket(
   data: LifeHarnessData,
   cardId: string,
@@ -852,7 +1693,11 @@ export function buildFeatureScopingPacket(
     nextMove.primary?.cardId === cardId || nextMove.backup?.cardId === cardId;
   const verifyCommands =
     project?.verificationCommands?.length ? project.verificationCommands : DEFAULT_VERIFY_COMMANDS;
-  const normalizedRoughSpec = normalizeRoughSpecForScoping(options.roughSpec);
+  const activePlan = getActiveFeatureSprintPlanForCard(data, cardId);
+  const persistedSpec = activePlan?.featureSpec;
+  const normalizedRoughSpec = persistedSpec?.body?.trim()
+    ? null
+    : normalizeRoughSpecForScoping(options.roughSpec);
 
   const lines: string[] = [
     "# Feature Scoping Packet",
@@ -863,7 +1708,11 @@ export function buildFeatureScopingPacket(
     ""
   ];
 
-  if (normalizedRoughSpec) {
+  if (persistedSpec?.body?.trim() && persistedSpec.approvedAt) {
+    lines.push(...formatApprovedFeatureSpecSections(persistedSpec));
+  } else if (persistedSpec?.body?.trim()) {
+    lines.push(...formatDraftFeatureSpecSections(persistedSpec));
+  } else if (normalizedRoughSpec) {
     lines.push(...formatRoughSpecSections(normalizedRoughSpec));
   }
 
@@ -964,6 +1813,238 @@ function resolvePlanStep(
   return plan.steps.find((step) => step.id === resolvedId);
 }
 
+export function buildFeatureStepLocalizationPacket(
+  data: LifeHarnessData,
+  planId: string,
+  stepId?: string,
+  options: { now?: Date } = {}
+): FeaturePacketBuildResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const step = resolvePlanStep(plan, stepId);
+  if (!step) {
+    return { ok: false, error: "No current step resolved for localization packet." };
+  }
+
+  const cardResult = buildCardContextPacket(data, plan.cardId, options);
+  if (!cardResult.ok) {
+    return { ok: false, error: cardResult.error };
+  }
+
+  const project = buildProjectContextForCard(data, plan.cardId);
+  const verifyCommands =
+    project?.verificationCommands?.length ? project.verificationCommands : DEFAULT_VERIFY_COMMANDS;
+  const promptSeed = step.suggestedPrompt?.trim() || step.goal.trim();
+
+  const lines: string[] = [
+    `# Feature Step Localization Packet — ${step.title}`,
+    "",
+    "## Purpose",
+    "Repo-localize this Feature Sprint step for Cursor. This is a read-only inspection pass.",
+    "",
+    "## Hard boundaries",
+    "- Do **not** implement.",
+    "- Do **not** edit files.",
+    "- Inspect the repo only (read-only).",
+    "- Return structured JSON in a fenced `feature-prompt-localization` block.",
+    "",
+    "## Feature",
+    `- Title: ${plan.title}`,
+    `- Goal: ${plan.goal}`,
+    ""
+  ];
+
+  if (plan.featureSpec?.approvedAt) {
+    lines.push(...formatApprovedFeatureSpecPacketSection(plan.featureSpec));
+  }
+
+  lines.push(
+    "## Current step",
+    `- Title: ${step.title}`,
+    `- Goal: ${step.goal}`,
+    "",
+    ...formatBulletSection("## Step acceptance criteria", step.acceptanceCriteria),
+    ...formatBulletSection("## Feature non-goals", plan.nonGoals),
+    ...formatBulletSection("## Feature constraints", plan.constraints)
+  );
+
+  if (project) {
+    lines.push("## Project");
+    if (project.repoPath) {
+      lines.push(`- Repo: ${project.repoPath}`);
+    }
+    if (project.branch) {
+      lines.push(`- Branch: ${project.branch}`);
+    }
+    if (project.docs.length > 0) {
+      lines.push(`- Docs: ${project.docs.join("; ")}`);
+    }
+    lines.push(
+      ...formatBulletSection("## Likely files (seed)", project.likelyFiles),
+      ...formatBulletSection("## Verification commands", verifyCommands)
+    );
+  } else {
+    lines.push(...formatBulletSection("## Verification commands", verifyCommands));
+  }
+
+  lines.push(
+    "## Current implementation prompt seed",
+    promptSeed,
+    "",
+    "## Instructions",
+    "- Map this step to actual files, helpers, and tests in the repo.",
+    "- Call out risks and missing context.",
+    "- Produce a bounded `revisedImplementationPrompt` for **this step only**.",
+    "- Include verification commands the implementer should run.",
+    "",
+    "## Expected final response",
+    "Return short prose plus a fenced JSON block:",
+    "",
+    "```feature-prompt-localization",
+    JSON.stringify(
+      {
+        likelyFiles: ["src/core/example.ts"],
+        existingHelpers: ["helperName"],
+        testsToRun: verifyCommands.slice(0, 2),
+        risks: ["Describe repo-specific risks"],
+        revisedImplementationPrompt: "Bounded implementation prompt for this step only."
+      },
+      null,
+      2
+    ),
+    "```"
+  );
+
+  return { ok: true, markdown: lines.join("\n").trimEnd() };
+}
+
+export function buildFeatureStepPromptAuditPacket(
+  data: LifeHarnessData,
+  planId: string,
+  stepId?: string,
+  options: { now?: Date } = {}
+): FeaturePacketBuildResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const step = resolvePlanStep(plan, stepId);
+  if (!step) {
+    return { ok: false, error: "No current step resolved for prompt audit packet." };
+  }
+
+  const cardResult = buildCardContextPacket(data, plan.cardId, options);
+  if (!cardResult.ok) {
+    return { ok: false, error: cardResult.error };
+  }
+
+  const project = buildProjectContextForCard(data, plan.cardId);
+  const verifyCommands =
+    project?.verificationCommands?.length ? project.verificationCommands : DEFAULT_VERIFY_COMMANDS;
+  const promptSeed = step.suggestedPrompt?.trim() || step.goal.trim();
+
+  const lines: string[] = [
+    `# Feature Step Prompt Audit Packet — ${step.title}`,
+    "",
+    "## Purpose",
+    "Audit the localized implementation prompt before worktree implementation.",
+    "Make risk-reducing prompt edits only — no code changes.",
+    "",
+    "## Hard boundaries",
+    "- Do **not** implement or edit files.",
+    "- Do **not** add style polish.",
+    "- Only tighten scope, guards, files, and verification for this step.",
+    "- Return structured JSON in a fenced `feature-prompt-critique` block.",
+    "",
+    "## Feature",
+    `- Title: ${plan.title}`,
+    `- Goal: ${plan.goal}`,
+    ""
+  ];
+
+  if (plan.featureSpec?.approvedAt) {
+    lines.push(...formatApprovedFeatureSpecPacketSection(plan.featureSpec));
+  }
+
+  lines.push(
+    "## Current step",
+    `- Title: ${step.title}`,
+    `- Goal: ${step.goal}`,
+    "",
+    ...formatBulletSection("## Step acceptance criteria", step.acceptanceCriteria),
+    ...formatBulletSection("## Feature non-goals", plan.nonGoals),
+    ...formatBulletSection("## Feature constraints", plan.constraints),
+    "## Original implementation prompt seed",
+    promptSeed,
+    ""
+  );
+
+  if (step.promptLocalization?.revisedImplementationPrompt?.trim()) {
+    lines.push(
+      "## Localization context (from Cursor)",
+      "",
+      "### Revised implementation prompt (localized)",
+      step.promptLocalization.revisedImplementationPrompt,
+      "",
+      ...formatBulletSection("### Likely files", step.promptLocalization.likelyFiles),
+      ...formatBulletSection("### Existing helpers", step.promptLocalization.existingHelpers),
+      ...formatBulletSection("### Tests to run", step.promptLocalization.testsToRun),
+      ...formatBulletSection("### Localization risks", step.promptLocalization.risks)
+    );
+  } else {
+    lines.push(
+      "## Localization context",
+      "No localization was imported for this step. Audit the original prompt seed above.",
+      ""
+    );
+  }
+
+  if (project) {
+    lines.push("## Project");
+    if (project.repoPath) {
+      lines.push(`- Repo: ${project.repoPath}`);
+    }
+    if (project.branch) {
+      lines.push(`- Branch: ${project.branch}`);
+    }
+    lines.push(...formatBulletSection("## Verification commands (project)", verifyCommands));
+  } else {
+    lines.push(...formatBulletSection("## Verification commands (defaults)", verifyCommands));
+  }
+
+  lines.push(
+    "## Audit instructions",
+    "- Compare the localized prompt to the step scope and approved spec.",
+    "- Produce a safer bounded `finalImplementationPrompt` for this step only.",
+    "- Use verdict `ready` when the prompt is safe to implement as-is or with minor tightening.",
+    "- Use verdict `tighten_first` when risks remain but you still provide a safer final prompt.",
+    "",
+    "## Expected final response",
+    "Return short prose plus a fenced JSON block:",
+    "",
+    "```feature-prompt-critique",
+    JSON.stringify(
+      {
+        verdict: "ready",
+        risks: ["Describe remaining risks"],
+        requiredPromptChanges: ["List required prompt edits"],
+        finalImplementationPrompt: "Bounded final implementation prompt for this step only.",
+        mustCheckFiles: ["src/core/example.ts"],
+        verificationCommands: verifyCommands.slice(0, 2)
+      },
+      null,
+      2
+    ),
+    "```"
+  );
+
+  return { ok: true, markdown: lines.join("\n").trimEnd() };
+}
+
 export function buildFeatureStepImplementationPacket(
   data: LifeHarnessData,
   planId: string,
@@ -987,8 +2068,20 @@ export function buildFeatureStepImplementationPacket(
 
   const project = buildProjectContextForCard(data, plan.cardId);
   const cardContextMarkdown = formatCardContextPacketMarkdown(cardResult.packet);
-  const verifyCommands =
+  const projectVerifyCommands =
     project?.verificationCommands?.length ? project.verificationCommands : DEFAULT_VERIFY_COMMANDS;
+  const verifyCommands = step.promptAudit?.verificationCommands?.length
+    ? mergeVerificationCommandsForPacket(
+        step.promptAudit.verificationCommands,
+        projectVerifyCommands
+      )
+    : projectVerifyCommands;
+  const implementationPrompt = resolveStepImplementationPrompt(step);
+  const promptSectionTitle = step.promptAudit?.finalImplementationPrompt?.trim()
+    ? "## Implementation prompt (audited)"
+    : step.suggestedPrompt?.trim()
+      ? "## Suggested implementation prompt"
+      : "## Implementation prompt (from step goal)";
 
   const lines: string[] = [
     `# Feature Step Implementation Packet — ${step.title}`,
@@ -996,7 +2089,14 @@ export function buildFeatureStepImplementationPacket(
     "## Feature",
     `- Title: ${plan.title}`,
     `- Goal: ${plan.goal}`,
-    "",
+    ""
+  ];
+
+  if (plan.featureSpec?.approvedAt) {
+    lines.push(...formatApprovedFeatureSpecPacketSection(plan.featureSpec));
+  }
+
+  lines.push(
     "## Current step",
     `- Title: ${step.title}`,
     `- Goal: ${step.goal}`,
@@ -1004,7 +2104,7 @@ export function buildFeatureStepImplementationPacket(
     ...formatBulletSection("## Step acceptance criteria", step.acceptanceCriteria),
     ...formatBulletSection("## Feature non-goals", plan.nonGoals),
     ...formatBulletSection("## Feature constraints", plan.constraints)
-  ];
+  );
 
   if (project) {
     lines.push("## Project");
@@ -1024,8 +2124,8 @@ export function buildFeatureStepImplementationPacket(
 
   lines.push("## Card context", cardContextMarkdown, "");
 
-  if (step.suggestedPrompt) {
-    lines.push("## Suggested implementation prompt", step.suggestedPrompt, "");
+  if (implementationPrompt) {
+    lines.push(promptSectionTitle, implementationPrompt, "");
   }
 
   lines.push(
@@ -1058,7 +2158,12 @@ export function buildFeatureStepReviewPacket(
     return { ok: false, error: "No current step resolved for review packet." };
   }
 
-  const output = agentOutput?.trim() || step.outputSummary?.trim() || "(not provided)";
+  const rawOutput =
+    step.implementationProof?.rawOutput?.trim() ||
+    agentOutput?.trim() ||
+    step.outputSummary?.trim() ||
+    "(not provided)";
+  const outputExcerpt = capRawOutputExcerptForReviewPacket(rawOutput);
   const session = step.agentSessionId
     ? data.agentSessions.find((item) => item.id === step.agentSessionId)
     : undefined;
@@ -1072,17 +2177,27 @@ export function buildFeatureStepReviewPacket(
     "## Feature plan",
     `- Title: ${plan.title}`,
     `- Goal: ${plan.goal}`,
-    "",
+    ""
+  ];
+
+  if (plan.featureSpec?.approvedAt) {
+    lines.push(...formatApprovedFeatureSpecPacketSection(plan.featureSpec));
+  }
+
+  lines.push(
     "## Current step",
     `- Title: ${step.title}`,
     `- Goal: ${step.goal}`,
     "",
     ...formatBulletSection("## Step acceptance criteria", step.acceptanceCriteria),
     ...formatBulletSection("## Feature non-goals", plan.nonGoals),
-    "## Implementation agent output",
-    output,
+    ...formatImplementationPromptPacketSection(step),
+    ...formatImplementationProofPacketSections(step),
+    ...formatRunnerEvidencePacketSections(data, step),
+    "## Raw implementation output",
+    outputExcerpt,
     ""
-  ];
+  );
 
   if (session) {
     lines.push(

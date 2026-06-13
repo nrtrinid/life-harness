@@ -17,6 +17,7 @@ describe("cursorArgs", () => {
       expect(result.args).toEqual([
         "-p",
         "--force",
+        "--trust",
         "--output-format",
         "text",
         expect.stringContaining("C:/tmp/prompt.md")
@@ -30,6 +31,17 @@ describe("cursorArgs", () => {
     if (result.ok) {
       expect(result.promptFilePath).toBe("C:/Users/me/AppData/Local/Temp/prompt.md");
       expect(result.args.at(-1)).toContain("C:/Users/me/AppData/Local/Temp/prompt.md");
+    }
+  });
+
+  it("passes workspace path for headless trust in isolated worktrees", () => {
+    const result = buildCursorArgs("C:/tmp/prompt.md", {
+      workspacePath: "C:\\worktrees\\life-harness\\feature-step-abc"
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.args).toContain("--workspace");
+      expect(result.args).toContain("C:/worktrees/life-harness/feature-step-abc");
     }
   });
 

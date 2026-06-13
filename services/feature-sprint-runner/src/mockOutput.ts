@@ -1,4 +1,5 @@
 import {
+  isPromptAuditProfile,
   isScopingProfile,
   type FeatureSprintRunnerProfile
 } from "../../../src/core/featureSprintRunner";
@@ -41,9 +42,27 @@ const MOCK_REVIEW_OUTPUT = `Review complete. The implementation output looks acc
 \`\`\`
 `;
 
+const MOCK_PROMPT_AUDIT_OUTPUT = `Prompt audit complete. The implementation prompt is bounded for this step.
+
+\`\`\`feature-prompt-critique
+{
+  "verdict": "ready",
+  "risks": ["Scope may creep without explicit file list"],
+  "requiredPromptChanges": ["Keep changes limited to listed files"],
+  "finalImplementationPrompt": "Implement the current step using only the files named in the audit packet. Add tests for core logic changes.",
+  "mustCheckFiles": ["src/core/featureSprintOrchestrator.ts"],
+  "verificationCommands": ["npm test -- --run src/core/featureSprintOrchestrator.test.ts"]
+}
+\`\`\`
+`;
+
 export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): string {
   if (isScopingProfile(profile)) {
     return MOCK_SCOPING_OUTPUT;
+  }
+
+  if (isPromptAuditProfile(profile)) {
+    return MOCK_PROMPT_AUDIT_OUTPUT;
   }
 
   return MOCK_REVIEW_OUTPUT;

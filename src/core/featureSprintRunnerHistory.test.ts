@@ -13,10 +13,15 @@ import {
   isFeatureSprintRunnerHistorySafetyBlocked,
   markFeatureSprintRunnerRunImported,
   markFeatureSprintRunnerRunWorktreeCleanup,
-  markMostRecentFeatureSprintRunnerRunImported
+  markMostRecentFeatureSprintRunnerRunImported,
+  markReviewRunnerRunImportedForVerdict,
+  resolveReviewRunnerRunForImportMark
 } from "./featureSprintRunnerHistory";
 import {
   createFeatureSprintPlanForCard,
+  getActiveFeatureSprintPlanForCard,
+  hasStepPromptAudit,
+  importFeaturePromptAuditFromText,
   importFeatureSprintPlanFromText
 } from "./featureSprintOrchestrator";
 import { normalizeData } from "./stateHydration";
@@ -817,5 +822,352 @@ describe("markFeatureSprintRunnerRunWorktreeCleanup", () => {
       return;
     }
     expect(JSON.stringify(marked.state.featureSprintPlans)).toBe(plansBefore);
+  });
+
+  it("completing codex_prompt_audit run does not persist step.promptAudit", () => {
+    const SAMPLE_PLAN_BLOCK = `
+\`\`\`feature-sprint-plan
+{
+  "title": "Prompt audit runner",
+  "goal": "Trust model",
+  "acceptanceCriteria": ["No auto-import"],
+  "nonGoals": [],
+  "constraints": [],
+  "steps": [
+    {
+      "title": "Core",
+      "goal": "Add runner",
+      "acceptanceCriteria": ["Manual import only"]
+    }
+  ]
+}
+\`\`\`
+`;
+
+    const SAMPLE_CRITIQUE_BLOCK = `
+\`\`\`feature-prompt-critique
+{
+  "verdict": "ready",
+  "risks": [],
+  "requiredPromptChanges": [],
+  "finalImplementationPrompt": "Trust-test audited prompt.",
+  "mustCheckFiles": [],
+  "verificationCommands": []
+}
+\`\`\`
+`;
+
+    let data = baseData();
+    const imported = importFeatureSprintPlanFromText(
+      data,
+      "card-build-test",
+      SAMPLE_PLAN_BLOCK,
+      FIXED_NOW
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) {
+      return;
+    }
+    data = imported.state;
+
+    const plan = getActiveFeatureSprintPlanForCard(data, "card-build-test");
+    expect(plan?.currentStepId).toBeTruthy();
+    if (!plan?.currentStepId) {
+      return;
+    }
+
+    const created = createFeatureSprintRunnerRun(data, {
+      profile: "codex_prompt_audit",
+      cardId: "card-build-test",
+      planId: plan.id,
+      stepId: plan.currentStepId,
+      repoPath: "C:/repo"
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok || !created.runId) {
+      return;
+    }
+
+    const completed = completeFeatureSprintRunnerRun(
+      created.state,
+      created.runId,
+      {
+        ok: true,
+        profile: "codex_prompt_audit",
+        outputText: SAMPLE_CRITIQUE_BLOCK,
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString()
+      },
+      FIXED_NOW.toISOString()
+    );
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) {
+      return;
+    }
+
+    const stepAfterRun = getActiveFeatureSprintPlanForCard(
+      completed.state,
+      "card-build-test"
+    )?.steps.find((item) => item.id === plan.currentStepId);
+    expect(hasStepPromptAudit(stepAfterRun)).toBe(false);
+
+    const importedAudit = importFeaturePromptAuditFromText(
+      completed.state,
+      plan.id,
+      SAMPLE_CRITIQUE_BLOCK,
+      plan.currentStepId,
+      FIXED_NOW
+    );
+    expect(importedAudit.ok).toBe(true);
+    if (!importedAudit.ok) {
+      return;
+    }
+
+    const stepAfterImport = getActiveFeatureSprintPlanForCard(
+      importedAudit.state,
+      "card-build-test"
+    )?.steps.find((item) => item.id === plan.currentStepId);
+    expect(hasStepPromptAudit(stepAfterImport)).toBe(true);
+  });
+
+  describe("Phase B5 review runner import marking", () => {
+    const SAMPLE_PLAN_BLOCK = `
+\`\`\`feature-sprint-plan
+{
+  "title": "Review runner test",
+  "goal": "Test review import marking",
+  "acceptanceCriteria": ["Marked correctly"],
+  "nonGoals": [],
+  "constraints": [],
+  "steps": [
+    {
+      "title": "Core",
+      "goal": "Review slice",
+      "acceptanceCriteria": ["Review works"]
+    }
+  ]
+}
+\`\`\`
+`;
+
+    const REVIEW_OUTPUT = `\`\`\`feature-review-verdict
+{
+  "status": "accepted",
+  "verdict": "Looks good.",
+  "nextPrompt": "Next",
+  "followUps": []
+}
+\`\`\``;
+
+    function importPlan(data: LifeHarnessData) {
+      return importFeatureSprintPlanFromText(data, "card-build-test", SAMPLE_PLAN_BLOCK, FIXED_NOW);
+    }
+
+    function createCompletedReviewRun(
+      data: LifeHarnessData,
+      profile: "codex_review" | "cursor_review",
+      outputText: string,
+      startedAt: string
+    ) {
+      const imported = importPlan(data);
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return undefined;
+      }
+
+      const plan = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test");
+      if (!plan?.currentStepId) {
+        return undefined;
+      }
+
+      const created = createFeatureSprintRunnerRun(imported.state, {
+        profile,
+        cardId: "card-build-test",
+        planId: plan.id,
+        stepId: plan.currentStepId,
+        startedAt
+      });
+      if (!created.ok) {
+        return undefined;
+      }
+
+      const completed = completeFeatureSprintRunnerRun(
+        created.state,
+        created.runId,
+        {
+          ok: true,
+          profile,
+          outputText,
+          startedAt,
+          completedAt: startedAt
+        },
+        startedAt
+      );
+      if (!completed.ok) {
+        return undefined;
+      }
+
+      return {
+        state: completed.state,
+        planId: plan.id,
+        stepId: plan.currentStepId,
+        runId: created.runId
+      };
+    }
+
+    it("completeFeatureSprintRunnerRun does not persist reviewVerdict", () => {
+      const result = createCompletedReviewRun(
+        baseData(),
+        "codex_review",
+        REVIEW_OUTPUT,
+        "2026-06-09T12:00:00.000Z"
+      );
+      expect(result).toBeTruthy();
+      if (!result) {
+        return;
+      }
+
+      const step = getActiveFeatureSprintPlanForCard(result.state, "card-build-test")?.steps.find(
+        (item) => item.id === result.stepId
+      );
+      expect(step?.reviewVerdict).toBeUndefined();
+      expect(step?.reviewStatus).toBeUndefined();
+    });
+
+    it("markReviewRunnerRunImportedForVerdict marks cursor_review run by selectedRunId", () => {
+      const result = createCompletedReviewRun(
+        baseData(),
+        "cursor_review",
+        REVIEW_OUTPUT,
+        "2026-06-09T12:00:00.000Z"
+      );
+      expect(result?.runId).toBeTruthy();
+      if (!result?.runId) {
+        return;
+      }
+
+      const marked = markReviewRunnerRunImportedForVerdict(result.state, {
+        cardId: "card-build-test",
+        planId: result.planId,
+        stepId: result.stepId,
+        reviewImportText: REVIEW_OUTPUT,
+        selectedRunId: result.runId,
+        runnerAgent: "cursor"
+      });
+      expect(marked.ok).toBe(true);
+      if (!marked.ok) {
+        return;
+      }
+      expect(marked.runId).toBe(result.runId);
+
+      const run = marked.state.featureSprintRunnerRuns.find((item) => item.id === result.runId);
+      expect(run?.profile).toBe("cursor_review");
+      expect(run?.importedAt).toBeTruthy();
+    });
+
+    it("prefers selected cursor run when runnerAgent toggle switched to codex before import", () => {
+      let data = baseData();
+      const imported = importPlan(data);
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+      data = imported.state;
+
+      const plan = getActiveFeatureSprintPlanForCard(data, "card-build-test");
+      if (!plan?.currentStepId) {
+        return;
+      }
+
+      const codexCreated = createFeatureSprintRunnerRun(data, {
+        profile: "codex_review",
+        cardId: "card-build-test",
+        planId: plan.id,
+        stepId: plan.currentStepId,
+        startedAt: "2026-06-09T13:00:00.000Z"
+      });
+      expect(codexCreated.ok).toBe(true);
+      if (!codexCreated.ok) {
+        return;
+      }
+
+      const codexCompleted = completeFeatureSprintRunnerRun(
+        codexCreated.state,
+        codexCreated.runId,
+        {
+          ok: true,
+          profile: "codex_review",
+          outputText: "older codex review",
+          startedAt: "2026-06-09T13:00:00.000Z",
+          completedAt: "2026-06-09T13:00:00.000Z"
+        },
+        "2026-06-09T13:00:00.000Z"
+      );
+      expect(codexCompleted.ok).toBe(true);
+      if (!codexCompleted.ok) {
+        return;
+      }
+
+      const cursorCreated = createFeatureSprintRunnerRun(codexCompleted.state, {
+        profile: "cursor_review",
+        cardId: "card-build-test",
+        planId: plan.id,
+        stepId: plan.currentStepId,
+        startedAt: "2026-06-09T14:00:00.000Z"
+      });
+      expect(cursorCreated.ok).toBe(true);
+      if (!cursorCreated.ok) {
+        return;
+      }
+
+      const cursorCompleted = completeFeatureSprintRunnerRun(
+        cursorCreated.state,
+        cursorCreated.runId,
+        {
+          ok: true,
+          profile: "cursor_review",
+          outputText: REVIEW_OUTPUT,
+          startedAt: "2026-06-09T14:00:00.000Z",
+          completedAt: "2026-06-09T14:00:00.000Z"
+        },
+        "2026-06-09T14:00:00.000Z"
+      );
+      expect(cursorCompleted.ok).toBe(true);
+      if (!cursorCompleted.ok) {
+        return;
+      }
+
+      const resolved = resolveReviewRunnerRunForImportMark(cursorCompleted.state, {
+        cardId: "card-build-test",
+        planId: plan.id,
+        stepId: plan.currentStepId,
+        reviewImportText: REVIEW_OUTPUT,
+        selectedRunId: cursorCreated.runId,
+        runnerAgent: "codex"
+      });
+      expect(resolved).toBe(cursorCreated.runId);
+
+      const marked = markReviewRunnerRunImportedForVerdict(cursorCompleted.state, {
+        cardId: "card-build-test",
+        planId: plan.id,
+        stepId: plan.currentStepId,
+        reviewImportText: REVIEW_OUTPUT,
+        selectedRunId: cursorCreated.runId,
+        runnerAgent: "codex"
+      });
+      expect(marked.ok).toBe(true);
+      if (!marked.ok) {
+        return;
+      }
+      expect(marked.runId).toBe(cursorCreated.runId);
+      const cursorRun = marked.state.featureSprintRunnerRuns.find(
+        (item) => item.id === cursorCreated.runId
+      );
+      const codexRun = marked.state.featureSprintRunnerRuns.find(
+        (item) => item.id === codexCreated.runId
+      );
+      expect(cursorRun?.importedAt).toBeTruthy();
+      expect(codexRun?.importedAt).toBeUndefined();
+    });
   });
 });

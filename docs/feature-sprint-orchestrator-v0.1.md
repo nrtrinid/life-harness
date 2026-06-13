@@ -1,5 +1,7 @@
 # Feature Sprint Orchestrator v0.1
 
+For vision, agent roles, gate model, and doc map, see **[`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md)** (authority doc).
+
 ## What this adds
 
 Feature Sprint Orchestrator is a card-anchored manual loop for solo-builder feature work. Life Harness acts as **conductor**: it stores the plan, generates copy/paste packets, tracks step gates, and logs proof on feature completion.
@@ -138,12 +140,9 @@ Local runner profiles (Codex and Cursor CLI) ship separately — see [feature-sp
 
 ## Future path
 
-- Streaming partial runner output to UI
-- Worktree/branch isolation per slice
-- `Copy implementation prompt + log sent` if trivial atop agent session helpers
-- Feature-step Next Move collector
-- Assistant Action integration for import/approve flows
-- Agent Workbench row hints when `agentSessionId` links a step
+See [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md) for trust dashboard, parallel lanes, expanded contracts, risk routing, and replay evals.
+
+Near-term items also tracked there: streaming runner output, Next Move collector, Assistant Action integration, Agent Workbench hints.
 
 ## Core module
 

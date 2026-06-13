@@ -46,7 +46,7 @@ See [docs/feature-sprint-cursor-runner-v0.1.md](../../docs/feature-sprint-cursor
 | `FEATURE_SPRINT_RUNNER_ENABLE_CURSOR` | unset | Must be `1` for real `cursor_*` profiles |
 | `FEATURE_SPRINT_CODEX_BIN` | `codex` | Experimental real Codex mode only |
 | `FEATURE_SPRINT_CODEX_MODEL` | optional | Experimental |
-| `FEATURE_SPRINT_CODEX_REASONING_EFFORT` | optional | e.g. `high` / `xhigh` if supported |
+| `FEATURE_SPRINT_CODEX_REASONING_EFFORT` | optional | Passed via `-c model_reasoning_effort=...` if set |
 | `FEATURE_SPRINT_CURSOR_BIN` | `agent` | Experimental real Cursor mode only |
 | `FEATURE_SPRINT_CURSOR_MODEL` | optional | e.g. `composer-2.5` |
 | `CURSOR_API_KEY` | unset | Required for real Cursor mode (server-side only) |
@@ -61,6 +61,8 @@ See [docs/feature-sprint-cursor-runner-v0.1.md](../../docs/feature-sprint-cursor
 Implementation runs accept optional `verificationCommands` + `runVerification` (user-configured in app). See [docs/feature-sprint-verification-capture-v0.2.md](../../docs/feature-sprint-verification-capture-v0.2.md).
 
 On Windows, package-manager verification commands (`npm`, `npx`, `pnpm`, `yarn`) spawn through a fixed `cmd.exe /d /s /c` shim with parsed args only — not raw shell strings.
+
+Codex/Cursor agent binaries ending in `.cmd`, `.bat`, or `.ps1` (including npm global `codex.cmd` and `cursor-agent-wrapper.cmd`) use the same `cmd.exe` shim — Node cannot spawn script wrappers with `shell: false` on Windows.
 
 App token (optional, pair with server): `EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN`
 

@@ -1,12 +1,13 @@
 import { spawn } from "node:child_process";
 import http from "node:http";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { parseFeatureReviewVerdictBlock, parseFeatureSprintPlanBlock } from "../../../src/core/featureSprintOrchestrator";
+import { parseFeaturePromptCritiqueBlock, parseFeatureReviewVerdictBlock, parseFeatureSprintPlanBlock } from "../../../src/core/featureSprintOrchestrator";
 import type { FeatureSprintRunnerRequest, FeatureSprintRunnerResponse } from "../../../src/core/featureSprintRunner";
 import type { FeatureSprintWorktreeCleanupResponse } from "../../../src/core/featureSprintRunner";
 import { createServer } from "../src/server";
@@ -209,6 +210,25 @@ describe("feature-sprint-runner", () => {
     }
   });
 
+  it("returns mock prompt audit fence for codex_prompt_audit without worktree", async () => {
+    const result = await postRun(port, {
+      profile: "codex_prompt_audit",
+      promptMarkdown: "Audit this implementation prompt.",
+      cardId: "card-build-test",
+      planId: "plan-1",
+      stepId: "step-1",
+      repoPath: tempRepoPath
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, profile: "codex_prompt_audit" });
+    if ("outputText" in result.body && result.body.outputText) {
+      expect(parseFeaturePromptCritiqueBlock(result.body.outputText)?.verdict).toBe("ready");
+    }
+    if ("worktreePath" in result.body) {
+      expect(result.body.worktreePath).toBeUndefined();
+    }
+  });
+
   it("returns mock implementation output with isolated worktree metadata", async () => {
     const result = await postRun(port, {
       profile: "codex_implementation",
@@ -316,6 +336,43 @@ describe("feature-sprint-runner", () => {
     const output = `${row?.stdoutExcerpt ?? ""}${row?.stderrExcerpt ?? ""}`;
     expect(output).toMatch(/\d+\.\d+\.\d+/);
   });
+
+  it.runIf(process.platform === "win32")(
+    "spawns codex.cmd for real prompt audit without EINVAL",
+    async () => {
+      const codexCmd = path.join(process.env.APPDATA ?? "", "npm", "codex.cmd");
+      if (!codexCmd || !existsSync(codexCmd)) {
+        return;
+      }
+
+      process.env.FEATURE_SPRINT_RUNNER_MODE = "real";
+      process.env.FEATURE_SPRINT_RUNNER_ENABLE_CODEX = "1";
+      process.env.FEATURE_SPRINT_RUNNER_TOKEN = "secret-token";
+      process.env.FEATURE_SPRINT_CODEX_BIN = codexCmd;
+
+      const result = await postRun(
+        port,
+        {
+          profile: "codex_prompt_audit",
+          promptMarkdown: "Reply with exactly: codex-spawn-ok",
+          repoPath: tempRepoPath,
+          timeoutMs: 2_000
+        },
+        { Authorization: "Bearer secret-token" }
+      );
+
+      expect(result.body).toMatchObject({ profile: "codex_prompt_audit" });
+      const errorText =
+        "error" in result.body
+          ? String(result.body.error)
+          : "outputText" in result.body
+            ? String(result.body.outputText ?? "")
+            : "";
+      expect(errorText).not.toMatch(/spawn EINVAL/i);
+      expect(errorText).not.toMatch(/unexpected argument '--file'/i);
+    },
+    30_000
+  );
 
   it("rejects verification fields on scoping profile", async () => {
     const result = await postRun(port, {

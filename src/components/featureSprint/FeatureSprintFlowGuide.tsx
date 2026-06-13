@@ -11,22 +11,26 @@ const BOUNDARY_LINES = [
 ] as const;
 
 const BEFORE_PLAN_STEPS = [
-  "1. Start feature panel — describe the feature (optional rough spec).",
-  "2. Check setup — project metadata, repo path, runner.",
-  "3. Scope it — copy scoping packet or run scoping with Codex.",
-  "4. Import plan — inspect output, then click Import plan."
+  "1. Start feature panel — paste ChatGPT web spec, choose source, Save spec.",
+  "2. Approve feature spec — required before Run implementation when a spec is saved.",
+  "3. Check setup — project metadata, repo path, runner.",
+  "4. Scope it — copy scoping packet or run scoping with Codex.",
+  "5. Import plan — inspect output, then click Import plan."
 ] as const;
 
 const AFTER_PLAN_STEPS = [
-  "1. Run implementation in worktree",
-  "2. View details — open the run in Recent runner runs",
-  "3. Inspect output, changed files, diff, and verification",
-  "4. Save agent output",
-  "5. Run review with Codex or copy review packet",
-  "6. Import review verdict",
-  "7. Advance step — repeat from step 1 for the next slice",
-  "8. Mark feature complete",
-  "9. Clean worktree — View details → Clean worktree; Force clean only after inspecting output/diff"
+  "0. Optional: Copy for Cursor localization → import localization (read-only repo map)",
+  "1. Optional: Copy for GPT/Codex prompt audit → Run prompt audit with Codex → import prompt audit",
+  "2. Run implementation in worktree",
+  "3. View details — open the run in Recent runner runs",
+  "4. Inspect output, changed files, diff, and verification",
+  "5. Save agent output",
+  "6. Normalize for review",
+  "7. Run review with Codex/Cursor or copy review packet",
+  "8. Import review verdict",
+  "9. Advance step — repeat from step 2 for the next slice",
+  "10. Mark feature complete",
+  "11. Clean worktree — View details → Clean worktree; Force clean only after inspecting output/diff"
 ] as const;
 
 export function FeatureSprintFlowGuide() {

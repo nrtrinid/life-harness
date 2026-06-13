@@ -1,4 +1,5 @@
 import {
+  parseFeaturePromptCritiqueBlock,
   parseFeatureReviewVerdictBlock,
   parseFeatureSprintPlanBlock
 } from "./featureSprintOrchestrator";
@@ -25,4 +26,16 @@ export function reviewFenceReadinessNotice(outputText: string | undefined): stri
   }
 
   return "Output loaded but no feature-review-verdict fence found. Inspect before Import review verdict.";
+}
+
+export function promptAuditFenceReadinessNotice(outputText: string | undefined): string | undefined {
+  if (!outputText?.trim()) {
+    return undefined;
+  }
+
+  if (parseFeaturePromptCritiqueBlock(outputText)) {
+    return undefined;
+  }
+
+  return "Output needs manual cleanup before import.";
 }

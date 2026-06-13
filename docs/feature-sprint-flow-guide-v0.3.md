@@ -1,5 +1,7 @@
 # Feature Sprint Flow Guide v0.3
 
+Vision and agent roles: [`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md).
+
 ## What this adds
 
 A visible **How this flow works** guide on Card Detail Backroom that documents the full Feature Sprint trust loop — including the inspection step between implementation runs and saving output, and worktree cleanup after review.

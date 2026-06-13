@@ -18,6 +18,18 @@ export type FeatureSprintActionGuideInput = {
   reviewVerdictImported: boolean;
   scopingOutputReady: boolean;
   planImportTextReady: boolean;
+  /** UI-only: local textarea differs from persisted plan.featureSpec.body */
+  featureSpecDirty?: boolean;
+  /** Persisted localization on current step */
+  stepLocalizationSaved?: boolean;
+  /** Persisted prompt audit on current step */
+  stepPromptAuditSaved?: boolean;
+  /** Persisted implementation proof on current step */
+  stepImplementationProofSaved?: boolean;
+  /** Step review accepted — gates advance_step in checklist */
+  stepReviewAccepted?: boolean;
+  /** Succeeded codex_prompt_audit run output exists for current step */
+  stepPromptAuditRunnerSucceeded?: boolean;
 };
 
 function step(
@@ -60,9 +72,18 @@ function implementationLoopSteps(input: FeatureSprintActionGuideInput): FeatureS
       input.stepOutputSaved ? "done" : input.implementationRunViewed ? "current" : "upcoming"
     ),
     step(
+      "normalize_proof",
+      "Normalize for review (optional)",
+      input.stepImplementationProofSaved ? "done" : input.stepOutputSaved ? "current" : "upcoming"
+    ),
+    step(
       "run_review",
       `Run review with ${agentLabel}`,
-      input.reviewOutputReady || input.reviewVerdictImported ? "done" : input.stepOutputSaved ? "current" : "upcoming"
+      input.reviewOutputReady || input.reviewVerdictImported
+        ? "done"
+        : input.stepImplementationProofSaved || input.stepOutputSaved
+          ? "current"
+          : "upcoming"
     ),
     step(
       "import_review",
@@ -72,11 +93,84 @@ function implementationLoopSteps(input: FeatureSprintActionGuideInput): FeatureS
     step(
       "advance_step",
       "Advance step",
-      input.reviewVerdictImported ? "current" : "upcoming"
+      input.stepReviewAccepted ? "current" : "upcoming"
     )
   ];
 
   return steps;
+}
+
+function prependSaveFeatureSpecStep(
+  steps: FeatureSprintActionGuideStep[],
+  dirty: boolean
+): FeatureSprintActionGuideStep[] {
+  if (!dirty) {
+    return steps;
+  }
+  return [
+    step("save_feature_spec", "Save feature spec", "current"),
+    ...steps.map((item) =>
+      item.status === "current" ? { ...item, status: "upcoming" as const } : item
+    )
+  ];
+}
+
+function prependOptionalLocalizationSteps(
+  steps: FeatureSprintActionGuideStep[],
+  saved: boolean
+): FeatureSprintActionGuideStep[] {
+  const localizationSteps: FeatureSprintActionGuideStep[] = [
+    step(
+      "copy_localization",
+      "Copy for Cursor localization (optional)",
+      saved ? "done" : "upcoming"
+    ),
+    step(
+      "import_localization",
+      "Import localization (optional)",
+      saved ? "done" : "upcoming"
+    )
+  ];
+  return [...localizationSteps, ...steps];
+}
+
+function prependOptionalAuditSteps(
+  steps: FeatureSprintActionGuideStep[],
+  input: FeatureSprintActionGuideInput
+): FeatureSprintActionGuideStep[] {
+  const auditSaved = Boolean(input.stepPromptAuditSaved);
+  const auditSteps: FeatureSprintActionGuideStep[] = [
+    step(
+      "copy_prompt_audit",
+      "Copy for GPT/Codex prompt audit (optional)",
+      auditSaved ? "done" : "upcoming"
+    ),
+    step(
+      "run_prompt_audit",
+      "Run prompt audit with Codex (optional)",
+      auditSaved
+        ? "done"
+        : input.stepPromptAuditRunnerSucceeded
+          ? "done"
+          : "upcoming"
+    ),
+    step(
+      "import_prompt_audit",
+      "Import prompt audit (optional)",
+      auditSaved ? "done" : "upcoming"
+    )
+  ];
+  return [...auditSteps, ...steps];
+}
+
+function prependOptionalInnerLoopSteps(
+  steps: FeatureSprintActionGuideStep[],
+  input: FeatureSprintActionGuideInput
+): FeatureSprintActionGuideStep[] {
+  return prependOptionalLocalizationSteps(
+    prependOptionalAuditSteps(steps, input),
+    Boolean(input.stepLocalizationSaved)
+  );
 }
 
 export function buildFeatureSprintActionGuide(
@@ -84,22 +178,27 @@ export function buildFeatureSprintActionGuide(
 ): FeatureSprintActionGuideStep[] {
   const agentLabel = runnerAgentLabel(resolveRunnerAgent(input));
 
+  let steps: FeatureSprintActionGuideStep[];
+
   switch (input.nextActionKind) {
     case "add_project_metadata":
-      return markCurrent([
+      steps = markCurrent([
         step("repo_path", "Save project metadata with a repo path below", "current"),
         step("check_runner", "Check runner in Start feature", "upcoming"),
         step("run_scoping", "Run scoping", "upcoming")
       ]);
+      break;
     case "check_runner":
-      return markCurrent([
+      steps = markCurrent([
         step("start_runner", "Start npm run feature-runner in a terminal", "current"),
         step("check_runner", "Click Check runner in Start feature", "upcoming"),
         step("run_scoping", "Run scoping or copy scoping packet", "upcoming")
       ]);
+      break;
     case "run_scoping":
-      return markCurrent([
-        step("rough_spec", "Paste a rough spec in Start feature (optional)", "current"),
+      steps = markCurrent([
+        step("rough_spec", "Paste a feature spec in Start feature", "current"),
+        step("save_feature_spec", "Save feature spec", "upcoming"),
         step(
           "run_scoping",
           `Run scoping with ${agentLabel} or copy scoping packet`,
@@ -107,8 +206,9 @@ export function buildFeatureSprintActionGuide(
         ),
         step("import_plan", "Import plan", "upcoming")
       ]);
+      break;
     case "import_plan":
-      return markCurrent([
+      steps = markCurrent([
         step(
           "load_scoping",
           input.scopingOutputReady
@@ -118,34 +218,53 @@ export function buildFeatureSprintActionGuide(
         ),
         step("import_plan", "Click Import plan", input.planImportTextReady ? "current" : "upcoming")
       ]);
+      break;
+    case "approve_feature_spec":
+      steps = prependOptionalInnerLoopSteps(
+        markCurrent([
+          step("approve_feature_spec", "Approve feature spec", "current"),
+          step("import_plan", "Import plan if not imported yet", "upcoming"),
+          step("run_implementation", `Run implementation with ${agentLabel}`, "upcoming")
+        ]),
+        input
+      );
+      break;
     case "run_implementation":
-      return markCurrent([
-        step("run_implementation", `Run implementation with ${agentLabel}`, "current"),
-        ...implementationLoopSteps({
-          ...input,
-          implementationRunViewed: false,
-          stepOutputSaved: false,
-          reviewOutputReady: false,
-          reviewVerdictImported: false
-        }).slice(0, 2)
-      ]);
+      steps = prependOptionalInnerLoopSteps(
+        markCurrent([
+          step("run_implementation", `Run implementation with ${agentLabel}`, "current"),
+          ...implementationLoopSteps({
+            ...input,
+            implementationRunViewed: false,
+            stepOutputSaved: false,
+            reviewOutputReady: false,
+            reviewVerdictImported: false,
+            stepReviewAccepted: false
+          }).map((item) => ({ ...item, status: "upcoming" as const }))
+        ]),
+        input
+      );
+      break;
     case "save_agent_output":
-      return implementationLoopSteps(input);
+      steps = implementationLoopSteps(input);
+      break;
     case "run_review":
-      return implementationLoopSteps({
+      steps = implementationLoopSteps({
         ...input,
         implementationRunViewed: true,
         stepOutputSaved: true
       });
+      break;
     case "import_review":
-      return implementationLoopSteps({
+      steps = implementationLoopSteps({
         ...input,
         implementationRunViewed: true,
         stepOutputSaved: true,
         reviewOutputReady: true
       });
+      break;
     case "advance_step":
-      return markCurrent([
+      steps = markCurrent([
         step("advance_step", "Click Advance step", "current"),
         step(
           "next_slice",
@@ -153,14 +272,21 @@ export function buildFeatureSprintActionGuide(
           "upcoming"
         )
       ]);
+      break;
     case "complete_feature":
-      return markCurrent([
+      steps = markCurrent([
         step("complete_feature", "Click Mark feature complete", "current"),
         step("clean_worktree", "Clean worktree from View details when done", "upcoming")
       ]);
+      break;
     case "inspect_proof":
-      return markCurrent([step("inspect_proof", "Open Proof Ledger to inspect completion proof", "current")]);
+      steps = markCurrent([
+        step("inspect_proof", "Open Proof Ledger to inspect completion proof", "current")
+      ]);
+      break;
     default:
-      return [];
+      steps = [];
   }
+
+  return prependSaveFeatureSpecStep(steps, Boolean(input.featureSpecDirty));
 }
