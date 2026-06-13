@@ -62,6 +62,22 @@ import {
 
 ---
 
+## Agent Policy v0.1
+
+`src/core/agentPolicy.ts` adds the next explicit spine layer:
+
+```text
+workflow registry -> performance mode -> resolved policy
+```
+
+This is a resolver only. It does not wire runtime behavior into UI, clients, gateway routes, state, or provider selection.
+
+Performance modes (`quiet`, `balanced`, `fast`, `ultra`) change compute and verification budgets only. They do not expand context permissions, mutation policy, provider surface, or containment. The invariant is: **performance mode can increase compute, but never permissions.**
+
+`ultra` is descriptive and future-facing in v0.1. It does not perform GPU auto-tuning, enable slots, add endpoints, or change ai-gateway behavior.
+
+---
+
 ## Workflow inventory (condensed)
 
 Status labels are honest: **implemented**, **partial**, **stale**, **doc_only**.
