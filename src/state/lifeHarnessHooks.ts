@@ -49,6 +49,10 @@ export function useCareerActions() {
     dismissJobCandidate,
     approveJobCandidate,
     backfillResumeDraftPacket,
+    toggleResumeDraftPacketModule,
+    setResumeDraftPacketModuleForSection,
+    addDefaultResumeModulesToPacket,
+    patchResumeModule,
     importCareerSourcePack,
     clearCareerSourcePack
   } = useLifeHarness();
@@ -61,6 +65,10 @@ export function useCareerActions() {
       dismissJobCandidate,
       approveJobCandidate,
       backfillResumeDraftPacket,
+      toggleResumeDraftPacketModule,
+      setResumeDraftPacketModuleForSection,
+      addDefaultResumeModulesToPacket,
+      patchResumeModule,
       importCareerSourcePack,
       clearCareerSourcePack
     }),
@@ -71,6 +79,10 @@ export function useCareerActions() {
       dismissJobCandidate,
       approveJobCandidate,
       backfillResumeDraftPacket,
+      toggleResumeDraftPacketModule,
+      setResumeDraftPacketModuleForSection,
+      addDefaultResumeModulesToPacket,
+      patchResumeModule,
       importCareerSourcePack,
       clearCareerSourcePack
     ]
@@ -108,8 +120,10 @@ export function useJobSourcesActions() {
     recordJobSourceRun,
     runOneJobSource,
     runDueJobSources,
+    runHealthyJobSources,
     runAllEnabledJobSources,
-    runFitFinder
+    runFitFinder,
+    setJobSourcePackMode
   } = useLifeHarness();
 
   return useMemo(
@@ -120,8 +134,10 @@ export function useJobSourcesActions() {
       recordJobSourceRun,
       runOneJobSource,
       runDueJobSources,
+      runHealthyJobSources,
       runAllEnabledJobSources,
-      runFitFinder
+      runFitFinder,
+      setJobSourcePackMode
     }),
     [
       addJobSource,
@@ -130,8 +146,10 @@ export function useJobSourcesActions() {
       recordJobSourceRun,
       runOneJobSource,
       runDueJobSources,
+      runHealthyJobSources,
       runAllEnabledJobSources,
-      runFitFinder
+      runFitFinder,
+      setJobSourcePackMode
     ]
   );
 }

@@ -1,6 +1,9 @@
 import fs from "node:fs/promises";
 
-import { resolveGovernmentJobsFetchUrl } from "../../../src/core/jobSourceAdapters";
+import {
+  resolveGovernmentJobsFetchUrl,
+  resolveIcimsFetchUrl
+} from "../../../src/core/jobSourceAdapters";
 import {
   buildSafeRequestHeaders,
   validateJobSourceRequestConfig
@@ -83,7 +86,8 @@ async function fetchNetworkUrl(
   resolvedAddresses: string[],
   fetchImpl: FetchImpl,
   requestConfig?: JobSourceRequestConfig,
-  kind?: JobSourceKind
+  kind?: JobSourceKind,
+  cookieHeader?: string
 ): Promise<FetchSourceResult | FetchSourceError> {
   let hostname: string | undefined;
   try {
@@ -93,13 +97,49 @@ async function fetchNetworkUrl(
   }
 
   const method = requestConfig?.method ?? "GET";
-  const headers =
-    kind === "governmentjobs" && method === "GET"
-      ? {
-          Accept: "text/html,application/xhtml+xml,*/*",
-          "X-Requested-With": "XMLHttpRequest"
-        }
-      : buildSafeRequestHeaders();
+  const browserUserAgent =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+  let headers: Record<string, string> = buildSafeRequestHeaders();
+  if (kind === "governmentjobs" && method === "GET") {
+    headers = {
+      ...headers,
+      Accept: "text/html,application/xhtml+xml,*/*",
+      "X-Requested-With": "XMLHttpRequest"
+    };
+  }
+  if (kind === "icims") {
+    try {
+      const origin = new URL(url).origin;
+      headers = {
+        ...headers,
+        Referer: `${origin}/jobs/search`,
+        "User-Agent": browserUserAgent,
+        Accept: "text/html,application/xhtml+xml,*/*"
+      };
+    } catch {
+      // keep safe defaults
+    }
+  }
+  if (kind === "workday" && method === "POST") {
+    try {
+      const parsed = new URL(url);
+      const sitePath = parsed.pathname.replace(/\/wday\/cxs\/[^/]+\/[^/]+\/jobs\/?$/i, "");
+      const referer = sitePath ? `${parsed.origin}${sitePath}` : parsed.origin;
+      headers = {
+        ...headers,
+        Referer: referer,
+        Accept: "application/json",
+        "User-Agent": browserUserAgent
+      };
+    } catch {
+      // keep safe defaults
+    }
+  }
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader;
+  }
+
   const init: RequestInit = {
     method,
     headers,
@@ -145,7 +185,11 @@ export async function fetchSourceText(
   }
 
   const fetchUrl =
-    options.kind === "governmentjobs" ? resolveGovernmentJobsFetchUrl(url) : url;
+    options.kind === "governmentjobs"
+      ? resolveGovernmentJobsFetchUrl(url)
+      : options.kind === "icims"
+        ? resolveIcimsFetchUrl(url)
+        : url;
   const safety = await assertUrlSafeForFetch(fetchUrl, options.resolveHost);
   if (!safety.ok) {
     return { ok: false, error: safety.error };
@@ -160,6 +204,36 @@ export async function fetchSourceText(
       ...fixture,
       method: options.requestConfig?.method ?? "GET"
     };
+  }
+
+  if (options.kind === "icims") {
+    try {
+      const origin = new URL(safety.url).origin;
+      const warmup = await (options.fetchImpl ?? fetch)(`${origin}/jobs/search`, {
+        method: "GET",
+        headers: {
+          ...buildSafeRequestHeaders(),
+          Referer: `${origin}/jobs/search`,
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,*/*"
+        },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      });
+      const setCookie = warmup.headers.get("set-cookie");
+      if (setCookie) {
+        return fetchNetworkUrl(
+          safety.url,
+          safety.resolvedAddresses,
+          options.fetchImpl ?? fetch,
+          options.requestConfig,
+          options.kind,
+          setCookie
+        );
+      }
+    } catch {
+      // fall through to direct fetch
+    }
   }
 
   return fetchNetworkUrl(

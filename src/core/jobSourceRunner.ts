@@ -2,6 +2,7 @@ import { createId, nowIso } from "./ids";
 import {
   isSupportedAdapterKind,
   GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
+  ICIMS_ZERO_LISTINGS_MESSAGE,
   WORKDAY_ZERO_LISTINGS_MESSAGE,
   countWorkdayRawJobEntries,
   normalizeWithAdapter,
@@ -212,8 +213,16 @@ export function finalizeJobSourceFromPostings(
     source.kind === "governmentjobs" && normalized.length === 0 && normalizeErrors.length === 0;
   const isWorkdayWeakPass =
     source.kind === "workday" && normalized.length === 0 && normalizeErrors.length === 0;
+  const isIcimsWeakPass =
+    source.kind === "icims" && normalized.length === 0 && normalizeErrors.length === 0;
 
-  if (normalized.length === 0 && errors.length === 0 && !isGovernmentJobsWeakPass && !isWorkdayWeakPass) {
+  if (
+    normalized.length === 0 &&
+    errors.length === 0 &&
+    !isGovernmentJobsWeakPass &&
+    !isWorkdayWeakPass &&
+    !isIcimsWeakPass
+  ) {
     errors.push("No supported public postings found at this URL.");
   }
 
@@ -226,7 +235,9 @@ export function finalizeJobSourceFromPostings(
     ? GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE
     : isWorkdayWeakPass
       ? WORKDAY_ZERO_LISTINGS_MESSAGE
-      : errors.length > 0
+      : isIcimsWeakPass
+        ? ICIMS_ZERO_LISTINGS_MESSAGE
+        : errors.length > 0
         ? errors[0]
         : candidates.length > 0
           ? `Found ${candidates.length} new candidate${candidates.length === 1 ? "" : "s"}. Skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.${paginationNote}`
@@ -390,7 +401,7 @@ export function buildFetchErrorRunOutput(
 }
 
 export function parseFetchedRaw(source: JobSource, responseText: string): unknown {
-  if (source.kind === "jobposting_jsonld" || source.kind === "governmentjobs") {
+  if (source.kind === "jobposting_jsonld" || source.kind === "governmentjobs" || source.kind === "icims") {
     return responseText;
   }
   if (source.kind === "workday") {

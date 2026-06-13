@@ -6,6 +6,7 @@ import {
   buildSourceScheduleStats,
   formatRunBatchNotice,
   getDueJobSources,
+  getHealthyJobSources,
   getRunnableJobSources,
   getSourceDueBadge,
   isJobSourceDue,
@@ -201,9 +202,68 @@ describe("buildRunAllSummary and formatRunBatchNotice", () => {
       ])
     );
     expect(notice).toContain("Ran 2 sources");
-    expect(notice).toContain("1 successful");
+    expect(notice).toContain("1 produced matches");
     expect(notice).toContain("1 failed");
     expect(notice).toContain("5 new candidates");
     expect(notice).toContain("2 duplicates skipped");
+  });
+
+  it("counts weak-pass separately from produced matches", () => {
+    const outcomes: SourceRunOutcome[] = [
+      {
+        sourceId: "a",
+        sourceName: "A",
+        ok: true,
+        weakPass: true,
+        createdCandidates: 0,
+        skippedDuplicates: 0,
+        errors: [],
+        message: "weak"
+      },
+      {
+        sourceId: "b",
+        sourceName: "B",
+        ok: true,
+        createdCandidates: 2,
+        skippedDuplicates: 0,
+        errors: [],
+        message: "ok"
+      }
+    ];
+    const summary = buildRunAllSummary(outcomes);
+    expect(summary.weakPassSources).toBe(1);
+    expect(summary.successfulSources).toBe(1);
+    const notice = formatRunBatchNotice(summary);
+    expect(notice).toContain("weak-pass");
+  });
+});
+
+describe("getHealthyJobSources", () => {
+  it("includes healthy, stale, and never_run but excludes weak_pass", () => {
+    const sources = [
+      fixtureSource({ id: "healthy", lastRunAt: "2026-06-09T08:00:00.000Z" }),
+      fixtureSource({ id: "never" }),
+      fixtureSource({ id: "weak", lastRunAt: "2026-06-09T08:00:00.000Z" })
+    ];
+    const runs: JobSourceRunResult[] = [
+      {
+        sourceId: "healthy",
+        fetchedAt: "2026-06-09T08:00:00.000Z",
+        createdCandidateIds: ["c1"],
+        skippedDuplicates: 0,
+        errors: [],
+        message: "ok"
+      },
+      {
+        sourceId: "weak",
+        fetchedAt: "2026-06-09T08:00:00.000Z",
+        createdCandidateIds: [],
+        skippedDuplicates: 0,
+        errors: [],
+        message: "zero"
+      }
+    ];
+    const healthy = getHealthyJobSources(sources, runs, [], NOW);
+    expect(healthy.map((item) => item.id).sort()).toEqual(["healthy", "never"]);
   });
 });

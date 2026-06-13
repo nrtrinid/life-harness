@@ -132,16 +132,30 @@ export const SOURCE_CANDIDATE_EXAMPLES: SourceCandidateExample[] = [
       "MCCS civilian careers (filter to MCB Camp Pendleton). Registry bookmark — not runnable until an MCCS adapter exists."
   },
   {
+    name: "iCIMS Fixture (local)",
+    kind: "icims",
+    url: "/fixtures/sample-icims-listing.html",
+    notes: "Use this example → Test Source. No live network. Kind is set automatically."
+  },
+  {
+    name: "Viasat — iCIMS",
+    kind: "icims",
+    url: "https://careers-viasat.icims.com/jobs/search?ss=1&in_iframe=1",
+    notes:
+      "Viasat iCIMS search — listing HTML parsed defensively. Live fetch may redirect to marketing site."
+  },
+  {
     name: "Workday Fixture (local)",
     kind: "workday",
     url: "/fixtures/sample-workday-search.json",
     notes: "Use this example → Test Source. No live network. Kind is set automatically."
   },
   {
-    name: "Qualcomm",
+    name: "Qualcomm — Workday CXS",
     kind: "workday",
-    url: "https://qualcomm.wd12.myworkdayjobs.com/en-US/External",
-    notes: "Workday / MyWorkdayJobs — testable but adapter-limited. Default cadence: manual."
+    url: "https://qualcomm.wd12.myworkdayjobs.com/wday/cxs/qualcomm/External/jobs",
+    notes:
+      "Live Qualcomm CXS endpoint — use endpoint mode POST with workday_offset pagination. Site page URL also detects as Workday."
   },
   {
     name: "Northrop Grumman",

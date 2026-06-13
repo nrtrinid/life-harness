@@ -4,6 +4,7 @@ import type { PaginationStoppedReason } from "./jobSourcePagination";
 import { canRunJobSource } from "./jobSourceRunner";
 import {
   getDueJobSources,
+  getHealthyJobSources,
   getRunnableJobSources,
   getSourceDueBadge,
   isJobSourceDue,
@@ -26,6 +27,7 @@ export type SourceLifecyclePhase =
 
 export type BatchRunnerAction =
   | "run_due_sources"
+  | "run_healthy_sources"
   | "run_enabled_sources"
   | "retry_failed_source"
   | "no_runnable_sources";
@@ -54,9 +56,12 @@ export interface BatchRunnerLifecycleView {
   batchRunningLabel: string;
   dueRunEmptyMessage: string;
   enabledRunEmptyMessage: string;
+  healthyRunEmptyMessage: string;
   dueCount: number;
   runnableCount: number;
+  healthyCount: number;
   canRunDue: boolean;
+  canRunHealthy: boolean;
   canRunAll: boolean;
   primaryPanelTitle: string;
   primaryPanelReason: string;
@@ -71,6 +76,7 @@ export interface LastRunSummary {
 
 const DUE_RUN_EMPTY_MESSAGE = "No due sources to run.";
 const ENABLED_RUN_EMPTY_MESSAGE = "No enabled runnable sources.";
+const HEALTHY_RUN_EMPTY_MESSAGE = "No healthy runnable sources.";
 
 function isSourceRunning(
   source: JobSource,
@@ -164,9 +170,12 @@ export function deriveBatchRunnerLifecycle(
   const isBatchRunning = options?.isBatchRunning ?? false;
   const dueSources = getDueJobSources(sources, now);
   const runnableSources = getRunnableJobSources(sources);
+  const healthySources = getHealthyJobSources(sources, runs, candidates, now);
   const dueCount = dueSources.length;
   const runnableCount = runnableSources.length;
+  const healthyCount = healthySources.length;
   const canRunDue = !isBatchRunning && dueCount > 0;
+  const canRunHealthy = !isBatchRunning && healthyCount > 0;
   const canRunAll = !isBatchRunning && runnableCount > 0;
 
   const failedRunnableCount = runnableSources.filter(
@@ -177,6 +186,8 @@ export function deriveBatchRunnerLifecycle(
   let action: BatchRunnerAction = "no_runnable_sources";
   if (dueCount > 0) {
     action = "run_due_sources";
+  } else if (healthyCount > 0) {
+    action = "run_healthy_sources";
   } else if (runnableCount > 0) {
     action = failedRunnableCount > 0 ? "retry_failed_source" : "run_enabled_sources";
   }
@@ -184,25 +195,31 @@ export function deriveBatchRunnerLifecycle(
   const actionLabel =
     action === "run_due_sources"
       ? "Run due sources"
-      : action === "retry_failed_source"
-        ? "Retry failed sources"
-        : action === "run_enabled_sources"
-          ? "Run all enabled"
-          : "No runnable sources";
+      : action === "run_healthy_sources"
+        ? "Run healthy sources"
+        : action === "retry_failed_source"
+          ? "Retry failed sources"
+          : action === "run_enabled_sources"
+            ? "Run all enabled"
+            : "No runnable sources";
 
   const primaryPanelTitle = canRunDue
     ? `${dueCount} source${dueCount === 1 ? "" : "s"} due`
-    : canRunAll
-      ? "Run enabled job sources"
-      : "Paste one job posting";
+    : canRunHealthy
+      ? `Run ${healthyCount} healthy source${healthyCount === 1 ? "" : "s"}`
+      : canRunAll
+        ? "Run enabled job sources"
+        : "Paste one job posting";
 
   const primaryPanelReason = canRunDue
     ? "Refresh the due sources, then review any new matches before tinkering with setup."
-    : canRunAll
-      ? action === "retry_failed_source"
-        ? "Some enabled sources failed last time. Retry them, then review any new matches."
-        : "No source is due, but enabled sources can still bring in fresh options."
-      : "Sources are quiet. Manual paste is the fastest way to create one review decision.";
+    : canRunHealthy
+      ? "Run sources that produced matches before — skip weak-pass and error sources."
+      : canRunAll
+        ? action === "retry_failed_source"
+          ? "Some enabled sources failed last time. Retry them, then review any new matches."
+          : "No source is due, but enabled sources can still bring in fresh options."
+        : "Sources are quiet. Manual paste is the fastest way to create one review decision.";
 
   return {
     action,
@@ -210,9 +227,12 @@ export function deriveBatchRunnerLifecycle(
     batchRunningLabel: "Running batch…",
     dueRunEmptyMessage: DUE_RUN_EMPTY_MESSAGE,
     enabledRunEmptyMessage: ENABLED_RUN_EMPTY_MESSAGE,
+    healthyRunEmptyMessage: HEALTHY_RUN_EMPTY_MESSAGE,
     dueCount,
     runnableCount,
+    healthyCount,
     canRunDue,
+    canRunHealthy,
     canRunAll,
     primaryPanelTitle,
     primaryPanelReason

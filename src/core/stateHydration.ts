@@ -2,7 +2,7 @@ import { syncApplicationStatus } from "./career";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { normalizeResumeModules } from "./resumeModuleBank";
 import type { CardState, DailyState, JobCandidate, JobSource, LifeCard } from "./types";
-import { seedJobSources, seedResumeModules } from "../data/seedJobScout";
+import { seedJobSources, seedResumeModules, STARTER_JOB_SOURCE_IDS } from "../data/seedJobScout";
 
 export const RUN_INTERRUPTED_MESSAGE = "Run interrupted — reset on load.";
 
@@ -80,11 +80,17 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     agentSessions: partial.agentSessions ?? [],
     featureSprintPlans: partial.featureSprintPlans ?? [],
     featureSprintRunnerRuns: partial.featureSprintRunnerRuns ?? [],
-    careerSourcePack: partial.careerSourcePack ?? null
+    careerSourcePack: partial.careerSourcePack ?? null,
+    jobSourcePackMode: partial.jobSourcePackMode ?? "core"
   };
 }
 
-export function mergeSeedDefaults(data: LifeHarnessData): LifeHarnessData {
+export interface MergeSeedDefaultsResult {
+  data: LifeHarnessData;
+  addedStarterSourceIds: string[];
+}
+
+export function mergeSeedDefaults(data: LifeHarnessData): MergeSeedDefaultsResult {
   const moduleIds = new Set(data.resumeModules.map((module) => module.id));
   const mergedModules = [
     ...data.resumeModules,
@@ -92,15 +98,38 @@ export function mergeSeedDefaults(data: LifeHarnessData): LifeHarnessData {
   ];
 
   const sourceIds = new Set(data.jobSources.map((source) => source.id));
-  const mergedSources = [
-    ...data.jobSources,
-    ...seedJobSources.filter((source) => !sourceIds.has(source.id))
-  ];
+  const addedSources = seedJobSources.filter((source) => !sourceIds.has(source.id));
+  const addedStarterSourceIds = addedSources
+    .map((source) => source.id)
+    .filter((id) => (STARTER_JOB_SOURCE_IDS as readonly string[]).includes(id));
+  const mergedSources = [...data.jobSources, ...addedSources];
 
   return {
+    data: {
+      ...data,
+      resumeModules: mergedModules,
+      jobSources: mergedSources,
+      jobSourcePackMode: data.jobSourcePackMode ?? "core"
+    },
+    addedStarterSourceIds
+  };
+}
+
+export function mergeStarterSourceAnnouncements(
+  data: LifeHarnessData,
+  addedStarterSourceIds: string[]
+): LifeHarnessData {
+  if (addedStarterSourceIds.length === 0) {
+    return data;
+  }
+  const existing = data.dailyState.newStarterSourceIds ?? [];
+  const merged = [...new Set([...existing, ...addedStarterSourceIds])];
+  return {
     ...data,
-    resumeModules: mergedModules,
-    jobSources: mergedSources
+    dailyState: {
+      ...data.dailyState,
+      newStarterSourceIds: merged
+    }
   };
 }
 
@@ -261,5 +290,8 @@ export function hydrateState(data: LifeHarnessData, now = new Date()): LifeHarne
 }
 
 export function preparePersistedState(raw: Partial<LifeHarnessData>, now = new Date()): LifeHarnessData {
-  return hydrateState(mergeSeedDefaults(normalizeData(raw)), now);
+  const normalized = normalizeData(raw);
+  const { data: merged, addedStarterSourceIds } = mergeSeedDefaults(normalized);
+  const withAnnouncements = mergeStarterSourceAnnouncements(merged, addedStarterSourceIds);
+  return hydrateState(withAnnouncements, now);
 }

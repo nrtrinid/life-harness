@@ -65,10 +65,19 @@ Every step still requires an explicit click. No auto-import, auto-save, auto-rev
 - **Recent runner runs** — View details expands output/diff/verification/cleanup
 - **Agent output** — helper reminds user to View details before saving
 
+## Action guide (v0.4)
+
+Card Detail Backroom shows a **Current step checklist** after runner actions:
+
+- Numbered steps for the active gate (import plan, post-implementation save, review, advance)
+- Highlights the current step; marks View details done after you expand the latest implementation run
+- **Load latest scoping output** when scoping succeeded but Import plan is empty
+- Runner runs auto-expand **View details** after scoping, implementation, and review complete
+
 ## Intentional limits (v0.3)
 
 - Guidance only — Save agent output is not disabled until View details is opened
-- No auto-expand View details after a run completes
+- No hard block on Save when View details was skipped
 - No auto-cleanup after mark complete
 - No Workbench flow guide UI
 - No runner, data model, or manual gate changes

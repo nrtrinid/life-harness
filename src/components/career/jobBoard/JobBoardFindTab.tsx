@@ -8,17 +8,26 @@ import { Section } from "../../Section";
 import { colors, styles } from "../../styles";
 import { APPROVED_SOURCE_FETCHING_BANNER } from "../../../core/labels";
 import { ROLE_TYPE_LABELS } from "../../../core/labels";
-import { buildJobFindingsSummary, formatJobRunFinding } from "../../../core/jobFindings";
+import { FindPreflightStrip } from "../FindPreflightStrip";
+import {
+  buildFindPreflightSummary,
+  buildJobFindingsSummary,
+  formatJobRunFinding
+} from "../../../core/jobFindings";
+import { useRunnerHealth } from "../../../hooks/useRunnerHealth";
 import { deriveBatchRunnerLifecycle } from "../../../core/jobRunnerLifecycle";
 import type { JobBoardTab } from "../../../core/jobBoardTab";
+import type { RunBatchSummary } from "../../../core/jobSourceSchedule";
 import type { RoleType } from "../../../core/types";
 import { useLifeHarness } from "../../../state/LifeHarnessState";
+import type { JobBoardHandoff } from "./JobBoardHandoffBanner";
 
 const ROLE_TYPES = Object.keys(ROLE_TYPE_LABELS) as RoleType[];
 
 interface JobBoardFindTabProps {
   onSelectTab: (tab: JobBoardTab) => void;
   onNotice: (kind: "success" | "warning" | "info", message: string) => void;
+  onHandoff?: (handoff: JobBoardHandoff) => void;
   showPasteForm?: boolean;
   pasteOnly?: boolean;
 }
@@ -26,6 +35,7 @@ interface JobBoardFindTabProps {
 export function JobBoardFindTab({
   onSelectTab,
   onNotice,
+  onHandoff,
   showPasteForm = true,
   pasteOnly = false
 }: JobBoardFindTabProps) {
@@ -36,15 +46,16 @@ export function JobBoardFindTab({
     isBatchRunning,
     batchRunProgress,
     runDueJobSources,
+    runHealthyJobSources,
     runAllEnabledJobSources,
     submitJobCandidateIntake
   } = useLifeHarness();
+  const { ok: runnerOk } = useRunnerHealth();
 
   const [company, setCompany] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [description, setDescription] = useState("");
   const [roleType, setRoleType] = useState<RoleType>("software");
-  const [lastRunCreated, setLastRunCreated] = useState<number | null>(null);
 
   const now = new Date();
   const batchLifecycle = deriveBatchRunnerLifecycle(
@@ -55,39 +66,58 @@ export function JobBoardFindTab({
     { isBatchRunning }
   );
   const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, now);
+  const preflight = buildFindPreflightSummary(jobSources, jobSourceRuns, jobCandidates, now);
+  const batchBlocked = !runnerOk || isBatchRunning;
   const leadAction =
     batchLifecycle.canRunDue
       ? {
           label: batchLifecycle.actionLabel,
-          onPress: () => void handleRunDueSources()
+          onPress: () => void handleRunDueSources(),
+          disabled: batchBlocked
         }
-      : batchLifecycle.canRunAll
+      : batchLifecycle.canRunHealthy
         ? {
             label: batchLifecycle.actionLabel,
-            onPress: handleRunAllEnabled
+            onPress: () => void handleRunHealthySources(),
+            disabled: batchBlocked
           }
-        : undefined;
+        : batchLifecycle.canRunAll
+          ? {
+              label: batchLifecycle.actionLabel,
+              onPress: handleRunAllEnabled,
+              disabled: batchBlocked
+            }
+          : undefined;
 
-  async function handleRunDueSources() {
-    const result = await runDueJobSources();
+  function finishBatch(
+    result: { ok: boolean; message: string; summary: RunBatchSummary },
+    emptyKind: "info" | "success" | "warning" = "info"
+  ) {
     onNotice(
-      result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
+      result.summary.totalSources === 0 ? emptyKind : result.ok ? "success" : "warning",
       result.message
     );
     if (result.summary.createdCandidates > 0) {
-      setLastRunCreated(result.summary.createdCandidates);
+      onHandoff?.({
+        tab: "review",
+        count: result.summary.createdCandidates,
+        message: `${result.summary.createdCandidates} new match${
+          result.summary.createdCandidates === 1 ? "" : "es"
+        } ready for review`
+      });
     }
   }
 
+  async function handleRunHealthySources() {
+    finishBatch(await runHealthyJobSources());
+  }
+
+  async function handleRunDueSources() {
+    finishBatch(await runDueJobSources());
+  }
+
   async function runAllConfirmed() {
-    const result = await runAllEnabledJobSources();
-    onNotice(
-      result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
-      result.message
-    );
-    if (result.summary.createdCandidates > 0) {
-      setLastRunCreated(result.summary.createdCandidates);
-    }
+    finishBatch(await runAllEnabledJobSources());
   }
 
   function handleRunAllEnabled() {
@@ -138,6 +168,7 @@ export function JobBoardFindTab({
     setRoleTitle("");
     setDescription("");
     onNotice("success", result.message ?? "Added to review queue.");
+    onHandoff?.({ tab: "review", count: 1, message: "Posting added — review it next" });
     onSelectTab("review");
   }
 
@@ -220,7 +251,7 @@ export function JobBoardFindTab({
       >
         <SignalStrip
           label="Source status"
-          text={`${batchLifecycle.runnableCount} runnable · ${batchLifecycle.dueCount} due`}
+          text={`${batchLifecycle.healthyCount} healthy · ${batchLifecycle.runnableCount} runnable · ${batchLifecycle.dueCount} due`}
           tone={batchLifecycle.dueCount > 0 ? "warning" : "neutral"}
         />
         {batchRunProgress ? (
@@ -237,32 +268,10 @@ export function JobBoardFindTab({
       </PrimaryMovePanel>
 
       <RunnerStatusBanner />
+      <FindPreflightStrip preflight={preflight} />
 
       <Section title="Source details">
         <Text style={styles.bodyText}>{APPROVED_SOURCE_FETCHING_BANNER}</Text>
-        {batchRunProgress ? (
-          <Text style={styles.bodyText}>
-            Running {batchRunProgress.sourceName} ({batchRunProgress.current}/{batchRunProgress.total})
-          </Text>
-        ) : null}
-        <View style={styles.cardActionsRow}>
-          <Pressable
-            style={styles.primaryAction}
-            disabled={isBatchRunning || batchLifecycle.runnableCount === 0}
-            onPress={handleRunAllEnabled}
-          >
-            <Text style={styles.primaryActionText}>
-              {isBatchRunning ? batchLifecycle.batchRunningLabel : "Run all enabled"}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryAction}
-            disabled={isBatchRunning || batchLifecycle.dueCount === 0}
-            onPress={() => void handleRunDueSources()}
-          >
-            <Text style={styles.secondaryActionText}>Run due</Text>
-          </Pressable>
-        </View>
         {findings.latestRun ? (
           <Text style={styles.helpText}>
             Last run: {findings.latestRun.sourceName} — {formatJobRunFinding(findings.latestRun)}
@@ -270,21 +279,9 @@ export function JobBoardFindTab({
         ) : (
           <Text style={styles.helpText}>No source runs yet.</Text>
         )}
-        {(lastRunCreated ?? 0) > 0 || findings.counts.waiting > 0 ? (
-          <Pressable style={styles.secondaryAction} onPress={() => onSelectTab("review")}>
-            <Text style={styles.secondaryActionText}>
-              Review {findings.counts.waiting} match{findings.counts.waiting === 1 ? "" : "es"}
-            </Text>
-          </Pressable>
-        ) : null}
         <Link href="/job-sources" asChild>
           <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Manage sources</Text>
-          </Pressable>
-        </Link>
-        <Link href={"/source-setup" as Href} asChild>
-          <Pressable style={styles.smallButton}>
-            <Text style={styles.smallButtonText}>Advanced setup</Text>
+            <Text style={styles.secondaryActionText}>Advanced source runs & setup</Text>
           </Pressable>
         </Link>
       </Section>

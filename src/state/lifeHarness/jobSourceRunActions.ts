@@ -12,7 +12,9 @@ import {
   buildRunAllSummary,
   formatRunBatchNotice,
   getDueJobSources,
+  getHealthyJobSources,
   getRunnableJobSources,
+  HEALTHY_RUN_EMPTY_MESSAGE,
   type RunBatchSummary,
   type SourceRunOutcome
 } from "../../core/jobSourceSchedule";
@@ -27,6 +29,7 @@ export interface JobSourceRunController {
     sourceId: string
   ) => Promise<{ ok: boolean; message?: string; outcome?: SourceRunOutcome; runnerUnreachable?: boolean }>;
   runDueJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
+  runHealthyJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
   runAllEnabledJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
   runFitFinder: () => Promise<ReturnType<typeof buildFitFinderResult>>;
 }
@@ -156,6 +159,32 @@ export function createJobSourceRunActions(
       };
     },
 
+    runHealthyJobSources: async () => {
+      const current = stateRef.current;
+      const packMode = current.jobSourcePackMode ?? "core";
+      const targets = getHealthyJobSources(
+        current.jobSources,
+        current.jobSourceRuns,
+        current.jobCandidates,
+        new Date(),
+        { packMode }
+      );
+      if (targets.length === 0) {
+        return {
+          ok: true,
+          message: HEALTHY_RUN_EMPTY_MESSAGE,
+          summary: buildRunAllSummary([])
+        };
+      }
+
+      const summary = await runSourceBatch(targets);
+      return {
+        ok: summary.failedSources === 0 && !summary.runnerUnreachable,
+        message: formatRunBatchNotice(summary),
+        summary
+      };
+    },
+
     runAllEnabledJobSources: async () => {
       const current = stateRef.current;
       const batchLifecycle = deriveBatchRunnerLifecycle(
@@ -182,7 +211,15 @@ export function createJobSourceRunActions(
     },
 
     runFitFinder: async () => {
-      const targets = getRunnableJobSources(stateRef.current.jobSources);
+      const current = stateRef.current;
+      const packMode = current.jobSourcePackMode ?? "core";
+      const targets = getHealthyJobSources(
+        current.jobSources,
+        current.jobSourceRuns,
+        current.jobCandidates,
+        new Date(),
+        { packMode }
+      );
       if (targets.length === 0) {
         return buildFitFinderResult({
           ok: false,

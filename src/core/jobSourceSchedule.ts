@@ -3,7 +3,8 @@ import {
   countFailedSourceRuns,
   countSuccessfulManualSourceRuns
 } from "./jobSourceRunner";
-import type { JobSource, JobSourceRunResult } from "./types";
+import { getJobSourceHealth } from "./jobSourceHealth";
+import type { JobCandidate, JobSource, JobSourcePack, JobSourceRunResult } from "./types";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -13,6 +14,7 @@ export interface SourceRunOutcome {
   sourceId: string;
   sourceName: string;
   ok: boolean;
+  weakPass?: boolean;
   createdCandidates: number;
   skippedDuplicates: number;
   errors: string[];
@@ -23,6 +25,7 @@ export interface SourceRunOutcome {
 export interface RunBatchSummary {
   totalSources: number;
   successfulSources: number;
+  weakPassSources: number;
   failedSources: number;
   createdCandidates: number;
   skippedDuplicates: number;
@@ -66,6 +69,42 @@ export function isRunnableJobSource(source: JobSource): boolean {
 export function getRunnableJobSources(sources: JobSource[]): JobSource[] {
   return sources.filter((source) => source.enabled && isRunnableJobSource(source));
 }
+
+export interface HealthyJobSourcesOptions {
+  includeNeverRun?: boolean;
+  packMode?: JobSourcePack;
+}
+
+export function filterSourcesByPack(sources: JobSource[], packMode: JobSourcePack): JobSource[] {
+  if (packMode === "full") {
+    return sources;
+  }
+  return sources.filter((source) => source.sourcePack !== "full");
+}
+
+export function getHealthyJobSources(
+  sources: JobSource[],
+  runs: JobSourceRunResult[],
+  candidates: JobCandidate[],
+  now: Date,
+  options: HealthyJobSourcesOptions = {}
+): JobSource[] {
+  const includeNeverRun = options.includeNeverRun ?? true;
+  const packMode = options.packMode ?? "full";
+
+  return filterSourcesByPack(getRunnableJobSources(sources), packMode).filter((source) => {
+    const health = getJobSourceHealth(source, runs, candidates, now);
+    if (health === "healthy" || health === "stale") {
+      return true;
+    }
+    if (includeNeverRun && health === "never_run") {
+      return true;
+    }
+    return false;
+  });
+}
+
+export const HEALTHY_RUN_EMPTY_MESSAGE = "No healthy runnable sources to run.";
 
 function parseLastRunAt(lastRunAt: string | undefined): Date | undefined {
   if (!lastRunAt) {
@@ -189,7 +228,10 @@ export function buildSourceScheduleStats(
 }
 
 export function buildRunAllSummary(outcomes: SourceRunOutcome[]): RunBatchSummary {
-  const successfulSources = outcomes.filter((outcome) => outcome.ok).length;
+  const weakPassSources = outcomes.filter((outcome) => outcome.weakPass).length;
+  const successfulSources = outcomes.filter(
+    (outcome) => outcome.ok && !outcome.weakPass && outcome.createdCandidates > 0
+  ).length;
   const failedSources = outcomes.filter((outcome) => !outcome.ok).length;
   const createdCandidates = outcomes.reduce(
     (total, outcome) => total + outcome.createdCandidates,
@@ -204,6 +246,7 @@ export function buildRunAllSummary(outcomes: SourceRunOutcome[]): RunBatchSummar
   return {
     totalSources: outcomes.length,
     successfulSources,
+    weakPassSources,
     failedSources,
     createdCandidates,
     skippedDuplicates,
@@ -218,19 +261,22 @@ export function formatRunBatchNotice(summary: RunBatchSummary): string {
     return "No sources were run.";
   }
 
-  const parts = [
-    `Ran ${summary.totalSources} source${summary.totalSources === 1 ? "" : "s"}`,
-    `${summary.successfulSources} successful`,
-    `${summary.failedSources} failed`,
-    `${summary.createdCandidates} new candidate${summary.createdCandidates === 1 ? "" : "s"}`,
-    `${summary.skippedDuplicates} duplicate${summary.skippedDuplicates === 1 ? "" : "s"} skipped`
-  ];
+  const produced = summary.successfulSources;
+  const weakPass = summary.weakPassSources;
+  const failed = summary.failedSources;
+  const base = `Ran ${summary.totalSources} source${summary.totalSources === 1 ? "" : "s"} — ${produced} produced matches`;
+  const weakPart =
+    weakPass > 0
+      ? `, ${weakPass} need attention (weak-pass)`
+      : "";
+  const failPart = `, ${failed} failed`;
+  const tail = ` — ${summary.createdCandidates} new candidate${summary.createdCandidates === 1 ? "" : "s"}, ${summary.skippedDuplicates} duplicate${summary.skippedDuplicates === 1 ? "" : "s"} skipped`;
 
   if (summary.runnerUnreachable) {
-    return `${parts.join(", ")}. Runner stopped — start it with npm run scout:runner.`;
+    return `${base}${weakPart}${failPart}${tail}. Runner stopped — start it with npm run scout:runner.`;
   }
 
-  return `${parts.join(", ")}.`;
+  return `${base}${weakPart}${failPart}${tail}.`;
 }
 
 export const SOURCE_DUE_BADGE_LABELS: Record<SourceDueBadge, string> = {

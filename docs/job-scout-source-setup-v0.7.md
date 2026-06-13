@@ -94,11 +94,15 @@ Example reference URLs live on the Setup screen under "Example sources to try" â
 
 Planned registry targets (not in v0.7):
 
-- GovernmentJobs / NEOGOV
-- Workday
-- iCIMS
 - CalCareers / CalOpps
 - Microsoft / static HTML career pages
+- PeopleSoft (e.g. MCCS)
+
+Shipped after v0.7:
+
+- GovernmentJobs / NEOGOV
+- Workday (including CXS endpoint mode)
+- iCIMS ([`job-scout-icims-v0.12.md`](job-scout-icims-v0.12.md))
 
 ## Related docs
 

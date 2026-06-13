@@ -21,6 +21,7 @@ const SUPPORTED_ADAPTER_KINDS = new Set<JobSourceKind>([
   "ashby",
   "governmentjobs",
   "workday",
+  "icims",
   "jobposting_jsonld",
   "manual"
 ]);
@@ -550,6 +551,258 @@ function normalizeGovernmentJobs(raw: unknown, source: JobSource): NormalizedJob
   return parseGovernmentJobsListingHtml(html, source);
 }
 
+export const ICIMS_ZERO_LISTINGS_MESSAGE =
+  "No iCIMS listings found at this URL. The portal may redirect outside iframe mode — use the *.icims.com search URL with in_iframe=1.";
+
+export function extractIcimsTenantSlug(host: string): string | null {
+  const normalized = host.toLowerCase();
+  if (!normalized.includes("icims.com")) {
+    return null;
+  }
+  const subdomain = normalized.split(".")[0] ?? "";
+  const careersMatch = subdomain.match(/^careers-(.+)$/);
+  if (careersMatch?.[1]) {
+    return careersMatch[1];
+  }
+  const jobsMatch = subdomain.match(/^jobs(?:\d+)?-(.+)$/);
+  if (jobsMatch?.[1]) {
+    return jobsMatch[1];
+  }
+  const jobseuropeMatch = subdomain.match(/^jobseurope-(.+)$/);
+  if (jobseuropeMatch?.[1]) {
+    return jobseuropeMatch[1];
+  }
+  return subdomain || null;
+}
+
+function buildIcimsSearchUrl(origin: string): string {
+  const url = new URL(`${origin.replace(/\/$/, "")}/jobs/search`);
+  url.searchParams.set("ss", "1");
+  url.searchParams.set("in_iframe", "1");
+  return url.href;
+}
+
+export function resolveIcimsFetchUrl(sourceUrl: string): string {
+  const trimmed = sourceUrl.trim();
+  if (!trimmed || trimmed.startsWith("/fixtures/")) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (!parsed.hostname.toLowerCase().includes("icims.com")) {
+      return trimmed;
+    }
+
+    if (parsed.pathname.toLowerCase().includes("/jobs/search")) {
+      parsed.searchParams.set("ss", "1");
+      parsed.searchParams.set("in_iframe", "1");
+      return parsed.href;
+    }
+
+    return buildIcimsSearchUrl(parsed.origin);
+  } catch {
+    return trimmed;
+  }
+}
+
+function isIcimsJobDetailPath(href: string): boolean {
+  let pathname = href;
+  try {
+    pathname = href.startsWith("http") ? new URL(href).pathname : href.split("?")[0] ?? href;
+  } catch {
+    return false;
+  }
+  return /\/jobs\/\d+\//i.test(pathname);
+}
+
+function resolveIcimsHref(href: string, sourceUrl: string): string {
+  try {
+    const base = sourceUrl.startsWith("http")
+      ? sourceUrl
+      : "https://example.icims.com/jobs/search";
+    const origin = new URL(base).origin;
+    return new URL(href, origin).href;
+  } catch {
+    return href;
+  }
+}
+
+function extractIcimsTitleFromAnchor(anchorHtml: string, titleAttr?: string): string {
+  if (titleAttr?.trim()) {
+    const stripped = titleAttr.replace(/^\d+\s*-\s*/, "").trim();
+    if (stripped) {
+      return stripped;
+    }
+  }
+  const h3Match = anchorHtml.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+  if (h3Match?.[1]) {
+    const text = stripHtml(h3Match[1]);
+    if (text) {
+      return text;
+    }
+  }
+  return stripHtml(anchorHtml);
+}
+
+function extractIcimsLocationFromBlock(block: string): string | undefined {
+  const locationMatch = block.match(
+    /<div[^>]*class=["'][^"']*\bheader\b[^"']*\bleft\b[^"']*["'][^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>/i
+  );
+  if (locationMatch?.[1]) {
+    const text = stripHtml(locationMatch[1]);
+    return text || undefined;
+  }
+  return undefined;
+}
+
+function extractIcimsSnippetFromBlock(block: string): string | undefined {
+  const snippetMatch = block.match(
+    /<div[^>]*class=["'][^"']*\bdescription\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i
+  );
+  if (snippetMatch?.[1]) {
+    const text = stripHtml(snippetMatch[1]);
+    return text || undefined;
+  }
+  return undefined;
+}
+
+function composeIcimsDescription(input: {
+  roleTitle: string;
+  location?: string;
+  snippet?: string;
+}): string {
+  const lines = [`Title: ${input.roleTitle}`];
+  if (input.location) {
+    lines.push(`Location: ${input.location}`);
+  }
+  if (input.snippet) {
+    lines.push(`Snippet: ${input.snippet}`);
+  }
+  return truncateDescription(lines.join("\n"));
+}
+
+function buildIcimsPosting(input: {
+  roleTitle: string;
+  sourceUrl?: string;
+  location?: string;
+  snippet?: string;
+  company: string;
+}): NormalizedJobPosting {
+  const description = composeIcimsDescription(input);
+  return {
+    company: input.company,
+    roleTitle: input.roleTitle,
+    sourceUrl: input.sourceUrl,
+    location: input.location,
+    description,
+    roleType: inferRoleType(input.roleTitle, description)
+  };
+}
+
+function resolveIcimsCompanyName(sourceName: string): string {
+  return sourceName.replace(/\s*[—-]?\s*(Careers|Jobs|iCIMS)\s*$/i, "").trim();
+}
+
+export function parseIcimsListingHtml(html: string, source: JobSource): NormalizedJobPosting[] {
+  const company = resolveIcimsCompanyName(source.name);
+  const deduped = new Map<string, NormalizedJobPosting>();
+
+  function addPosting(posting: NormalizedJobPosting | undefined) {
+    if (!posting) {
+      return;
+    }
+    const key = `${(posting.sourceUrl ?? "").toLowerCase()}|${posting.roleTitle.toLowerCase()}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, posting);
+    }
+  }
+
+  for (const blockMatch of html.matchAll(
+    /<li[^>]*class=["'][^"']*row[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi
+  )) {
+    const block = blockMatch[1] ?? "";
+    const anchorMatch =
+      block.match(
+        /<a[^>]*class=["'][^"']*iCIMS_Anchor[^"']*["'][^>]*href=["']([^"']+)["'][^>]*(?:title=["']([^"']*)["'])?[^>]*>([\s\S]*?)<\/a>/i
+      ) ??
+      block.match(
+        /<a[^>]*href=["']([^"']+)["'][^>]*class=["'][^"']*iCIMS_Anchor[^"']*["'][^>]*(?:title=["']([^"']*)["'])?[^>]*>([\s\S]*?)<\/a>/i
+      );
+    if (!anchorMatch) {
+      continue;
+    }
+    const href = anchorMatch[1] ?? "";
+    if (!isIcimsJobDetailPath(href)) {
+      continue;
+    }
+    const roleTitle = extractIcimsTitleFromAnchor(anchorMatch[3] ?? "", anchorMatch[2]);
+    if (!roleTitle) {
+      continue;
+    }
+    addPosting(
+      buildIcimsPosting({
+        roleTitle,
+        sourceUrl: resolveIcimsHref(href, source.url),
+        location: extractIcimsLocationFromBlock(block),
+        snippet: extractIcimsSnippetFromBlock(block),
+        company
+      })
+    );
+  }
+
+  for (const match of html.matchAll(
+    /<a[^>]*href=["']([^"']+)["'][^>]*(?:title=["']([^"']*)["'])?[^>]*class=["'][^"']*iCIMS_Anchor[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi
+  )) {
+    const href = match[1] ?? "";
+    if (!isIcimsJobDetailPath(href)) {
+      continue;
+    }
+    const roleTitle = extractIcimsTitleFromAnchor(match[3] ?? "", match[2]);
+    if (!roleTitle) {
+      continue;
+    }
+    addPosting(
+      buildIcimsPosting({
+        roleTitle,
+        sourceUrl: resolveIcimsHref(href, source.url),
+        company
+      })
+    );
+  }
+
+  for (const match of html.matchAll(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = match[1] ?? "";
+    if (!isIcimsJobDetailPath(href)) {
+      continue;
+    }
+    const roleTitle = stripHtml(match[2] ?? "");
+    if (!roleTitle || roleTitle.length < 3) {
+      continue;
+    }
+    addPosting(
+      buildIcimsPosting({
+        roleTitle,
+        sourceUrl: resolveIcimsHref(href, source.url),
+        company
+      })
+    );
+  }
+
+  return [...deduped.values()];
+}
+
+function normalizeIcims(raw: unknown, source: JobSource): NormalizedJobPosting[] {
+  const html = typeof raw === "string" ? raw : "";
+  if (!html.trim()) {
+    return [];
+  }
+  if (html.includes("window.top.location.href")) {
+    return [];
+  }
+  return parseIcimsListingHtml(html, source);
+}
+
 export const WORKDAY_ZERO_LISTINGS_MESSAGE =
   "No supported Workday postings found at this URL/payload. This source may need endpoint discovery or a different Workday site path.";
 
@@ -797,8 +1050,12 @@ export function countWorkdayRawJobEntries(raw: unknown): number {
   return extractWorkdayJobArray(raw).length;
 }
 
+function resolveWorkdayCompanyName(sourceName: string): string {
+  return sourceName.replace(/\s*[—-]?\s*(Careers|Jobs|External Site|Workday CXS)\s*$/i, "").trim();
+}
+
 export function parseWorkdaySearchPayload(raw: unknown, source: JobSource): NormalizedJobPosting[] {
-  const company = source.name.replace(/\s+(Careers|Jobs|External Site)$/i, "").trim();
+  const company = resolveWorkdayCompanyName(source.name);
   const deduped = new Map<string, NormalizedJobPosting>();
 
   for (const job of extractWorkdayJobArray(raw)) {
@@ -831,7 +1088,14 @@ function normalizeWorkday(raw: unknown, source: JobSource): NormalizedJobPosting
 }
 
 const ADAPTERS: Record<
-  "greenhouse" | "lever" | "ashby" | "governmentjobs" | "workday" | "jobposting_jsonld" | "manual",
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "governmentjobs"
+  | "workday"
+  | "icims"
+  | "jobposting_jsonld"
+  | "manual",
   JobSourceAdapter
 > = {
   greenhouse: {
@@ -858,6 +1122,11 @@ const ADAPTERS: Record<
     kind: "workday",
     label: "Workday / MyWorkdayJobs",
     normalize: normalizeWorkday
+  },
+  icims: {
+    kind: "icims",
+    label: "iCIMS Career Portal",
+    normalize: normalizeIcims
   },
   jobposting_jsonld: {
     kind: "jobposting_jsonld",

@@ -2,6 +2,8 @@ import { Link } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, Pressable, Switch, Text, TextInput, View } from "react-native";
 
+import { FindPreflightStrip } from "../src/components/career/FindPreflightStrip";
+import { RunnerStatusBanner } from "../src/components/career/RunnerStatusBanner";
 import { Notice, type NoticeState } from "../src/components/Notice";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
@@ -26,12 +28,15 @@ import {
   SOURCE_DUE_BADGE_LABELS
 } from "../src/core/jobSourceSchedule";
 import {
+  buildFindPreflightSummary,
   buildJobFindingsSummary,
   formatJobRunFinding,
   getLatestJobSourceRun
 } from "../src/core/jobFindings";
+import { checkJobScoutLocks } from "../src/core/jobScout";
 import { canRunJobSource } from "../src/core/jobSourceRunner";
-import type { JobSourceCadence, JobSourceKind } from "../src/core/types";
+import type { JobSourceCadence, JobSourceKind, JobSourcePack } from "../src/core/types";
+import { useRunnerHealth } from "../src/hooks/useRunnerHealth";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
 const KIND_OPTIONS: JobSourceKind[] = [
@@ -40,6 +45,7 @@ const KIND_OPTIONS: JobSourceKind[] = [
   "ashby",
   "governmentjobs",
   "workday",
+  "icims",
   "jobposting_jsonld",
   "manual",
   "company_careers"
@@ -57,9 +63,15 @@ export default function JobSourcesScreen() {
     isBatchRunning,
     batchRunProgress,
     runOneJobSource,
+    cards,
+    logs,
+    jobSourcePackMode,
     runDueJobSources,
-    runAllEnabledJobSources
+    runHealthyJobSources,
+    runAllEnabledJobSources,
+    setJobSourcePackMode
   } = useLifeHarness();
+  const { ok: runnerOk } = useRunnerHealth();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -89,6 +101,13 @@ export default function JobSourcesScreen() {
     { isBatchRunning }
   );
   const findings = buildJobFindingsSummary(jobCandidates, jobSources, jobSourceRuns, now);
+  const preflight = buildFindPreflightSummary(jobSources, jobSourceRuns, jobCandidates, now);
+  const scoutLocks = checkJobScoutLocks(jobCandidates, cards, logs, jobSourceRuns);
+  const scheduledLock = scoutLocks.find((lock) => lock.id === "scheduled-fetching");
+  const scheduledUnlocked =
+    (scheduledLock?.current ?? 0) >= (scheduledLock?.required ?? 5);
+  const batchBlocked = !runnerOk || isBatchRunning;
+  const activePack = jobSourcePackMode ?? "core";
 
   async function handleRunSource(sourceId: string) {
     setRunningId(sourceId);
@@ -102,12 +121,40 @@ export default function JobSourcesScreen() {
     });
   }
 
+  async function handleRunHealthySources() {
+    const result = await runHealthyJobSources();
+    setNotice({
+      kind: result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
+      message: result.message
+    });
+  }
+
   async function handleRunDueSources() {
     const result = await runDueJobSources();
     setNotice({
       kind: result.summary.totalSources === 0 ? "info" : result.ok ? "success" : "warning",
       message: result.message
     });
+  }
+
+  function handlePackChange(mode: JobSourcePack) {
+    if (mode === activePack) {
+      return;
+    }
+    const message =
+      mode === "full"
+        ? "Enable full pack (includes speculative Qualcomm/Viasat sources)?"
+        : "Switch to core pack and disable full-only sources?";
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
+      if (window.confirm(message)) {
+        setJobSourcePackMode(mode);
+      }
+      return;
+    }
+    Alert.alert("Change source pack?", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Confirm", onPress: () => setJobSourcePackMode(mode) }
+    ]);
   }
 
   async function runAllConfirmed() {
@@ -201,6 +248,42 @@ export default function JobSourcesScreen() {
           <Text style={styles.secondaryActionText}>Open Jobs</Text>
         </Pressable>
       </Link>
+      <RunnerStatusBanner compact />
+      <FindPreflightStrip preflight={preflight} />
+
+      <Section title="Source pack">
+        <Text style={styles.helpText}>
+          Core pack is the high-signal starter set. Full pack adds speculative feeds (Qualcomm,
+          Viasat).
+        </Text>
+        <View style={styles.cardActionsRow}>
+          <Pressable
+            style={activePack === "core" ? styles.primaryAction : styles.secondaryAction}
+            onPress={() => handlePackChange("core")}
+          >
+            <Text
+              style={
+                activePack === "core" ? styles.primaryActionText : styles.secondaryActionText
+              }
+            >
+              Core pack
+            </Text>
+          </Pressable>
+          <Pressable
+            style={activePack === "full" ? styles.primaryAction : styles.secondaryAction}
+            onPress={() => handlePackChange("full")}
+          >
+            <Text
+              style={
+                activePack === "full" ? styles.primaryActionText : styles.secondaryActionText
+              }
+            >
+              Full pack
+            </Text>
+          </Pressable>
+        </View>
+      </Section>
+
       <Section title="Approved Source Fetching">
         <Text style={styles.bodyText}>{APPROVED_SOURCE_FETCHING_BANNER}</Text>
         <Text style={styles.helpText}>
@@ -234,23 +317,35 @@ export default function JobSourcesScreen() {
         ) : null}
         <Pressable
           style={styles.primaryAction}
-          disabled={isBatchRunning || scheduleStats.dueSources === 0}
-          onPress={() => void handleRunDueSources()}
+          disabled={batchBlocked || batchLifecycle.healthyCount === 0}
+          onPress={() => void handleRunHealthySources()}
         >
           <Text style={styles.primaryActionText}>
-            {isBatchRunning ? "Running batch..." : "Run Due Sources"}
+            {isBatchRunning ? "Running batch..." : "Run healthy sources"}
           </Text>
         </Pressable>
         <Pressable
           style={styles.secondaryAction}
-          disabled={isBatchRunning || scheduleStats.runnableSources === 0}
+          disabled={batchBlocked || scheduleStats.dueSources === 0}
+          onPress={() => void handleRunDueSources()}
+        >
+          <Text style={styles.secondaryActionText}>
+            {scheduledUnlocked && scheduleStats.dueSources > 0
+              ? "Run due (recommended)"
+              : "Run due sources"}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondaryAction}
+          disabled={batchBlocked || scheduleStats.runnableSources === 0}
           onPress={handleRunAllEnabled}
         >
-          <Text style={styles.secondaryActionText}>Run All Enabled Sources</Text>
+          <Text style={styles.secondaryActionText}>Run all enabled</Text>
         </Pressable>
         <Text style={styles.helpText}>
-          Run Due uses daily/weekly cadence only. Run All includes manual cadence sources too.
-          Scheduled background fetching remains locked.
+          {scheduledUnlocked
+            ? "Scheduled fetch is unlocked — use Run due when sources are due. Fetch stays manual-click (no background daemon)."
+            : `Scheduled fetch unlocks after ${scheduledLock?.required ?? 5} successful manual runs (${scheduledLock?.current ?? 0}/${scheduledLock?.required ?? 5}).`}
         </Text>
         {findings.latestRun ? (
           <Text style={styles.bodyText}>
@@ -438,7 +533,7 @@ export default function JobSourcesScreen() {
                 <View style={styles.cardActions}>
                   <Pressable
                     style={styles.primaryAction}
-                    disabled={!guard.ok || isRunning}
+                    disabled={!guard.ok || isRunning || !runnerOk}
                     onPress={() => void handleRunSource(source.id)}
                   >
                     <Text style={styles.primaryActionText}>

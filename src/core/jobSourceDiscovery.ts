@@ -1,3 +1,4 @@
+import { extractIcimsTenantSlug, resolveIcimsFetchUrl } from "./jobSourceAdapters";
 import type { JobSource, JobSourceKind } from "./types";
 
 export type SourceDetectionConfidence = "high" | "medium" | "low";
@@ -25,6 +26,11 @@ export const GOVERNMENTJOBS_AGENCY_NAMES: Record<string, string> = {
 export const WORKDAY_KNOWN_NAMES: Record<string, string> = {
   qualcomm: "Qualcomm",
   ngc: "Northrop Grumman"
+};
+
+export const ICIMS_KNOWN_NAMES: Record<string, string> = {
+  viasat: "Viasat",
+  qualcomm: "Qualcomm"
 };
 
 function resolveGovernmentJobsAgencyName(agency: string): string {
@@ -81,7 +87,7 @@ function detectUnsupportedDomain(parsed: URL): SourceDetectionResult | null {
   const haystack = `${host}${path}`;
 
   const checks: { match: boolean; label: string }[] = [
-    { match: host.includes("icims") || haystack.includes("icims"), label: "iCIMS" },
+    { match: host === "api.icims.com" || host.endsWith(".api.icims.com"), label: "iCIMS API" },
     {
       match:
         (host.includes("microsoft") && (path.includes("career") || path.includes("apply"))) ||
@@ -312,6 +318,76 @@ function canonicalWorkdaySiteUrl(parsed: URL): string {
   return `${parsed.protocol}//${parsed.host}${normalizedPath}`;
 }
 
+/** Suggested Workday CXS jobs endpoint — never auto-saved; user must Test Source first. */
+export function deriveWorkdayCxsEndpointUrl(siteUrl: string): string | null {
+  const parsed = parseHttpUrl(normalizePastedUrl(siteUrl));
+  if (!parsed || !parsed.hostname.toLowerCase().includes("myworkdayjobs.com")) {
+    return null;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const tenant = host.split(".")[0];
+  if (!tenant) {
+    return null;
+  }
+
+  const jobIndex = parsed.pathname.toLowerCase().indexOf("/job/");
+  const sitePath = jobIndex >= 0 ? parsed.pathname.slice(0, jobIndex) : parsed.pathname;
+  const segments = sitePath.split("/").filter(Boolean);
+  const site = segments[segments.length - 1];
+  if (!site) {
+    return null;
+  }
+
+  return `${parsed.protocol}//${parsed.host}/wday/cxs/${tenant}/${site}/jobs`;
+}
+
+function resolveIcimsSourceName(parsed: URL): string {
+  const tenant = extractIcimsTenantSlug(parsed.hostname);
+  if (tenant && ICIMS_KNOWN_NAMES[tenant]) {
+    return ICIMS_KNOWN_NAMES[tenant];
+  }
+  if (tenant) {
+    return titleCaseSlug(tenant);
+  }
+  return titleCaseSlug(parsed.hostname.split(".")[0] ?? "Company");
+}
+
+function detectIcims(parsed: URL, inputUrl: string): SourceDetectionResult | null {
+  const host = parsed.hostname.toLowerCase();
+  if (!host.includes("icims.com") || host === "api.icims.com" || host.endsWith(".api.icims.com")) {
+    return null;
+  }
+
+  const path = parsed.pathname.toLowerCase();
+  if (!path.includes("/jobs")) {
+    return {
+      inputUrl,
+      detectedKind: "icims",
+      runnableUrl: resolveIcimsFetchUrl(parsed.href),
+      sourceName: resolveIcimsSourceName(parsed),
+      confidence: "low",
+      notes: ["iCIMS career portal detected."],
+      warnings: ["Prefer a /jobs/search URL. Derived search URL should be tested before saving."],
+      isRunnable: true
+    };
+  }
+
+  return {
+    inputUrl,
+    detectedKind: "icims",
+    runnableUrl: resolveIcimsFetchUrl(parsed.href),
+    sourceName: resolveIcimsSourceName(parsed),
+    confidence: path.includes("/jobs/search") ? "high" : "medium",
+    notes: [
+      "iCIMS career portal search detected.",
+      "Listing HTML is parsed defensively; test before saving."
+    ],
+    warnings: [DERIVED_URL_WARNING],
+    isRunnable: true
+  };
+}
+
 function detectWorkday(parsed: URL, inputUrl: string): SourceDetectionResult | null {
   const host = parsed.hostname.toLowerCase();
   if (!host.includes("myworkdayjobs.com")) {
@@ -327,17 +403,23 @@ function detectWorkday(parsed: URL, inputUrl: string): SourceDetectionResult | n
     warnings.push("This looks like a job detail URL. Prefer the main external site/search URL.");
   }
 
+  const suggestedEndpoint = deriveWorkdayCxsEndpointUrl(parsed.href);
+  const notes = [
+    "Workday / MyWorkdayJobs source detected.",
+    "Endpoint-backed mode available: paste JSON search endpoint URL and request body in Source Setup.",
+    "Workday sources are testable but adapter-limited. Default cadence: manual. Change to daily/weekly only after a successful candidate-producing run."
+  ];
+  if (suggestedEndpoint) {
+    notes.push(`Suggested CXS endpoint: ${suggestedEndpoint}`);
+  }
+
   return {
     inputUrl,
     detectedKind: "workday",
     runnableUrl: canonicalWorkdaySiteUrl(parsed),
     sourceName: resolveWorkdaySiteName(parsed),
     confidence: "medium",
-    notes: [
-      "Workday / MyWorkdayJobs source detected.",
-      "Endpoint-backed mode available: paste JSON search endpoint URL and request body in Source Setup.",
-      "Workday sources are testable but adapter-limited. Default cadence: manual. Change to daily/weekly only after a successful candidate-producing run."
-    ],
+    notes,
     warnings,
     isRunnable: true
   };
@@ -407,6 +489,11 @@ export function detectJobSourceFromUrl(inputUrl: string): SourceDetectionResult 
   const workday = detectWorkday(parsed, normalized);
   if (workday) {
     return workday;
+  }
+
+  const icims = detectIcims(parsed, normalized);
+  if (icims) {
+    return icims;
   }
 
   const unsupported = detectUnsupportedDomain(parsed);

@@ -1,5 +1,5 @@
 import { createJobCandidate, createResumeModule } from "../core/jobScout";
-import { NORTHROP_WORKDAY_CXS_URL } from "../core/jobSourceHealth";
+import { NORTHROP_WORKDAY_CXS_URL, QUALCOMM_WORKDAY_CXS_URL } from "../core/jobSourceHealth";
 import type { JobCandidate, JobSource, ResumeModule } from "../core/types";
 
 export const seedResumeModules: ResumeModule[] = [
@@ -201,6 +201,7 @@ function starterGovernmentJobsSource(id: string, name: string, agency: string): 
     cadence: "manual",
     maxResults: STARTER_MAX_RESULTS,
     runStatus: "idle",
+    sourcePack: "core",
     adapterNotes: STARTER_GOVERNMENTJOBS_NOTE
   };
 }
@@ -215,6 +216,7 @@ function starterGreenhouseSource(id: string, name: string, slug: string): JobSou
     cadence: "manual",
     maxResults: STARTER_MAX_RESULTS,
     runStatus: "idle",
+    sourcePack: "core",
     adapterNotes: STARTER_GREENHOUSE_NOTE
   };
 }
@@ -229,6 +231,7 @@ function starterLeverSource(id: string, name: string, company: string): JobSourc
     cadence: "manual",
     maxResults: STARTER_MAX_RESULTS,
     runStatus: "idle",
+    sourcePack: "core",
     adapterNotes: STARTER_LEVER_NOTE
   };
 }
@@ -243,6 +246,7 @@ function starterAshbySource(id: string, name: string, org: string): JobSource {
     cadence: "manual",
     maxResults: STARTER_MAX_RESULTS,
     runStatus: "idle",
+    sourcePack: "core",
     adapterNotes: STARTER_ASHBY_NOTE
   };
 }
@@ -260,11 +264,18 @@ export const STARTER_JOB_SOURCE_IDS = [
   "source-cohere",
   "source-radiant",
   "source-northrop-workday-cxs",
+  "source-qualcomm-workday-cxs",
+  "source-viasat-icims",
   "source-sd-county",
   "source-city-sandiego",
   "source-la-county",
   "source-orange-county"
 ] as const;
+
+/** High-signal starter set — default pack when jobSourcePackMode is core */
+export const CORE_JOB_SOURCE_IDS = STARTER_JOB_SOURCE_IDS.filter(
+  (id) => id !== "source-qualcomm-workday-cxs" && id !== "source-viasat-icims"
+);
 
 export const seedJobSources: JobSource[] = [
   {
@@ -298,6 +309,7 @@ export const seedJobSources: JobSource[] = [
     cadence: "manual",
     maxResults: STARTER_MAX_RESULTS,
     runStatus: "idle",
+    sourcePack: "core",
     adapterNotes:
       "Starter pack — Northrop Workday CXS search endpoint (POST, paginated).",
     requestConfig: {
@@ -314,6 +326,46 @@ export const seedJobSources: JobSource[] = [
         maxPages: 3
       }
     }
+  },
+  {
+    id: "source-qualcomm-workday-cxs",
+    name: "Qualcomm — Workday CXS",
+    url: QUALCOMM_WORKDAY_CXS_URL,
+    kind: "workday",
+    enabled: false,
+    cadence: "manual",
+    sourcePack: "full",
+    maxResults: STARTER_MAX_RESULTS,
+    runStatus: "idle",
+    adapterNotes:
+      "Starter pack — Qualcomm Workday CXS search endpoint (POST, paginated). Live POST may return zero postings until the site path is re-verified in DevTools.",
+    requestConfig: {
+      method: "POST",
+      bodyJson: {
+        appliedFacets: {},
+        limit: 20,
+        offset: 0,
+        searchText: ""
+      },
+      pagination: {
+        mode: "workday_offset",
+        limit: 20,
+        maxPages: 3
+      }
+    }
+  },
+  {
+    id: "source-viasat-icims",
+    name: "Viasat — iCIMS",
+    url: "https://careers-viasat.icims.com/jobs/search?ss=1&in_iframe=1",
+    kind: "icims",
+    enabled: false,
+    cadence: "manual",
+    sourcePack: "full",
+    maxResults: STARTER_MAX_RESULTS,
+    runStatus: "idle",
+    adapterNotes:
+      "Starter pack — Viasat iCIMS search listing (first page). Live fetch may redirect; test before Run Due."
   },
   starterGovernmentJobsSource("source-sd-county", "County of San Diego", "sdcounty"),
   starterGovernmentJobsSource("source-city-sandiego", "City of San Diego", "sandiego"),

@@ -25,14 +25,29 @@ import type {
   LifeArea,
   LifeCard,
   LifeLogEntry,
-  ProofItem
+  ProofItem,
+  ResumeModule,
+  ResumeModuleSection
 } from "./types";
+
+export interface ResumeModulePatch {
+  date?: string;
+  appendBullet?: string;
+  appendSkill?: string;
+  appendProof?: string;
+}
 import {
   parseCareerSourcePackJson,
   upsertPackResumeModules
 } from "./careerSourcePack";
 import { matchCandidateWithCareerPack } from "./careerPackMatching";
-import { buildResumeDraftPacket } from "./resumeModuleBank";
+import { suggestDefaultModuleIdsPerSection } from "./applicationResumeAction";
+import {
+  buildResumeDraftPacket,
+  normalizeResumeModule,
+  normalizeResumeModulePlacement,
+  refreshResumeDraftPacketSelection
+} from "./resumeModuleBank";
 import type { JobSourceRunOutput } from "./jobSourceRunner";
 import { rebindJobSourceRunOutput } from "./jobSourceRunner";
 import {
@@ -838,6 +853,224 @@ export function applyBackfillResumeDraftPacket(
     state: { ...state, cards },
     ok: true,
     message: "Resume draft packet created from current resume bank."
+  };
+}
+
+function updateApplicationResumeDraftPacket(
+  state: LifeHarnessData,
+  cardId: string,
+  selectedModuleIds: string[]
+): ActionResult {
+  const card = state.cards.find((item) => item.id === cardId);
+  const packet = card?.careerApplication?.resumeDraftPacket;
+  if (!card?.careerApplication || !packet) {
+    return { state, ok: false, message: "No resume draft packet on this card." };
+  }
+
+  const updatedPacket = refreshResumeDraftPacketSelection(
+    packet,
+    selectedModuleIds,
+    state.resumeModules,
+    card.careerApplication.roleType
+  );
+  const cards = updateCard(state.cards, cardId, (item) => ({
+    ...item,
+    careerApplication: item.careerApplication
+      ? { ...item.careerApplication, resumeDraftPacket: updatedPacket }
+      : item.careerApplication
+  }));
+
+  return {
+    state: { ...state, cards },
+    ok: true,
+    message: "Resume module selection updated."
+  };
+}
+
+export function applyToggleResumeDraftPacketModule(
+  state: LifeHarnessData,
+  cardId: string,
+  moduleId: string
+): ActionResult {
+  const card = state.cards.find((item) => item.id === cardId);
+  const packet = card?.careerApplication?.resumeDraftPacket;
+  if (!card?.careerApplication || !packet) {
+    return { state, ok: false, message: "No resume draft packet on this card." };
+  }
+
+  const module = state.resumeModules.find((item) => item.id === moduleId && item.isActive);
+  if (!module) {
+    return { state, ok: false, message: "Resume module not found or inactive." };
+  }
+
+  const nextIds = packet.selectedModuleIds.includes(moduleId)
+    ? packet.selectedModuleIds.filter((id) => id !== moduleId)
+    : [...packet.selectedModuleIds, moduleId];
+
+  return updateApplicationResumeDraftPacket(state, cardId, nextIds);
+}
+
+export function applySetResumeDraftPacketModuleForSection(
+  state: LifeHarnessData,
+  cardId: string,
+  section: ResumeModuleSection,
+  moduleId: string
+): ActionResult {
+  const card = state.cards.find((item) => item.id === cardId);
+  const packet = card?.careerApplication?.resumeDraftPacket;
+  if (!card?.careerApplication || !packet) {
+    return { state, ok: false, message: "No resume draft packet on this card." };
+  }
+
+  const module = state.resumeModules.find((item) => item.id === moduleId && item.isActive);
+  if (!module) {
+    return { state, ok: false, message: "Resume module not found or inactive." };
+  }
+  if (normalizeResumeModulePlacement(module, 0).section !== section) {
+    return { state, ok: false, message: "Module does not belong in that resume section." };
+  }
+
+  const moduleById = new Map(state.resumeModules.map((item) => [item.id, item]));
+  const withoutSection = packet.selectedModuleIds.filter((id) => {
+    const selected = moduleById.get(id);
+    return (
+      !selected ||
+      normalizeResumeModulePlacement(selected, 0).section !== section
+    );
+  });
+  const nextIds = withoutSection.includes(moduleId)
+    ? withoutSection
+    : [...withoutSection, moduleId];
+
+  return updateApplicationResumeDraftPacket(state, cardId, nextIds);
+}
+
+function syncResumeDraftPacketsForModule(
+  state: LifeHarnessData,
+  moduleId: string
+): LifeHarnessData {
+  const cards = state.cards.map((card) => {
+    const packet = card.careerApplication?.resumeDraftPacket;
+    if (!packet?.selectedModuleIds.includes(moduleId) || !card.careerApplication) {
+      return card;
+    }
+    const updatedPacket = refreshResumeDraftPacketSelection(
+      packet,
+      packet.selectedModuleIds,
+      state.resumeModules,
+      card.careerApplication.roleType
+    );
+    return {
+      ...card,
+      careerApplication: {
+        ...card.careerApplication,
+        resumeDraftPacket: updatedPacket
+      }
+    };
+  });
+  return { ...state, cards };
+}
+
+export function applyPatchResumeModule(
+  state: LifeHarnessData,
+  moduleId: string,
+  patch: ResumeModulePatch
+): ActionResult {
+  const index = state.resumeModules.findIndex((item) => item.id === moduleId);
+  if (index < 0) {
+    return { state, ok: false, message: "Resume module not found." };
+  }
+
+  const module = state.resumeModules[index];
+  const placement = normalizeResumeModulePlacement(module, index);
+  const hasPatch =
+    Boolean(patch.date?.trim()) ||
+    Boolean(patch.appendBullet?.trim()) ||
+    Boolean(patch.appendSkill?.trim()) ||
+    Boolean(patch.appendProof?.trim());
+  if (!hasPatch) {
+    return { state, ok: false, message: "Nothing to patch." };
+  }
+
+  const updated: ResumeModule = {
+    ...module,
+    resumePlacement: {
+      ...placement,
+      ...(patch.date?.trim() ? { date: patch.date.trim() } : {})
+    },
+    bullets: patch.appendBullet?.trim()
+      ? [...module.bullets, patch.appendBullet.trim()]
+      : module.bullets,
+    skills: patch.appendSkill?.trim()
+      ? [...module.skills, patch.appendSkill.trim()]
+      : module.skills,
+    proof: patch.appendProof?.trim()
+      ? [...(module.proof ?? []), patch.appendProof.trim()]
+      : module.proof
+  };
+
+  const resumeModules = [...state.resumeModules];
+  resumeModules[index] = normalizeResumeModule(updated, index);
+  const nextState = syncResumeDraftPacketsForModule({ ...state, resumeModules }, moduleId);
+
+  return { state: nextState, ok: true, message: `Patched ${module.title}.` };
+}
+
+export function applyAddDefaultResumeModulesToPacket(
+  state: LifeHarnessData,
+  cardId: string
+): ActionResult {
+  const card = state.cards.find((item) => item.id === cardId);
+  const packet = card?.careerApplication?.resumeDraftPacket;
+  if (!card?.careerApplication || !packet) {
+    return { state, ok: false, message: "No resume draft packet on this card." };
+  }
+
+  const defaults = suggestDefaultModuleIdsPerSection(state.resumeModules);
+  let current = state;
+  let added = 0;
+
+  for (const section of ["education", "skills", "projects"] as const) {
+    const currentCard = current.cards.find((item) => item.id === cardId);
+    const currentPacket = currentCard?.careerApplication?.resumeDraftPacket;
+    if (!currentPacket) {
+      break;
+    }
+    const moduleById = new Map(current.resumeModules.map((item) => [item.id, item]));
+    const hasSection = currentPacket.selectedModuleIds.some((id) => {
+      const module = moduleById.get(id);
+      return (
+        module &&
+        normalizeResumeModulePlacement(module, 0).section === section
+      );
+    });
+    const defaultModuleId = defaults[section];
+    if (!hasSection && defaultModuleId) {
+      const result = applySetResumeDraftPacketModuleForSection(
+        current,
+        cardId,
+        section,
+        defaultModuleId
+      );
+      if (result.ok) {
+        current = result.state;
+        added += 1;
+      }
+    }
+  }
+
+  if (added === 0) {
+    return {
+      state,
+      ok: true,
+      message: "Standard modules already selected or bank has no defaults."
+    };
+  }
+
+  return {
+    state: current,
+    ok: true,
+    message: `Added ${added} standard module(s) from bank.`
   };
 }
 

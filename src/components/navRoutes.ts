@@ -34,8 +34,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/resume-bank", label: "Resume Bank" },
       { href: "/job-sources", label: "Job Sources" },
       { href: "/career-pack", label: "Career Pack" },
-      { href: "/job-candidates", label: "Review queue" },
-      { href: "/candidate-intake", label: "Paste a job" },
+      { href: "/career?tab=review", label: "Review queue" },
+      { href: "/career?tab=find&add=1", label: "Paste a job" },
       { href: "/career-intake", label: "Career Intake" },
       { href: "/source-setup", label: "Source Setup" }
     ]
@@ -52,8 +52,8 @@ export const LEGACY_NAV_HREFS = [
   "/board",
   "/career",
   "/career-intake",
-  "/candidate-intake",
-  "/job-candidates",
+  "/career?tab=find&add=1",
+  "/career?tab=review",
   "/resume-bank",
   "/memory-bank",
   "/job-sources",
@@ -85,6 +85,8 @@ const SYSTEM_HREFS = new Set(
   NAV_GROUPS.find((group) => group.id === "system")?.routes.map((route) => route.href) ?? []
 );
 
+const LEGACY_SYSTEM_PATHS = ["/candidate-intake", "/job-candidates"] as const;
+
 export function isSystemPath(pathname: string): boolean {
   for (const href of SYSTEM_HREFS) {
     if (isNavActive(pathname, href)) {
@@ -92,7 +94,7 @@ export function isSystemPath(pathname: string): boolean {
     }
   }
 
-  return false;
+  return LEGACY_SYSTEM_PATHS.some((href) => isNavActive(pathname, href));
 }
 
 export function getNavGroupForPath(pathname: string): NavGroup["id"] | null {

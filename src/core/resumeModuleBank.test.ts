@@ -4,8 +4,10 @@ import {
   buildCandidateResumePacket,
   buildResumeDraftPacket,
   buildResumeModuleReadinessSummary,
+  buildResumePacketFromSelection,
   groupActiveResumeModules,
-  normalizeResumeModules
+  normalizeResumeModules,
+  refreshResumeDraftPacketSelection
 } from "./resumeModuleBank";
 import type { JobCandidate, ResumeModule } from "./types";
 
@@ -169,6 +171,42 @@ describe("resume module bank", () => {
     expect(packet.selectedModuleIds).toEqual(["skills", "project-early", "project-late"]);
     expect(packet.sectionCoverage).toEqual(["skills", "projects"]);
     expect(packet.missingEvidence.map((issue) => issue.message)).toContain("No proof attached.");
+  });
+
+  it("refreshes packet metadata from explicit selected module ids", () => {
+    const base = buildResumeDraftPacket(
+      {
+        id: "candidate-test",
+        company: "Packet Co",
+        roleTitle: "Software Engineer",
+        suggestedResumeModuleIds: ["project-late"],
+        roleType: "software"
+      },
+      modules,
+      "2026-06-10T12:00:00.000Z"
+    );
+
+    const refreshed = refreshResumeDraftPacketSelection(
+      base,
+      ["project-late", "old-education"],
+      modules,
+      "software"
+    );
+
+    expect(refreshed.selectedModuleIds).toEqual(["old-education", "project-late"]);
+    expect(refreshed.sectionCoverage).toEqual(["education", "projects"]);
+    expect(refreshed.company).toBe("Packet Co");
+  });
+
+  it("builds selection metadata with education when only project was suggested", () => {
+    const selection = buildResumePacketFromSelection(
+      ["project-late", "old-education"],
+      modules,
+      "other"
+    );
+
+    expect(selection.sectionCoverage).toEqual(["education", "projects"]);
+    expect(selection.selectedModuleIds).toEqual(["old-education", "project-late"]);
   });
 
   it("creates an empty packet with a manual next action when no modules match", () => {

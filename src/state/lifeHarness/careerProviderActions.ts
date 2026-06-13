@@ -3,7 +3,12 @@ import type { Dispatch, MutableRefObject } from "react";
 import {
   applyAddJobSource,
   applyApproveJobCandidate,
+  applyAddDefaultResumeModulesToPacket,
   applyBackfillResumeDraftPacket,
+  applyPatchResumeModule,
+  applySetResumeDraftPacketModuleForSection,
+  applyToggleResumeDraftPacketModule,
+  type ResumeModulePatch,
   applyCareerIntake,
   applyClearCareerSourcePack,
   applyDismissJobCandidate,
@@ -21,7 +26,7 @@ import type { CareerIntakeInput } from "../../core/career";
 import type { LifeHarnessData } from "../../core/lifeHarnessData";
 import type { JobCandidateIntakeInput } from "../../core/jobScout";
 import type { JobSourceRunOutput } from "../../core/jobSourceRunner";
-import type { JobSource } from "../../core/types";
+import type { JobSource, ResumeModuleSection } from "../../core/types";
 import type { LifeHarnessAction } from "./actions";
 
 export function createCareerProviderActions(
@@ -82,6 +87,42 @@ export function createCareerProviderActions(
       const result = applyBackfillResumeDraftPacket(state, cardId);
       if (result.ok) {
         dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+
+    toggleResumeDraftPacketModule: (cardId: string, moduleId: string) => {
+      const result = applyToggleResumeDraftPacketModule(state, cardId, moduleId);
+      if (result.ok) {
+        dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+
+    setResumeDraftPacketModuleForSection: (
+      cardId: string,
+      section: ResumeModuleSection,
+      moduleId: string
+    ) => {
+      const result = applySetResumeDraftPacketModuleForSection(state, cardId, section, moduleId);
+      if (result.ok) {
+        dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+
+    addDefaultResumeModulesToPacket: (cardId: string) => {
+      const result = applyAddDefaultResumeModulesToPacket(state, cardId);
+      if (result.ok) {
+        dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+
+    patchResumeModule: (moduleId: string, patch: ResumeModulePatch) => {
+      const result = applyPatchResumeModule(state, moduleId, patch);
+      if (result.ok) {
+        dispatch({ type: "state_replaced", state: result.state });
       }
       return { ok: result.ok, message: result.message };
     },

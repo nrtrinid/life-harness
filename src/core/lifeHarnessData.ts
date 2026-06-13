@@ -1,6 +1,7 @@
 import type { StoredCareerSourcePack } from "./careerSourcePack";
 import type {
   DailyState,
+  JobSourcePack,
   HarnessAgentSession,
   HarnessChatSummary,
   HarnessFeatureSprintPlan,
@@ -32,4 +33,5 @@ export interface LifeHarnessData {
   featureSprintPlans: HarnessFeatureSprintPlan[];
   featureSprintRunnerRuns: HarnessFeatureSprintRunnerRun[];
   careerSourcePack: StoredCareerSourcePack | null;
+  jobSourcePackMode?: JobSourcePack;
 }

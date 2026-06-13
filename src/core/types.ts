@@ -100,6 +100,7 @@ export type JobSourceKind =
   | "ashby"
   | "governmentjobs"
   | "workday"
+  | "icims"
   | "jobposting_jsonld"
   | "company_careers"
   | "manual";
@@ -125,6 +126,8 @@ export interface JobSourceRequestConfig {
   pagination?: JobSourcePaginationConfig;
 }
 
+export type JobSourcePack = "core" | "full";
+
 export interface JobSource {
   id: string;
   name: string;
@@ -132,6 +135,7 @@ export interface JobSource {
   kind: JobSourceKind;
   enabled: boolean;
   cadence: JobSourceCadence;
+  sourcePack?: JobSourcePack;
   lastCheckedAt?: string;
   notes?: string;
   runStatus?: JobSourceRunStatus;
@@ -272,6 +276,8 @@ export interface DailyState {
   lastOpenedAt?: string;
   sessionStartedAt?: string;
   briefingSinceAt?: string;
+  /** Starter sources merged this session — cleared when user dismisses banner */
+  newStarterSourceIds?: string[];
 }
 
 export interface Briefing {

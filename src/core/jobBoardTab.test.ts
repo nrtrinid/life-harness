@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { CareerHubSummary } from "./careerHub";
-import { parseJobBoardTab, resolveJobBoardTab, suggestJobBoardTab } from "./jobBoardTab";
+import {
+  jobBoardTabHref,
+  parseJobBoardTab,
+  resolveJobBoardTab,
+  suggestJobBoardTab
+} from "./jobBoardTab";
 
 function summary(overrides: Partial<CareerHubSummary> = {}): CareerHubSummary {
   return {
@@ -62,5 +67,10 @@ describe("jobBoardTab", () => {
   it("resolveJobBoardTab prefers explicit param over suggestion", () => {
     expect(resolveJobBoardTab("find", summary({ followUpCount: 3 }))).toBe("find");
     expect(resolveJobBoardTab(undefined, summary({ queueCount: 2 }))).toBe("review");
+  });
+
+  it("builds tab deep links", () => {
+    expect(jobBoardTabHref("review")).toBe("/career?tab=review");
+    expect(jobBoardTabHref("followup")).toBe("/career?tab=followup");
   });
 });

@@ -11,11 +11,17 @@ import {
 } from "react";
 import { Platform } from "react-native";
 
+import { buildPostApproveApplicationHref } from "../core/applicationResumeAction";
 import {
   applyAddJobSource,
   applyClearCareerSourcePack,
   applyApproveJobCandidate,
+  applyAddDefaultResumeModulesToPacket,
   applyBackfillResumeDraftPacket,
+  applyPatchResumeModule,
+  applySetResumeDraftPacketModuleForSection,
+  applyToggleResumeDraftPacketModule,
+  type ResumeModulePatch,
   applyCompleteAgentSessionWithEvidence,
   applyImportCareerSourcePack,
   applyCardStateChange,
@@ -42,10 +48,13 @@ import {
   buildRunAllSummary,
   formatRunBatchNotice,
   getDueJobSources,
+  getHealthyJobSources,
   getRunnableJobSources,
+  HEALTHY_RUN_EMPTY_MESSAGE,
   type RunBatchSummary,
   type SourceRunOutcome
 } from "../core/jobSourceSchedule";
+import { applyPackModeToSources } from "../core/jobSourcePack";
 import {
   buildFetchErrorRunOutput,
   canRunJobSource,
@@ -119,7 +128,18 @@ import {
   savePersistedState,
   serializeEnvelope
 } from "../storage/persistence";
-import type { CardState, DailyState, HarnessChatSummary, HarnessMemoryItem, JobSource, LifeCard, LifeLogEntry, ProofItem } from "../core/types";
+import type {
+  CardState,
+  DailyState,
+  HarnessChatSummary,
+  HarnessMemoryItem,
+  JobSource,
+  JobSourcePack,
+  LifeCard,
+  LifeLogEntry,
+  ProofItem,
+  ResumeModuleSection
+} from "../core/types";
 
 export interface BatchRunProgress {
   current: number;
@@ -185,8 +205,22 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   dismissJobCandidate: (candidateId: string) => { ok: boolean; message?: string };
   approveJobCandidate: (
     candidateId: string
-  ) => { ok: boolean; message?: string; cardId?: string; candidateId?: string };
+  ) => { ok: boolean; message?: string; cardId?: string; candidateId?: string; cardHref?: string };
   backfillResumeDraftPacket: (cardId: string) => { ok: boolean; message?: string };
+  toggleResumeDraftPacketModule: (
+    cardId: string,
+    moduleId: string
+  ) => { ok: boolean; message?: string };
+  setResumeDraftPacketModuleForSection: (
+    cardId: string,
+    section: ResumeModuleSection,
+    moduleId: string
+  ) => { ok: boolean; message?: string };
+  addDefaultResumeModulesToPacket: (cardId: string) => { ok: boolean; message?: string };
+  patchResumeModule: (
+    moduleId: string,
+    patch: ResumeModulePatch
+  ) => { ok: boolean; message?: string };
   importCareerSourcePack: (json: string) => { ok: boolean; message?: string };
   clearCareerSourcePack: () => { ok: boolean; message?: string };
   addJobSource: (input: JobSourceInput) => { ok: boolean; message?: string };
@@ -281,8 +315,11 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     sourceId: string
   ) => Promise<{ ok: boolean; message?: string; outcome?: SourceRunOutcome; runnerUnreachable?: boolean }>;
   runDueJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
+  runHealthyJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
   runAllEnabledJobSources: () => Promise<{ ok: boolean; message: string; summary: RunBatchSummary }>;
   runFitFinder: () => Promise<FitFinderResult>;
+  setJobSourcePackMode: (mode: JobSourcePack) => void;
+  dismissStarterSourceAnnouncement: () => void;
 }
 
 const LifeHarnessContext = createContext<LifeHarnessContextValue | undefined>(undefined);
@@ -300,13 +337,16 @@ function patchSourceRunning(state: LifeHarnessData, sourceId: string): LifeHarne
 
 function outcomeFromRun(source: JobSource, result: ReturnType<typeof applyRunJobSourceResult>): SourceRunOutcome {
   const run = result.state.jobSourceRuns[0];
+  const createdCandidates = run?.createdCandidateIds.length ?? 0;
+  const errors = run?.errors ?? [];
   return {
     sourceId: source.id,
     sourceName: source.name,
     ok: result.ok,
-    createdCandidates: run?.createdCandidateIds.length ?? 0,
+    weakPass: result.ok && createdCandidates === 0 && errors.length === 0,
+    createdCandidates,
     skippedDuplicates: run?.skippedDuplicates ?? 0,
-    errors: run?.errors ?? [],
+    errors,
     message: result.message ?? run?.message ?? "Source run recorded."
   };
 }
@@ -529,11 +569,20 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       const result = applyApproveJobCandidate(state, candidateId);
       if (result.ok) {
         dispatch({ type: "job_candidate_updated", state: result.state });
+        const cardHref =
+          result.cardId != null
+            ? buildPostApproveApplicationHref(
+                result.state.cards,
+                result.state.resumeModules,
+                result.cardId
+              )
+            : undefined;
         return {
           ok: true,
           message: result.message,
           cardId: result.cardId,
-          candidateId: result.candidateId
+          candidateId: result.candidateId,
+          cardHref
         };
       }
       return { ok: false, message: result.message };
@@ -546,6 +595,50 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       const result = applyBackfillResumeDraftPacket(state, cardId);
       if (result.ok) {
         dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
+  const toggleResumeDraftPacketModuleAction = useCallback(
+    (cardId: string, moduleId: string) => {
+      const result = applyToggleResumeDraftPacketModule(state, cardId, moduleId);
+      if (result.ok) {
+        dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
+  const setResumeDraftPacketModuleForSectionAction = useCallback(
+    (cardId: string, section: ResumeModuleSection, moduleId: string) => {
+      const result = applySetResumeDraftPacketModuleForSection(state, cardId, section, moduleId);
+      if (result.ok) {
+        dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
+  const addDefaultResumeModulesToPacketAction = useCallback(
+    (cardId: string) => {
+      const result = applyAddDefaultResumeModulesToPacket(state, cardId);
+      if (result.ok) {
+        dispatch({ type: "career_intake_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
+  const patchResumeModuleAction = useCallback(
+    (moduleId: string, patch: ResumeModulePatch) => {
+      const result = applyPatchResumeModule(state, moduleId, patch);
+      if (result.ok) {
+        dispatch({ type: "state_replaced", state: result.state });
       }
       return { ok: result.ok, message: result.message };
     },
@@ -1035,6 +1128,32 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     };
   }, [runSourceBatch]);
 
+  const runHealthyJobSources = useCallback(async () => {
+    const current = stateRef.current;
+    const packMode = current.jobSourcePackMode ?? "core";
+    const targets = getHealthyJobSources(
+      current.jobSources,
+      current.jobSourceRuns,
+      current.jobCandidates,
+      new Date(),
+      { packMode }
+    );
+    if (targets.length === 0) {
+      return {
+        ok: true,
+        message: HEALTHY_RUN_EMPTY_MESSAGE,
+        summary: buildRunAllSummary([])
+      };
+    }
+
+    const summary = await runSourceBatch(targets);
+    return {
+      ok: summary.failedSources === 0 && !summary.runnerUnreachable,
+      message: formatRunBatchNotice(summary),
+      summary
+    };
+  }, [runSourceBatch]);
+
   const runAllEnabledJobSources = useCallback(async () => {
     const targets = getRunnableJobSources(stateRef.current.jobSources);
     if (targets.length === 0) {
@@ -1053,8 +1172,43 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     };
   }, [runSourceBatch]);
 
+  const setJobSourcePackMode = useCallback(
+    (mode: JobSourcePack) => {
+      dispatch({
+        type: "state_replaced",
+        state: {
+          ...stateRef.current,
+          jobSourcePackMode: mode,
+          jobSources: applyPackModeToSources(stateRef.current.jobSources, mode)
+        }
+      });
+    },
+    [dispatch]
+  );
+
+  const dismissStarterSourceAnnouncement = useCallback(() => {
+    dispatch({
+      type: "state_replaced",
+      state: {
+        ...stateRef.current,
+        dailyState: {
+          ...stateRef.current.dailyState,
+          newStarterSourceIds: []
+        }
+      }
+    });
+  }, [dispatch]);
+
   const runFitFinder = useCallback(async (): Promise<FitFinderResult> => {
-    const targets = getRunnableJobSources(stateRef.current.jobSources);
+    const current = stateRef.current;
+    const packMode = current.jobSourcePackMode ?? "core";
+    const targets = getHealthyJobSources(
+      current.jobSources,
+      current.jobSourceRuns,
+      current.jobCandidates,
+      new Date(),
+      { packMode }
+    );
     if (targets.length === 0) {
       return buildFitFinderResult({
         ok: false,
@@ -1103,6 +1257,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       dismissJobCandidate: dismissJobCandidateAction,
       approveJobCandidate: approveJobCandidateAction,
       backfillResumeDraftPacket: backfillResumeDraftPacketAction,
+      toggleResumeDraftPacketModule: toggleResumeDraftPacketModuleAction,
+      setResumeDraftPacketModuleForSection: setResumeDraftPacketModuleForSectionAction,
+      addDefaultResumeModulesToPacket: addDefaultResumeModulesToPacketAction,
+      patchResumeModule: patchResumeModuleAction,
       importCareerSourcePack,
       clearCareerSourcePack,
       addJobSource: addJobSourceAction,
@@ -1145,8 +1303,11 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       batchRunProgress,
       runOneJobSource,
       runDueJobSources,
+      runHealthyJobSources,
       runAllEnabledJobSources,
-      runFitFinder
+      runFitFinder,
+      setJobSourcePackMode,
+      dismissStarterSourceAnnouncement
     }),
     [
       state,
@@ -1161,6 +1322,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       dismissJobCandidateAction,
       approveJobCandidateAction,
       backfillResumeDraftPacketAction,
+      toggleResumeDraftPacketModuleAction,
+      setResumeDraftPacketModuleForSectionAction,
+      addDefaultResumeModulesToPacketAction,
+      patchResumeModuleAction,
       importCareerSourcePack,
       clearCareerSourcePack,
       addJobSourceAction,
@@ -1201,8 +1366,11 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       batchRunProgress,
       runOneJobSource,
       runDueJobSources,
+      runHealthyJobSources,
       runAllEnabledJobSources,
-      runFitFinder
+      runFitFinder,
+      setJobSourcePackMode,
+      dismissStarterSourceAnnouncement
     ]
   );
 

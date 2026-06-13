@@ -61,6 +61,7 @@ export const JOB_SOURCE_KIND_LABELS: Record<JobSourceKind, string> = {
   ashby: "Ashby",
   governmentjobs: "GovernmentJobs / NEOGOV",
   workday: "Workday / MyWorkdayJobs",
+  icims: "iCIMS Career Portal",
   jobposting_jsonld: "JobPosting JSON-LD",
   company_careers: "Company Careers",
   manual: "Manual"

@@ -105,7 +105,7 @@ describe("mergeSeedDefaults", () => {
       source.id === "source-microsoft" ? { ...source, url: editedUrl, enabled: true } : source
     );
 
-    const merged = mergeSeedDefaults(state);
+    const merged = mergeSeedDefaults(state).data;
     const microsoft = merged.jobSources.find((source) => source.id === "source-microsoft");
     expect(microsoft?.url).toBe(editedUrl);
     expect(microsoft?.enabled).toBe(true);
@@ -115,7 +115,7 @@ describe("mergeSeedDefaults", () => {
     const state = createSeedState();
     state.resumeModules = state.resumeModules.filter((module) => module.id !== "resume-asu");
 
-    const merged = mergeSeedDefaults(state);
+    const merged = mergeSeedDefaults(state).data;
     expect(merged.resumeModules.some((module) => module.id === "resume-asu")).toBe(true);
     expect(merged.resumeModules.length).toBe(seedResumeModules.length);
   });
@@ -133,10 +133,20 @@ describe("mergeSeedDefaults", () => {
       }
     ];
 
-    const merged = mergeSeedDefaults(state);
+    const merged = mergeSeedDefaults(state).data;
     expect(merged.jobSources.some((source) => source.id === "source-user-custom")).toBe(true);
     expect(merged.jobSources.some((source) => source.id === "source-fixture-greenhouse")).toBe(true);
     expect(merged.jobSources.length).toBe(seedJobSources.length + 1);
+  });
+
+  it("tracks newly merged starter source ids for announcement", () => {
+    const state = createSeedState();
+    state.jobSources = state.jobSources.filter(
+      (source) => source.id !== "source-qualcomm-workday-cxs" && source.id !== "source-viasat-icims"
+    );
+    const { addedStarterSourceIds } = mergeSeedDefaults(state);
+    expect(addedStarterSourceIds).toContain("source-qualcomm-workday-cxs");
+    expect(addedStarterSourceIds).toContain("source-viasat-icims");
   });
 });
 

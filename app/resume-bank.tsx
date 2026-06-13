@@ -1,35 +1,73 @@
 import { Link } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { ResumeModulePatchSheet } from "../src/components/career/ResumeModulePatchSheet";
 import { PageHeader } from "../src/components/PageHeader";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { styles } from "../src/components/styles";
+import type { ResumeModulePatch } from "../src/core/actions";
 import {
   FIT_SCORE_DISCLAIMER,
   RESUME_MODULE_CATEGORY_LABELS,
   ROLE_TYPE_LABELS
 } from "../src/core/labels";
+import type { ResumeReadinessWarning } from "../src/core/resumeReadiness";
 import {
   buildResumeModuleReadinessSummary,
   groupActiveResumeModules,
   normalizeResumeModulePlacement,
-  RESUME_MODULE_SECTION_LABELS
+  RESUME_MODULE_SECTION_LABELS,
+  type ResumeModuleIssue
 } from "../src/core/resumeModuleBank";
 import type { ResumeModule } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
+function issuesToWarnings(module: ResumeModule, issues: ResumeModuleIssue[]): ResumeReadinessWarning[] {
+  return issues
+    .filter((issue) => issue.moduleId === module.id)
+    .map((issue, index) => {
+      let category: ResumeReadinessWarning["category"] = "missing_bullets";
+      if (issue.message.includes("date")) {
+        category = "missing_date";
+      } else if (issue.message.includes("proof")) {
+        category = "missing_proof";
+      } else if (issue.message.includes("skill")) {
+        category = "missing_bullets";
+      }
+      return {
+        id: `bank-${module.id}-${index}`,
+        category,
+        message: issue.message,
+        moduleId: module.id,
+        moduleTitle: module.title,
+        blocksExport: category !== "missing_proof"
+      };
+    });
+}
+
 function ModuleCard({
   module,
   expanded,
-  onToggle
+  issues,
+  patching,
+  onToggle,
+  onOpenPatch,
+  onPatch,
+  onClosePatch
 }: {
   module: ResumeModule;
   expanded: boolean;
+  issues: ResumeModuleIssue[];
+  patching: boolean;
   onToggle: () => void;
+  onOpenPatch: () => void;
+  onPatch: (patch: ResumeModulePatch) => void;
+  onClosePatch: () => void;
 }) {
   const placement = normalizeResumeModulePlacement(module, 0);
+  const moduleIssues = issues.filter((issue) => issue.moduleId === module.id);
 
   return (
     <View style={styles.cardTile}>
@@ -70,6 +108,22 @@ function ModuleCard({
           ) : (
             <Text style={styles.helpText}>No bullets yet.</Text>
           )}
+          {moduleIssues.length > 0 ? (
+            <Pressable
+              style={StyleSheet.flatten([styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }])}
+              onPress={onOpenPatch}
+            >
+              <Text style={styles.secondaryActionText}>Patch module</Text>
+            </Pressable>
+          ) : null}
+          {patching ? (
+            <ResumeModulePatchSheet
+              module={module}
+              blockingWarnings={issuesToWarnings(module, issues)}
+              onPatch={onPatch}
+              onClose={onClosePatch}
+            />
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -77,17 +131,28 @@ function ModuleCard({
 }
 
 export default function ResumeBankScreen() {
-  const { resumeModules } = useLifeHarness();
+  const { resumeModules, patchResumeModule } = useLifeHarness();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const readiness = buildResumeModuleReadinessSummary(resumeModules);
+  const [patchModuleId, setPatchModuleId] = useState<string | null>(null);
+  const readiness = useMemo(
+    () => buildResumeModuleReadinessSummary(resumeModules),
+    [resumeModules]
+  );
   const groups = groupActiveResumeModules(resumeModules);
   const inactiveModules = resumeModules.filter((module) => !module.isActive);
+
+  function handlePatch(moduleId: string, patch: ResumeModulePatch) {
+    const result = patchResumeModule(moduleId, patch);
+    if (result.ok) {
+      setPatchModuleId(null);
+    }
+  }
 
   return (
     <Screen>
       <PageHeader
         title="Resume Bank"
-        subtitle="Structured resume modules for deterministic matching. No resume generation here."
+        subtitle="Structured resume modules for deterministic matching. Patch gaps here before export."
       />
 
       <View style={styles.lofiCardHero}>
@@ -104,9 +169,12 @@ export default function ResumeBankScreen() {
         {readiness.issues[0] ? (
           <Pressable
             style={StyleSheet.flatten([styles.primaryAction, { alignSelf: "flex-start" }])}
-            onPress={() => setExpandedId(readiness.issues[0]!.moduleId)}
+            onPress={() => {
+              setExpandedId(readiness.issues[0]!.moduleId);
+              setPatchModuleId(readiness.issues[0]!.moduleId);
+            }}
           >
-            <Text style={styles.primaryActionText}>Review first issue</Text>
+            <Text style={styles.primaryActionText}>Patch first issue</Text>
           </Pressable>
         ) : (
           <Link href="/career" asChild>
@@ -154,7 +222,12 @@ export default function ResumeBankScreen() {
                 key={module.id}
                 module={module}
                 expanded={expandedId === module.id}
+                issues={readiness.issues}
+                patching={patchModuleId === module.id}
                 onToggle={() => setExpandedId(expandedId === module.id ? null : module.id)}
+                onOpenPatch={() => setPatchModuleId(module.id)}
+                onPatch={(patch) => handlePatch(module.id, patch)}
+                onClosePatch={() => setPatchModuleId(null)}
               />
             ))
           )}
@@ -170,7 +243,12 @@ export default function ResumeBankScreen() {
               key={module.id}
               module={module}
               expanded={expandedId === module.id}
+              issues={readiness.issues}
+              patching={patchModuleId === module.id}
               onToggle={() => setExpandedId(expandedId === module.id ? null : module.id)}
+              onOpenPatch={() => setPatchModuleId(module.id)}
+              onPatch={(patch) => handlePatch(module.id, patch)}
+              onClosePatch={() => setPatchModuleId(null)}
             />
           ))
         )}

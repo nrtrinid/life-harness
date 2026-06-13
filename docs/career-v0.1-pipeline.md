@@ -100,6 +100,8 @@ The boundary is:
 rules validate -> user edits/approves -> rules export -> user manually reviews/sends
 ```
 
+v0.17 adds [`ResumeModulePatchSheet`](../src/components/career/ResumeModulePatchSheet.tsx) so date/bullet/skill/proof gaps are editable on the application card and in Resume Bank (`applyPatchResumeModule`). Jobs **Apply** tab buttons use the same primary action as card detail (`deriveApplicationResumePrimaryAction`).
+
 ## Non-goals
 
 Career v0.1 does not add:

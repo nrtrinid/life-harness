@@ -1,45 +1,121 @@
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Linking, Pressable, Text, View } from "react-native";
 
+import type { ResumeModulePatch } from "../../core/actions";
 import { CardAgentToolsSection } from "../card/CardAgentToolsSection";
+import { CardStateButtons } from "../CardStateButtons";
 import { CollapsibleSection } from "../CollapsibleSection";
+import { ProgressBar } from "../ProgressBar";
 import { Section } from "../Section";
 import { styles } from "../styles";
+import { ApplicationResumeModulePicker } from "./ApplicationResumeModulePicker";
 import { CareerStatusChip } from "./CareerStatusChip";
+import { ResumeModulePatchSheet } from "./ResumeModulePatchSheet";
 import { ResumeNextStrip } from "./ResumeNextStrip";
 import { CARD_STATE_LABELS, ROLE_TYPE_LABELS } from "../../core/labels";
 import {
   RESUME_MODULE_SECTION_LABELS,
   RESUME_MODULE_SECTION_ORDER
 } from "../../core/resumeModuleBank";
+import { computeCardProgress } from "../../core/progress";
 import type { ApplicationResumeReadiness } from "../../core/resumeReadiness";
-import type { JobCandidate, LifeCard, ProofItem } from "../../core/types";
+import type {
+  JobCandidate,
+  LifeCard,
+  LifeLogEntry,
+  ProofItem,
+  ResumeModule,
+  ResumeModuleSection
+} from "../../core/types";
 
 interface CareerApplicationCardDetailProps {
   card: LifeCard;
   resumeReadiness: ApplicationResumeReadiness;
+  resumeModules: ResumeModule[];
   cardProof: ProofItem[];
+  logs: LifeLogEntry[];
+  sessionStartedAt?: string;
   linkedCandidate?: JobCandidate;
+  initialFocusSection?: ResumeModuleSection | null;
+  initialPatchModuleId?: string | null;
   onBuildDocx: () => void;
   onCreateDraftPacket?: () => void;
+  onToggleModule: (moduleId: string) => void;
+  onSetModuleForSection?: (section: ResumeModuleSection, moduleId: string) => void;
+  onAddDefaultModules?: () => void;
+  onPatchModule: (moduleId: string, patch: ResumeModulePatch) => void;
+  onParkCard?: () => void;
   onNotice: (kind: "success" | "warning" | "info", message: string) => void;
 }
 
 export function CareerApplicationCardDetail({
   card,
   resumeReadiness,
+  resumeModules,
   cardProof,
+  logs,
+  sessionStartedAt,
   linkedCandidate,
+  initialFocusSection,
+  initialPatchModuleId,
   onBuildDocx,
   onCreateDraftPacket,
+  onToggleModule,
+  onSetModuleForSection,
+  onAddDefaultModules,
+  onPatchModule,
+  onParkCard,
   onNotice
 }: CareerApplicationCardDetailProps) {
   const application = card.careerApplication!;
   const [jobDescriptionExpanded, setJobDescriptionExpanded] = useState(false);
+  const [focusSection, setFocusSection] = useState<ResumeModuleSection | null>(
+    initialFocusSection ?? null
+  );
+  const [patchModuleId, setPatchModuleId] = useState<string | null>(initialPatchModuleId ?? null);
+  const selectedModuleIds = application.resumeDraftPacket?.selectedModuleIds ?? [];
   const weakMatch =
     application.roleType === "other" ||
     linkedCandidate?.fitLabel === "bad_fit" ||
     linkedCandidate?.fitLabel === "stretch";
+
+  useEffect(() => {
+    if (initialFocusSection) {
+      setFocusSection(initialFocusSection);
+    }
+  }, [initialFocusSection]);
+
+  useEffect(() => {
+    if (initialPatchModuleId) {
+      setPatchModuleId(initialPatchModuleId);
+    }
+  }, [initialPatchModuleId]);
+
+  const patchModule = patchModuleId
+    ? resumeModules.find((module) => module.id === patchModuleId)
+    : undefined;
+  const patchWarnings = useMemo(
+    () =>
+      patchModuleId
+        ? resumeReadiness.warnings.filter(
+            (warning) =>
+              warning.moduleId === patchModuleId &&
+              (warning.blocksExport ||
+                warning.category === "missing_date" ||
+                warning.category === "missing_bullets" ||
+                warning.category === "missing_proof")
+          )
+        : [],
+    [patchModuleId, resumeReadiness.warnings]
+  );
+  const blockingWarnings = resumeReadiness.warnings.filter(
+    (warning) =>
+      warning.blocksExport &&
+      warning.moduleId &&
+      (warning.category === "missing_date" ||
+        warning.category === "missing_bullets" ||
+        warning.category === "missing_proof")
+  );
 
   return (
     <>
@@ -47,19 +123,98 @@ export function CareerApplicationCardDetail({
         readiness={resumeReadiness}
         onBuildDocx={onBuildDocx}
         onCreateDraftPacket={onCreateDraftPacket}
+        onFocusSection={(section) => setFocusSection(section)}
+        onPatchModule={(moduleId) => setPatchModuleId(moduleId)}
       />
+
+      {patchModule && patchWarnings.length > 0 ? (
+        <ResumeModulePatchSheet
+          module={patchModule}
+          blockingWarnings={patchWarnings}
+          onPatch={(patch) => {
+            onPatchModule(patchModule.id, patch);
+            setPatchModuleId(null);
+          }}
+          onClose={() => setPatchModuleId(null)}
+        />
+      ) : null}
+
+      {application.resumeDraftPacket ? (
+        <ApplicationResumeModulePicker
+          readiness={resumeReadiness}
+          resumeModules={resumeModules}
+          selectedModuleIds={selectedModuleIds}
+          onToggleModule={onToggleModule}
+          onSetModuleForSection={onSetModuleForSection}
+          onAddDefaultModules={onAddDefaultModules}
+          focusSection={focusSection}
+        />
+      ) : null}
+
+      {blockingWarnings.length > 0 ? (
+        <Section title="Patch gaps">
+          {blockingWarnings.slice(0, 5).map((warning) => (
+            <View
+              key={warning.id}
+              style={[styles.cardActionsRow, { marginTop: 6, alignItems: "center" }]}
+            >
+              <Text style={[styles.bodyText, { flex: 1 }]}>{warning.message}</Text>
+              {warning.moduleId ? (
+                <Pressable
+                  style={styles.smallButton}
+                  onPress={() => setPatchModuleId(warning.moduleId!)}
+                >
+                  <Text style={styles.smallButtonText}>Fix</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+        </Section>
+      ) : null}
+
+      <Section title="Move">
+        <ProgressBar value={computeCardProgress(card, logs, sessionStartedAt)} />
+        <Text style={styles.label}>Why it matters</Text>
+        <Text style={styles.bodyText}>{card.whyItMatters}</Text>
+        <CardStateButtons cardId={card.id} currentState={card.state} />
+      </Section>
+
+      <Section title="Next tiny action">
+        <Text style={styles.titleText}>{card.nextTinyAction}</Text>
+        <Text style={[styles.label, { marginTop: 12 }]}>Done for now</Text>
+        <Text style={styles.bodyText}>{card.doneForNow}</Text>
+      </Section>
 
       {weakMatch ? (
         <Section title="Fit check">
           <Text style={styles.bodyText}>
-            This posting is probably not a tech-role match for your current resume bank. Auto-suggested
-            projects and angles may not apply — open the listing, then tailor manually or pass.
+            Passing is fine — only build DOCX if you are investing time in this role. Open the
+            posting to decide whether to tailor manually on the employer site.
           </Text>
           {linkedCandidate?.gaps.slice(0, 3).map((gap) => (
             <Text key={gap} style={styles.listItem}>
               - {gap}
             </Text>
           ))}
+          <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
+            {application.sourceUrl ? (
+              <Pressable
+                style={styles.secondaryAction}
+                onPress={() => {
+                  void Linking.openURL(application.sourceUrl!).catch(() => {
+                    onNotice("warning", "Could not open posting URL.");
+                  });
+                }}
+              >
+                <Text style={styles.secondaryActionText}>Open posting</Text>
+              </Pressable>
+            ) : null}
+            {onParkCard ? (
+              <Pressable style={styles.smallButton} onPress={onParkCard}>
+                <Text style={styles.smallButtonText}>Park this</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </Section>
       ) : null}
 

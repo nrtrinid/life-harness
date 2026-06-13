@@ -21,7 +21,11 @@ import {
   runJobSourceFromRaw,
   runPaginatedJobSourceFromRaw
 } from "./jobSourceRunner";
-import { GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE, WORKDAY_ZERO_LISTINGS_MESSAGE } from "./jobSourceAdapters";
+import {
+  GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
+  ICIMS_ZERO_LISTINGS_MESSAGE,
+  WORKDAY_ZERO_LISTINGS_MESSAGE
+} from "./jobSourceAdapters";
 import type { JobSource } from "./types";
 
 const greenhouseFixture = {
@@ -54,6 +58,21 @@ const governmentJobsSource: JobSource = {
   name: "County of San Diego",
   url: "/fixtures/sample-governmentjobs-listing.html",
   kind: "governmentjobs",
+  enabled: true,
+  cadence: "manual",
+  maxResults: 25
+};
+
+const icimsFixtureHtml = readFileSync(
+  join(process.cwd(), "public/fixtures/sample-icims-listing.html"),
+  "utf8"
+);
+
+const icimsSource: JobSource = {
+  id: "source-viasat-icims",
+  name: "Viasat — iCIMS",
+  url: "/fixtures/sample-icims-listing.html",
+  kind: "icims",
   enabled: true,
   cadence: "manual",
   maxResults: 25
@@ -267,6 +286,27 @@ describe("jobSourceRunner", () => {
     expect(result.state.cards).toHaveLength(state.cards.length);
   });
 
+  it("creates source_fetch candidates from icims fixture HTML", () => {
+    const output = runJobSourceFromRaw(icimsSource, icimsFixtureHtml, [], seedResumeModules);
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(output.candidates[0]?.origin).toBe("source_fetch");
+    expect(output.candidates[0]?.company).toBe("Viasat");
+  });
+
+  it("treats empty icims HTML as weak pass with informative message", () => {
+    const output = runJobSourceFromRaw(
+      icimsSource,
+      readFileSync(join(process.cwd(), "public/fixtures/sample-icims-empty.html"), "utf8"),
+      [],
+      seedResumeModules
+    );
+    expect(output.candidates).toHaveLength(0);
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.result.message).toBe(ICIMS_ZERO_LISTINGS_MESSAGE);
+    expect(output.updatedSource.runStatus).toBe("success");
+  });
+
   it("creates source_fetch candidates from workday fixture JSON", () => {
     const output = runJobSourceFromRaw(
       workdaySource,
@@ -362,6 +402,29 @@ describe("jobSourceRunner", () => {
     );
     expect(output.result.errors).toHaveLength(0);
     expect(output.candidates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("creates candidates from qualcomm workday CXS fixture", () => {
+    const source: JobSource = {
+      ...workdaySource,
+      id: "source-qualcomm-workday-cxs",
+      name: "Qualcomm — Workday CXS",
+      url: "https://qualcomm.wd12.myworkdayjobs.com/wday/cxs/qualcomm/External/jobs",
+      requestConfig: {
+        method: "POST",
+        bodyJson: { appliedFacets: {}, limit: 20, offset: 0, searchText: "" },
+        pagination: { mode: "workday_offset", limit: 20, maxPages: 3 }
+      }
+    };
+    const output = runJobSourceFromRaw(
+      source,
+      JSON.parse(workdayCxsResponseJson),
+      [],
+      seedResumeModules
+    );
+    expect(output.result.errors).toHaveLength(0);
+    expect(output.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(output.candidates[0]?.company).toBe("Qualcomm");
   });
 
   it("rejects workday source with forbidden credential keys in requestConfig", () => {

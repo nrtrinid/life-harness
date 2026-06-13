@@ -1,3 +1,4 @@
+import { buildSourceHealthStats } from "./jobSourceHealth";
 import { getDueJobSources, getRunnableJobSources } from "./jobSourceSchedule";
 import type { JobCandidate, JobSource, JobSourceRunResult } from "./types";
 
@@ -134,9 +135,54 @@ export function buildJobRunFinding(
 }
 
 export function formatJobRunFinding(run: JobRunFinding): string {
+  const weakPass =
+    run.createdCandidates === 0 && run.errorCount === 0 ? " (weak-pass)" : "";
   return `${run.createdCandidates} new - ${run.skippedDuplicates} duplicate${
     run.skippedDuplicates === 1 ? "" : "s"
-  } - ${run.errorCount} error${run.errorCount === 1 ? "" : "s"}`;
+  } - ${run.errorCount} error${run.errorCount === 1 ? "" : "s"}${weakPass}`;
+}
+
+export interface FindPreflightSummary {
+  label: string;
+  healthy: number;
+  neverRun: number;
+  weakPass: number;
+  error: number;
+  stale: number;
+}
+
+export function buildFindPreflightSummary(
+  sources: JobSource[],
+  runs: JobSourceRunResult[],
+  candidates: JobCandidate[],
+  now: Date
+): FindPreflightSummary {
+  const enabled = sources.filter((source) => source.enabled);
+  const stats = buildSourceHealthStats(enabled, runs, candidates, now);
+  const parts: string[] = [];
+  if (stats.healthy > 0) {
+    parts.push(`${stats.healthy} healthy`);
+  }
+  if (stats.neverRun > 0) {
+    parts.push(`${stats.neverRun} never run`);
+  }
+  if (stats.weakPass > 0) {
+    parts.push(`${stats.weakPass} weak-pass`);
+  }
+  if (stats.error > 0) {
+    parts.push(`${stats.error} error`);
+  }
+  if (stats.stale > 0) {
+    parts.push(`${stats.stale} stale`);
+  }
+  return {
+    label: parts.length > 0 ? parts.join(" · ") : "No enabled sources",
+    healthy: stats.healthy,
+    neverRun: stats.neverRun,
+    weakPass: stats.weakPass,
+    error: stats.error,
+    stale: stats.stale
+  };
 }
 
 export function buildJobFindingsSummary(

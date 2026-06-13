@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   applyAddJobSource,
   applyApproveJobCandidate,
+  applyAddDefaultResumeModulesToPacket,
   applyBackfillResumeDraftPacket,
+  applyPatchResumeModule,
+  applyToggleResumeDraftPacketModule,
   applyCardStateChange,
   applyCareerIntake,
   applyDismissJobCandidate,
@@ -22,6 +25,7 @@ import { buildProofLedger } from "./proofLedger";
 import { PROOF_TITLES } from "./proof";
 import { PREVIEW_JOB_SOURCE_ID, runJobSourceFromRaw } from "./jobSourceRunner";
 import { buildRawLabIdeaCaptureText } from "./rawLabOutputAttachment";
+import { buildApplicationResumeReadiness } from "./resumeReadiness";
 import { seedJobCandidates, seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { seedCards, seedDailyState, seedLogs, seedProofItems } from "../data/seed";
 import type { DailyState } from "./types";
@@ -359,6 +363,113 @@ describe("job candidate actions", () => {
     expect(card?.careerApplication?.resumeDraftPacket?.selectedModuleIds.length).toBeGreaterThan(0);
     expect(card?.nextTinyAction).toBe("Tailor resume angle and submit application.");
     expect(card?.whyItMatters).toContain("Job Scout");
+  });
+
+  it("toggles resume draft packet modules and updates section coverage", () => {
+    const state = createState();
+    const intake = applyJobCandidateIntake(state, {
+      company: "Toggle Co",
+      roleTitle: "Communications Technician",
+      description: "Field communications and cabling work.",
+      roleType: "other",
+      origin: "manual"
+    });
+    const approved = applyApproveJobCandidate(intake.state, intake.candidateId!);
+    const cardId = approved.cardId!;
+    const before = approved.state.cards.find((card) => card.id === cardId);
+    const packet = before?.careerApplication?.resumeDraftPacket;
+    expect(packet).toBeTruthy();
+
+    const readinessBefore = buildApplicationResumeReadiness({
+      card: before!,
+      resumeModules: approved.state.resumeModules
+    });
+    expect(
+      readinessBefore.warnings.some((warning) => warning.category === "missing_section_coverage")
+    ).toBe(true);
+
+    const educationModule = approved.state.resumeModules.find(
+      (module) => module.resumePlacement?.section === "education" && module.isActive
+    );
+    expect(educationModule).toBeTruthy();
+
+    const toggled = applyToggleResumeDraftPacketModule(
+      approved.state,
+      cardId,
+      educationModule!.id
+    );
+    expect(toggled.ok).toBe(true);
+    const after = toggled.state.cards.find((card) => card.id === cardId);
+    expect(after?.careerApplication?.resumeDraftPacket?.selectedModuleIds).toContain(
+      educationModule!.id
+    );
+    expect(after?.careerApplication?.resumeDraftPacket?.sectionCoverage).toContain("education");
+
+    const readinessAfter = buildApplicationResumeReadiness({
+      card: after!,
+      resumeModules: toggled.state.resumeModules
+    });
+    expect(
+      readinessAfter.warnings.some(
+        (warning) =>
+          warning.category === "missing_section_coverage" && warning.section === "education"
+      )
+    ).toBe(false);
+  });
+
+  it("patches resume module content and clears blocking date warnings", () => {
+    const state = createState();
+    const intake = applyJobCandidateIntake(state, {
+      company: "Patch Co",
+      roleTitle: "Software Engineer",
+      description: "TypeScript and Python backend work.",
+      roleType: "software",
+      origin: "manual"
+    });
+    const approved = applyApproveJobCandidate(intake.state, intake.candidateId!);
+    const cardId = approved.cardId!;
+    const card = approved.state.cards.find((item) => item.id === cardId)!;
+    const projectModule = approved.state.resumeModules.find(
+      (module) => module.category === "project" && module.isActive
+    )!;
+    const projectId = projectModule.id;
+
+    const withoutDate = applyPatchResumeModule(approved.state, projectId, { date: "" });
+    expect(withoutDate.ok).toBe(false);
+
+    const patched = applyPatchResumeModule(approved.state, projectId, { date: "2025" });
+    expect(patched.ok).toBe(true);
+
+    const readiness = buildApplicationResumeReadiness({
+      card,
+      resumeModules: patched.state.resumeModules
+    });
+    expect(
+      readiness.warnings.some(
+        (warning) => warning.category === "missing_date" && warning.moduleId === projectId
+      )
+    ).toBe(false);
+  });
+
+  it("adds default bank modules for missing critical sections", () => {
+    const state = createState();
+    const intake = applyJobCandidateIntake(state, {
+      company: "Defaults Co",
+      roleTitle: "Communications Technician",
+      description: "Field communications work.",
+      roleType: "other",
+      origin: "manual"
+    });
+    const approved = applyApproveJobCandidate(intake.state, intake.candidateId!);
+    const cardId = approved.cardId!;
+
+    const result = applyAddDefaultResumeModulesToPacket(approved.state, cardId);
+    expect(result.ok).toBe(true);
+    const packet = result.state.cards.find((card) => card.id === cardId)?.careerApplication
+      ?.resumeDraftPacket;
+    expect(packet?.sectionCoverage).toEqual(
+      expect.arrayContaining(["education", "skills", "projects"])
+    );
   });
 
   it("backfills resume draft packet on legacy application cards", () => {

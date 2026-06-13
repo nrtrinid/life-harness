@@ -10,6 +10,7 @@ import type { JobSourceInput } from "../src/core/actions";
 import { FIT_SCORE_DISCLAIMER, JOB_SOURCE_CADENCE_LABELS, JOB_SOURCE_KIND_LABELS } from "../src/core/labels";
 import {
   buildSuggestedSourceFromDetection,
+  deriveWorkdayCxsEndpointUrl,
   detectJobSourceFromUrl,
   normalizePastedUrl,
   type SourceDetectionResult
@@ -24,7 +25,7 @@ import {
   runSourceViaRunner
 } from "../src/core/jobScoutRunnerClient";
 import { buildTemporaryJobSource, isValidSourceUrl, type JobSourceRunOutput } from "../src/core/jobSourceRunner";
-import { WORKDAY_ZERO_LISTINGS_MESSAGE } from "../src/core/jobSourceAdapters";
+import { ICIMS_ZERO_LISTINGS_MESSAGE, WORKDAY_ZERO_LISTINGS_MESSAGE } from "../src/core/jobSourceAdapters";
 import { parseJsonBodyText, validateJobSourceRequestConfig } from "../src/core/jobSourceRequestConfig";
 import type { JobSourceCadence, JobSourceKind, JobSourceRequestMethod } from "../src/core/types";
 import { SOURCE_CANDIDATE_EXAMPLES, type SourceCandidateExample } from "../src/data/sourceCandidates";
@@ -43,6 +44,7 @@ const KIND_OPTIONS: JobSourceKind[] = [
   "ashby",
   "governmentjobs",
   "workday",
+  "icims",
   "jobposting_jsonld",
   "manual",
   "company_careers"
@@ -95,7 +97,10 @@ export default function SourceSetupScreen() {
   const canTest =
     form.name.trim().length > 0 &&
     isValidSourceUrl(activeUrl) &&
-    (detection?.isRunnable === true || form.kind === "governmentjobs" || form.kind === "workday");
+    (detection?.isRunnable === true ||
+      form.kind === "governmentjobs" ||
+      form.kind === "workday" ||
+      form.kind === "icims");
 
   const previewSucceeded =
     previewOutput !== null && previewOutput.result.errors.length === 0;
@@ -107,8 +112,23 @@ export default function SourceSetupScreen() {
     previewOutput.result.errors.length === 0 &&
     previewOutput.result.message === WORKDAY_ZERO_LISTINGS_MESSAGE;
 
+  const isIcimsWeakPassPreview =
+    form.kind === "icims" &&
+    previewOutput !== null &&
+    previewOutput.candidates.length === 0 &&
+    previewOutput.result.errors.length === 0 &&
+    previewOutput.result.message === ICIMS_ZERO_LISTINGS_MESSAGE;
+
+  const isWeakPassPreview = isWorkdayWeakPassPreview || isIcimsWeakPassPreview;
+  const previewProducedCandidates = (previewOutput?.candidates.length ?? 0) > 0;
+  const suggestedWorkdayEndpoint = deriveWorkdayCxsEndpointUrl(
+    endpointMode ? endpointUrl : form.url || detection?.runnableUrl || ""
+  );
+
   const showWorkdayHelp = form.kind === "workday" || detection?.detectedKind === "workday";
-  const cadenceLocked = endpointMode && showWorkdayHelp;
+  const cadenceLocked =
+    (endpointMode && showWorkdayHelp) ||
+    ((form.kind === "workday" || form.kind === "icims") && !previewProducedCandidates);
 
   function resetEndpointMode() {
     setEndpointMode(false);
@@ -319,6 +339,30 @@ export default function SourceSetupScreen() {
     }
   }
 
+  function handleCadencePress(cadence: JobSourceCadence) {
+    if (cadence !== "manual" && !previewProducedCandidates) {
+      setNotice({
+        kind: "warning",
+        message:
+          "Run a candidate-producing test before setting daily or weekly cadence."
+      });
+      return;
+    }
+    setForm((current) => ({ ...current, cadence }));
+  }
+
+  function handleUseSuggestedEndpoint() {
+    if (!suggestedWorkdayEndpoint) {
+      return;
+    }
+    enableEndpointMode(suggestedWorkdayEndpoint);
+    setEndpointUrl(suggestedWorkdayEndpoint);
+    setNotice({
+      kind: "info",
+      message: "Suggested CXS endpoint applied — Test Source before saving."
+    });
+  }
+
   function handleSaveSource() {
     if (!form.name.trim() || !(endpointMode ? endpointUrl.trim() : form.url.trim())) {
       setNotice({ kind: "warning", message: "Name and URL are required." });
@@ -331,6 +375,14 @@ export default function SourceSetupScreen() {
       return;
     }
 
+    if (payload.input.cadence !== "manual" && !previewProducedCandidates) {
+      setNotice({
+        kind: "warning",
+        message: "Daily/weekly cadence requires a successful candidate-producing preview."
+      });
+      return;
+    }
+
     if (importPreview && !previewSucceeded) {
       setNotice({
         kind: "warning",
@@ -339,11 +391,18 @@ export default function SourceSetupScreen() {
       return;
     }
 
-    const result = saveJobSourceFromSetup(payload.input, previewOutput ?? undefined, importPreview);
+    const inputToSave = isWeakPassPreview ? { ...payload.input, enabled: false } : payload.input;
+    const result = saveJobSourceFromSetup(inputToSave, previewOutput ?? undefined, importPreview);
 
     setNotice({
       kind: result.ok ? "success" : "warning",
-      message: result.message ?? (result.ok ? "Source saved." : "Could not save source.")
+      message:
+        result.message ??
+        (result.ok
+          ? isWeakPassPreview
+            ? "Source saved as disabled until endpoint produces candidates."
+            : "Source saved."
+          : "Could not save source.")
     });
 
     if (result.ok) {
@@ -464,7 +523,7 @@ export default function SourceSetupScreen() {
                 <Pressable
                   key={cadence}
                   style={form.cadence === cadence ? styles.primaryAction : styles.secondaryAction}
-                  onPress={() => setForm((current) => ({ ...current, cadence }))}
+                  onPress={() => handleCadencePress(cadence)}
                 >
                   <Text
                     style={
@@ -515,6 +574,11 @@ export default function SourceSetupScreen() {
                     Use endpoint mode
                   </Text>
                 </Pressable>
+                {suggestedWorkdayEndpoint ? (
+                  <Pressable style={styles.secondaryAction} onPress={handleUseSuggestedEndpoint}>
+                    <Text style={styles.secondaryActionText}>Use suggested endpoint</Text>
+                  </Pressable>
+                ) : null}
               </View>
               <View style={{ marginTop: 12 }}>
                 <Text style={styles.label}>Workday endpoint templates</Text>
@@ -728,11 +792,18 @@ export default function SourceSetupScreen() {
                 </Text>
               ))
             ) : null}
-            {isWorkdayWeakPassPreview ? (
+            {isWeakPassPreview ? (
               <Text style={styles.bodyText}>
                 This Workday URL was recognized, but no job payload was found. It may need a future
                 endpoint-discovery adapter before it can return candidates. Save as registry-only or
                 keep as a manual source for now.
+              </Text>
+            ) : null}
+            {isIcimsWeakPassPreview && !isWorkdayWeakPassPreview ? (
+              <Text style={styles.bodyText}>
+                This iCIMS URL was recognized, but no listings were found. The portal may redirect
+                outside iframe mode — try the *.icims.com /jobs/search URL with in_iframe=1, or use
+                the local fixture to verify the adapter.
               </Text>
             ) : null}
             {sampleCandidates.map((candidate) => {

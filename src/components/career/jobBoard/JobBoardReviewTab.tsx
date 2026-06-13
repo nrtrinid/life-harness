@@ -1,4 +1,4 @@
-import { Link, useRouter } from "expo-router";
+import { Link, useRouter, type Href } from "expo-router";
 import { useMemo, useState } from "react";
 import { Linking, Platform, Pressable, Text, TextInput, View } from "react-native";
 
@@ -72,9 +72,13 @@ function tierLabel(tier: CareerFitTier): string {
 
 interface JobBoardReviewTabProps {
   embedded?: boolean;
+  onApplicationStarted?: () => void;
 }
 
-export function JobBoardReviewTab({ embedded = false }: JobBoardReviewTabProps) {
+export function JobBoardReviewTab({
+  embedded = false,
+  onApplicationStarted
+}: JobBoardReviewTabProps) {
   const router = useRouter();
   const {
     jobCandidates,
@@ -129,7 +133,11 @@ export function JobBoardReviewTab({ embedded = false }: JobBoardReviewTabProps) 
           : approveJobCandidate(candidateId);
 
     if (action === "approve" && result.ok && "cardId" in result && result.cardId) {
-      router.push(`/card/${result.cardId}`);
+      onApplicationStarted?.();
+      const href = (
+        "cardHref" in result && result.cardHref ? result.cardHref : `/card/${result.cardId}`
+      ) as Href;
+      router.push(href);
     }
   }
 
@@ -177,14 +185,6 @@ export function JobBoardReviewTab({ embedded = false }: JobBoardReviewTabProps) 
 
   return (
     <View style={{ gap: 12 }}>
-      {!embedded ? null : (
-        <Link href="/career?tab=review" asChild>
-          <Pressable style={styles.secondaryAction}>
-            <Text style={styles.secondaryActionText}>Open Job Board</Text>
-          </Pressable>
-        </Link>
-      )}
-
       {leadCandidate ? (
         <PrimaryMovePanel
           label="Review next"
@@ -204,7 +204,7 @@ export function JobBoardReviewTab({ embedded = false }: JobBoardReviewTabProps) 
                   {
                     label: "Save",
                     onPress: () => handleAction("save", leadCandidate.id),
-                    variant: "secondary" as const
+                    variant: "small" as const
                   }
                 ]
               : []),
@@ -213,7 +213,7 @@ export function JobBoardReviewTab({ embedded = false }: JobBoardReviewTabProps) 
                   {
                     label: "Open posting",
                     onPress: () => openSourceUrl(leadCandidate.sourceUrl!),
-                    variant: "secondary" as const
+                    variant: "small" as const
                   }
                 ]
               : []),
@@ -222,7 +222,7 @@ export function JobBoardReviewTab({ embedded = false }: JobBoardReviewTabProps) 
                   {
                     label: "Pass",
                     onPress: () => handleAction("dismiss", leadCandidate.id),
-                    variant: "secondary" as const
+                    variant: "small" as const
                   }
                 ]
               : [])

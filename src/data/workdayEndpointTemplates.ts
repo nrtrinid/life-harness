@@ -1,5 +1,5 @@
 import type { JobSourceInput } from "../core/actions";
-import { NORTHROP_WORKDAY_CXS_URL } from "../core/jobSourceHealth";
+import { NORTHROP_WORKDAY_CXS_URL, QUALCOMM_WORKDAY_CXS_URL } from "../core/jobSourceHealth";
 import type { JobSourcePaginationConfig } from "../core/types";
 
 export interface WorkdayEndpointTemplate {
@@ -54,16 +54,21 @@ export const WORKDAY_ENDPOINT_TEMPLATES: WorkdayEndpointTemplate[] = [
     }
   },
   {
-    id: "qualcomm-workday-guide",
-    name: "Qualcomm — Workday",
+    id: "qualcomm-workday-cxs",
+    name: "Qualcomm — Workday CXS",
     kind: "workday",
-    endpointUrl: "",
-    pageUrl: "https://qualcomm.wd12.myworkdayjobs.com/en-US/External",
+    endpointUrl: QUALCOMM_WORKDAY_CXS_URL,
     method: "POST",
     bodyJson: { ...WORKDAY_CXS_BODY_TEMPLATE },
-    notes: "Qualcomm needs exact DevTools CXS endpoint capture.",
-    runnable: false,
-    endpointNeeded: true
+    pageUrl: "https://qualcomm.wd12.myworkdayjobs.com/en-US/External",
+    notes:
+      "Qualcomm CXS endpoint — public POST search with offset/limit pagination. Re-verify in DevTools if live runs return zero postings.",
+    runnable: true,
+    defaultPagination: {
+      mode: "workday_offset",
+      limit: 20,
+      maxPages: 3
+    }
   }
 ];
 

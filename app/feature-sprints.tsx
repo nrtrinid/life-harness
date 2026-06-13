@@ -234,10 +234,24 @@ export default function FeatureSprintsScreen() {
 
       <Section title="Needs planning">
         {summary.needsPlanning.length === 0 ? (
-          <Text style={styles.emptyText}>
-            Add project metadata to a build card, then open the card to paste a rough spec and start
-            the guided scoping flow.
-          </Text>
+          <View style={{ gap: 12 }}>
+            <Text style={styles.emptyText}>
+              This dashboard fills in after you start on a card. Open a build card, switch to Backroom,
+              save project metadata, then use the Start feature panel.
+            </Text>
+            <View style={styles.cardActionsRow}>
+              <Link href="/board" asChild>
+                <Pressable style={styles.secondaryAction}>
+                  <Text style={styles.secondaryActionText}>Open Board</Text>
+                </Pressable>
+              </Link>
+              <Link href="/card/life-harness" asChild>
+                <Pressable style={styles.secondaryAction}>
+                  <Text style={styles.secondaryActionText}>Open Life Harness card</Text>
+                </Pressable>
+              </Link>
+            </View>
+          </View>
         ) : (
           summary.needsPlanning.map((row) => (
             <ReadyCardRow

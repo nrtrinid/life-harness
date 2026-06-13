@@ -24,13 +24,16 @@ Sticky chrome on `/career`:
 - **Pipeline stepper** — counts per stage; tap to switch tab
 - **Next contract** — single CTA from [`careerHub.ts`](../src/core/careerHub.ts)
 - **Add a job** — paste posting or direct card (`?add=1`)
+- **Handoff banner** — after Find batch or Review approve, one obvious CTA to the next tab
+
+The legacy Contracts Hub morning loop is retired from `/career`; batch moves live on the Find tab.
 
 ## Legacy routes
 
 | Route | Behavior |
 |-------|----------|
 | `/job-candidates` | Thin wrapper around Review tab |
-| `/candidate-intake` | Redirects to `/career?tab=find&add=1` |
+| `/candidate-intake` | Redirects to `/career?tab=find&add=1` (legacy URL still resolves) |
 | `/job-sources` | Full operator UI + link back to Find tab |
 | `/career-intake` | Direct application card (secondary path) |
 

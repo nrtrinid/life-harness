@@ -25,13 +25,17 @@ export function outcomeFromRun(
   result: ReturnType<typeof applyRunJobSourceResult>
 ): SourceRunOutcome {
   const run = result.state.jobSourceRuns[0];
+  const createdCandidates = run?.createdCandidateIds.length ?? 0;
+  const errors = run?.errors ?? [];
+  const weakPass = result.ok && createdCandidates === 0 && errors.length === 0;
   return {
     sourceId: source.id,
     sourceName: source.name,
     ok: result.ok,
-    createdCandidates: run?.createdCandidateIds.length ?? 0,
+    weakPass,
+    createdCandidates,
     skippedDuplicates: run?.skippedDuplicates ?? 0,
-    errors: run?.errors ?? [],
+    errors,
     message: result.message ?? run?.message ?? "Source run recorded."
   };
 }

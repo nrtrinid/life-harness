@@ -4,6 +4,9 @@ export const SOURCE_HEALTH_STALE_DAYS = 14;
 export const NORTHROP_WORKDAY_CXS_URL =
   "https://ngc.wd1.myworkdayjobs.com/wday/cxs/ngc/Northrop_Grumman_External_Site/jobs";
 
+export const QUALCOMM_WORKDAY_CXS_URL =
+  "https://qualcomm.wd12.myworkdayjobs.com/wday/cxs/qualcomm/External/jobs";
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function formatSourceHealthLabel(health: JobSourceHealth): string {
@@ -46,6 +49,13 @@ export function isNorthropWorkdayEndpointSource(source: JobSource): boolean {
   return (
     source.kind === "workday" &&
     source.url.trim().toLowerCase() === NORTHROP_WORKDAY_CXS_URL.toLowerCase()
+  );
+}
+
+export function isQualcommWorkdayEndpointSource(source: JobSource): boolean {
+  return (
+    source.kind === "workday" &&
+    source.url.trim().toLowerCase() === QUALCOMM_WORKDAY_CXS_URL.toLowerCase()
   );
 }
 
@@ -137,6 +147,23 @@ export function buildSourceHealthStats(
   return counts;
 }
 
+function weakPassSourceNames(
+  sources: JobSource[],
+  runs: JobSourceRunResult[],
+  candidates: JobCandidate[],
+  now: Date,
+  kind?: JobSource["kind"]
+): string[] {
+  return sources
+    .filter((source) => {
+      if (kind && source.kind !== kind) {
+        return false;
+      }
+      return getJobSourceHealth(source, runs, candidates, now) === "weak_pass";
+    })
+    .map((source) => source.name);
+}
+
 export function buildSourceHealthBriefingLines(
   sources: JobSource[],
   runs: JobSourceRunResult[],
@@ -145,9 +172,14 @@ export function buildSourceHealthBriefingLines(
 ): string[] {
   const stats = buildSourceHealthStats(sources, runs, candidates, now);
   const lines: string[] = [];
-  if (stats.weakPassWorkdaySources > 0) {
+  const weakPassNames = weakPassSourceNames(sources, runs, candidates, now).slice(0, 3);
+  if (weakPassNames.length > 0) {
+    const suffix =
+      stats.weakPass > weakPassNames.length
+        ? ` (+${stats.weakPass - weakPassNames.length} more)`
+        : "";
     lines.push(
-      `${stats.weakPassWorkdaySources} Workday source${stats.weakPassWorkdaySources === 1 ? "" : "s"} need endpoint capture.`
+      `Weak-pass sources need attention: ${weakPassNames.join(", ")}${suffix}.`
     );
   }
   if (stats.northropHealthy) {

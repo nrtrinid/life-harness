@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSuggestedSourceFromDetection,
+  deriveWorkdayCxsEndpointUrl,
   detectJobSourceFromUrl,
   normalizePastedUrl
 } from "./jobSourceDiscovery";
@@ -160,8 +161,24 @@ describe("detectJobSourceFromUrl", () => {
     expect(result.runnableUrl).toBe("https://www.governmentjobs.com/careers/lacounty");
   });
 
-  it("returns company_careers non-runnable for iCIMS", () => {
+  it("detects qualcomm icims search as runnable icims", () => {
     const result = detectJobSourceFromUrl("https://careers-qualcomm.icims.com/jobs/search");
+    expect(result.detectedKind).toBe("icims");
+    expect(result.isRunnable).toBe(true);
+    expect(result.sourceName).toBe("Qualcomm");
+    expect(result.runnableUrl).toContain("in_iframe=1");
+  });
+
+  it("detects viasat icims search as runnable icims", () => {
+    const result = detectJobSourceFromUrl("https://careers-viasat.icims.com/jobs/search");
+    expect(result.detectedKind).toBe("icims");
+    expect(result.isRunnable).toBe(true);
+    expect(result.sourceName).toBe("Viasat");
+    expect(result.runnableUrl).toContain("ss=1");
+  });
+
+  it("returns company_careers non-runnable for api.icims.com", () => {
+    const result = detectJobSourceFromUrl("https://api.icims.com/customers/123/search/jobs");
     expect(result.detectedKind).toBe("company_careers");
     expect(result.isRunnable).toBe(false);
   });
@@ -188,6 +205,24 @@ describe("detectJobSourceFromUrl", () => {
     const result = detectJobSourceFromUrl("not-a-valid-url");
     expect(result.isRunnable).toBe(false);
     expect(result.warnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe("deriveWorkdayCxsEndpointUrl", () => {
+  it("derives Northrop CXS endpoint from external site URL", () => {
+    expect(
+      deriveWorkdayCxsEndpointUrl(
+        "https://ngc.wd1.myworkdayjobs.com/Northrop_Grumman_External_Site"
+      )
+    ).toBe(
+      "https://ngc.wd1.myworkdayjobs.com/wday/cxs/ngc/Northrop_Grumman_External_Site/jobs"
+    );
+  });
+
+  it("derives Qualcomm CXS endpoint from external site URL", () => {
+    expect(
+      deriveWorkdayCxsEndpointUrl("https://qualcomm.wd12.myworkdayjobs.com/External")
+    ).toBe("https://qualcomm.wd12.myworkdayjobs.com/wday/cxs/qualcomm/External/jobs");
   });
 });
 

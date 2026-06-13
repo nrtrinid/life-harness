@@ -209,6 +209,56 @@ export function buildCandidateResumePacket(
   };
 }
 
+export function buildResumePacketFromSelection(
+  selectedModuleIds: string[],
+  modules: ResumeModule[],
+  roleType?: string
+): Pick<ResumeDraftPacket, "selectedModuleIds" | "sectionCoverage" | "missingEvidence" | "nextTinyAction"> {
+  const normalized = normalizeResumeModules(modules);
+  const moduleById = new Map(normalized.map((module) => [module.id, module]));
+  const selected = selectedModuleIds
+    .map((id) => moduleById.get(id))
+    .filter((module): module is ResumeModule => Boolean(module))
+    .filter((module) => module.isActive)
+    .sort(compareModules);
+  const missingEvidence = selected.flatMap(findModuleIssues);
+  const sectionCoverage = RESUME_MODULE_SECTION_ORDER.filter((section) =>
+    selected.some(
+      (module) => normalizeResumeModulePlacement(module, 0).section === section
+    )
+  );
+
+  let nextTinyAction = "Pick one suggested module and tighten one bullet.";
+  if (selected.length === 0) {
+    nextTinyAction = roleType
+      ? `Choose one active resume module for this ${roleType} role.`
+      : "Select one active resume module for this application.";
+  } else if (missingEvidence.length > 0) {
+    nextTinyAction = missingEvidence[0].message.includes("proof")
+      ? `Attach one proof item to ${missingEvidence[0].moduleTitle}.`
+      : `Patch ${missingEvidence[0].moduleTitle}: ${missingEvidence[0].message}`;
+  }
+
+  return {
+    selectedModuleIds: selected.map((module) => module.id),
+    sectionCoverage,
+    missingEvidence: missingEvidence.map((issue) => ({ ...issue })),
+    nextTinyAction
+  };
+}
+
+export function refreshResumeDraftPacketSelection(
+  packet: ResumeDraftPacket,
+  selectedModuleIds: string[],
+  modules: ResumeModule[],
+  roleType?: string
+): ResumeDraftPacket {
+  return {
+    ...packet,
+    ...buildResumePacketFromSelection(selectedModuleIds, modules, roleType)
+  };
+}
+
 export function buildResumeDraftPacket(
   candidate: CandidateResumePacketInput,
   modules: ResumeModule[],

@@ -24,6 +24,7 @@ import type {
 export type CareerMorningMoveKind =
   | "batch_running"
   | "run_due_sources"
+  | "run_healthy_sources"
   | "run_enabled_sources"
   | "review_candidates"
   | "open_application"
@@ -31,7 +32,7 @@ export type CareerMorningMoveKind =
   | "paste_job"
   | "maintain";
 
-export type CareerMorningBatchHandler = "run_due" | "run_all_enabled";
+export type CareerMorningBatchHandler = "run_due" | "run_healthy" | "run_all_enabled";
 
 export interface CareerMorningLoopBatchProgress {
   current: number;
@@ -217,6 +218,9 @@ function formatMorningLoopLastRunLine(
   const summary = summarizeLastRunOutcome(run, sources);
   const createdCount = run.createdCandidateIds.length;
   const matchLabel = createdCount === 1 ? "match" : "matches";
+  if (run.errors.length === 0 && createdCount === 0) {
+    return "Last fetch: weak-pass — no new matches (check source setup)";
+  }
   if (run.errors.length === 0) {
     return `Last fetch: ${createdCount} new ${matchLabel}`;
   }
@@ -290,6 +294,18 @@ function deriveNextMove(
     };
   }
 
+  const bestCandidate = getBestJobCandidateToReview(input.jobCandidates);
+  if (bestCandidate && buildJobFindingsCounts(input.jobCandidates).waiting > 0) {
+    return {
+      kind: "review_candidates",
+      title: `${bestCandidate.company} — ${bestCandidate.roleTitle}`,
+      why: "New matches are waiting — review one before running more sources.",
+      ctaLabel: "Review matches",
+      href: "/job-candidates",
+      candidateId: bestCandidate.id
+    };
+  }
+
   if (batchLifecycle.dueCount > 0) {
     return {
       kind: "run_due_sources",
@@ -300,17 +316,26 @@ function deriveNextMove(
     };
   }
 
+  if (batchLifecycle.healthyCount > 0) {
+    return {
+      kind: "run_healthy_sources",
+      title: batchLifecycle.primaryPanelTitle,
+      why: "Run sources that worked before — skip weak-pass and error feeds.",
+      ctaLabel: "Run healthy sources",
+      batchHandler: "run_healthy"
+    };
+  }
+
   if (failedRunnableCount > 0 && batchLifecycle.runnableCount > 0) {
     return {
       kind: "run_enabled_sources",
       title: "Run enabled sources",
       why: "A source failed last time. Run the enabled set again and see what comes back.",
-      ctaLabel: "Run enabled sources",
+      ctaLabel: "Run all enabled",
       batchHandler: "run_all_enabled"
     };
   }
 
-  const bestCandidate = getBestJobCandidateToReview(input.jobCandidates);
   if (bestCandidate) {
     return {
       kind: "review_candidates",

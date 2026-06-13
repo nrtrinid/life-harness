@@ -1,50 +1,31 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   canCopyTextToClipboard,
   copyTextToClipboard
 } from "../../core/askHarnessSynthesis";
-import {
-  checkJobScoutRunnerHealth,
-  requestJobScoutRunnerStart,
-  RUNNER_START_COMMAND
-} from "../../core/jobScoutRunnerClient";
+import { RUNNER_START_COMMAND } from "../../core/jobScoutRunnerClient";
+import { useRunnerHealth } from "../../hooks/useRunnerHealth";
 import { colors, styles } from "../styles";
 
 interface RunnerStatusBannerProps {
   onStatusChange?: (ok: boolean) => void;
+  compact?: boolean;
 }
 
-export function RunnerStatusBanner({ onStatusChange }: RunnerStatusBannerProps) {
-  const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
-  const [busy, setBusy] = useState(false);
+export function RunnerStatusBanner({ onStatusChange, compact = false }: RunnerStatusBannerProps) {
+  const { ok, message, checking, refresh, startRunner } = useRunnerHealth();
   const [notice, setNotice] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    const result = await checkJobScoutRunnerHealth();
-    setStatus(result);
-    onStatusChange?.(result.ok);
-    return result;
-  }, [onStatusChange]);
-
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    onStatusChange?.(ok);
+  }, [ok, onStatusChange]);
 
   async function handleStartRunner() {
-    setBusy(true);
     setNotice(null);
-    const start = await requestJobScoutRunnerStart();
-    if (!start.ok) {
-      setNotice(start.message);
-      setBusy(false);
-      return;
-    }
-
-    const health = await refresh();
-    setNotice(health.ok ? start.message : start.message);
-    setBusy(false);
+    const result = await startRunner();
+    setNotice(result.message);
   }
 
   async function handleCopyCommand() {
@@ -56,8 +37,12 @@ export function RunnerStatusBanner({ onStatusChange }: RunnerStatusBannerProps) 
     setNotice(copied ? "Copied npm run scout:runner." : "Could not copy command.");
   }
 
-  if (!status) {
+  if (checking && !compact) {
     return <Text style={styles.helpText}>Checking Job Scout Runner…</Text>;
+  }
+
+  if (compact && ok) {
+    return null;
   }
 
   return (
@@ -66,40 +51,40 @@ export function RunnerStatusBanner({ onStatusChange }: RunnerStatusBannerProps) 
         styles.lofiCardQuiet,
         {
           borderLeftWidth: 3,
-          borderLeftColor: status.ok ? colors.accentSuccess : colors.accentDanger,
+          borderLeftColor: ok ? colors.accentSuccess : colors.accentDanger,
           gap: 8
         }
       ]}
     >
-      <Text style={styles.lofiTapeLabel}>{status.ok ? "Runner awake" : "Runner not running"}</Text>
-      <Text style={styles.bodyText}>{status.message}</Text>
+      <Text style={styles.lofiTapeLabel}>{ok ? "Runner awake" : "Runner not running"}</Text>
+      {!compact ? <Text style={styles.bodyText}>{message}</Text> : null}
       {notice ? <Text style={styles.helpText}>{notice}</Text> : null}
       <View style={styles.cardActionsRow}>
-        {!status.ok ? (
+        {!ok ? (
           <Pressable
-            style={StyleSheet.flatten([styles.primaryAction, busy && { opacity: 0.7 }])}
-            disabled={busy}
+            style={StyleSheet.flatten([styles.primaryAction, checking && { opacity: 0.7 }])}
+            disabled={checking}
             onPress={() => void handleStartRunner()}
           >
             <Text style={styles.primaryActionText}>
-              {busy ? "Starting runner…" : "Start runner"}
+              {checking ? "Starting runner…" : "Start runner"}
             </Text>
           </Pressable>
         ) : null}
         <Pressable
-          style={StyleSheet.flatten([styles.secondaryAction, busy && { opacity: 0.7 }])}
-          disabled={busy}
+          style={StyleSheet.flatten([styles.secondaryAction, checking && { opacity: 0.7 }])}
+          disabled={checking}
           onPress={() => void refresh()}
         >
           <Text style={styles.secondaryActionText}>Check again</Text>
         </Pressable>
-        {!status.ok ? (
+        {!ok ? (
           <Pressable style={styles.secondaryAction} onPress={() => void handleCopyCommand()}>
             <Text style={styles.secondaryActionText}>Copy CLI command</Text>
           </Pressable>
         ) : null}
       </View>
-      {!status.ok ? (
+      {!ok && !compact ? (
         <Text style={styles.helpText}>
           Start runner works when the dev launcher is up (npm run web starts it automatically).
         </Text>

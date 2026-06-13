@@ -6,7 +6,7 @@ After **Start application**, card detail showed the full generic card inspector 
 
 ## Target layout
 
-When `card.careerApplication` is set, [`app/card/[id].tsx`](../../app/card/[id].tsx) renders [`CareerApplicationCardDetail`](../../src/components/career/CareerApplicationCardDetail.tsx) instead of the generic scroll.
+When `card.careerApplication` is set, [`app/card/[id].tsx`](../../app/card/[id].tsx) renders [`CareerApplicationCardDetail`](../../src/components/career/CareerApplicationCardDetail.tsx) instead of Act/Backroom. Inline [`ApplicationResumeModulePicker`](../../src/components/career/ApplicationResumeModulePicker.tsx) toggles `resumeDraftPacket.selectedModuleIds` (see selected module → section coverage in [`career-v0.1-pipeline.md`](../career-v0.1-pipeline.md)). [`ResumeModulePatchSheet`](../../src/components/career/ResumeModulePatchSheet.tsx) closes the patch-gap loop (date / bullet / skill / proof) on the card and in Resume Bank. Jobs **Apply** tab CTAs mirror [`deriveApplicationResumePrimaryAction`](../../src/core/applicationResumeAction.ts) from card detail.
 
 | Zone | Default | Contents |
 |------|---------|----------|

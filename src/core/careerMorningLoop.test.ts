@@ -176,7 +176,7 @@ describe("buildCareerMorningLoop", () => {
     expect(result.nextMove.kind).toBe("run_enabled_sources");
     expect(result.nextMove.batchHandler).toBe("run_all_enabled");
     expect(result.nextMove.title).toBe("Run enabled sources");
-    expect(result.nextMove.ctaLabel).toBe("Run enabled sources");
+    expect(result.nextMove.ctaLabel).toBe("Run all enabled");
     expect(result.nextMove.why).toContain("failed last time");
     expect(result.status.failedSourceCount).toBe(1);
   });
@@ -201,8 +201,8 @@ describe("buildCareerMorningLoop", () => {
 
     expect(result.nextMove.kind).toBe("review_candidates");
     expect(result.nextMove.href).toBe("/job-candidates");
-    expect(result.nextMove.ctaLabel).toBe("Open review queue");
-    expect(result.nextMove.why).toContain("one decision");
+    expect(result.nextMove.ctaLabel).toBe("Review matches");
+    expect(result.nextMove.why).toContain("before running");
     expect(result.status.waitingCandidateCount).toBe(1);
   });
 
@@ -303,7 +303,7 @@ describe("buildCareerMorningLoop", () => {
     expect(result.nextMove.why).toContain("sources can wait");
   });
 
-  it("returns maintain when nothing urgent is waiting", () => {
+  it("suggests run healthy sources when feeds are healthy but queue is empty", () => {
     const fetchedAt = "2026-06-10T12:00:00.000Z";
     const result = loop({
       jobCandidates: [],
@@ -323,9 +323,9 @@ describe("buildCareerMorningLoop", () => {
       ]
     });
 
-    expect(result.nextMove.kind).toBe("maintain");
-    expect(result.nextMove.href).toBeUndefined();
-    expect(result.nextMove.why).toContain("Nothing urgent");
+    expect(result.nextMove.kind).toBe("run_healthy_sources");
+    expect(result.nextMove.batchHandler).toBe("run_healthy");
+    expect(result.nextMove.why).toContain("worked before");
   });
 
   it("uses a friendly last-fetch supporting line when the last run had no errors", () => {

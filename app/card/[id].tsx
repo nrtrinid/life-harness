@@ -1,9 +1,11 @@
-import { Link, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { Link, router, useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { CareerApplicationCardDetail } from "../../src/components/career/CareerApplicationCardDetail";
 import { CardStateButtons } from "../../src/components/CardStateButtons";
 import { FeatureRunnerOutputDetails } from "../../src/components/featureSprint/FeatureRunnerOutputDetails";
+import { FeatureSprintActionGuide } from "../../src/components/featureSprint/FeatureSprintActionGuide";
 import { FeatureSprintFlowGuide } from "../../src/components/featureSprint/FeatureSprintFlowGuide";
 import { FeatureSprintStartFlow } from "../../src/components/featureSprint/FeatureSprintStartFlow";
 import { CollapsibleSection } from "../../src/components/CollapsibleSection";
@@ -26,13 +28,13 @@ import {
   normalizeAgentKind,
   type HarnessAgentSessionCreateInput
 } from "../../src/core/agentSessionLog";
-import { getFollowUpsDue } from "../../src/core/career";
 import {
   buildFeatureScopingPacket,
   buildFeatureStepImplementationPacket,
   buildFeatureStepReviewPacket,
   getActiveFeatureSprintPlanForCard
 } from "../../src/core/featureSprintOrchestrator";
+import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
   buildFeatureSprintDogfoodSummary,
   type FeatureSprintDogfoodCheckStatus
@@ -52,24 +54,36 @@ import {
   getProjectForCard,
   parseListField
 } from "../../src/core/projectRegistry";
-import { AREA_LABELS, CARD_STATE_LABELS, ROLE_TYPE_LABELS, WARMTH_LABELS } from "../../src/core/labels";
+import { AREA_LABELS, WARMTH_LABELS } from "../../src/core/labels";
 import { buildNextMoveSummary } from "../../src/core/nextMoveContract";
 import { computeCardProgress } from "../../src/core/progress";
 import { packResumeDocxBlob, type ResumeProfile } from "../../src/core/resumeDocx";
-import {
-  RESUME_MODULE_SECTION_LABELS,
-  RESUME_MODULE_SECTION_ORDER
-} from "../../src/core/resumeModuleBank";
 import { buildApplicationResumeReadiness } from "../../src/core/resumeReadiness";
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
-import type { HarnessAgentSession, HarnessFeatureSprintRunnerRun, HarnessProject, LifeCard } from "../../src/core/types";
+import type { ResumeModulePatch } from "../../src/core/actions";
+import type {
+  HarnessAgentSession,
+  HarnessFeatureSprintRunnerRun,
+  HarnessProject,
+  LifeCard,
+  ResumeModuleSection
+} from "../../src/core/types";
 
-const READINESS_LABELS = {
-  blocked: "Blocked",
-  needs_patch: "Needs patch",
-  ready_to_export: "Ready to export"
-} as const;
+const RESUME_MODULE_SECTIONS = new Set<ResumeModuleSection>([
+  "education",
+  "skills",
+  "projects",
+  "additional_experience"
+]);
+
+function parseFocusSection(value: string | string[] | undefined): ResumeModuleSection | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw || !RESUME_MODULE_SECTIONS.has(raw as ResumeModuleSection)) {
+    return null;
+  }
+  return raw as ResumeModuleSection;
+}
 
 type CardDetailMode = "act" | "backroom";
 
@@ -189,7 +203,20 @@ function buildSessionInputFromForm(
 }
 
 export default function CardDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{
+    id: string;
+    focusSection?: string;
+    patchModule?: string;
+  }>();
+  const { id } = params;
+  const initialFocusSection = useRef(parseFocusSection(params.focusSection)).current;
+  const initialPatchModuleId = useRef(
+    typeof params.patchModule === "string"
+      ? params.patchModule
+      : Array.isArray(params.patchModule)
+        ? params.patchModule[0]
+        : null
+  ).current;
   const {
     cards,
     logs,
@@ -222,7 +249,13 @@ export default function CardDetailScreen() {
     completeFeatureSprintRunnerRun,
     markMostRecentFeatureSprintRunnerRunImported,
     markFeatureSprintRunnerRunWorktreeCleanup,
-    logResumeExportForCard
+    logResumeExportForCard,
+    backfillResumeDraftPacket,
+    toggleResumeDraftPacketModule,
+    setResumeDraftPacketModuleForSection,
+    addDefaultResumeModulesToPacket,
+    patchResumeModule,
+    setCardState
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
@@ -405,8 +438,6 @@ export default function CardDetailScreen() {
 
   const cardId = card.id;
   const cardProof = proofItems.filter((proof) => card.proofItemIds.includes(proof.id));
-  const resumeDraftPacket = card.careerApplication?.resumeDraftPacket;
-  const moduleById = new Map(resumeModules.map((module) => [module.id, module]));
   const linkedCandidate = card.careerApplication?.jobCandidateId
     ? jobCandidates.find((candidate) => candidate.id === card.careerApplication?.jobCandidateId)
     : undefined;
@@ -426,10 +457,6 @@ export default function CardDetailScreen() {
 
   async function handleBuildResumeDocx() {
     if (resumeReadiness && !resumeReadiness.exportReadiness.canExportDocx) {
-      showNotice(
-        "warning",
-        `Cannot export resume: ${resumeReadiness.exportReadiness.reason ?? resumeReadiness.nextTinyResumeAction}`
-      );
       return;
     }
     if (Platform.OS !== "web" || typeof document === "undefined") {
@@ -474,6 +501,46 @@ export default function CardDetailScreen() {
     );
   }
 
+  function handleCreateDraftPacket() {
+    const result = backfillResumeDraftPacket(cardId);
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not create draft packet.");
+  }
+
+  function handleToggleResumeModule(moduleId: string) {
+    const result = toggleResumeDraftPacketModule(cardId, moduleId);
+    if (!result.ok) {
+      showNotice("warning", result.message ?? "Could not update module selection.");
+    }
+  }
+
+  function handleSetModuleForSection(section: ResumeModuleSection, moduleId: string) {
+    const result = setResumeDraftPacketModuleForSection(cardId, section, moduleId);
+    if (!result.ok) {
+      showNotice("warning", result.message ?? "Could not update module selection.");
+    }
+  }
+
+  function handleAddDefaultModules() {
+    const result = addDefaultResumeModulesToPacket(cardId);
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not add modules.");
+  }
+
+  function handlePatchResumeModule(moduleId: string, patch: ResumeModulePatch) {
+    const result = patchResumeModule(moduleId, patch);
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not patch module.");
+  }
+
+  function handleParkApplicationCard() {
+    const result = setCardState(cardId, "parked");
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not park card.");
+  }
+
+  useEffect(() => {
+    if (params.focusSection || params.patchModule) {
+      router.setParams({ focusSection: undefined, patchModule: undefined });
+    }
+  }, [params.focusSection, params.patchModule]);
+
   const activeFeatureSprintPlan = getActiveFeatureSprintPlanForCard(lifeHarnessData, card.id);
   const cardProject = getProjectForCard(lifeHarnessData, card.id);
   const currentFeatureStep = activeFeatureSprintPlan?.steps.find(
@@ -481,19 +548,61 @@ export default function CardDetailScreen() {
   );
   const cardAgentSessions = getAgentSessionsForCard(lifeHarnessData, card.id).slice(0, 5);
   const recentRunnerRuns = getFeatureSprintRunnerRunsForCard(lifeHarnessData, card.id, 5);
-  const latestSuccessfulImplementationRun = recentRunnerRuns.find(
-    (run) => run.profile === "codex_implementation" && run.status === "succeeded"
+  const latestScopingRun = recentRunnerRuns.find(
+    (run) => run.profile === "codex_scoping" && run.status === "succeeded"
+  );
+  const latestImplementationRunForStep = recentRunnerRuns.find(
+    (run) =>
+      run.profile === "codex_implementation" &&
+      run.status === "succeeded" &&
+      run.planId === activeFeatureSprintPlan?.id &&
+      run.stepId === activeFeatureSprintPlan?.currentStepId
+  );
+  const latestReviewRunForStep = recentRunnerRuns.find(
+    (run) =>
+      run.profile === "codex_review" &&
+      run.status === "succeeded" &&
+      run.planId === activeFeatureSprintPlan?.id &&
+      run.stepId === activeFeatureSprintPlan?.currentStepId
+  );
+  const implementationRunViewed =
+    latestImplementationRunForStep !== undefined &&
+    selectedRunnerRunId === latestImplementationRunForStep.id;
+  const featureSprintActionGuideSteps = useMemo(
+    () =>
+      buildFeatureSprintActionGuide({
+        nextActionKind: featureSprintDogfood.nextAction.kind,
+        implementationRunViewed,
+        stepOutputSaved: Boolean(currentFeatureStep?.outputSummary?.trim()),
+        reviewOutputReady: Boolean(
+          reviewImportText.trim() || latestReviewRunForStep?.outputText || latestReviewRunForStep?.outputExcerpt
+        ),
+        reviewVerdictImported: currentFeatureStep?.reviewStatus === "accepted",
+        scopingOutputReady: Boolean(
+          latestScopingRun?.outputText?.trim() || latestScopingRun?.outputExcerpt?.trim()
+        ),
+        planImportTextReady: Boolean(planImportText.trim())
+      }),
+    [
+      featureSprintDogfood.nextAction.kind,
+      implementationRunViewed,
+      currentFeatureStep?.outputSummary,
+      currentFeatureStep?.reviewStatus,
+      reviewImportText,
+      latestReviewRunForStep,
+      latestScopingRun,
+      planImportText
+    ]
   );
   const showAgentOutputReadyHelper =
-    !agentOutputText.trim() &&
-    latestSuccessfulImplementationRun !== undefined &&
-    (!selectedRunnerRunId || selectedRunnerRunId === latestSuccessfulImplementationRun.id);
+    Boolean(agentOutputText.trim()) &&
+    !currentFeatureStep?.outputSummary?.trim() &&
+    latestImplementationRunForStep !== undefined;
   const now = new Date();
   const nextMove = buildNextMoveSummary(lifeHarnessData, { now });
   const todayMoveForCard = [nextMove.primary, nextMove.backup, ...nextMove.candidates].find(
     (contract) => contract?.cardId === card.id
   );
-  const followUpDue = getFollowUpsDue(cards, now).some((item) => item.id === card.id);
   const recentWinsTeaser = card.recentWins.slice(-3);
 
   async function copyMarkdownToClipboard(
@@ -712,11 +821,27 @@ export default function CardDetailScreen() {
       }
 
       setPlanImportText(result.outputText);
+      if (historyCreate.ok && historyCreate.runId) {
+        setSelectedRunnerRunId(historyCreate.runId);
+      }
       const preview = result.commandPreview ? ` (${result.commandPreview})` : "";
-      showNotice("success", `Codex scoping output ready to import.${preview}`);
+      showNotice("success", `Scoping output loaded below. Click Import plan when ready.${preview}`);
     } finally {
       setIsRunningScoping(false);
     }
+  }
+
+  function handleLoadLatestScopingOutput() {
+    const output = latestScopingRun?.outputText?.trim() || latestScopingRun?.outputExcerpt?.trim();
+    if (!output) {
+      showNotice("warning", "No scoping output found. Run scoping first.");
+      return;
+    }
+    setPlanImportText(latestScopingRun?.outputText ?? latestScopingRun?.outputExcerpt ?? "");
+    if (latestScopingRun) {
+      setSelectedRunnerRunId(latestScopingRun.id);
+    }
+    showNotice("success", "Latest scoping output loaded into Import plan.");
   }
 
   async function handleRunReviewWithCodex() {
@@ -771,8 +896,11 @@ export default function CardDetailScreen() {
       }
 
       setReviewImportText(result.outputText);
+      if (historyCreate.ok && historyCreate.runId) {
+        setSelectedRunnerRunId(historyCreate.runId);
+      }
       const preview = result.commandPreview ? ` (${result.commandPreview})` : "";
-      showNotice("success", `Codex review output ready to import.${preview}`);
+      showNotice("success", `Review output ready. Click Import review verdict.${preview}`);
     } finally {
       setIsRunningReview(false);
     }
@@ -837,12 +965,15 @@ export default function CardDetailScreen() {
       }
 
       setAgentOutputText(composeImplementationRunnerOutputSummary(result));
+      if (historyCreate.ok && historyCreate.runId) {
+        setSelectedRunnerRunId(historyCreate.runId);
+      }
       const hasVerifyFailure = result.verificationResults?.some((row) => row.status === "failed");
       showNotice(
         "success",
         hasVerifyFailure
-          ? "Implementation output ready. Verification reported failures."
-          : "Implementation output ready to save."
+          ? "Implementation finished. Inspect the expanded run, then Save agent output."
+          : "Implementation finished. Inspect the expanded run above, then Save agent output."
       );
     } finally {
       setIsRunningImplementation(false);
@@ -930,6 +1061,28 @@ export default function CardDetailScreen() {
         </Text>
       </Section>
 
+      {card.careerApplication && resumeReadiness ? (
+        <CareerApplicationCardDetail
+          card={card}
+          resumeReadiness={resumeReadiness}
+          resumeModules={resumeModules}
+          cardProof={cardProof}
+          logs={logs}
+          sessionStartedAt={dailyState.sessionStartedAt}
+          linkedCandidate={linkedCandidate}
+          initialFocusSection={initialFocusSection}
+          initialPatchModuleId={initialPatchModuleId}
+          onBuildDocx={() => void handleBuildResumeDocx()}
+          onCreateDraftPacket={handleCreateDraftPacket}
+          onToggleModule={handleToggleResumeModule}
+          onSetModuleForSection={handleSetModuleForSection}
+          onAddDefaultModules={handleAddDefaultModules}
+          onPatchModule={handlePatchResumeModule}
+          onParkCard={handleParkApplicationCard}
+          onNotice={showNotice}
+        />
+      ) : (
+        <>
       <View style={styles.cardActionsRow}>
         {(["act", "backroom"] as const).map((mode) => {
           const active = detailMode === mode;
@@ -1032,36 +1185,6 @@ export default function CardDetailScreen() {
               ▸ {win}
             </Text>
           ))}
-        </Section>
-      ) : null}
-
-      {card.careerApplication && resumeReadiness ? (
-        <Section title="Career">
-          <Text style={styles.titleText}>
-            {card.careerApplication.company} · {card.careerApplication.roleTitle}
-          </Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Follow-up</Text>
-          <Text style={styles.bodyText}>
-            {card.careerApplication.followUpDate
-              ? `${card.careerApplication.followUpDate}${followUpDue ? " · due" : ""}`
-              : "No follow-up scheduled"}
-          </Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Resume readiness</Text>
-          <Text style={styles.bodyText}>{READINESS_LABELS[resumeReadiness.status]}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Next resume action</Text>
-          <Text style={styles.bodyText}>{resumeReadiness.nextTinyResumeAction}</Text>
-          {resumeDraftPacket ? (
-            <Pressable
-              style={[
-                styles.secondaryAction,
-                { marginTop: 12 },
-                resumeReadiness.exportReadiness.canExportDocx === false && { opacity: 0.7 }
-              ]}
-              onPress={() => void handleBuildResumeDocx()}
-            >
-              <Text style={styles.secondaryActionText}>Build Resume DOCX</Text>
-            </Pressable>
-          ) : null}
         </Section>
       ) : null}
 
@@ -1473,9 +1596,22 @@ export default function CardDetailScreen() {
           </View>
         ) : null}
 
+        <FeatureSprintActionGuide
+          steps={featureSprintActionGuideSteps}
+          title="Current step checklist"
+        />
+
         <Text style={[styles.label, { marginTop: 12 }]}>Import plan (ChatGPT/Codex output)</Text>
+        {!activeFeatureSprintPlan && latestScopingRun ? (
+          <Pressable
+            style={[styles.secondaryAction, { marginTop: 8, alignSelf: "flex-start" }]}
+            onPress={handleLoadLatestScopingOutput}
+          >
+            <Text style={styles.secondaryActionText}>Load latest scoping output</Text>
+          </Pressable>
+        ) : null}
         <TextInput
-          style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
+          style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top", marginTop: 8 }]}
           value={planImportText}
           onChangeText={setPlanImportText}
           placeholder="Paste output with a feature-sprint-plan fenced block"
@@ -1490,12 +1626,13 @@ export default function CardDetailScreen() {
           <>
             <Text style={[styles.label, { marginTop: 12 }]}>Agent output</Text>
             <Text style={styles.helpText}>
-              Inspect the run in Recent runner runs → View details before saving.
+              Runner filled this box. Inspect the expanded run in Recent runner runs, then click Save agent
+              output. Continue with review → import verdict → advance step.
             </Text>
             {showAgentOutputReadyHelper ? (
-              <Text style={[styles.helpText, { marginTop: 4, marginBottom: 8 }]}>
-                Implementation output is ready. Open View details on the run, inspect output/diff/verification,
-                then use Save agent output below.
+              <Text style={[styles.helpText, { marginTop: 4, marginBottom: 8, color: colors.accentPrimary }]}>
+                Ready to save — follow the checklist above: View details (if collapsed) → Save agent output →
+                Run review → Import review verdict → Advance step.
               </Text>
             ) : null}
             <TextInput
@@ -1829,154 +1966,6 @@ export default function CardDetailScreen() {
         </Section>
       ) : null}
 
-      {card.careerApplication && resumeReadiness ? (
-        <Section title="Resume Readiness / Hardening">
-          <Text style={styles.titleText}>{READINESS_LABELS[resumeReadiness.status]}</Text>
-          <Text style={styles.bodyText}>{resumeReadiness.nextTinyResumeAction}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>DOCX Export</Text>
-          <Text style={styles.bodyText}>
-            {resumeReadiness.exportReadiness.canExportDocx
-              ? "Can export DOCX for manual review."
-              : resumeReadiness.exportReadiness.reason}
-          </Text>
-
-          <Text style={[styles.label, { marginTop: 12 }]}>Selected Modules</Text>
-          {RESUME_MODULE_SECTION_ORDER.map((section) => {
-            const modules = resumeReadiness.selectedModulesBySection[section];
-            return (
-              <View key={section} style={{ marginTop: 6 }}>
-                <Text style={styles.helpText}>{RESUME_MODULE_SECTION_LABELS[section]}</Text>
-                {modules.length === 0 ? (
-                  <Text style={styles.emptyText}>No selected module.</Text>
-                ) : (
-                  modules.map((module) => (
-                    <Text key={module.id} style={styles.listItem}>
-                      - {module.title}
-                    </Text>
-                  ))
-                )}
-              </View>
-            );
-          })}
-
-          <Text style={[styles.label, { marginTop: 12 }]}>Missing / cautions</Text>
-          {resumeReadiness.warnings.length === 0 ? (
-            <Text style={styles.emptyText}>No missing evidence or cautions.</Text>
-          ) : (
-            resumeReadiness.warnings.slice(0, 8).map((warning) => (
-              <Text key={warning.id} style={styles.listItem}>
-                - {warning.message}
-              </Text>
-            ))
-          )}
-
-          <View style={styles.cardActionsRow}>
-            <Link href="/resume-bank" asChild>
-              <Pressable style={styles.secondaryAction}>
-                <Text style={styles.secondaryActionText}>Resume Bank</Text>
-              </Pressable>
-            </Link>
-            <Link href="/career-pack" asChild>
-              <Pressable style={styles.secondaryAction}>
-                <Text style={styles.secondaryActionText}>Career Pack</Text>
-              </Pressable>
-            </Link>
-          </View>
-        </Section>
-      ) : null}
-
-      {card.careerApplication ? (
-        <Section title="Career Application">
-          <Text style={styles.label}>Company</Text>
-          <Text style={styles.bodyText}>{card.careerApplication.company}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Role</Text>
-          <Text style={styles.bodyText}>{card.careerApplication.roleTitle}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Role Type</Text>
-          <Text style={styles.bodyText}>{ROLE_TYPE_LABELS[card.careerApplication.roleType]}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Status</Text>
-          <Text style={styles.bodyText}>
-            {CARD_STATE_LABELS[card.careerApplication.applicationStatus]}
-          </Text>
-          {card.careerApplication.sourceUrl ? (
-            <>
-              <Text style={[styles.label, { marginTop: 12 }]}>Source URL</Text>
-              <Text style={styles.bodyText}>{card.careerApplication.sourceUrl}</Text>
-            </>
-          ) : null}
-          <Text style={[styles.label, { marginTop: 12 }]}>Resume Angle</Text>
-          <Text style={styles.bodyText}>{card.careerApplication.resumeAngle}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Projects to Emphasize</Text>
-          <Text style={styles.bodyText}>{card.careerApplication.projectsToEmphasize}</Text>
-          <Text style={[styles.label, { marginTop: 12 }]}>Bullets / Skills to Emphasize</Text>
-          <Text style={styles.bodyText}>{card.careerApplication.bulletsToEmphasize ?? "(not set)"}</Text>
-          {resumeDraftPacket ? (
-            <>
-              <Text style={[styles.label, { marginTop: 12 }]}>Resume Draft Packet</Text>
-              <Text style={styles.bodyText}>{resumeDraftPacket.nextTinyAction}</Text>
-              <Pressable
-                style={[
-                  styles.secondaryAction,
-                  resumeReadiness?.exportReadiness.canExportDocx === false && { opacity: 0.7 }
-                ]}
-                onPress={handleBuildResumeDocx}
-              >
-                <Text style={styles.secondaryActionText}>Build Resume DOCX</Text>
-              </Pressable>
-              <Text style={[styles.helpText, { marginTop: 8 }]}>
-                v0.1 export uses the sample profile fixture for the header until resume profile
-                settings ship.
-              </Text>
-              <Text style={[styles.label, { marginTop: 12 }]}>Selected Modules</Text>
-              {resumeDraftPacket.selectedModuleIds.length === 0 ? (
-                <Text style={styles.emptyText}>No modules selected yet.</Text>
-              ) : (
-                resumeDraftPacket.selectedModuleIds.map((moduleId) => {
-                  const module = moduleById.get(moduleId);
-                  return (
-                    <Text key={moduleId} style={styles.listItem}>
-                      - {module?.title ?? moduleId}
-                    </Text>
-                  );
-                })
-              )}
-              <Text style={[styles.label, { marginTop: 12 }]}>Section Coverage</Text>
-              <Text style={styles.bodyText}>
-                {resumeDraftPacket.sectionCoverage.length > 0
-                  ? resumeDraftPacket.sectionCoverage
-                      .map((section) => RESUME_MODULE_SECTION_LABELS[section])
-                      .join(", ")
-                  : "No sections covered yet."}
-              </Text>
-              <Text style={[styles.label, { marginTop: 12 }]}>Packet Patches</Text>
-              {resumeDraftPacket.missingEvidence.length === 0 ? (
-                <Text style={styles.emptyText}>No packet patches flagged.</Text>
-              ) : (
-                resumeDraftPacket.missingEvidence.slice(0, 5).map((issue) => (
-                  <Text key={`${issue.moduleId}-${issue.message}`} style={styles.listItem}>
-                    - {issue.moduleTitle}: {issue.message}
-                  </Text>
-                ))
-              )}
-            </>
-          ) : null}
-          {card.careerApplication.followUpDate ? (
-            <>
-              <Text style={[styles.label, { marginTop: 12 }]}>Follow-up Date</Text>
-              <Text style={styles.bodyText}>{card.careerApplication.followUpDate}</Text>
-            </>
-          ) : null}
-          {card.careerApplication.jobCandidateId ? (
-            <>
-              <Text style={[styles.label, { marginTop: 12 }]}>Linked Candidate</Text>
-              <Text style={styles.bodyText}>{card.careerApplication.jobCandidateId}</Text>
-            </>
-          ) : null}
-          <Text style={[styles.label, { marginTop: 12 }]}>Job Description</Text>
-          <Text style={styles.bodyText} numberOfLines={8}>
-            {card.careerApplication.jobDescription}
-          </Text>
-        </Section>
-      ) : null}
       </CollapsibleSection>
 
       <CollapsibleSection title="Backroom — history" defaultOpen={false}>
@@ -2004,6 +1993,8 @@ export default function CardDetailScreen() {
         )}
       </Section>
       </CollapsibleSection>
+        </>
+      )}
         </>
       )}
     </Screen>

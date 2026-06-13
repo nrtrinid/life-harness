@@ -157,6 +157,25 @@ describe("deriveBatchRunnerLifecycle", () => {
     const view = deriveBatchRunnerLifecycle([], [], [], NOW);
     expect(view.dueRunEmptyMessage).toBe("No due sources to run.");
     expect(view.enabledRunEmptyMessage).toBe("No enabled runnable sources.");
+    expect(view.healthyRunEmptyMessage).toBe("No healthy runnable sources.");
+  });
+
+  it("prefers run healthy sources when no due sources and healthy feeds exist", () => {
+    const sources = [fixtureSource({ id: "healthy", cadence: "manual" })];
+    const runs = [
+      {
+        sourceId: "healthy",
+        fetchedAt: "2026-06-09T08:00:00.000Z",
+        createdCandidateIds: ["c1"],
+        skippedDuplicates: 0,
+        errors: [],
+        message: "ok"
+      }
+    ];
+    const view = deriveBatchRunnerLifecycle(sources, runs, [], NOW);
+    expect(view.action).toBe("run_healthy_sources");
+    expect(view.actionLabel).toBe("Run healthy sources");
+    expect(view.canRunHealthy).toBe(true);
   });
 });
 

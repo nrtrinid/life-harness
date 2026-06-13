@@ -7,11 +7,14 @@ import {
   extractJobPostingsFromJsonLdHtml,
   getAdapterForKind,
   GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE,
+  ICIMS_ZERO_LISTINGS_MESSAGE,
   inferRoleType,
   normalizeWithAdapter,
   parseGovernmentJobsListingHtml,
+  parseIcimsListingHtml,
   parseWorkdaySearchPayload,
   resolveGovernmentJobsFetchUrl,
+  resolveIcimsFetchUrl,
   stripHtml,
   WORKDAY_ZERO_LISTINGS_MESSAGE
 } from "./jobSourceAdapters";
@@ -23,6 +26,8 @@ const emptyHtml = readFileSync(join(fixtureDir, "sample-governmentjobs-empty.htm
 const workdaySearchJson = readFileSync(join(fixtureDir, "sample-workday-search.json"), "utf8");
 const workdayEmptyJson = readFileSync(join(fixtureDir, "sample-workday-empty.json"), "utf8");
 const workdayCxsResponseJson = readFileSync(join(fixtureDir, "sample-workday-cxs-response.json"), "utf8");
+const icimsListingHtml = readFileSync(join(fixtureDir, "sample-icims-listing.html"), "utf8");
+const icimsEmptyHtml = readFileSync(join(fixtureDir, "sample-icims-empty.html"), "utf8");
 
 const greenhouseSource: JobSource = {
   id: "source-test",
@@ -196,6 +201,44 @@ describe("jobSourceAdapters", () => {
     expect(result.postings.length).toBeGreaterThanOrEqual(2);
     expect(getAdapterForKind("governmentjobs")).toBeDefined();
     expect(GOVERNMENTJOBS_ZERO_LISTINGS_MESSAGE).toContain("No GovernmentJobs listings found");
+  });
+
+  it("resolves icims search URLs with iframe params", () => {
+    expect(resolveIcimsFetchUrl("https://careers-viasat.icims.com/jobs/search")).toBe(
+      "https://careers-viasat.icims.com/jobs/search?ss=1&in_iframe=1"
+    );
+    expect(resolveIcimsFetchUrl("/fixtures/sample-icims-listing.html")).toBe(
+      "/fixtures/sample-icims-listing.html"
+    );
+  });
+
+  it("parses icims fixture with at least two postings", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "icims",
+      name: "Viasat — iCIMS",
+      url: "https://careers-viasat.icims.com/jobs/search?ss=1&in_iframe=1"
+    };
+    const postings = parseIcimsListingHtml(icimsListingHtml, source);
+    expect(postings.length).toBeGreaterThanOrEqual(2);
+    expect(postings.every((posting) => posting.sourceUrl?.includes("careers-viasat.icims.com/jobs/"))).toBe(
+      true
+    );
+    expect(postings[0]?.location).toBeTruthy();
+    expect(postings.some((posting) => posting.roleType === "software")).toBe(true);
+  });
+
+  it("returns empty list for icims redirect shell HTML", () => {
+    const source: JobSource = {
+      ...greenhouseSource,
+      kind: "icims",
+      name: "Viasat — iCIMS",
+      url: "https://careers-viasat.icims.com/jobs/search?ss=1&in_iframe=1"
+    };
+    expect(parseIcimsListingHtml(icimsEmptyHtml, source)).toEqual([]);
+    expect(normalizeWithAdapter(icimsEmptyHtml, source).postings).toEqual([]);
+    expect(ICIMS_ZERO_LISTINGS_MESSAGE).toContain("No iCIMS listings found");
+    expect(getAdapterForKind("icims")).toBeDefined();
   });
 
   it("parses workday fixture with at least two postings", () => {

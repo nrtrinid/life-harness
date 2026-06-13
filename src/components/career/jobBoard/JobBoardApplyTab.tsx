@@ -5,9 +5,12 @@ import { PrimaryMovePanel, SignalStrip, UsefulEmptyState } from "../../AlivePatt
 import { Section } from "../../Section";
 import { styles } from "../../styles";
 import { CARD_STATE_LABELS } from "../../../core/labels";
-import { buildApplicationResumeReadiness } from "../../../core/resumeReadiness";
+import {
+  buildCardResumeHref,
+  deriveApplicationResumePrimaryAction,
+  sortApplicationsForApplyQueue
+} from "../../../core/applicationResumeAction";
 import type { JobBoardTab } from "../../../core/jobBoardTab";
-import type { LifeCard } from "../../../core/types";
 import { useLifeHarness } from "../../../state/LifeHarnessState";
 
 const READINESS_SHORT = {
@@ -20,45 +23,41 @@ interface JobBoardApplyTabProps {
   onSelectTab: (tab: JobBoardTab) => void;
 }
 
-function applicationCards(cards: LifeCard[]): LifeCard[] {
-  return cards.filter(
-    (card) =>
-      card.careerApplication &&
-      (card.state === "inbox" || card.state === "active" || card.state === "waiting")
-  );
-}
-
 export function JobBoardApplyTab({ onSelectTab }: JobBoardApplyTabProps) {
   const { cards, resumeModules, jobCandidates, careerSourcePack } = useLifeHarness();
-  const applicationSummaries = applicationCards(cards).map((card) => {
-    const linkedCandidate = card.careerApplication?.jobCandidateId
-      ? jobCandidates.find((candidate) => candidate.id === card.careerApplication?.jobCandidateId)
-      : undefined;
-    const readiness = buildApplicationResumeReadiness({
-      card,
-      resumeModules,
-      jobCandidate: linkedCandidate,
-      careerSourcePack: careerSourcePack?.pack
-    });
-    return { card, readiness };
+  const applicationSummaries = sortApplicationsForApplyQueue({
+    cards,
+    resumeModules,
+    jobCandidates,
+    careerSourcePack: careerSourcePack?.pack
   });
   const leadApplication = applicationSummaries[0];
   const remainingApplications = leadApplication
     ? applicationSummaries.filter(({ card }) => card.id !== leadApplication.card.id)
     : applicationSummaries;
+  const leadAction = leadApplication
+    ? deriveApplicationResumePrimaryAction(leadApplication.readiness)
+    : null;
+  const leadHref = leadApplication && leadAction
+    ? (buildCardResumeHref(leadApplication.card.id, leadAction) as Href)
+    : undefined;
 
   return (
     <View style={{ gap: 12 }}>
-      {leadApplication ? (
+      {leadApplication && leadAction && leadHref ? (
         <PrimaryMovePanel
           label="Apply next"
           title={leadApplication.card.title}
           reason={leadApplication.readiness.nextTinyResumeAction}
           primaryAction={{
-            label: "Open application",
-            href: `/card/${leadApplication.card.id}` as Href
+            label: leadAction.label,
+            href: leadHref
           }}
-          footnote={leadApplication.card.nextTinyAction}
+          footnote={
+            leadApplication.readiness.status === "ready_to_export"
+              ? "DOCX ready — apply on employer site after review."
+              : leadApplication.card.nextTinyAction
+          }
         >
           <SignalStrip
             label="Readiness"
@@ -92,21 +91,24 @@ export function JobBoardApplyTab({ onSelectTab }: JobBoardApplyTabProps) {
             }
           />
         ) : (
-          remainingApplications.map(({ card, readiness }) => (
-            <View key={card.id} style={styles.cardTile}>
-              <Text style={styles.titleText}>{card.title}</Text>
-              <Text style={styles.bodyText}>
-                {CARD_STATE_LABELS[card.state]} - Resume: {READINESS_SHORT[readiness.status]}
-              </Text>
-              <Text style={styles.helpText}>{readiness.nextTinyResumeAction}</Text>
-              <Text style={styles.helpText}>{card.nextTinyAction}</Text>
-              <Link href={`/card/${card.id}`} asChild>
-                <Pressable style={styles.primaryAction}>
-                  <Text style={styles.primaryActionText}>Open application</Text>
-                </Pressable>
-              </Link>
-            </View>
-          ))
+          remainingApplications.map(({ card, readiness }) => {
+            const action = deriveApplicationResumePrimaryAction(readiness);
+            const href = buildCardResumeHref(card.id, action) as Href;
+            return (
+              <View key={card.id} style={styles.cardTile}>
+                <Text style={styles.titleText}>{card.title}</Text>
+                <Text style={styles.bodyText}>
+                  {CARD_STATE_LABELS[card.state]} - Resume: {READINESS_SHORT[readiness.status]}
+                </Text>
+                <Text style={styles.helpText}>{readiness.nextTinyResumeAction}</Text>
+                <Link href={href} asChild>
+                  <Pressable style={styles.primaryAction}>
+                    <Text style={styles.primaryActionText}>{action.label}</Text>
+                  </Pressable>
+                </Link>
+              </View>
+            );
+          })
         )}
       </Section>
 

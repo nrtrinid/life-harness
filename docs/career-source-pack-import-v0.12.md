@@ -81,4 +81,5 @@ When a pack is imported, **Queue** adds:
 
 - Expanded Resume Bank claims/metrics UI on module expand
 - Approval metadata persistence (`roleRecipeId`, evidence gap counts)
-- Optional local scout-assisted pack refresh (separate ticket)
+- ~~Optional local pack refresh~~ — implemented in [`career-pack-refresh-v0.18.md`](career-pack-refresh-v0.18.md)
+- Optional local scout-assisted pack rebuild suggestions (separate ticket)
