@@ -76,6 +76,14 @@ Performance modes (`quiet`, `balanced`, `fast`, `ultra`) change compute and veri
 
 `ultra` is descriptive and future-facing in v0.1. It does not perform GPU auto-tuning, enable slots, add endpoints, or change ai-gateway behavior.
 
+### Agent Policy v0.2
+
+Agent Policy v0.2 adds pure consumer helpers and compact introspection summaries on top of the resolver. Future UI, dev, debug, and runtime code should ask for policy through `resolveWorkflowAgentPolicy`, `resolveAgentPolicySummary`, `listResolvedAgentPolicies`, or `listAgentPolicySummaries` instead of re-reading registry fields by hand.
+
+The summary shape is intentionally small: workflow label, performance mode, provider surface, context sources, mutation policy, containment, model tier, and compute/verification settings. It does not include prompts, payloads, endpoint bodies, or large config blobs.
+
+No gateway, UI, state, provider execution, or mutation behavior is wired to policy yet. Permissions still come from the workflow registry, and `agentPolicyPermissionsMatchRegistry` exists to keep that invariant explicit.
+
 ---
 
 ## Workflow inventory (condensed)

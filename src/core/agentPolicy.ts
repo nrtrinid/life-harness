@@ -1,5 +1,6 @@
 import {
   getAgentWorkflowDefinition,
+  listAgentWorkflowDefinitions,
   type AgentContainmentType,
   type AgentContextSourceId,
   type AgentModelTier,
@@ -34,6 +35,25 @@ export type ResolvedAgentPolicy = {
 export type ResolveAgentPolicyInput = {
   workflowId: AgentWorkflowId;
   performanceMode?: AgentPerformanceMode;
+};
+
+export type AgentPolicySummary = {
+  workflowId: AgentWorkflowId;
+  label: string;
+  performanceMode: AgentPerformanceMode;
+  providerSurface: AgentProviderSurface;
+  modelTier: AgentModelTier;
+  contextSources: AgentContextSourceId[];
+  mutationPolicy: AgentMutationPolicy;
+  containment: AgentContainmentType;
+  inputBudget: number;
+  verificationDepth: AgentVerificationDepth;
+  repairAttempts: number;
+  usesCritic: boolean;
+  usesRepair: boolean;
+  allowsMutation: boolean;
+  allowsParallelism: boolean;
+  keepWarm: boolean;
 };
 
 const MODE_BUDGETS: Record<
@@ -137,6 +157,76 @@ export function resolveAgentPolicy(
   }
 
   return resolveGroundedChatPolicy(basePolicy);
+}
+
+export function resolveWorkflowAgentPolicy(
+  workflowId: AgentWorkflowId,
+  performanceMode: AgentPerformanceMode = "balanced"
+): ResolvedAgentPolicy | undefined {
+  return resolveAgentPolicy({ workflowId, performanceMode });
+}
+
+export function summarizeAgentPolicy(policy: ResolvedAgentPolicy): AgentPolicySummary {
+  const workflow = getAgentWorkflowDefinition(policy.workflowId);
+
+  return {
+    workflowId: policy.workflowId,
+    label: workflow?.label ?? policy.workflowId,
+    performanceMode: policy.performanceMode,
+    providerSurface: policy.providerSurface,
+    modelTier: policy.modelTier,
+    contextSources: [...policy.contextSources],
+    mutationPolicy: policy.mutationPolicy,
+    containment: policy.containment,
+    inputBudget: policy.maxInputChars,
+    verificationDepth: policy.verificationDepth,
+    repairAttempts: policy.maxRepairAttempts,
+    usesCritic: policy.allowCritic,
+    usesRepair: policy.allowRepair,
+    allowsMutation: policy.mutationPolicy !== "none",
+    allowsParallelism: policy.allowParallelism,
+    keepWarm: policy.keepWarm
+  };
+}
+
+export function resolveAgentPolicySummary(
+  workflowId: AgentWorkflowId,
+  performanceMode: AgentPerformanceMode = "balanced"
+): AgentPolicySummary | undefined {
+  const policy = resolveWorkflowAgentPolicy(workflowId, performanceMode);
+  return policy ? summarizeAgentPolicy(policy) : undefined;
+}
+
+export function listResolvedAgentPolicies(
+  performanceMode: AgentPerformanceMode = "balanced"
+): ResolvedAgentPolicy[] {
+  return listAgentWorkflowDefinitions().map((workflow) => {
+    const policy = resolveWorkflowAgentPolicy(workflow.id, performanceMode);
+    if (!policy) {
+      throw new Error(`Missing agent policy for registered workflow: ${workflow.id}`);
+    }
+    return policy;
+  });
+}
+
+export function listAgentPolicySummaries(
+  performanceMode: AgentPerformanceMode = "balanced"
+): AgentPolicySummary[] {
+  return listResolvedAgentPolicies(performanceMode).map(summarizeAgentPolicy);
+}
+
+export function agentPolicyPermissionsMatchRegistry(policy: ResolvedAgentPolicy): boolean {
+  const workflow = getAgentWorkflowDefinition(policy.workflowId);
+  if (!workflow) {
+    return false;
+  }
+
+  return (
+    policy.providerSurface === workflow.providerSurface &&
+    sameContextSources(policy.contextSources, workflow.contextSources) &&
+    policy.mutationPolicy === workflow.mutationPolicy &&
+    policy.containment === workflow.containment
+  );
 }
 
 function fromRegistry(
@@ -244,4 +334,11 @@ function resolveGroundedChatPolicy(policy: ResolvedAgentPolicy): ResolvedAgentPo
     keepWarm: policy.performanceMode === "fast" || ultra,
     rationale: [...policy.rationale, "Grounded chat keeps registry mutation permissions."]
   };
+}
+
+function sameContextSources(
+  left: readonly AgentContextSourceId[],
+  right: readonly AgentContextSourceId[]
+): boolean {
+  return left.length === right.length && left.every((source, index) => source === right[index]);
 }

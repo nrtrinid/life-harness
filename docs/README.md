@@ -21,7 +21,7 @@ Agent quickstart: `npm run agent:bootstrap`, `npm run agent:map`, `npm run agent
 | Persistence | [`persistence-audit-v0.5.md`](persistence-audit-v0.5.md) |
 | Memory Bank | [`memory-bank-v0.1.md`](memory-bank-v0.1.md) |
 | AI workflow map | [`ai-workflows-current.md`](ai-workflows-current.md) |
-| Agent spine inventory | [`agent-spine-inventory-v0.1.md`](agent-spine-inventory-v0.1.md) |
+| Agent spine inventory / policy resolver | [`agent-spine-inventory-v0.1.md`](agent-spine-inventory-v0.1.md) |
 | Feature Sprint / builder loop | [`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md) (authority), [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md), [`feature-sprint-flow-guide-v0.3.md`](feature-sprint-flow-guide-v0.3.md), `feature-sprint-*.md` slices |
 | Ask Harness | [`ask-harness-v0.1.md`](ask-harness-v0.1.md) |
 | Thread intelligence | [`conversation-thread-intelligence.md`](conversation-thread-intelligence.md) |

@@ -3,13 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_WORKFLOWS,
   getAgentWorkflowDefinition,
+  listAgentWorkflowDefinitions,
   type AgentMutationPolicy,
   type AgentWorkflowId
 } from "./agentWorkflowRegistry";
 import {
   AGENT_PERFORMANCE_MODES,
   AGENT_VERIFICATION_DEPTHS,
+  agentPolicyPermissionsMatchRegistry,
+  listAgentPolicySummaries,
+  listResolvedAgentPolicies,
+  resolveAgentPolicySummary,
   resolveAgentPolicy,
+  resolveWorkflowAgentPolicy,
   type AgentPerformanceMode,
   type AgentVerificationDepth,
   type ResolvedAgentPolicy
@@ -47,6 +53,17 @@ function mutationRank(policy: AgentMutationPolicy): number {
 describe("agentPolicy", () => {
   it("defaults to balanced mode", () => {
     expect(requirePolicy("chat_harness").performanceMode).toBe("balanced");
+    expect(resolveWorkflowAgentPolicy("chat_harness")?.performanceMode).toBe("balanced");
+    expect(resolveAgentPolicySummary("chat_harness")?.performanceMode).toBe("balanced");
+  });
+
+  it("resolves explicit modes through the consumer helper", () => {
+    for (const performanceMode of AGENT_PERFORMANCE_MODES) {
+      const policy = resolveWorkflowAgentPolicy("chat_harness", performanceMode);
+
+      expect(policy?.workflowId).toBe("chat_harness");
+      expect(policy?.performanceMode).toBe(performanceMode);
+    }
   });
 
   it("returns undefined for unknown workflow IDs like the registry helper", () => {
@@ -54,6 +71,8 @@ describe("agentPolicy", () => {
 
     expect(getAgentWorkflowDefinition(unknown)).toBeUndefined();
     expect(resolveAgentPolicy({ workflowId: unknown })).toBeUndefined();
+    expect(resolveWorkflowAgentPolicy(unknown)).toBeUndefined();
+    expect(resolveAgentPolicySummary(unknown)).toBeUndefined();
   });
 
   it("keeps deterministic workflows model-free without critic, repair, keep-warm, or parallelism", () => {
@@ -162,6 +181,20 @@ describe("agentPolicy", () => {
     }
   });
 
+  it("keeps registry permission fields invariant across performance modes", () => {
+    for (const workflow of AGENT_WORKFLOWS) {
+      for (const performanceMode of AGENT_PERFORMANCE_MODES) {
+        const policy = requirePolicy(workflow.id, performanceMode);
+
+        expect(policy.providerSurface).toBe(workflow.providerSurface);
+        expect(policy.contextSources).toEqual(workflow.contextSources);
+        expect(policy.mutationPolicy).toBe(workflow.mutationPolicy);
+        expect(policy.containment).toBe(workflow.containment);
+        expect(agentPolicyPermissionsMatchRegistry(policy)).toBe(true);
+      }
+    }
+  });
+
   it("resolves every workflow in every performance mode", () => {
     for (const workflow of AGENT_WORKFLOWS) {
       for (const performanceMode of AGENT_PERFORMANCE_MODES) {
@@ -171,6 +204,46 @@ describe("agentPolicy", () => {
         expect(policy.performanceMode).toBe(performanceMode);
         expect(AGENT_VERIFICATION_DEPTHS).toContain(policy.verificationDepth);
       }
+    }
+  });
+
+  it("creates compact deterministic policy summaries", () => {
+    const first = resolveAgentPolicySummary("chat_harness", "fast");
+    const second = resolveAgentPolicySummary("chat_harness", "fast");
+
+    expect(first).toEqual(second);
+    expect(first).toMatchObject({
+      workflowId: "chat_harness",
+      label: "Companion (Chat Harness)",
+      performanceMode: "fast",
+      providerSurface: "ai_gateway",
+      mutationPolicy: "user_approved_actions_only",
+      containment: "grounded",
+      verificationDepth: "related",
+      usesCritic: false,
+      allowsMutation: true
+    });
+    expect(first?.contextSources).toContain("board_snapshot");
+    expect(first?.inputBudget).toBeGreaterThan(0);
+    expect(first?.repairAttempts).toBeGreaterThan(0);
+    expect(Object.keys(first ?? {})).not.toContain("rationale");
+    expect(Object.keys(first ?? {})).not.toContain("coreFiles");
+    expect(Object.keys(first ?? {})).not.toContain("testFiles");
+    expect(Object.keys(first ?? {})).not.toContain("endpoint");
+  });
+
+  it("lists resolved policies and summaries for every registered workflow in stable order", () => {
+    const expectedIds = listAgentWorkflowDefinitions().map((workflow) => workflow.id);
+
+    for (const performanceMode of AGENT_PERFORMANCE_MODES) {
+      const policies = listResolvedAgentPolicies(performanceMode);
+      const summaries = listAgentPolicySummaries(performanceMode);
+
+      expect(policies.map((policy) => policy.workflowId)).toEqual(expectedIds);
+      expect(summaries.map((summary) => summary.workflowId)).toEqual(expectedIds);
+      expect(policies).toHaveLength(AGENT_WORKFLOWS.length);
+      expect(summaries).toHaveLength(AGENT_WORKFLOWS.length);
+      expect(summaries.every((summary) => summary.performanceMode === performanceMode)).toBe(true);
     }
   });
 });
