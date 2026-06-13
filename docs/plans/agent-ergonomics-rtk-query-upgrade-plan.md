@@ -264,6 +264,8 @@ Each skill must include:
 
 ## PR 3.5: Optional Codex Hooks / Local Agent Config
 
+**Status:** Implemented in the PR 3.5 hook/docs slice. Added project-local `PreToolUse` and `Stop` hooks, smoke tests, and hook documentation without runtime app changes.
+
 This PR is optional and should happen only after PR 0 through PR 3 are working.
 
 Possible hooks/checks:

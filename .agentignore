@@ -16,6 +16,7 @@ pnpm-lock.yaml
 tmp/
 .agent-runs/
 .agent-logs/
+.codex/hooks/*.tmp
 
 # Fixtures and sample outputs are opt-in context.
 fixtures/

@@ -4,7 +4,7 @@ Use this file after reading root `AGENTS.md` and, when useful, running `npm run 
 
 This is a router, not a full architecture doc. Read only the task block that matches the ticket, then inspect the listed files directly. Respect `.agentignore` and avoid archived/planning/historical docs unless a task explicitly asks for them.
 
-Useful first commands: `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:tests-for -- --changed`, and `npm run agent:grep -- "<query>"`. Use `npm run check:boundaries` before boundary-sensitive changes. Use `npm run agent:typecheck`, `npm run agent:test`, or `npm run agent:verify` when you need compact terminal output with full logs under `tmp/agent-logs/`; use `npm run agent:failures` to summarize the latest log and `npm run agent:review-packet` before review.
+Useful first commands: `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:tests-for -- --changed`, and `npm run agent:grep -- "<query>"`. Use `npm run check:boundaries` before boundary-sensitive changes. Optional project hooks are documented in `docs/CODEX_HOOKS.md`.
 
 ## Task: core-board-product-logic
 
@@ -54,9 +54,7 @@ BOUNDARIES:
 - product rules belong in `src/core/`, not scattered in UI
 - core logic must stay UI-independent
 
-NOTES:
-- Keep changes narrow and preserve local seed/state behavior.
-- Add or update tests when core logic changes.
+NOTES: Keep changes narrow, preserve local seed/state behavior, and test core logic changes.
 
 ## Task: core-board-usability
 
@@ -163,9 +161,7 @@ BOUNDARIES:
 - app/src must not import from `services/`
 - runner stays local and bounded
 
-NOTES:
-- For source adapters, prefer fixture-first tests before live fetch assumptions.
-- Keep candidate approval/manual review in the user-approved flow.
+NOTES: Prefer fixture-first adapter tests and keep candidate approval/manual review in the user-approved flow.
 
 ## Task: ask-harness
 
@@ -212,9 +208,7 @@ BOUNDARIES:
 - S3 routing and board mutation guardrails must not weaken
 - app/src must not import from `services/`
 
-NOTES:
-- Ask can suggest; the user approves mutations.
-- Keep shared thread logic in `src/core/chatThreadState.ts`.
+NOTES: Ask can suggest; the user approves mutations. Keep shared thread logic in `src/core/chatThreadState.ts`.
 
 ## Task: raw-lab-containment
 
@@ -262,9 +256,7 @@ BOUNDARIES:
 - Raw Lab state is in-memory unless the user explicitly saves approved Companion Self-Memories
 - do not weaken Ask Harness or S3 containment
 
-NOTES:
-- Keep Raw Lab containment tests close to any boundary change.
-- Do not export Raw Lab jailbreak/framing behavior to other modes.
+NOTES: Keep containment tests close to boundary changes and do not export Raw Lab jailbreak/framing behavior to other modes.
 
 ## Task: ai-gateway
 
@@ -306,9 +298,7 @@ BOUNDARIES:
 - S3 must be rejected before provider calls
 - no app-side provider/model binding
 
-NOTES:
-- Keep schemas strict and mock-first.
-- Do not expose provider/model details through app core behavior.
+NOTES: Keep schemas strict and mock-first. Do not expose provider/model details through app core behavior.
 
 ## Task: docs-planning
 
@@ -335,6 +325,7 @@ VERIFY:
 - `npm run agent:bootstrap`
 - `npm run agent:impact -- --changed`
 - `npm run agent:review-packet`
+- `npm run codex:hooks:smoke` for hook changes
 - scoped `git diff -- <docs touched>`
 - `git status --short`
 
@@ -348,9 +339,7 @@ BOUNDARIES:
 - do not add product concepts while editing process docs
 - keep root `AGENTS.md` short and stable
 
-NOTES:
-- Prefer links and task routers over copied context.
-- Mark planned scripts as planned if they do not exist yet.
+NOTES: Prefer links and task routers over copied context. Mark missing planned scripts as planned.
 
 ## Task: rtk-query-network-layer
 
@@ -398,6 +387,4 @@ BOUNDARIES:
 - existing pure request/parse clients stay available
 - app/src must not import from `services/`
 
-NOTES:
-- RTK Query helps future agents find network calls; it is not the main token saver.
-- Do not add RTK dependencies until the explicit PR 4 implementation ticket.
+NOTES: RTK Query helps future agents find network calls; it is not the main token saver. Do not add RTK dependencies until PR 4.

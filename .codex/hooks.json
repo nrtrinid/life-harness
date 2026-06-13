@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/pre-tool-use-policy.js\"",
+            "windowsCommand": "for /f \"delims=\" %i in ('git rev-parse --show-toplevel') do node \"%i\\.codex\\hooks\\pre-tool-use-policy.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/stop-summary-policy.js\"",
+            "windowsCommand": "for /f \"delims=\" %i in ('git rev-parse --show-toplevel') do node \"%i\\.codex\\hooks\\stop-summary-policy.js\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

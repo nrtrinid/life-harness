@@ -8,8 +8,9 @@
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — local dev setup
 - [`AGENT_BUDGETS.md`](AGENT_BUDGETS.md) — token budgets and bootstrap guardrails for coding agents
 - [`AGENT_CONTEXT_MAP.md`](AGENT_CONTEXT_MAP.md) — task-scoped docs/files/tests router for coding agents
+- [`CODEX_HOOKS.md`](CODEX_HOOKS.md) — optional local Codex hook guardrails
 
-Agent quickstart: `npm run agent:bootstrap`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run check:boundaries`, `npm run agent:review-packet`. Compact verification logs are written by `npm run agent:typecheck`, `npm run agent:test`, and `npm run agent:verify` to `tmp/agent-logs/`. Human verification commands include `npm run verify:core`, `npm run verify:job-scout`, `npm run verify:app`, and `npm run verify`.
+Agent quickstart: `npm run agent:bootstrap`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run check:boundaries`, `npm run agent:review-packet`. Optional hook smoke test: `npm run codex:hooks:smoke`. Compact verification logs are written by `npm run agent:typecheck`, `npm run agent:test`, and `npm run agent:verify` to `tmp/agent-logs/`. Human verification commands include `npm run verify:core`, `npm run verify:job-scout`, `npm run verify:app`, and `npm run verify`.
 
 ## Features (by version)
 
@@ -51,6 +52,7 @@ Agent quickstart: `npm run agent:bootstrap`, `npm run agent:map`, `npm run agent
 ## Agent commands
 
 - [`AGENT_CONTEXT_MAP.md`](AGENT_CONTEXT_MAP.md) - narrow task router for agents
+- [`CODEX_HOOKS.md`](CODEX_HOOKS.md) - optional project-local hook guardrails
 - `npm run check:boundaries` - deterministic import-boundary scanner
 - `npm run verify:core` - narrow core Vitest suite
 - `npm run verify:app` - app typecheck plus full Vitest suite

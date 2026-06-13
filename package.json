@@ -29,6 +29,7 @@
     "agent:verify": "tsx scripts/agent-verify.ts",
     "agent:failures": "tsx scripts/agent-failures.ts",
     "agent:review-packet": "tsx scripts/agent-review-packet.ts",
+    "codex:hooks:smoke": "node .codex/hooks/smoke-test.js",
     "scout:runner": "tsx services/job-scout-runner/src/server.ts",
     "scout:runner:test": "vitest run services/job-scout-runner/tests",
     "feature-runner": "tsx services/feature-sprint-runner/src/server.ts",
