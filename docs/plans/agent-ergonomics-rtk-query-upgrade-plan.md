@@ -18,6 +18,8 @@ This is not a product feature plan. It must not add app-facing routes, new motiv
 
 ## PR 0: Agent Budget + Bootstrap Guardrails
 
+**Status:** Implemented in the PR 0 tooling/docs slice.
+
 Add the repo-token-saving control plane before rewriting agent docs.
 
 Planned files:
@@ -74,6 +76,8 @@ Measurement and observability:
 
 ## PR 1: Agent Context Router
 
+**Status:** Implemented in the PR 1 context-router docs slice.
+
 Rewrite the current broad agent context into a small routing layer.
 
 Root `AGENTS.md`:
@@ -123,6 +127,8 @@ RTK Query note:
 - It is not the primary token saver without the budget, map, grep, output diet, and failure-summary tools.
 
 ## PR 2: Repo Tooling
+
+**Status:** Implemented across PR 2A, PR 2.5, and PR 2B. PR 2A added `agent:map`, `agent:grep`, `agent:symbols`, `agent:exports`, `agent:tests-for`, and `agent:impact`; PR 2.5 added `agent:failures`, `agent:review-packet`, and compact output wrappers; PR 2B added `verify`, `verify:app`, `verify:core`, `verify:job-scout`, and `check:boundaries`.
 
 Add deterministic scripts that agents can run before reading large files or asking broad questions.
 
@@ -180,6 +186,8 @@ Symbol/export summaries:
 - The purpose is file selection, not implementation without inspection.
 
 ## PR 2.5: Agent Output Diet + Failure Summaries
+
+**Status:** Implemented in the PR 2.5 tooling slice. Added compact-output wrappers for test/typecheck/verify, latest failure summaries, and bounded review packets. No lint wrapper was added because the repo has no lint package script.
 
 Add agent-facing wrappers that keep terminals readable while preserving full logs on disk.
 
