@@ -148,7 +148,7 @@ describe("career pack dogfood chain", () => {
     const readiness = buildApplicationResumeReadiness({
       card,
       resumeModules: imported.state.resumeModules,
-      careerSourcePack: imported.state.careerSourcePack?.pack ?? null
+      careerSourcePack: imported.state.careerSourcePack?.pack
     });
 
     expect(readiness.status).toBe("needs_patch");
