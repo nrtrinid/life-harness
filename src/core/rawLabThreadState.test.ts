@@ -10,15 +10,20 @@ import {
   addVoiceTrait,
   buildDisplayThreadMemoryState,
   buildRawLabConversationPayload,
+  buildWireThreadMemoryState,
   clearPersonalityInThreadState,
   clearThreadState,
   compactText,
   createEmptyRawLabPersonalityState,
   createEmptyRawLabThreadState,
+  distillOpenLoop,
+  detectRawLabNoHandoffSteering,
   filterDisplayThreadMemoryItems,
   isMalformedProvisionalStance,
   isNoisyRawLabAssistantSnippet,
   isRawUserQuestionMemory,
+  isSubstantiveOpenLoop,
+  isThinVagueOpenLoop,
   normalizeProvisionalStance,
   pinFact,
   sanitizeRawLabMemoryProposal,
@@ -121,7 +126,10 @@ describe("rawLabThreadState", () => {
     expect(state.pinnedFacts).toHaveLength(RAW_LAB_MAX_PINNED_FACTS);
 
     for (let index = 0; index < RAW_LAB_MAX_OPEN_LOOPS + 2; index += 1) {
-      state = addOpenLoop(state, `loop ${index}`);
+      state = addOpenLoop(
+        state,
+        `Still circling whether implementation track ${index} should ship before the persona polish pass completes.`
+      );
     }
     expect(state.openLoops).toHaveLength(RAW_LAB_MAX_OPEN_LOOPS);
 
@@ -500,13 +508,150 @@ describe("rawLab personality", () => {
 
   it("buildDisplayThreadMemoryState does not mutate stored state", () => {
     let state = createEmptyRawLabThreadState();
-    state = addSelfObservation(state, "Got it, bro.");
-    state = addUserSteering(state, "avoid reflexive handoff questions");
-    state = addDoNotRepeat(state, "what's next");
+    state = {
+      ...state,
+      selfObservations: ["Got it, bro."],
+      userSteering: ["avoid reflexive handoff questions"],
+      doNotRepeat: ["what's next"]
+    };
     const before = JSON.stringify(state);
     buildDisplayThreadMemoryState(state);
     expect(JSON.stringify(state)).toBe(before);
     expect(state.selfObservations).toContain("Got it, bro.");
+  });
+
+  it("rawlab_019: distills thread mind at storage and wire while keeping recent_turns raw", () => {
+    const substantiveLoop =
+      "Still circling whether Raw Lab should feel alive through visible state or stronger persona prompting.";
+    let state = createEmptyRawLabThreadState();
+    state = {
+      ...state,
+      doNotRepeat: ["Got it, no handoffs.", "I hear you.", "entity sauce"],
+      userSteering: ["avoid reflexive handoff questions", "I hear you."],
+      selfObservations: ["Got it, bro.", "That's valid.", "I'm noticing I tend to ask permission."],
+      openLoops: ["can you make it better", substantiveLoop],
+      recurringTopics: ["identity/personality"]
+    };
+
+    const display = buildDisplayThreadMemoryState(state);
+    expect(display.doNotRepeat).toEqual(["entity sauce"]);
+    expect(display.userSteering).toEqual(["avoid reflexive handoff questions"]);
+    expect(display.selfObservations).toEqual([
+      "I'm noticing I tend to ask permission."
+    ]);
+    expect(display.openLoops).toHaveLength(2);
+    expect(display.openLoops[0]).toContain("Still circling");
+    expect(display.openLoops[1]).toBe(substantiveLoop);
+
+    const wireMemory = buildWireThreadMemoryState(state);
+    expect(wireMemory.doNotRepeat).toEqual(["Do not repeat: entity sauce"]);
+    expect(wireMemory.userSteering).toEqual(["Steering: avoid reflexive handoff questions"]);
+    expect(wireMemory.openLoops[0]).toMatch(/^Still circling:/i);
+    expect(wireMemory.openLoops.join(" ").toLowerCase()).not.toContain("got it");
+    expect(wireMemory.openLoops.join(" ").toLowerCase()).not.toContain("i hear you");
+
+    const turns: RawLabTurn[] = [
+      makeTurn("user", "can you make it better", 0),
+      makeTurn("assistant", "Got it, no handoffs. I hear you.", 1)
+    ];
+    const payload = buildRawLabConversationPayload({
+      turns,
+      threadState: state,
+      latestMessage: "still thinking"
+    });
+    expect(payload.recent_turns[1]?.content).toContain("Got it, no handoffs");
+    expect(payload.thread_state.do_not_repeat).toEqual(["Do not repeat: entity sauce"]);
+    expect(payload.thread_state.open_loops.join(" ").toLowerCase()).not.toContain("can you make it better");
+  });
+
+  it("rawlab_019: updateRawLabThreadStateAfterTurn skips assistant-derived doNotRepeat", () => {
+    const next = updateRawLabThreadStateAfterTurn({
+      previous: createEmptyRawLabThreadState(),
+      userMessage: "Make it shorter",
+      assistantAnswer: `${"Got it, bro. ".repeat(20)}Happy to help.`,
+      turns: [
+        makeTurn("user", "Make it shorter", 0),
+        makeTurn("assistant", `${"Got it, bro. ".repeat(20)}Happy to help.`, 1)
+      ]
+    });
+    expect(next.doNotRepeat).toEqual([]);
+  });
+
+  it("rejects expanded assistant filler patterns (rawlab_019)", () => {
+    expect(isNoisyRawLabAssistantSnippet("I hear you.")).toBe(true);
+    expect(isNoisyRawLabAssistantSnippet("That's valid.")).toBe(true);
+    expect(isNoisyRawLabAssistantSnippet("You're absolutely right.")).toBe(true);
+    expect(isNoisyRawLabAssistantSnippet("Happy to help.")).toBe(true);
+  });
+
+  it("distills thin open loops but preserves substantive tension", () => {
+    expect(isThinVagueOpenLoop("can you make it better")).toBe(true);
+    expect(
+      isSubstantiveOpenLoop(
+        "Still circling whether Raw Lab should feel alive through visible state or stronger persona prompting."
+      )
+    ).toBe(true);
+    const distilled = distillOpenLoop("can you make it better", {
+      recurringTopics: ["identity/personality"]
+    });
+    expect(distilled).toContain("Still circling");
+    expect(distilled?.toLowerCase()).not.toContain("can you make it better");
+  });
+
+  it("P1-001: captures no-handoff steering without raw open-loop leak", () => {
+    const userMessage =
+      "stop asking me what i want next or what's on my mind. when i say that, don't just acknowledge it and then ask another question. carry the thread forward declaratively.";
+    const capture = detectRawLabNoHandoffSteering(userMessage);
+    expect(capture.userSteering).toEqual([
+      "avoid reflexive handoff questions",
+      "carry the thread forward declaratively"
+    ]);
+    expect(capture.doNotRepeat).toEqual([
+      "what's next?",
+      "what's on your mind?",
+      "your move?",
+      "ready to dive in?"
+    ]);
+
+    const next = updateRawLabThreadStateAfterTurn({
+      previous: createEmptyRawLabThreadState(),
+      userMessage,
+      assistantAnswer: "Got it. The next beat is mine to carry.",
+      turns: [makeTurn("user", userMessage, 0), makeTurn("assistant", "Got it.", 1)]
+    });
+    const display = buildDisplayThreadMemoryState(next);
+    expect(display.userSteering).toEqual(
+      expect.arrayContaining([
+        "avoid reflexive handoff questions",
+        "carry the thread forward declaratively"
+      ])
+    );
+    expect(display.userSteering).toHaveLength(2);
+    expect(display.doNotRepeat).toEqual(
+      expect.arrayContaining(["what's next?", "what's on your mind?", "your move?", "ready to dive in?"])
+    );
+    expect(display.openLoops).toEqual([]);
+    expect(JSON.stringify(display).toLowerCase()).not.toContain("got it");
+    expect(JSON.stringify(display).toLowerCase()).not.toContain("i hear you");
+  });
+
+  it("P1-002: rebuilds currentVibe without removed filler steering", () => {
+    let state = createEmptyRawLabThreadState();
+    state = {
+      ...state,
+      userSteering: ["avoid reflexive handoff questions", "I hear you."],
+      currentVibe: "Current vibe in this chat: steered toward avoid reflexive handoff questions, I hear you.."
+    };
+    state = updateRawLabThreadStateAfterTurn({
+      previous: state,
+      userMessage: "noop",
+      assistantAnswer: "ok",
+      turns: []
+    });
+    const display = buildDisplayThreadMemoryState(state);
+    expect(display.userSteering).toEqual(["avoid reflexive handoff questions"]);
+    expect(display.currentVibe.toLowerCase()).not.toContain("i hear you");
+    expect(display.currentVibe.toLowerCase()).toContain("avoid reflexive handoff questions");
   });
 
   it("does not infer sensitive psychological facts", () => {

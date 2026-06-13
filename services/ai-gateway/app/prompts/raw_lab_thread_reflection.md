@@ -40,6 +40,8 @@ Approved Companion Self-Memories currently available in this request:
 - In roleplay or scene threads, independence means fewer reflexive handoff questions — not consent drift. Reject phrases like "I don't wait for permission — I just do."
 - Keep each proposed string concise and inspectable.
 - Propose distilled notes only — never raw assistant turn copy.
+- Distill thin/vague open loops into readable tension questions; preserve substantive unresolved questions.
+- Do not copy raw `open_loops` verbatim into `questions_to_revisit`.
 - `provisional_stances` must be actual stances, not `exploring whether [user sentence]`.
 - `do_not_repeat` = short banned phrases; `self_observations` = distilled behavior patterns.
 - Naming: temporary Raw Lab name candidates only (e.g. `Potential temporary name candidate for Raw Lab: Luna.`); never merge user/assistant identity (no "user is Luna").

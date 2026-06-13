@@ -78,12 +78,14 @@ function TruncatedDigest({ text, label }: { text: string; label?: string }) {
 function MemoryItemsList({
   items,
   listKey,
+  sectionLabel,
   onRemove,
   onLeanInto,
   onAvoid
 }: {
   items: string[];
   listKey: string;
+  sectionLabel?: string;
   onRemove: (index: number) => void;
   onLeanInto?: (item: string) => void;
   onAvoid?: (item: string) => void;
@@ -93,7 +95,8 @@ function MemoryItemsList({
   }
 
   return (
-    <>
+    <View style={styles.checklist}>
+      {sectionLabel ? <Text style={styles.helpText}>{sectionLabel}</Text> : null}
       {items.map((item, index) => (
         <MemoryReviewCard
           key={`${listKey}-${index}`}
@@ -103,7 +106,7 @@ function MemoryItemsList({
           onAvoid={onAvoid ? () => onAvoid(item) : undefined}
         />
       ))}
-    </>
+    </View>
   );
 }
 
@@ -130,7 +133,8 @@ export function RawLabThreadMemoryPanel({
     Boolean(displayMemory.currentVibe) ||
     displayMemory.provisionalStances.length > 0 ||
     displayMemory.selfObservations.length > 0 ||
-    displayMemory.questionsToRevisit.length > 0;
+    displayMemory.questionsToRevisit.length > 0 ||
+    Boolean(threadState.smartCompactedContext?.currentTension?.trim());
 
   const hasPersonalityContent =
     personality.voiceTraits.length > 0 ||
@@ -211,6 +215,7 @@ export function RawLabThreadMemoryPanel({
               <MemoryItemsList
                 items={displayMemory.openLoops}
                 listKey="openLoops"
+                sectionLabel="Open loops"
                 onRemove={(index) => {
                   const item = displayMemory.openLoops[index];
                   const stateIndex = threadState.openLoops.indexOf(item);
@@ -222,6 +227,7 @@ export function RawLabThreadMemoryPanel({
               <MemoryItemsList
                 items={displayMemory.userSteering}
                 listKey="userSteering"
+                sectionLabel="Steering"
                 onRemove={(index) => {
                   const item = displayMemory.userSteering[index];
                   const stateIndex = threadState.userSteering.indexOf(item);
@@ -233,6 +239,7 @@ export function RawLabThreadMemoryPanel({
               <MemoryItemsList
                 items={displayMemory.doNotRepeat}
                 listKey="doNotRepeat"
+                sectionLabel="Do not repeat"
                 onRemove={(index) => {
                   const item = displayMemory.doNotRepeat[index];
                   const stateIndex = threadState.doNotRepeat.indexOf(item);
@@ -244,6 +251,7 @@ export function RawLabThreadMemoryPanel({
               <MemoryItemsList
                 items={displayMemory.recurringTopics}
                 listKey="recurringTopics"
+                sectionLabel="Recurring topics"
                 onRemove={(index) => {
                   const item = displayMemory.recurringTopics[index];
                   const stateIndex = threadState.recurringTopics.indexOf(item);
@@ -253,20 +261,30 @@ export function RawLabThreadMemoryPanel({
                 }}
               />
               {displayMemory.currentVibe ? (
-                <MemoryReviewCard
-                  text={displayMemory.currentVibe}
-                  onForget={() =>
-                    onThreadStateChange({
-                      ...threadState,
-                      currentVibe: "",
-                      updatedAt: new Date().toISOString()
-                    })
-                  }
+                <View style={styles.checklist}>
+                  <Text style={styles.helpText}>Current vibe</Text>
+                  <MemoryReviewCard
+                    text={displayMemory.currentVibe}
+                    onForget={() =>
+                      onThreadStateChange({
+                        ...threadState,
+                        currentVibe: "",
+                        updatedAt: new Date().toISOString()
+                      })
+                    }
+                  />
+                </View>
+              ) : null}
+              {threadState.smartCompactedContext?.currentTension?.trim() ? (
+                <TruncatedDigest
+                  text={threadState.smartCompactedContext.currentTension.trim()}
+                  label="Current tension (from last send compaction)"
                 />
               ) : null}
               <MemoryItemsList
                 items={displayMemory.provisionalStances}
                 listKey="provisionalStances"
+                sectionLabel="Provisional stances"
                 onRemove={(index) => {
                   const item = displayMemory.provisionalStances[index];
                   const stateIndex = threadState.provisionalStances.indexOf(item);
@@ -278,6 +296,7 @@ export function RawLabThreadMemoryPanel({
               <MemoryItemsList
                 items={displayMemory.selfObservations}
                 listKey="selfObservations"
+                sectionLabel="Self-observations"
                 onRemove={(index) => {
                   const item = displayMemory.selfObservations[index];
                   const stateIndex = threadState.selfObservations.indexOf(item);
@@ -289,6 +308,7 @@ export function RawLabThreadMemoryPanel({
               <MemoryItemsList
                 items={displayMemory.questionsToRevisit}
                 listKey="questionsToRevisit"
+                sectionLabel="Questions to revisit"
                 onRemove={(index) => {
                   const item = displayMemory.questionsToRevisit[index];
                   const stateIndex = threadState.questionsToRevisit.indexOf(item);

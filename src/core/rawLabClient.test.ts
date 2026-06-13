@@ -31,7 +31,9 @@ describe("buildRawLabRequestBody", () => {
         pinnedFacts: ["note"],
         recurringTopics: ["Raw Lab"],
         currentVibe: "Current vibe in this chat: direct.",
-        provisionalStances: ["Provisional stance: exploring whether Raw Lab can cohere"],
+        provisionalStances: [
+          "Raw Lab should produce the next concrete artifact once the user has approved a build direction."
+        ],
         selfObservations: ["I'm noticing I tend to circle continuity."],
         questionsToRevisit: ["What were we circling?"]
       }
@@ -44,12 +46,12 @@ describe("buildRawLabRequestBody", () => {
     expect(body.thread_state.recurring_topics).toEqual(["Raw Lab"]);
     expect(body.thread_state.current_vibe).toBe("Current vibe in this chat: direct.");
     expect(body.thread_state.provisional_stances).toEqual([
-      "Provisional stance: exploring whether Raw Lab can cohere"
+      "Raw Lab should produce the next concrete artifact once the user has approved a build direction."
     ]);
     expect(body.thread_state.self_observations).toEqual([
       "I'm noticing I tend to circle continuity."
     ]);
-    expect(body.thread_state.questions_to_revisit).toEqual(["What were we circling?"]);
+    expect(body.thread_state.questions_to_revisit).toEqual(["Revisit: What were we circling?"]);
     expect(body.thread_state.smart_compacted_context).toMatchObject({
       active_open_loops: [],
       questions_to_revisit: [],

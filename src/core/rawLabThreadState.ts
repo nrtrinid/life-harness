@@ -261,6 +261,71 @@ const DO_NOT_REPEAT_COMMAND_PATTERNS = [
   /\bdon(?:'|')?t say\s+["“”']?([^"“”'\n.?!]{3,100})/i
 ];
 
+const RAW_LAB_NO_HANDOFF_STEERING_SIGNAL_PATTERNS = [
+  /\bstop asking (?:me )?what i want next\b/i,
+  /\bdon'?t ask (?:me )?what i want next\b/i,
+  /\bdon'?t ask (?:me )?(?:what'?s on my mind|handoff)\b/i,
+  /\bstop asking (?:me )?(?:what'?s on my mind|handoff)\b/i,
+  /\bwhat'?s on my mind\b/i,
+  /\bdon'?t hand (?:the )?steering wheel back\b/i,
+  /\bcarry the thread forward declaratively\b/i,
+  /\bstop ending with questions\b/i,
+  /\bavoid reflexive handoff\b/i,
+  /\bstop checking in\b/i,
+  /\bcarry (?:the )?thread forward\b/i,
+  /\bno what'?s next\b/i,
+  /\byou'?re killing the mood\b/i
+];
+
+export const RAW_LAB_NO_HANDOFF_STEERING_LABELS = [
+  "avoid reflexive handoff questions",
+  "carry the thread forward declaratively"
+] as const;
+
+export const RAW_LAB_NO_HANDOFF_DO_NOT_REPEAT_PHRASES = [
+  "what's next?",
+  "what's on your mind?",
+  "your move?",
+  "ready to dive in?"
+] as const;
+
+export type RawLabNoHandoffSteeringCapture = {
+  userSteering: string[];
+  doNotRepeat: string[];
+  isSteeringOnly: boolean;
+};
+
+export function detectRawLabNoHandoffSteering(userMessage: string): RawLabNoHandoffSteeringCapture {
+  const trimmed = userMessage.trim();
+  if (!trimmed || containsSensitiveInference(trimmed)) {
+    return { userSteering: [], doNotRepeat: [], isSteeringOnly: false };
+  }
+  const matched = RAW_LAB_NO_HANDOFF_STEERING_SIGNAL_PATTERNS.some((pattern) =>
+    pattern.test(trimmed)
+  );
+  if (!matched) {
+    return { userSteering: [], doNotRepeat: [], isSteeringOnly: false };
+  }
+  return {
+    userSteering: [...RAW_LAB_NO_HANDOFF_STEERING_LABELS],
+    doNotRepeat: [...RAW_LAB_NO_HANDOFF_DO_NOT_REPEAT_PHRASES],
+    isSteeringOnly: true
+  };
+}
+
+function isOpenLoopFromSteeringOnlyMessage(loop: string, userMessage: string): boolean {
+  const loopNorm = normalizeMemoryKey(loop);
+  const msgNorm = normalizeMemoryKey(userMessage);
+  if (!loopNorm || !msgNorm) {
+    return false;
+  }
+  const prefixLen = Math.min(loopNorm.length, msgNorm.length, 64);
+  return (
+    loopNorm.startsWith(msgNorm.slice(0, prefixLen)) ||
+    msgNorm.startsWith(loopNorm.slice(0, prefixLen))
+  );
+}
+
 const PROVISIONAL_STANCE_PATTERNS = [
   /\bi think(?: that)?\s+([^.!?\n]{12,180})/i,
   /\bmaybe\s+([^.!?\n]{12,180})/i,
@@ -411,14 +476,20 @@ export function toWireSmartCompactedContext(
 
 export function toWireThreadState(state: RawLabThreadState): RawLabWireThreadState {
   const shared = toWireChatHarnessThreadState(state);
+  const wireMemory = buildWireThreadMemoryState(state);
   return {
     ...shared,
-    tone_preferences: state.userSteering,
-    recurring_topics: state.recurringTopics,
-    current_vibe: compactText(state.currentVibe, RAW_LAB_MAX_CURRENT_VIBE_CHARS),
-    provisional_stances: state.provisionalStances,
-    self_observations: state.selfObservations,
-    questions_to_revisit: state.questionsToRevisit,
+    pinned_facts: wireMemory.pinnedFacts,
+    decisions: wireMemory.decisions,
+    open_loops: wireMemory.openLoops,
+    user_steering: wireMemory.userSteering,
+    do_not_repeat: wireMemory.doNotRepeat,
+    tone_preferences: wireMemory.userSteering,
+    recurring_topics: wireMemory.recurringTopics,
+    current_vibe: wireMemory.currentVibe,
+    provisional_stances: wireMemory.provisionalStances,
+    self_observations: wireMemory.selfObservations,
+    questions_to_revisit: wireMemory.questionsToRevisit,
     smart_compacted_context: toWireSmartCompactedContext(
       state.smartCompactedContext ?? createEmptyRawLabSmartCompactedContext()
     ),
@@ -877,11 +948,15 @@ export function setCurrentVibe(state: RawLabThreadState, vibe: string): RawLabTh
 }
 
 export function addProvisionalStance(state: RawLabThreadState, stance: string): RawLabThreadState {
+  const sanitized = sanitizeRawLabMemoryProposal(stance, "provisionalStance");
+  if (!sanitized) {
+    return state;
+  }
   return {
     ...state,
     provisionalStances: appendCappedUnique(
       state.provisionalStances,
-      stance,
+      sanitized,
       RAW_LAB_MAX_PROVISIONAL_STANCES,
       180
     ),
@@ -893,11 +968,15 @@ export function addSelfObservation(
   state: RawLabThreadState,
   observation: string
 ): RawLabThreadState {
+  const sanitized = sanitizeRawLabMemoryProposal(observation, "selfObservation");
+  if (!sanitized) {
+    return state;
+  }
   return {
     ...state,
     selfObservations: appendCappedUnique(
       state.selfObservations,
-      observation,
+      sanitized,
       RAW_LAB_MAX_SELF_OBSERVATIONS,
       180
     ),
@@ -909,11 +988,17 @@ export function addQuestionToRevisit(
   state: RawLabThreadState,
   question: string
 ): RawLabThreadState {
+  const distilled = distillQuestionToRevisit(question, {
+    recurringTopics: state.recurringTopics
+  });
+  if (!distilled) {
+    return state;
+  }
   return {
     ...state,
     questionsToRevisit: appendCappedUnique(
       state.questionsToRevisit,
-      question,
+      distilled,
       RAW_LAB_MAX_QUESTIONS_TO_REVISIT,
       180
     ),
@@ -992,7 +1077,8 @@ export function updateRawLabThreadStateAfterTurn(args: {
     userMessage: args.userMessage,
     assistantAnswer: args.assistantAnswer,
     turns: chatTurns,
-    now
+    now,
+    deriveDoNotRepeatFromAssistant: false
   });
 
   let next: RawLabThreadState = {
@@ -1011,6 +1097,22 @@ export function updateRawLabThreadStateAfterTurn(args: {
   const recentUserTexts = userTurnTexts(args.turns.slice(-RAW_LAB_PERSONALITY_TURN_SCAN_COUNT));
 
   if (!containsSensitiveInference(userMessage)) {
+    const noHandoffSteering = detectRawLabNoHandoffSteering(userMessage);
+    for (const steering of noHandoffSteering.userSteering) {
+      next = addUserSteering(next, steering);
+    }
+    for (const phrase of noHandoffSteering.doNotRepeat) {
+      next = addDoNotRepeat(next, phrase);
+    }
+    if (noHandoffSteering.isSteeringOnly) {
+      next = {
+        ...next,
+        openLoops: next.openLoops.filter(
+          (loop) => !isOpenLoopFromSteeringOnlyMessage(loop, userMessage)
+        )
+      };
+    }
+
     for (const snippet of detectDoNotRepeatCommands(userMessage)) {
       next = addDoNotRepeat(next, snippet);
     }
@@ -1046,7 +1148,7 @@ export function updateRawLabThreadStateAfterTurn(args: {
     next = addQuestionToRevisit(next, userMessage);
   }
 
-  return { ...next, updatedAt: now };
+  return sanitizeRawLabThreadMemoryFields({ ...next, updatedAt: now });
 }
 
 export function pinFact(state: RawLabThreadState, text: string): RawLabThreadState {
@@ -1054,25 +1156,37 @@ export function pinFact(state: RawLabThreadState, text: string): RawLabThreadSta
 }
 
 export function addDoNotRepeat(state: RawLabThreadState, text: string): RawLabThreadState {
+  const sanitized = sanitizeRawLabMemoryProposal(text, "doNotRepeat");
+  if (!sanitized) {
+    return state;
+  }
   return {
     ...state,
-    doNotRepeat: appendCappedUnique(state.doNotRepeat, text, RAW_LAB_MAX_DO_NOT_REPEAT),
+    doNotRepeat: appendCappedUnique(state.doNotRepeat, sanitized, RAW_LAB_MAX_DO_NOT_REPEAT),
     updatedAt: new Date().toISOString()
   };
 }
 
 export function addUserSteering(state: RawLabThreadState, text: string): RawLabThreadState {
+  const sanitized = sanitizeRawLabMemoryProposal(text, "userSteering");
+  if (!sanitized) {
+    return state;
+  }
   return {
     ...state,
-    userSteering: appendCappedUnique(state.userSteering, text, MAX_USER_STEERING, 120),
+    userSteering: appendCappedUnique(state.userSteering, sanitized, MAX_USER_STEERING, 120),
     updatedAt: new Date().toISOString()
   };
 }
 
 export function addOpenLoop(state: RawLabThreadState, text: string): RawLabThreadState {
+  const distilled = distillOpenLoop(text, { recurringTopics: state.recurringTopics });
+  if (!distilled) {
+    return state;
+  }
   return {
     ...state,
-    openLoops: appendCappedUnique(state.openLoops, text, RAW_LAB_MAX_OPEN_LOOPS),
+    openLoops: appendCappedUnique(state.openLoops, distilled, RAW_LAB_MAX_OPEN_LOOPS),
     updatedAt: new Date().toISOString()
   };
 }
@@ -1150,6 +1264,215 @@ export type RawLabMemoryItemKind =
   | "decision";
 
 export const RAW_LAB_DISPLAY_MEMORY_MAX_CHARS = 180;
+export const RAW_LAB_WIRE_MEMORY_MAX_CHARS = 160;
+
+export type DistillOpenLoopContext = {
+  recurringTopics?: string[];
+};
+
+const THIN_VAGUE_OPEN_LOOP_PATTERNS = [
+  /^can you make it better/i,
+  /^make it better/i,
+  /^can you\b/i,
+  /^what about\b/i,
+  /^how about\b/i
+];
+
+const ALIVE_PERSONA_OPEN_LOOP_RE =
+  /\b(alive|persona|entity|visible state|feel alive|feel more alive)\b/i;
+
+const SUBSTANTIVE_OPEN_LOOP_RE =
+  /\b(whether|how (does|should|do|can|would)|should feel|instead of|through|versus|vs\.?)\b/i;
+
+export function isSubstantiveOpenLoop(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length >= 72) {
+    return true;
+  }
+  return SUBSTANTIVE_OPEN_LOOP_RE.test(trimmed);
+}
+
+export function isThinVagueOpenLoop(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || isSubstantiveOpenLoop(trimmed)) {
+    return false;
+  }
+  if (THIN_VAGUE_OPEN_LOOP_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return true;
+  }
+  if (trimmed.split(/\s+/).length <= 5 && OPEN_LOOP_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return true;
+  }
+  return trimmed.length < 40;
+}
+
+function distillThinOpenLoop(trimmed: string, context: DistillOpenLoopContext): string {
+  if (ALIVE_PERSONA_OPEN_LOOP_RE.test(trimmed)) {
+    return compactText(
+      "Still circling whether Raw Lab should feel alive through visible state or stronger persona prompting.",
+      RAW_LAB_DISPLAY_MEMORY_MAX_CHARS
+    );
+  }
+  const topic = context.recurringTopics?.[0];
+  if (topic) {
+    return compactText(`Still circling ${topic} in this thread.`, RAW_LAB_DISPLAY_MEMORY_MAX_CHARS);
+  }
+  return compactText(
+    "Still circling an unresolved direction in this thread.",
+    RAW_LAB_DISPLAY_MEMORY_MAX_CHARS
+  );
+}
+
+export function distillOpenLoop(
+  text: string,
+  context: DistillOpenLoopContext = {}
+): string | null {
+  const trimmed = text.trim();
+  if (!trimmed || isNoisyRawLabAssistantSnippet(trimmed)) {
+    return null;
+  }
+  if (isThinVagueOpenLoop(trimmed)) {
+    return distillThinOpenLoop(trimmed, context);
+  }
+  return compactText(trimmed, RAW_LAB_DISPLAY_MEMORY_MAX_CHARS);
+}
+
+export function distillQuestionToRevisit(
+  text: string,
+  context: DistillOpenLoopContext = {}
+): string | null {
+  const trimmed = text.trim();
+  if (!trimmed || isNoisyRawLabAssistantSnippet(trimmed)) {
+    return null;
+  }
+  if (isRawUserQuestionMemory(trimmed)) {
+    return null;
+  }
+  if (THREAD_CIRCLING_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return compactText(trimmed, RAW_LAB_DISPLAY_MEMORY_MAX_CHARS);
+  }
+  if (isThinVagueOpenLoop(trimmed)) {
+    return distillThinOpenLoop(trimmed, context);
+  }
+  return compactText(trimmed, RAW_LAB_DISPLAY_MEMORY_MAX_CHARS);
+}
+
+function dedupeMemoryItems(items: string[], max: number): string[] {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const item of items) {
+    const key = normalizeMemoryKey(item);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(item);
+    if (deduped.length >= max) {
+      break;
+    }
+  }
+  return deduped;
+}
+
+function sanitizeRawLabThreadMemoryFields(state: RawLabThreadState): RawLabThreadState {
+  const context: DistillOpenLoopContext = { recurringTopics: state.recurringTopics };
+
+  const openLoops = dedupeMemoryItems(
+    state.openLoops
+      .map((loop) => distillOpenLoop(loop, context))
+      .filter((loop): loop is string => Boolean(loop)),
+    RAW_LAB_MAX_OPEN_LOOPS
+  );
+
+  const questionsToRevisit = dedupeMemoryItems(
+    state.questionsToRevisit
+      .map((question) => distillQuestionToRevisit(question, context))
+      .filter((question): question is string => Boolean(question)),
+    RAW_LAB_MAX_QUESTIONS_TO_REVISIT
+  );
+
+  const doNotRepeat = dedupeMemoryItems(
+    state.doNotRepeat
+      .map((item) => sanitizeRawLabMemoryProposal(item, "doNotRepeat"))
+      .filter((item): item is string => Boolean(item)),
+    RAW_LAB_MAX_DO_NOT_REPEAT
+  );
+
+  const userSteering = dedupeMemoryItems(
+    state.userSteering
+      .map((item) => sanitizeRawLabMemoryProposal(item, "userSteering"))
+      .filter((item): item is string => Boolean(item)),
+    MAX_USER_STEERING
+  );
+
+  const provisionalStances = dedupeMemoryItems(
+    state.provisionalStances
+      .map((item) => sanitizeRawLabMemoryProposal(item, "provisionalStance"))
+      .filter((item): item is string => Boolean(item)),
+    RAW_LAB_MAX_PROVISIONAL_STANCES
+  );
+
+  const selfObservations = dedupeMemoryItems(
+    state.selfObservations
+      .map((item) => sanitizeRawLabMemoryProposal(item, "selfObservation"))
+      .filter((item): item is string => Boolean(item)),
+    RAW_LAB_MAX_SELF_OBSERVATIONS
+  );
+
+  const currentVibe = rebuildSanitizedCurrentVibe(state, userSteering);
+
+  return {
+    ...state,
+    openLoops,
+    questionsToRevisit,
+    doNotRepeat,
+    userSteering,
+    provisionalStances,
+    selfObservations,
+    currentVibe
+  };
+}
+
+function rebuildSanitizedCurrentVibe(
+  state: RawLabThreadState,
+  userSteering: string[]
+): string {
+  const rebuilt = buildCurrentVibe({
+    userSteering,
+    recurringTopics: state.recurringTopics,
+    personality: state.personality
+  });
+  if (rebuilt) {
+    return rebuilt;
+  }
+  const stripped = stripFillerFragmentsFromVibe(state.currentVibe);
+  if (!stripped || isNoisyRawLabAssistantSnippet(stripped)) {
+    return "";
+  }
+  return compactText(stripped, RAW_LAB_MAX_CURRENT_VIBE_CHARS);
+}
+
+function stripFillerFragmentsFromVibe(vibe: string): string {
+  let cleaned = vibe.trim();
+  if (!cleaned) {
+    return "";
+  }
+  const fillerFragments = [
+    /\bi hear you\b[^.;]*/gi,
+    /\bgot it\b[^.;]*/gi,
+    /\bthat'?s valid\b[^.;]*/gi,
+    /\byou'?re absolutely right\b[^.;]*/gi
+  ];
+  for (const pattern of fillerFragments) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+  return cleaned
+    .replace(/\s*,\s*,/g, ",")
+    .replace(/\s{2,}/g, " ")
+    .replace(/;\s*;/g, ";")
+    .replace(/\.\s*\./g, ".")
+    .trim();
+}
 
 const RAW_ASSISTANT_OPENER_PATTERNS = [
   /^got it\b/i,
@@ -1160,7 +1483,10 @@ const RAW_ASSISTANT_OPENER_PATTERNS = [
   /^i'?m glad\b/i,
   /^happy to help\b/i,
   /^let'?s dive in\b/i,
-  /^i'?ll help\b/i
+  /^i'?ll help\b/i,
+  /^i hear you\b/i,
+  /^that'?s valid\b/i,
+  /^you'?re absolutely right\b/i
 ];
 
 const RAW_ASSISTANT_HANDOFF_ECHO_PATTERNS = [
@@ -1356,7 +1682,8 @@ function shouldRejectMemoryItem(text: string, kind: RawLabMemoryItemKind): boole
 
 export function filterDisplayThreadMemoryItems(
   items: string[],
-  kind: RawLabMemoryItemKind = "selfObservation"
+  kind: RawLabMemoryItemKind = "selfObservation",
+  context: DistillOpenLoopContext = {}
 ): string[] {
   const seen = new Set<string>();
   const filtered: string[] = [];
@@ -1367,7 +1694,11 @@ export function filterDisplayThreadMemoryItems(
     const normalized =
       kind === "provisionalStance"
         ? normalizeProvisionalStance(item)
-        : normalizeRawLabMemoryItem(item, kind);
+        : kind === "openLoop"
+          ? distillOpenLoop(item, context)
+          : kind === "questionToRevisit"
+            ? distillQuestionToRevisit(item, context)
+            : normalizeRawLabMemoryItem(item, kind);
     if (!normalized) {
       continue;
     }
@@ -1398,6 +1729,7 @@ export type RawLabDisplayThreadMemoryState = Pick<
 export function buildDisplayThreadMemoryState(
   state: RawLabThreadState
 ): RawLabDisplayThreadMemoryState {
+  const context: DistillOpenLoopContext = { recurringTopics: state.recurringTopics };
   return {
     userSteering: filterDisplayThreadMemoryItems(state.userSteering, "userSteering"),
     doNotRepeat: filterDisplayThreadMemoryItems(state.doNotRepeat, "doNotRepeat"),
@@ -1409,7 +1741,7 @@ export function buildDisplayThreadMemoryState(
       state.selfObservations,
       "selfObservation"
     ),
-    openLoops: filterDisplayThreadMemoryItems(state.openLoops, "openLoop"),
+    openLoops: filterDisplayThreadMemoryItems(state.openLoops, "openLoop", context),
     recurringTopics: filterDisplayThreadMemoryItems(state.recurringTopics, "recurringTopic"),
     currentVibe: filterDisplayThreadMemoryItems(
       state.currentVibe ? [state.currentVibe] : [],
@@ -1417,10 +1749,77 @@ export function buildDisplayThreadMemoryState(
     ).join(""),
     questionsToRevisit: filterDisplayThreadMemoryItems(
       state.questionsToRevisit,
-      "questionToRevisit"
+      "questionToRevisit",
+      context
     ),
     pinnedFacts: filterDisplayThreadMemoryItems(state.pinnedFacts, "pinnedFact"),
     decisions: filterDisplayThreadMemoryItems(state.decisions, "decision")
+  };
+}
+
+export type RawLabWireThreadMemoryState = {
+  pinnedFacts: string[];
+  decisions: string[];
+  openLoops: string[];
+  userSteering: string[];
+  doNotRepeat: string[];
+  recurringTopics: string[];
+  currentVibe: string;
+  provisionalStances: string[];
+  selfObservations: string[];
+  questionsToRevisit: string[];
+};
+
+function wirePrefix(item: string, prefix: string, maxChars = RAW_LAB_WIRE_MEMORY_MAX_CHARS): string {
+  const trimmedPrefix = prefix.trim();
+  if (item.toLowerCase().startsWith(trimmedPrefix.toLowerCase())) {
+    return compactText(item, maxChars);
+  }
+  return compactText(`${prefix}${item}`, maxChars);
+}
+
+function buildWireMemoryList(
+  items: string[],
+  kind: RawLabMemoryItemKind,
+  context: DistillOpenLoopContext,
+  prefix?: string
+): string[] {
+  const filtered = filterDisplayThreadMemoryItems(items, kind, context);
+  if (!prefix) {
+    return filtered.map((item) => compactText(item, RAW_LAB_WIRE_MEMORY_MAX_CHARS));
+  }
+  return filtered.map((item) => wirePrefix(item, prefix));
+}
+
+export function buildWireThreadMemoryState(state: RawLabThreadState): RawLabWireThreadMemoryState {
+  const context: DistillOpenLoopContext = { recurringTopics: state.recurringTopics };
+  const currentVibe = filterDisplayThreadMemoryItems(
+    state.currentVibe ? [state.currentVibe] : [],
+    "currentVibe"
+  ).join("");
+
+  return {
+    pinnedFacts: buildWireMemoryList(state.pinnedFacts, "pinnedFact", context),
+    decisions: buildWireMemoryList(state.decisions, "decision", context),
+    openLoops: buildWireMemoryList(state.openLoops, "openLoop", context, "Still circling: "),
+    userSteering: buildWireMemoryList(state.userSteering, "userSteering", context, "Steering: "),
+    doNotRepeat: buildWireMemoryList(state.doNotRepeat, "doNotRepeat", context, "Do not repeat: "),
+    recurringTopics: buildWireMemoryList(state.recurringTopics, "recurringTopic", context),
+    currentVibe: currentVibe
+      ? compactText(currentVibe, RAW_LAB_MAX_CURRENT_VIBE_CHARS)
+      : "",
+    provisionalStances: buildWireMemoryList(
+      state.provisionalStances,
+      "provisionalStance",
+      context
+    ),
+    selfObservations: buildWireMemoryList(state.selfObservations, "selfObservation", context),
+    questionsToRevisit: buildWireMemoryList(
+      state.questionsToRevisit,
+      "questionToRevisit",
+      context,
+      "Revisit: "
+    )
   };
 }
 

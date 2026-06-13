@@ -268,7 +268,29 @@ def test_raw_lab_thread_reflection_rejects_malformed_exploring_stance(client):
     assert "you're dumb" not in joined
 
 
-def test_raw_lab_thread_reflection_fails_soft_for_unsupported_provider(monkeypatch, client):
+def test_raw_lab_thread_reflection_distills_thin_open_loops_to_revisit(client):
+    response = client.post(
+        "/raw-lab/reflect-thread",
+        json={
+            "recent_turns": [
+                {"role": "user", "content": "can you make it better"},
+            ],
+            "thread_state": {
+                "open_loops": ["can you make it better"],
+                "recurring_topics": ["identity/personality"],
+            },
+            "companion_self_memories": [],
+        },
+    )
+    assert response.status_code == 200
+    parsed = RawLabThreadReflectionResponse.model_validate(response.json())
+    joined = " ".join(parsed.proposals.questions_to_revisit).lower()
+    assert parsed.proposals.questions_to_revisit
+    assert "can you make it better" not in joined
+    assert "still circling" in joined
+
+
+def test_raw_lab_thread_reflection_falls_back_to_mock_for_unsupported_provider(monkeypatch, client):
     class MinimalProvider:
         name = "minimal"
 
@@ -279,6 +301,5 @@ def test_raw_lab_thread_reflection_fails_soft_for_unsupported_provider(monkeypat
     )
     assert response.status_code == 200
     parsed = RawLabThreadReflectionResponse.model_validate(response.json())
-    assert parsed.proposals.self_observations == []
     assert parsed.used_context is False
-    assert "unavailable" in parsed.safety_notes[0].lower()
+    assert parsed.safety_notes == []

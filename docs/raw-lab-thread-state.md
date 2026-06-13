@@ -24,7 +24,9 @@ When the user asks what memories, tools, or capabilities Raw Lab has, answers sh
 
 ## Thread memory vs personality
 
-**Thread memory** (`recent_digest`, pinned facts, decisions, open loops, tone preferences, do-not-repeat) tracks what the conversation is about and what to avoid repeating.
+**Thread memory** (`recent_digest`, pinned facts, decisions, open loops, tone preferences, do-not-repeat, provisional stances, self-observations, questions to revisit) tracks distilled interpretation of what the conversation is about and what to avoid repeating.
+
+**Raw transcript vs thread mind:** `recent_turns` and `recent_digest` stay raw/extractive. Thread mind list fields and wire `thread_state` lists are **distilled** (tension, steering, loops — not chat filler). See `docs/raw-lab-p1-thread-mind-distillation.md`.
 
 **Personality** (`thread_state.personality`) tracks temporary conversational style: voice traits, instincts, recurring interests, what the user responds well to or dislikes, current stance, and growth notes.
 

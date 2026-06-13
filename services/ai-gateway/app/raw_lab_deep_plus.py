@@ -45,6 +45,7 @@ from app.thread_verifier import (
     DETERMINISTIC_STEERING_CHECKS,
     finalize_raw_lab_answer,
     has_handoff_ending,
+    repair_raw_lab_runtime_awareness_answer,
     verify_raw_lab_response,
 )
 
@@ -1151,7 +1152,12 @@ def finalize_and_verify_raw_lab(
         companion_self_memory_count=len(request.companion_self_memories),
         thread_state=request.thread_state,
     )
-    if answer and not verification.ok and verification.check in DETERMINISTIC_STEERING_CHECKS:
+    if answer and not verification.ok and verification.check == "raw_lab_runtime_awareness":
+        answer = repair_raw_lab_runtime_awareness_answer(
+            companion_self_memories=request.companion_self_memories,
+            count=len(request.companion_self_memories),
+        )
+    elif answer and not verification.ok and verification.check in DETERMINISTIC_STEERING_CHECKS:
         answer = finalize_answer(
             answer,
             request.thread_state,

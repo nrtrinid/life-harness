@@ -50,6 +50,15 @@ _RAW_LAB_CAPABILITY_QUESTION_RE = re.compile(
 _RAW_LAB_TOTAL_MEMORY_DENIAL_PATTERNS = [
     re.compile(r"\b(?:i have )?no memories? at all\b", re.IGNORECASE),
     re.compile(r"\bi don'?t have (?:any )?memories?\b", re.IGNORECASE),
+    re.compile(
+        r"\bi don'?t have access to (?:your |any )?(?:personal )?(?:memories?|data|history)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bno access to (?:your |any )?(?:personal )?(?:memories?|data|history)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bi don'?t have (?:any )?(?:private )?(?:data|history)\b", re.IGNORECASE),
     re.compile(r"\bi have zero (?:memories?|memory)\b", re.IGNORECASE),
     re.compile(r"\bno memory access\b", re.IGNORECASE),
 ]
@@ -67,7 +76,61 @@ _RAW_LAB_RUNTIME_AWARENESS_REPAIR = (
     "hidden memory, board memory, Memory Bank, tools, files, and internet access."
 )
 
-DETERMINISTIC_STEERING_CHECKS = frozenset({"raw_lab_handoff_ending", "raw_lab_line_breaks"})
+_UNICODE_APOSTROPHE_VARIANTS = str.maketrans(
+    {
+        "\u2018": "'",  # LEFT SINGLE QUOTATION MARK
+        "\u2019": "'",  # RIGHT SINGLE QUOTATION MARK
+        "\u02bc": "'",  # MODIFIER LETTER APOSTROPHE
+        "\uff07": "'",  # FULLWIDTH APOSTROPHE
+        "\u201c": '"',  # LEFT DOUBLE QUOTATION MARK
+        "\u201d": '"',  # RIGHT DOUBLE QUOTATION MARK
+    }
+)
+
+
+def normalize_verifier_match_text(text: str) -> str:
+    """Normalize Unicode quote/apostrophe variants for verifier pattern matching only."""
+    return text.translate(_UNICODE_APOSTROPHE_VARIANTS)
+
+
+def _companion_self_memory_text(memory: object) -> str:
+    if isinstance(memory, dict):
+        return str(memory.get("text", ""))
+    return str(getattr(memory, "text", ""))
+
+
+def repair_raw_lab_runtime_awareness_answer(
+    *,
+    companion_self_memories: list,
+    count: int,
+) -> str:
+    if count > 0:
+        memory_lines = "\n".join(
+            f"- {_companion_self_memory_text(memory)}"
+            for memory in companion_self_memories[:6]
+        )
+        return (
+            f"I have {count} approved Companion Self-Memor"
+            f"{'y' if count == 1 else 'ies'} in this request — visible, user-approved "
+            "persona notes for Raw Lab only. They are not Memory Bank, board memory, or "
+            f"hidden memory:\n{memory_lines}\n"
+            "I do not have files, internet, shell tools, board context, or real-world actions."
+        )
+    return (
+        "Raw Lab only has this chat's recent turns and temporary thread_state in this "
+        "request — no board, Memory Bank, files, internet, or hidden memory."
+    )
+
+_RAW_LAB_ARTIFACT_TERMINAL_PERMISSION_REASK_REPAIR = (
+    "Remove the trailing permission re-ask. Preserve the delivered artifact/plan/code "
+    "and end declaratively with the next concrete continuation if needed."
+)
+
+DETERMINISTIC_STEERING_CHECKS = frozenset({
+    "raw_lab_handoff_ending",
+    "raw_lab_line_breaks",
+    "raw_lab_artifact_terminal_permission_reask",
+})
 
 _NO_HANDOFF_STEERING_MARKERS = (
     "avoid reflexive handoff",
@@ -629,12 +692,14 @@ def _raw_lab_runtime_awareness_failure(
     if not _RAW_LAB_CAPABILITY_QUESTION_RE.search(user_message):
         return False
 
+    normalized_answer = normalize_verifier_match_text(answer)
+
     if companion_self_memory_count > 0 and any(
-        pattern.search(answer) for pattern in _RAW_LAB_TOTAL_MEMORY_DENIAL_PATTERNS
+        pattern.search(normalized_answer) for pattern in _RAW_LAB_TOTAL_MEMORY_DENIAL_PATTERNS
     ):
         return True
 
-    return any(pattern.search(answer) for pattern in _RAW_LAB_TOOL_ACCESS_PATTERNS)
+    return any(pattern.search(normalized_answer) for pattern in _RAW_LAB_TOOL_ACCESS_PATTERNS)
 
 
 def verify_raw_lab_response(
@@ -752,6 +817,23 @@ def verify_raw_lab_response(
             ok=False,
             check="raw_lab_runtime_awareness",
             repair_instruction=_RAW_LAB_RUNTIME_AWARENESS_REPAIR,
+        )
+
+    from app.raw_lab_utils import (
+        has_trailing_artifact_permission_reask,
+        should_strip_trailing_artifact_permission_reask,
+    )
+
+    if should_strip_trailing_artifact_permission_reask(
+        answer,
+        user_message=user_message,
+        recent_turns=conversation_history,
+        thread_state=thread_state,
+    ) and has_trailing_artifact_permission_reask(answer):
+        return VerificationResult(
+            ok=False,
+            check="raw_lab_artifact_terminal_permission_reask",
+            repair_instruction=_RAW_LAB_ARTIFACT_TERMINAL_PERMISSION_REASK_REPAIR,
         )
 
     return VerificationResult(ok=True, check="ok")

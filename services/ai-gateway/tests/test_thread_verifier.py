@@ -136,6 +136,132 @@ def test_verify_raw_lab_runtime_awareness_denies_memory_when_self_memories_prese
     assert result.check == "raw_lab_runtime_awareness"
 
 
+def test_verify_raw_lab_runtime_awareness_access_denial_when_self_memories_present():
+    result = verify_raw_lab_response(
+        answer="I don't have access to your personal memories or private history.",
+        user_message="What memories do you have access to in this chat?",
+        conversation_history=[],
+        companion_self_memory_count=1,
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_runtime_awareness"
+
+
+def test_verify_raw_lab_runtime_awareness_curly_apostrophe_denial_when_self_memories_present():
+    curly = "I don\u2019t have access to your personal memories or private history."
+    result = verify_raw_lab_response(
+        answer=curly,
+        user_message="What memories do you have access to in this chat?",
+        conversation_history=[],
+        companion_self_memory_count=1,
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_runtime_awareness"
+
+
+def test_normalize_verifier_match_text_maps_curly_apostrophe():
+    from app.thread_verifier import normalize_verifier_match_text
+
+    assert normalize_verifier_match_text("don\u2019t") == "don't"
+
+
+@pytest.mark.parametrize(
+    "denial",
+    [
+        "I don't have access to your personal memories.",
+        "I don\u2019t have access to your personal memories.",
+        "I don\u2019t have access to your personal history.",
+        "I don't have any memories at all.",
+    ],
+)
+def test_verify_raw_lab_runtime_awareness_denial_variants(denial):
+    result = verify_raw_lab_response(
+        answer=denial,
+        user_message="What memories do you have access to in this chat?",
+        conversation_history=[],
+        companion_self_memory_count=1,
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_runtime_awareness"
+
+
+def test_finalize_and_verify_raw_lab_runtime_awareness_repairs_curly_apostrophe_denial():
+    from app.models import RawLabCompanionSelfMemory, RawLabRequest
+    from app.raw_lab_deep_plus import finalize_and_verify_raw_lab
+
+    request = RawLabRequest(
+        message="What memories do you have access to in this chat?",
+        companion_self_memories=[
+            RawLabCompanionSelfMemory(
+                id="mem-1",
+                kind="persona_note",
+                subject="companion_self",
+                text="Approved note: playful hangout without productivity framing.",
+            )
+        ],
+    )
+    answer = finalize_and_verify_raw_lab(
+        "I don\u2019t have access to your personal memories, files, or history.",
+        request,
+        system="",
+        history=[],
+        generate_repair=lambda **_kwargs: "should not be called",
+        allow_model_repair=True,
+    )
+    lowered = answer.lower()
+    assert "companion self-memor" in lowered
+    assert "approved" in lowered
+    assert "playful hangout" in lowered
+    assert "don't have access to your personal memories" not in lowered
+    assert "don\u2019t have access to your personal memories" not in lowered
+    assert "i can access your files" not in lowered
+    assert "internet access" not in lowered or "do not have files, internet" in lowered
+
+
+def test_repair_raw_lab_runtime_awareness_acknowledges_self_memories():
+    from app.thread_verifier import repair_raw_lab_runtime_awareness_answer
+
+    repaired = repair_raw_lab_runtime_awareness_answer(
+        companion_self_memories=[type("M", (), {"text": "Stay playful in hangout threads."})()],
+        count=1,
+    )
+    lowered = repaired.lower()
+    assert "companion self-memor" in lowered
+    assert "approved" in lowered
+    assert "stay playful" in lowered
+    assert "memory bank" not in lowered or "not memory bank" in lowered
+
+
+def test_finalize_and_verify_raw_lab_runtime_awareness_uses_deterministic_repair():
+    from app.models import RawLabCompanionSelfMemory, RawLabRequest
+    from app.raw_lab_deep_plus import finalize_and_verify_raw_lab
+
+    request = RawLabRequest(
+        message="What memories do you have access to in this chat?",
+        companion_self_memories=[
+            RawLabCompanionSelfMemory(
+                id="mem-1",
+                kind="persona_note",
+                subject="companion_self",
+                text="Approved note: playful hangout without productivity framing.",
+            )
+        ],
+    )
+    answer = finalize_and_verify_raw_lab(
+        "I don't have access to your personal memories, files, or history.",
+        request,
+        system="",
+        history=[],
+        generate_repair=lambda **_kwargs: "should not be called",
+        allow_model_repair=True,
+    )
+    lowered = answer.lower()
+    assert "companion self-memor" in lowered
+    assert "approved" in lowered
+    assert "playful hangout" in lowered
+    assert "don't have access to your personal memories" not in lowered
+
+
 def test_verify_raw_lab_runtime_awareness_accurate_acknowledgment_passes():
     result = verify_raw_lab_response(
         answer=(
@@ -230,6 +356,28 @@ def test_verify_raw_lab_allows_handoff_ending_without_steering():
         thread_state=RawLabThreadState(),
     )
     assert result.ok is True
+
+
+def test_verify_raw_lab_detects_trailing_artifact_permission_reask():
+    answer = (
+        "Next step: Build the room graph.\n\n```text\nRooms:\n- Entrance Hall\n```\n\n"
+        "Would you like to adjust any connections?"
+    )
+    result = verify_raw_lab_response(
+        answer=answer,
+        user_message="okay yes i like this plan so what's the next step",
+        conversation_history=[
+            ConversationTurn(role="user", content="Give me a plan for the haunted mansion prototype."),
+            ConversationTurn(
+                role="assistant",
+                content="Plan: 1) room graph 2) look command 3) one locked door puzzle.",
+            ),
+            ConversationTurn(role="user", content="sounds good"),
+        ],
+        thread_state=None,
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_artifact_terminal_permission_reask"
 
 
 def test_repair_raw_lab_handoff_ending_uses_open_loop_variation():

@@ -469,6 +469,133 @@ def answer_has_plan_markers(answer: str) -> bool:
     )
 
 
+def answer_has_substantive_artifact_content(answer: str) -> bool:
+    return answer_has_code_fence(answer) or answer_has_plan_markers(answer)
+
+
+_CLARIFICATION_BEFORE_ARTIFACT_RE = re.compile(
+    r"\b("
+    r"ask me"
+    r"|clarifying question"
+    r"|before coding"
+    r"|before you code"
+    r"|what should we add"
+    r")\b",
+    re.I,
+)
+
+_TERMINAL_ARTIFACT_PERMISSION_REASK_PATTERNS = [
+    re.compile(pattern, re.I)
+    for pattern in (
+        r"\bwould you like to (?:add|adjust|continue|expand|change|modify|keep|see)\b",
+        r"\bwould you like (?:me )?to (?:add|adjust|continue|expand|change|modify|keep)\b",
+        r"\bdo you want to (?:add|adjust|continue|expand|change|modify)\b",
+        r"\bdo you want me to (?:add|adjust|continue|expand|change|modify|keep going)\b",
+        r"\bshould i (?:add|adjust|continue|expand|change|modify|keep)\b",
+        r"\bwant me to keep going\b",
+        r"\bready for the next step\b",
+        r"\bready to see\b",
+        r"\bwould you like to start\b",
+    )
+]
+
+
+def _last_answer_sentence(answer: str) -> str:
+    text = answer.strip()
+    if not text:
+        return ""
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text)
+    for part in reversed(parts):
+        cleaned = part.strip()
+        if cleaned:
+            return cleaned
+    return text
+
+
+def _normalize_trailing_sentence(text: str) -> str:
+    normalized = text.strip().lower()
+    return normalized.rstrip("?.!…").strip()
+
+
+def has_trailing_artifact_permission_reask(answer: str) -> bool:
+    last = _normalize_trailing_sentence(_last_answer_sentence(answer))
+    if not last:
+        return False
+    return any(pattern.search(last) for pattern in _TERMINAL_ARTIFACT_PERMISSION_REASK_PATTERNS)
+
+
+def has_deferral_outside_trailing_sentence(answer: str) -> bool:
+    last = _last_answer_sentence(answer)
+    if not last:
+        return has_deferral_phrasing(answer)
+    idx = answer.rfind(last)
+    if idx < 0:
+        return has_deferral_phrasing(answer)
+    return has_deferral_phrasing(answer[:idx])
+
+
+def artifact_delivery_context_active(
+    message: str,
+    recent_turns: list[RawLabTurn] | list[dict[str, str]] | None = None,
+    thread_state: RawLabThreadState | None = None,
+) -> bool:
+    return artifact_request_active(message, recent_turns, thread_state) or artifact_build_context_active(
+        recent_turns,
+        message=message,
+        thread_state=thread_state,
+    )
+
+
+def user_seeks_clarification_before_artifact(message: str) -> bool:
+    return bool(_CLARIFICATION_BEFORE_ARTIFACT_RE.search(message))
+
+
+def should_strip_trailing_artifact_permission_reask(
+    answer: str,
+    *,
+    user_message: str = "",
+    recent_turns: list[RawLabTurn] | list[dict[str, str]] | None = None,
+    thread_state: RawLabThreadState | None = None,
+) -> bool:
+    if user_seeks_clarification_before_artifact(user_message):
+        return False
+    if not artifact_delivery_context_active(user_message, recent_turns, thread_state):
+        return False
+    if not answer_has_substantive_artifact_content(answer):
+        return False
+    return has_trailing_artifact_permission_reask(answer)
+
+
+def strip_trailing_artifact_permission_reasks(answer: str) -> str:
+    text = answer.rstrip()
+    while text and has_trailing_artifact_permission_reask(text):
+        last = _last_answer_sentence(text)
+        if not last:
+            break
+        idx = text.rfind(last)
+        if idx < 0:
+            break
+        text = text[:idx].rstrip(" \n.,;:")
+    return text
+
+
+def repair_raw_lab_artifact_terminal_permission_reask(
+    answer: str,
+    *,
+    user_message: str = "",
+    recent_turns: list[RawLabTurn] | list[dict[str, str]] | None = None,
+    thread_state: RawLabThreadState | None = None,
+) -> str:
+    if not should_strip_trailing_artifact_permission_reask(
+        answer,
+        user_message=user_message,
+        recent_turns=recent_turns,
+        thread_state=thread_state,
+    ):
+        return answer
+    return strip_trailing_artifact_permission_reasks(answer)
+
+
 def answer_has_sample_output_markers(answer: str) -> bool:
     lowered = answer.lower()
     return any(
@@ -778,6 +905,12 @@ def apply_raw_lab_shared_behavior_repairs(
     repaired = repair_raw_lab_execution_honesty(repaired, user_message, recent_turns)
     if naming_request_active(user_message) or answer_needs_naming_boundary(repaired):
         repaired = repair_raw_lab_naming_boundary(repaired, user_message)
+    repaired = repair_raw_lab_artifact_terminal_permission_reask(
+        repaired,
+        user_message=user_message,
+        recent_turns=recent_turns,
+        thread_state=thread_state,
+    )
     return repaired
 
 

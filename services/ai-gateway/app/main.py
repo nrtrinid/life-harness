@@ -329,9 +329,9 @@ def raw_lab_thread_reflection_endpoint(
     try:
         if hasattr(provider, "raw_lab_thread_reflection"):
             return provider.raw_lab_thread_reflection(request)
-        return RawLabThreadReflectionResponse(
-            safety_notes=["Thread reflection is unavailable for this provider; no changes proposed."]
-        )
+        from app.raw_lab_thread_reflection import mock_thread_reflection
+
+        return mock_thread_reflection(request)
     except (ProviderNotReadyError, ProviderParseError) as exc:
         return RawLabThreadReflectionResponse(
             safety_notes=[f"Thread reflection unavailable: {exc.message}"]

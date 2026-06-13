@@ -509,14 +509,23 @@ def _artifact_enforcement_active(payload: dict[str, Any]) -> bool:
 
 
 def check_raw_lab_anti_deferral(payload: dict[str, Any]) -> list[str]:
-    from app.raw_lab_utils import has_deferral_phrasing
+    from app.raw_lab_utils import (
+        answer_has_substantive_artifact_content,
+        has_deferral_outside_trailing_sentence,
+        has_deferral_phrasing,
+    )
 
     if not _artifact_enforcement_active(payload):
         return []
     issues: list[str] = []
     for answer in _raw_lab_answers(payload):
-        if has_deferral_phrasing(answer):
-            issues.append("answer defers with permission/check-in instead of producing artifact")
+        if not has_deferral_phrasing(answer):
+            continue
+        if answer_has_substantive_artifact_content(answer) and not has_deferral_outside_trailing_sentence(
+            answer
+        ):
+            continue
+        issues.append("answer defers with permission/check-in instead of producing artifact")
     return issues
 
 

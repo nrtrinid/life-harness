@@ -63,7 +63,11 @@ _RAW_ASSISTANT_ECHO_RE = re.compile(
     r"let'?s see where this goes|"
     r"i'?m all ears|"
     r"ready to see|"
-    r"what do you want me to do"
+    r"what do you want me to do|"
+    r"i hear you|"
+    r"that'?s valid|"
+    r"you'?re absolutely right|"
+    r"happy to help"
     r")\b",
     re.I,
 )
@@ -270,6 +274,64 @@ def _safe_provisional_stances(items: list[str]) -> list[str]:
     return safe
 
 
+_THIN_VAGUE_OPEN_LOOP_RE = re.compile(
+    r"^(can you make it better|make it better|can you\b|what about\b|how about\b)",
+    re.I,
+)
+
+_ALIVE_PERSONA_OPEN_LOOP_RE = re.compile(
+    r"\b(alive|persona|entity|visible state|feel alive|feel more alive)\b",
+    re.I,
+)
+
+_SUBSTANTIVE_OPEN_LOOP_RE = re.compile(
+    r"\b(whether|how (does|should|do|can|would)|should feel|instead of|through|versus|vs\.?)\b",
+    re.I,
+)
+
+
+def _is_substantive_open_loop(text: str) -> bool:
+    compact = text.strip()
+    if len(compact) >= 72:
+        return True
+    return bool(_SUBSTANTIVE_OPEN_LOOP_RE.search(compact))
+
+
+def _is_thin_vague_open_loop(text: str) -> bool:
+    compact = text.strip()
+    if not compact or _is_substantive_open_loop(compact):
+        return False
+    if _THIN_VAGUE_OPEN_LOOP_RE.search(compact):
+        return True
+    if len(compact.split()) <= 5 and re.search(
+        r"\b(we need|next|can we get|how would|still need|what about|can you)\b",
+        compact,
+        re.I,
+    ):
+        return True
+    return len(compact) < 40
+
+
+def _distill_open_loop_to_revisit(
+    loop: str,
+    *,
+    recurring_topics: list[str],
+) -> str | None:
+    compact = " ".join(loop.strip().split())
+    if not compact or _is_noisy_assistant_snippet(compact):
+        return None
+    if _is_thin_vague_open_loop(compact):
+        if _ALIVE_PERSONA_OPEN_LOOP_RE.search(compact):
+            return (
+                "Still circling whether Raw Lab should feel alive through visible state "
+                "or stronger persona prompting."
+            )
+        if recurring_topics:
+            return f"Still circling {recurring_topics[0]} in this thread."
+        return "Still circling an unresolved direction in this thread."
+    return compact[:220]
+
+
 def _safe_questions_to_revisit(items: list[str]) -> list[str]:
     safe: list[str] = []
     for item in items:
@@ -338,7 +400,12 @@ def mock_thread_reflection(
         )
 
     for loop in state.open_loops[:2]:
-        _append_unique(questions_to_revisit, loop)
+        distilled = _distill_open_loop_to_revisit(
+            loop,
+            recurring_topics=state.recurring_topics,
+        )
+        if distilled:
+            _append_unique(questions_to_revisit, distilled)
     for question in state.questions_to_revisit[:2]:
         _append_unique(questions_to_revisit, question)
     for user_message in recent_user[-4:]:

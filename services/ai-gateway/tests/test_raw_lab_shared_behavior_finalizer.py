@@ -158,3 +158,23 @@ def test_finalize_shared_behavior_repairs_idempotent():
     twice = apply_raw_lab_shared_behavior_repairs(once, user_message=message)
     assert once == twice
     assert once.count("can't actually run code inside Raw Lab") == 1
+
+
+def test_finalize_strips_trailing_artifact_permission_reask_idempotent():
+    message = "yes let's see how it looks"
+    recent_turns = [
+        {
+            "role": "user",
+            "content": "Let's make a haunted mansion text adventure with Kent and Elias.",
+        },
+        {"role": "assistant", "content": "I'll sketch rooms and exits."},
+    ]
+    answer = (
+        "Here's the skeleton:\n\n```python\nrooms = {}\nprint('Kent')\n```\n\n"
+        "Would you like to add more rooms?"
+    )
+    once = finalize_raw_lab_answer(answer, None, message, recent_turns=recent_turns)
+    twice = finalize_raw_lab_answer(once, None, message, recent_turns=recent_turns)
+    assert once == twice
+    assert "Would you like to add" not in once
+    assert "```python" in once
