@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createSeedState } from "../data/createSeedState";
 import { buildAiContextPacket } from "./contextPacketBuilder";
 import { toWireContextPacket } from "./contextPacketWire";
+import { UNTRUSTED_CONTEXT_BANNER } from "./untrustedContextBlock";
 
 const FIXED_NOW = new Date("2026-06-09T12:00:00.000Z");
 
@@ -38,6 +39,20 @@ describe("toWireContextPacket", () => {
     expect(wire.budget.estimated_chars).toBeTypeOf("number");
     expect(wire.redaction.request_sensitivity).toBe("S1");
     expect(wire.open_thread.wire.updated_at).toBeTypeOf("string");
+  });
+
+  it("maps untrusted blocks to wire markdown entries", () => {
+    const pasted = "Must have 5 years experience. ".repeat(20);
+    const packet = buildAiContextPacket({
+      data: createSeedState(FIXED_NOW.toISOString()),
+      userIntent: { message: pasted, mode: "general", sensitivity: "S1" },
+      now: FIXED_NOW
+    });
+    const wire = toWireContextPacket(packet);
+
+    expect(wire.untrusted_blocks?.length).toBeGreaterThan(0);
+    expect(wire.untrusted_blocks?.[0]?.markdown).toContain(UNTRUSTED_CONTEXT_BANNER);
+    expect(wire.untrusted_blocks?.[0]?.kind).toBe("pasted_text");
   });
 
   it("dump synthetic_context_packet.json when DUMP_CONTEXT_PACKET_FIXTURE=1", () => {

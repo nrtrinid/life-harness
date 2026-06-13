@@ -1,6 +1,7 @@
 import type { AiContextPacket, RankedSlice } from "./contextPacket";
 import type { WireChatHarnessThreadState } from "./chatThreadState";
 import type { HarnessContext } from "./harnessContext";
+import { renderUntrustedContextBlockMarkdown } from "./untrustedContextBlock";
 
 export type WireContextPacket = {
   packet_version: "0.1";
@@ -69,6 +70,7 @@ export type WireContextPacket = {
     denied: string[];
     notes: string[];
   };
+  untrusted_blocks?: WireUntrustedContextBlock[];
   budget: {
     estimated_chars: number;
     max_chars: number;
@@ -89,6 +91,14 @@ type WireRankedSlice = {
   rank: number;
   sensitivity: string;
   payload: Record<string, unknown>;
+};
+
+type WireUntrustedContextBlock = {
+  id: string;
+  kind: string;
+  title: string;
+  sensitivity: string;
+  markdown: string;
 };
 
 function mapRankedSlice<T extends Record<string, unknown>>(slice: RankedSlice<T>): WireRankedSlice {
@@ -189,6 +199,13 @@ export function toWireContextPacket(packet: AiContextPacket): WireContextPacket 
       denied: packet.tools.denied,
       notes: packet.tools.notes
     },
+    untrusted_blocks: packet.untrustedBlocks?.map((block) => ({
+      id: block.id,
+      kind: block.sourceKind,
+      title: block.title,
+      sensitivity: block.sensitivity,
+      markdown: renderUntrustedContextBlockMarkdown(block)
+    })),
     budget: {
       estimated_chars: packet.budget.estimatedChars,
       max_chars: packet.budget.maxChars,

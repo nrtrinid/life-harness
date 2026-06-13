@@ -56,6 +56,6 @@ describe("featureSprintRunnerHealth", () => {
     };
     expect(isRunnerAgentAvailable(probe, "cursor")).toBe(false);
     expect(guardRunnerAgentAvailability("cursor", probe)).toContain("Cursor runs are unavailable");
-    expect(buildRunnerAgentUnavailableHint("cursor", probe)).toContain("FEATURE_SPRINT_RUNNER_MODE=cursor");
+    expect(buildRunnerAgentUnavailableHint("cursor", probe)).toContain("Runner setup");
   });
 });

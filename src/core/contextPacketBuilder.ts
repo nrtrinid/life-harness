@@ -1,4 +1,13 @@
 import { buildAssistantActionSchemaHint } from "./assistantActionRegistry";
+import {
+  routeCapabilities,
+  routingToToolPermissions,
+  type HarnessRoute
+} from "./capabilityRouter";
+import {
+  buildUntrustedBlocksFromRouting,
+  resolveTrustedUserMessage
+} from "./untrustedContextBlock";
 import { generateWhileYouWereAway } from "./briefing";
 import {
   createEmptySharedChatThreadState,
@@ -43,6 +52,7 @@ export type ContextPacketBuildInput = {
     mode: ChatHarnessMode;
     sensitivity: SensitivityLevel;
   };
+  route?: HarnessRoute;
   threadState?: SharedChatThreadState;
   now?: Date;
   preferredExport?: "full" | "compact";
@@ -256,12 +266,32 @@ export function buildAiContextPacket(
     item.summary.toLowerCase().includes("diagnosis")
   );
   const productDecisions = harness.decisions;
+  const taskMode = classifyTurnIntent(userIntent.message);
+  const routing = routeCapabilities({
+    route: input.route ?? "companion",
+    message: userIntent.message,
+    mode: userIntent.mode,
+    sensitivity: userIntent.sensitivity,
+    taskMode
+  });
+  const toolPermissions = routingToToolPermissions(routing);
+  const untrustedBlocks = buildUntrustedBlocksFromRouting(userIntent.message, routing);
+  const packetUserMessage =
+    untrustedBlocks.length > 0
+      ? resolveTrustedUserMessage(userIntent.message, routing, untrustedBlocks)
+      : userIntent.message;
+  const metadataCapabilityNotes =
+    toolPermissions.metadataCapabilities.length > 0
+      ? [
+          `Routed capabilities (metadata): ${toolPermissions.metadataCapabilities.join(", ")}`
+        ]
+      : [];
 
   const packet: AiContextPacket = {
     packetVersion: "0.1",
     generatedAt,
     userIntent: {
-      message: userIntent.message,
+      message: packetUserMessage,
       mode: userIntent.mode,
       sensitivity: userIntent.sensitivity,
       primaryAction: {
@@ -271,7 +301,7 @@ export function buildAiContextPacket(
         smallestAction: primaryAction.smallestAction,
         cardId: primaryAction.cardId
       },
-      taskMode: classifyTurnIntent(userIntent.message)
+      taskMode
     },
     board: {
       harness,
@@ -314,26 +344,12 @@ export function buildAiContextPacket(
       requiresApproval: true
     },
     tools: {
-      allowed: [
-        "read_board",
-        "read_memory",
-        "read_thread",
-        "propose_card_update",
-        "propose_log_capture",
-        "propose_memory_save",
-        "navigate_route",
-        "quick_capture",
-        "log_win",
-        "park_card",
-        "update_next_tiny_action",
-        "create_agent_session"
-      ],
-      denied: [],
-      notes: [
-        "Mutations require explicit user approval.",
-        buildAssistantActionSchemaHint()
-      ]
+      allowed: toolPermissions.allowed,
+      denied: toolPermissions.denied,
+      notes: [...routing.notes, ...metadataCapabilityNotes, buildAssistantActionSchemaHint()]
     },
+    routing,
+    untrustedBlocks: untrustedBlocks.length > 0 ? untrustedBlocks : undefined,
     budget: {
       estimatedChars: 0,
       maxChars: options.maxChars ?? 0,

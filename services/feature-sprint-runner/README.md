@@ -9,7 +9,21 @@ The Expo app never spawns CLI processes. Card Detail Backroom calls this service
 From repo root:
 
 ```bash
-npm run feature-runner
+npm run feature-runner:mock
+```
+
+See [docs/feature-sprint-runner-setup-v0.1.md](../../docs/feature-sprint-runner-setup-v0.1.md) for mock vs Cursor setup, token pairing, and in-app **Runner setup** panel.
+
+Copy `services/feature-sprint-runner/.env.local.example` → `.env.local` for real Cursor mode, then:
+
+```bash
+npm run feature-runner:cursor
+```
+
+Verify with runner running:
+
+```bash
+npm run feature-runner:setup-check
 ```
 
 In the app: open a card → **Backroom** → **Feature Sprint** → pick **Codex** or **Cursor** → **Check runner** → run scoping/review/implementation.
@@ -18,7 +32,7 @@ Mock mode fills the existing import textareas with valid fenced blocks. You stil
 
 ## Endpoints
 
-- `GET /health` — `{ ok, mode, port, codexAvailable, cursorAvailable }`
+- `GET /health` — `{ ok, mode, port, codexAvailable, cursorAvailable, setup }`
 - `POST /feature-sprint/run` — body: `FeatureSprintRunnerRequest`; response: `FeatureSprintRunnerResponse`
 - `POST /feature-sprint/cleanup-worktree` — body: `FeatureSprintWorktreeCleanupRequest`; response: `FeatureSprintWorktreeCleanupResponse` (see [docs/feature-sprint-worktree-cleanup-v0.1.md](../../docs/feature-sprint-worktree-cleanup-v0.1.md))
 

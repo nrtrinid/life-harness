@@ -1,4 +1,6 @@
 import type { WireChatHarnessThreadState } from "./chatThreadState";
+import type { CapabilityRoutingResult } from "./capabilityRouter";
+import type { UntrustedContextBlock } from "./untrustedContextBlock";
 import type {
   HarnessContext,
   HarnessDecision,
@@ -175,6 +177,8 @@ export type AiContextPacket = {
   projectDocs: RankedSlice<ProjectDocSnippet>[];
   outputSchema: AiOutputSchemaRef;
   tools: ToolPermissionContext;
+  routing?: CapabilityRoutingResult;
+  untrustedBlocks?: UntrustedContextBlock[];
   budget: PacketBudgetMetadata;
   redaction: PacketRedactionMetadata;
 };

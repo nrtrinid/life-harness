@@ -128,6 +128,8 @@ describe("harnessContextGraph", () => {
     });
     expect(result.markdown).toContain("## Career application");
     expect(result.markdown).toContain("## Job candidate");
+    expect(result.markdown).toContain("Build reliable services.");
+    expect(result.markdown).toContain("## Untrusted: Job posting");
   });
 
   it("does not include unrelated cards in the packet", () => {

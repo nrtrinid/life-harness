@@ -17,6 +17,7 @@ import {
   validateAssistantAction
 } from "../../core/assistantActionRegistry";
 import type { AssistantProposedAction } from "../../core/assistantActionRegistry";
+import { routeCapabilities } from "../../core/capabilityRouter";
 import { buildChatSummary } from "../../core/harnessMemory";
 import {
   buildMemoryCandidatesFromChatSummary,
@@ -26,7 +27,7 @@ import {
   RESPONSE_VARIANTS,
   RESPONSE_VARIANTS_PRIMARY_COUNT
 } from "../../core/chatThreadState";
-import type { HarnessChatSummary, HarnessMemoryItem } from "../../core/types";
+import type { HarnessChatSummary, HarnessMemoryItem, SensitivityLevel } from "../../core/types";
 import { ChatEmptyState } from "./ChatEmptyState";
 import type { QuickQuestion } from "./ChatComposer";
 import type { ChatThreadItem } from "./types";
@@ -37,6 +38,7 @@ interface ChatThreadProps {
   loading?: boolean;
   memoryItems: HarnessMemoryItem[];
   lifeHarnessData?: LifeHarnessData;
+  sensitivity?: SensitivityLevel;
   proposalStatuses?: Record<string, ProposalUiStatus>;
   onApproveProposal?: (proposalId: string, action: AssistantProposedAction) => void;
   onDismissProposal?: (proposalId: string) => void;
@@ -83,6 +85,7 @@ function AssistantTurn({
   turn,
   memoryItems,
   lifeHarnessData,
+  sensitivity = "S1",
   proposalStatuses,
   onApproveProposal,
   onDismissProposal,
@@ -96,6 +99,7 @@ function AssistantTurn({
   turn: Extract<ChatThreadItem, { kind: "assistant" }>;
   memoryItems: HarnessMemoryItem[];
   lifeHarnessData?: LifeHarnessData;
+  sensitivity?: SensitivityLevel;
   proposalStatuses?: Record<string, ProposalUiStatus>;
   onApproveProposal?: (proposalId: string, action: AssistantProposedAction) => void;
   onDismissProposal?: (proposalId: string) => void;
@@ -130,13 +134,23 @@ function AssistantTurn({
     () => parseAssistantProposedActions(turn.response.answer),
     [turn.response.answer]
   );
+  const turnRouting = useMemo(
+    () =>
+      routeCapabilities({
+        route: "companion",
+        message: turn.userText,
+        mode: turn.mode,
+        sensitivity
+      }),
+    [turn.userText, turn.mode, sensitivity]
+  );
   const proposalEntries = useMemo(() => {
     if (!lifeHarnessData) {
       return [];
     }
     return proposedActions.map((action, actionIndex) => {
       const proposalId = buildAssistantProposalId(turn.id, actionIndex, action);
-      const validation = validateAssistantAction(lifeHarnessData, action);
+      const validation = validateAssistantAction(lifeHarnessData, action, turnRouting);
       return {
         proposalId,
         action,
@@ -145,7 +159,7 @@ function AssistantTurn({
         status: proposalStatuses?.[proposalId] ?? "pending"
       };
     });
-  }, [lifeHarnessData, proposedActions, proposalStatuses, turn.id]);
+  }, [lifeHarnessData, proposedActions, proposalStatuses, turn.id, turnRouting]);
 
   return (
     <View style={[styles.chatBubbleAssistant, styles.chatBubbleAssistantCompanion]}>
@@ -301,6 +315,7 @@ export function ChatThread({
   loading = false,
   memoryItems,
   lifeHarnessData,
+  sensitivity = "S1",
   proposalStatuses,
   onApproveProposal,
   onDismissProposal,
@@ -367,6 +382,7 @@ export function ChatThread({
             turn={item}
             memoryItems={memoryItems}
             lifeHarnessData={lifeHarnessData}
+            sensitivity={sensitivity}
             proposalStatuses={proposalStatuses}
             onApproveProposal={onApproveProposal}
             onDismissProposal={onDismissProposal}

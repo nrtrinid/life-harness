@@ -21,12 +21,22 @@ def _format_card_slice(slice_item: RankedBoardCardSlice) -> str:
 
 
 def render_context_packet_sections(packet: AiContextPacketWire) -> str:
-    lines: list[str] = [
-        "### User intent",
-        f"- Message context: {packet.user_intent.message}",
-        f"- Mode: {packet.user_intent.mode.value}",
-        f"- Sensitivity: {packet.user_intent.sensitivity.value}",
-    ]
+    lines: list[str] = []
+
+    if packet.untrusted_blocks:
+        lines.extend(["### Untrusted context", ""])
+        for block in packet.untrusted_blocks:
+            lines.append(block.markdown)
+            lines.append("")
+
+    lines.extend(
+        [
+            "### User intent",
+            f"- Message context: {packet.user_intent.message}",
+            f"- Mode: {packet.user_intent.mode.value}",
+            f"- Sensitivity: {packet.user_intent.sensitivity.value}",
+        ]
+    )
 
     if packet.user_intent.primary_action:
         action = packet.user_intent.primary_action

@@ -15,6 +15,7 @@ import {
   stripAssistantActionBlocks,
   validateAssistantAction
 } from "./assistantActionRegistry";
+import { routeCapabilities } from "./capabilityRouter";
 import type { LifeCard } from "./types";
 
 const FIXED_NOW = "2026-06-09T12:00:00.000Z";
@@ -122,6 +123,29 @@ describe("validateAssistantAction", () => {
       cardId: "card-build-test"
     });
     expect(result).toEqual({ ok: false, error: "Session goal is required." });
+  });
+
+  it("rejects create_agent_session when routing disallows it", () => {
+    const routing = routeCapabilities({
+      route: "companion",
+      message: "What should I do next?",
+      mode: "operator",
+      sensitivity: "S1"
+    });
+    const result = validateAssistantAction(
+      baseData(),
+      {
+        type: "create_agent_session",
+        cardId: "card-build-test",
+        goal: "Implement slice"
+      },
+      routing
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("create_agent_session");
+      expect(result.error).toContain("next_move");
+    }
   });
 });
 

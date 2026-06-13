@@ -61,6 +61,8 @@ Collection: `featureSprintPlans: HarnessFeatureSprintPlan[]`
 | `buildFeatureStepImplementationPacket` | Cursor/Codex builder | Bounded slice implementation |
 | `buildFeatureStepReviewPacket` | ChatGPT/Codex reviewer | Verdict + optional next prompt |
 
+Scoping rough specs and review implementation output are wrapped as untrusted context blocks — see [feature-sprint-untrusted-context-v0.1.md](./feature-sprint-untrusted-context-v0.1.md).
+
 ## Fence labels
 
 Only these exact fence labels are parsed:
@@ -142,7 +144,13 @@ Local runner profiles (Codex and Cursor CLI) ship separately — see [feature-sp
 
 See [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md) for trust dashboard, parallel lanes, expanded contracts, risk routing, and replay evals.
 
-Near-term items also tracked there: streaming runner output, Next Move collector, Assistant Action integration, Agent Workbench hints.
+- **Feature Sprint v2 — Living Spec Loop:** [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md) — persisted living spec, slice phases, Cursor localization, prompt audit, proof normalizer, spec-update import
+- Streaming partial runner output to UI
+- Worktree/branch isolation per slice
+- `Copy implementation prompt + log sent` if trivial atop agent session helpers
+- Feature-step Next Move collector
+- Assistant Action integration for import/approve flows
+- Agent Workbench row hints when `agentSessionId` links a step
 
 ## Core module
 

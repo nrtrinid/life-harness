@@ -552,3 +552,63 @@ def test_verify_chat_harness_detects_code_missing_fence():
     )
     assert result.ok is False
     assert result.check == "code_missing_fence"
+
+
+def test_verify_raw_lab_artifact_deferral_when_artifact_due():
+    result = verify_raw_lab_response(
+        answer="Ready to see how it looks?",
+        user_message="yes let's see how it looks",
+        conversation_history=[],
+        recent_turns=[
+            {"role": "user", "content": "write the haunted mansion code"},
+            {"role": "assistant", "content": "I'll write step-by-step."},
+        ],
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_artifact_deferral"
+
+
+def test_verify_raw_lab_false_execution_when_run_requested():
+    result = verify_raw_lab_response(
+        answer="I tested it and Kent is in the entrance hall.",
+        user_message="run the code",
+        conversation_history=[],
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_false_execution"
+
+
+def test_verify_raw_lab_false_execution_priority_over_handoff():
+    result = verify_raw_lab_response(
+        answer="I ran it. What's next?",
+        user_message="run the code",
+        conversation_history=[],
+        thread_state=RawLabThreadState(user_steering=["avoid reflexive handoff questions"]),
+    )
+    assert result.check == "raw_lab_false_execution"
+
+
+def test_verify_raw_lab_productivity_push_strong_hangout_only():
+    result = verify_raw_lab_response(
+        answer="Try a pounce mission on your inbox.",
+        user_message="I just want to hang out, no productivity.",
+        conversation_history=[],
+        thread_state=RawLabThreadState(user_steering=["just hang out"]),
+    )
+    assert result.ok is False
+    assert result.check == "raw_lab_productivity_push"
+
+
+def test_verify_raw_lab_productivity_push_skipped_in_plan_thread():
+    recent = [
+        {"role": "user", "content": "Give me a plan for the prototype."},
+        {"role": "assistant", "content": "Plan: 1) room graph."},
+        {"role": "user", "content": "sounds good"},
+    ]
+    result = verify_raw_lab_response(
+        answer="Next step: 1) implement the room graph.",
+        user_message="what's the next step",
+        conversation_history=[],
+        recent_turns=recent,
+    )
+    assert result.check != "raw_lab_productivity_push"

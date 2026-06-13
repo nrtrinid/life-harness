@@ -15,6 +15,10 @@ import { AREA_LABELS, CARD_STATE_LABELS } from "./labels";
 import { getAgentSessionsForCard } from "./agentSessionLog";
 import { buildProjectContextForCard, type CardProjectContextSummary } from "./projectRegistry";
 import { buildApplicationResumeReadiness } from "./resumeReadiness";
+import {
+  buildJobPostBlock,
+  renderUntrustedContextBlockMarkdown
+} from "./untrustedContextBlock";
 import type {
   HarnessAgentKind,
   HarnessAgentSession,
@@ -110,6 +114,7 @@ export interface CardContextCareerSummary {
   resumeDraftNextAction?: string;
   readinessStatus?: string;
   readinessNextAction?: string;
+  jobDescription?: string;
 }
 
 export interface CardContextJobCandidateSummary {
@@ -121,6 +126,7 @@ export interface CardContextJobCandidateSummary {
   fitReasons: string[];
   gaps: string[];
   recommendedResumeAngle?: string;
+  description?: string;
 }
 
 export interface CardContextProofSummary {
@@ -371,7 +377,8 @@ function buildJobCandidateSummary(candidate: JobCandidate): CardContextJobCandid
     fitLabel: candidate.fitLabel,
     fitReasons: candidate.fitReasons.slice(0, 4),
     gaps: candidate.gaps.slice(0, 4),
-    recommendedResumeAngle: candidate.recommendedResumeAngle
+    recommendedResumeAngle: candidate.recommendedResumeAngle,
+    description: candidate.description
   };
 }
 
@@ -437,7 +444,8 @@ export function buildCardContextPacket(
       followUpDate: application.followUpDate,
       resumeDraftNextAction: application.resumeDraftPacket?.nextTinyAction,
       readinessStatus: readiness.status,
-      readinessNextAction: readiness.nextTinyResumeAction
+      readinessNextAction: readiness.nextTinyResumeAction,
+      jobDescription: application.jobDescription
     };
 
     if (linkedCandidate) {
@@ -656,6 +664,11 @@ export function formatCardContextPacketMarkdown(packet: CardContextPacket): stri
     if (career.readinessNextAction) {
       lines.push(`- Resume readiness next action: ${career.readinessNextAction}`);
     }
+    if (career.jobDescription?.trim()) {
+      lines.push(
+        renderUntrustedContextBlockMarkdown(buildJobPostBlock(career.jobDescription.trim()))
+      );
+    }
     lines.push("");
   }
 
@@ -677,6 +690,19 @@ export function formatCardContextPacketMarkdown(packet: CardContextPacket): stri
     }
     if (candidate.gaps.length > 0) {
       lines.push(`- Gaps: ${candidate.gaps.join("; ")}`);
+    }
+    const applicationJobDescription = packet.careerContext?.jobDescription?.trim();
+    if (
+      candidate.description?.trim() &&
+      candidate.description.trim() !== applicationJobDescription
+    ) {
+      lines.push(
+        renderUntrustedContextBlockMarkdown(
+          buildJobPostBlock(candidate.description.trim(), {
+            title: "Scout candidate description"
+          })
+        )
+      );
     }
     lines.push("");
   }

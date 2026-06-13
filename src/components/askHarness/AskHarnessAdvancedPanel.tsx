@@ -38,6 +38,8 @@ interface AskHarnessAdvancedPanelProps {
   promptOverBudget: boolean;
   gatewayMaxInputChars: number;
   packetSliceSummary?: string;
+  routingSummary?: string;
+  untrustedBlockSummary?: string;
   qualitySummary: string;
   qualityOpen: boolean;
   onQualityOpenToggle: () => void;
@@ -72,6 +74,8 @@ export function AskHarnessAdvancedPanel({
   promptOverBudget,
   gatewayMaxInputChars,
   packetSliceSummary,
+  routingSummary,
+  untrustedBlockSummary,
   qualitySummary,
   qualityOpen,
   onQualityOpenToggle,
@@ -149,6 +153,17 @@ export function AskHarnessAdvancedPanel({
         </Text>
         {reasoningDepth === "deep" ? (
           <Text style={styles.helpText}>Deep mode may take longer on local OpenVINO.</Text>
+        ) : null}
+      </InspectorSection>
+
+      <InspectorSection title="Routing" defaultOpen={false}>
+        {routingSummary ? (
+          <Text style={styles.helpText}>{routingSummary}</Text>
+        ) : (
+          <Text style={styles.helpText}>Routing preview appears after you type a message.</Text>
+        )}
+        {untrustedBlockSummary ? (
+          <Text style={styles.helpText}>Untrusted blocks: {untrustedBlockSummary}</Text>
         ) : null}
       </InspectorSection>
 

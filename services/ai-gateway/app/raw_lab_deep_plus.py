@@ -1151,6 +1151,7 @@ def finalize_and_verify_raw_lab(
         conversation_history=history,
         companion_self_memory_count=len(request.companion_self_memories),
         thread_state=request.thread_state,
+        recent_turns=request.recent_turns,
     )
     if answer and not verification.ok and verification.check == "raw_lab_runtime_awareness":
         answer = repair_raw_lab_runtime_awareness_answer(

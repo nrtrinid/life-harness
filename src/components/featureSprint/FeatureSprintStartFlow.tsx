@@ -5,6 +5,7 @@ import { runnerAgentLabel } from "../../core/featureSprintRunner";
 import type { FeatureSprintRunnerHealthProbe } from "../../core/featureSprintRunnerHealth";
 import { formatRunnerHealthCapabilityLine } from "../../core/featureSprintRunnerHealth";
 import type { HarnessFeatureSpecSource } from "../../core/types";
+import { FeatureSprintRunnerSetupPanel } from "./FeatureSprintRunnerSetupPanel";
 import { colors, styles } from "../styles";
 
 export type FeatureSprintStartFlowProps = {
@@ -27,6 +28,7 @@ export type FeatureSprintStartFlowProps = {
   onSelectRunnerAgent: (agent: FeatureSprintRunnerAgent) => void;
   runnerHealth: "unknown" | "available" | "unavailable";
   runnerHealthProbe?: FeatureSprintRunnerHealthProbe;
+  appTokenConfigured: boolean;
   isCheckingRunner: boolean;
   isRunningScoping: boolean;
 
@@ -38,6 +40,7 @@ export type FeatureSprintStartFlowProps = {
   onCheckRunner: () => void;
   onCopyScopingPacket: () => void;
   onRunScoping: () => void;
+  onSetupNotice?: (kind: "success" | "warning", message: string) => void;
 };
 
 const FEATURE_SPEC_SOURCES: HarnessFeatureSpecSource[] = ["chatgpt_web", "manual", "other"];
@@ -144,6 +147,7 @@ export function FeatureSprintStartFlow({
   onSelectRunnerAgent,
   runnerHealth,
   runnerHealthProbe,
+  appTokenConfigured,
   isCheckingRunner,
   isRunningScoping,
   hasProjectMetadata,
@@ -152,7 +156,8 @@ export function FeatureSprintStartFlow({
   canCopyScopingPacket,
   onCheckRunner,
   onCopyScopingPacket,
-  onRunScoping
+  onRunScoping,
+  onSetupNotice
 }: FeatureSprintStartFlowProps) {
   return (
     <View style={[styles.cardTile, { marginTop: 12 }]}>
@@ -257,6 +262,14 @@ export function FeatureSprintStartFlow({
             </Text>
           </Pressable>
         </View>
+
+        <FeatureSprintRunnerSetupPanel
+          runnerAgent={runnerAgent}
+          runnerHealth={runnerHealth}
+          runnerHealthProbe={runnerHealthProbe}
+          appTokenConfigured={appTokenConfigured}
+          onNotice={onSetupNotice}
+        />
       </View>
 
       <View style={{ marginTop: 16, gap: 4 }}>

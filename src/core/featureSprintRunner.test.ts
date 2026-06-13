@@ -372,7 +372,11 @@ describe("featureSprintRunnerClient", () => {
       ok: true,
       mode: "real",
       codexAvailable: true,
-      cursorAvailable: false
+      cursorAvailable: false,
+      error: undefined,
+      failureKind: "ready",
+      httpStatus: 200,
+      setup: undefined
     });
   });
 

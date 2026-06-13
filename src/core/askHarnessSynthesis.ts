@@ -4,6 +4,7 @@ import { buildChatHarnessSendBundle } from "./chatHarnessSendBudget";
 import type { ReasoningDepth } from "./chatHarnessClient";
 import { type SharedChatThreadState } from "./chatThreadState";
 import { buildAiContextPacket } from "./contextPacketBuilder";
+import { resolveTrustedUserMessage } from "./untrustedContextBlock";
 import { toWireContextPacket } from "./contextPacketWire";
 import { DEFAULT_GATEWAY_MAX_INPUT_CHARS } from "./gatewayBudget";
 import type {
@@ -140,6 +141,7 @@ export function buildAskDeepSynthesisRequest(
   const mode = resolveMode(args.thread, args.mode);
   const sendPacket = buildAiContextPacket({
     data: args.exportInput,
+    route: "deep_synthesis",
     userIntent: {
       message: lastUserMessage,
       mode,
@@ -148,9 +150,13 @@ export function buildAskDeepSynthesisRequest(
     threadState: args.threadState,
     preferredExport: args.contextMode
   });
+  const synthesisMessage =
+    sendPacket.untrustedBlocks?.length && sendPacket.routing
+      ? resolveTrustedUserMessage(lastUserMessage, sendPacket.routing, sendPacket.untrustedBlocks)
+      : lastUserMessage;
   const sendBundle = buildChatHarnessSendBundle({
     exportInput: args.exportInput,
-    message: lastUserMessage,
+    message: synthesisMessage,
     priorThread: args.thread,
     threadState: args.threadState,
     preferredContextMode: args.contextMode,
