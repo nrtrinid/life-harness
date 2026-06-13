@@ -1,5 +1,7 @@
+import { hasDemoSeedCards } from "./boardUsability";
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "./guards";
 import { getFollowUpsDue } from "./career";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import type { StoredCareerSourcePack } from "./careerSourcePack";
 import { buildCareerPackBriefingStats } from "./careerPackMatching";
 import { buildCandidateBriefingSignals, formatFitScore } from "./jobScout";
@@ -363,4 +365,74 @@ export function startSession(dailyState: DailyState, nowIso: string): DailyState
     lastOpenedAt: nowIso,
     sessionStartedAt: nowIso
   };
+}
+
+export function deriveDailyMission(
+  cards: LifeCard[],
+  logs: LifeLogEntry[],
+  dailyState: DailyState,
+  now: Date
+): Pick<DailyState, "pounceMission" | "smallestStart"> {
+  const mainQuest = getMainQuest(cards, dailyState);
+  if (mainQuest?.nextTinyAction?.trim()) {
+    return {
+      pounceMission: mainQuest.nextTinyAction.trim(),
+      smallestStart: `Open ${mainQuest.title} and do the next tiny action.`
+    };
+  }
+
+  const followUps = getFollowUpsDue(cards, now);
+  if (followUps.length > 0) {
+    const card = followUps[0];
+    return {
+      pounceMission: card.nextTinyAction ?? `Follow up on ${card.title}.`,
+      smallestStart: `Open ${card.title} and send one follow-up.`
+    };
+  }
+
+  const briefing = generateWhileYouWereAway(cards, logs, [], dailyState, now);
+  const suggested = briefing.prepared.find((line) => line.includes("Suggested pounce"));
+  if (suggested) {
+    const cleaned = suggested.replace(/^Suggested pounce:\s*/i, "").trim();
+    return {
+      pounceMission: cleaned,
+      smallestStart: cleaned.endsWith(".") ? cleaned : `${cleaned}.`
+    };
+  }
+
+  const pounceCandidate = selectPounceCandidate(cards, logs, dailyState, now);
+  if (pounceCandidate?.nextTinyAction?.trim()) {
+    return {
+      pounceMission: pounceCandidate.nextTinyAction.trim(),
+      smallestStart: `Open ${pounceCandidate.title} and start.`
+    };
+  }
+
+  if (cards.length === 0) {
+    return {
+      pounceMission: "Capture one idea to the board.",
+      smallestStart: "Type new idea: … in Quick Capture."
+    };
+  }
+
+  return {
+    pounceMission: "Pick one tiny action from the board.",
+    smallestStart: "Open Board and start one Inbox card."
+  };
+}
+
+export function applyAppSessionStart(state: LifeHarnessData, now: Date): LifeHarnessData {
+  const sessionNow = now.toISOString();
+  let dailyState = startSession(state.dailyState, sessionNow);
+
+  if (!hasDemoSeedCards(state.cards)) {
+    const mission = deriveDailyMission(state.cards, state.logs, dailyState, now);
+    dailyState = {
+      ...dailyState,
+      pounceMission: mission.pounceMission,
+      smallestStart: mission.smallestStart
+    };
+  }
+
+  return { ...state, dailyState };
 }

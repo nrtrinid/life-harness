@@ -41,7 +41,7 @@ export function TinyQuestCard({
             disabled={pounceLogged || !onPounce}
           >
             <Text style={pounceLogged ? styles.secondaryActionText : styles.primaryActionText}>
-              {pounceLogged ? "Started" : action.ctaLabel ?? "Start"}
+              {pounceLogged ? "Started" : action.ctaLabel === "Start Pounce" ? "Start pounce" : action.ctaLabel ?? "Start pounce"}
             </Text>
           </Pressable>
         ) : action.targetRoute ? (
@@ -62,6 +62,9 @@ export function TinyQuestCard({
           <Text style={styles.secondaryActionText}>{showSmaller ? "Hide smaller" : "Make smaller"}</Text>
         </Pressable>
       </View>
+      {action.kind === "pounce" && !pounceLogged ? (
+        <Text style={[styles.helpText, { marginTop: 8 }]}>Start pounce logs initiation — not completion.</Text>
+      ) : null}
     </View>
   );
 }

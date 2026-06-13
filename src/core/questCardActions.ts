@@ -29,7 +29,7 @@ const SECONDARY_STATE_LABELS: Record<CardState, string> = {
   parked: "Park",
   waiting: "Move to waiting",
   done: "Done",
-  killed: "Kill"
+  killed: "Archive"
 };
 
 export function getQuestStartAction(card: Pick<LifeCard, "state">): QuestStartAction {

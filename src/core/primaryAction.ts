@@ -9,9 +9,9 @@ import {
 import type { Briefing, DailyState, LifeCard, LifeLogEntry, PrimaryAction } from "./types";
 
 const DEEP_LINK_MAP: Array<{ keyword: string; route: string; label: string }> = [
-  { keyword: "paste one job", route: "/candidate-intake", label: "Open Intake" },
-  { keyword: "review one fetched candidate", route: "/job-candidates", label: "Open Queue" },
-  { keyword: "approve one saved candidate", route: "/job-candidates", label: "Open Queue" },
+  { keyword: "paste one job", route: "/career?tab=find&add=1", label: "Add a job" },
+  { keyword: "review one fetched candidate", route: "/career?tab=review", label: "Review matches" },
+  { keyword: "approve one saved candidate", route: "/career?tab=review", label: "Review matches" },
   { keyword: "run due job sources", route: "/job-sources", label: "Run Sources" },
   { keyword: "run one approved job source", route: "/job-sources", label: "Run Sources" },
   { keyword: "send one follow-up", route: "/career", label: "Open Follow-ups" }

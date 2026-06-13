@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import type { NoticeState } from "./Notice";
+import type { CardState } from "../core/types";
 import { useLifeHarness } from "../state/LifeHarnessState";
+import { WaitingNudge } from "./WaitingNudge";
 import { colors, styles } from "./styles";
 
 interface QuickCaptureProps {
@@ -11,8 +13,11 @@ interface QuickCaptureProps {
 }
 
 export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
-  const { submitQuickCapture } = useLifeHarness();
+  const { submitQuickCapture, setCardState } = useLifeHarness();
   const [text, setText] = useState("");
+  const [waitingNudge, setWaitingNudge] = useState<
+    { cardId: string; label: string; state: CardState } | undefined
+  >();
 
   function handleSubmit() {
     if (!text.trim()) {
@@ -24,6 +29,9 @@ export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
     if (result.ok) {
       setText("");
       onNotice({ kind: "success", message: result.message ?? "Logged." });
+      if (result.suggestedCardState) {
+        setWaitingNudge(result.suggestedCardState);
+      }
     } else {
       onNotice({ kind: "info", message: result.message ?? "No rule matched." });
     }
@@ -36,7 +44,7 @@ export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
         editable
         placeholder={
           actMode
-            ? "worked on…, followed up…, agent finished…, new idea…"
+            ? "new idea: … · worked on … · followed up with …"
             : "worked on project for 10 min..."
         }
         placeholderTextColor={colors.inputPlaceholder}
@@ -46,14 +54,22 @@ export function QuickCapture({ onNotice, actMode = false }: QuickCaptureProps) {
         onSubmitEditing={handleSubmit}
         returnKeyType="done"
       />
-      <Pressable style={styles.secondaryAction} onPress={handleSubmit}>
-        <Text style={styles.secondaryActionText}>Capture</Text>
+      <Pressable style={styles.primaryAction} onPress={handleSubmit}>
+        <Text style={styles.primaryActionText}>Capture</Text>
       </Pressable>
       <Text style={styles.helpText}>
         {actMode
-          ? "Try: worked on resume · followed up with recruiter · agent finished card split"
+          ? "Try: new idea: my project · worked on resume · followed up with recruiter"
           : "New ideas go to Inbox, not Active."}
       </Text>
+      {waitingNudge ? (
+        <WaitingNudge
+          cardId={waitingNudge.cardId}
+          label={waitingNudge.label}
+          onMove={setCardState}
+          onDismiss={() => setWaitingNudge(undefined)}
+        />
+      ) : null}
     </View>
   );
 }

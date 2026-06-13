@@ -58,7 +58,7 @@ export function NextMoveContractPanel({ summary, actMode = false }: NextMoveCont
             <View style={styles.primaryMoveActions}>
               <Link href={primary.targetRoute as Href} asChild>
                 <Pressable accessibilityRole="button" style={styles.primaryAction}>
-                  <Text style={styles.primaryActionText}>Open</Text>
+                  <Text style={styles.primaryActionText}>Do this</Text>
                 </Pressable>
               </Link>
             </View>

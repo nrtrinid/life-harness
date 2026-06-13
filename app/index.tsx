@@ -1,8 +1,9 @@
-import { Link } from "expo-router";
+import { Link, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ActiveLimitBanner } from "../src/components/ActiveLimitBanner";
+import { DemoTriageBanner } from "../src/components/DemoTriageBanner";
 import { CardTile } from "../src/components/CardTile";
 import { CollapsibleSection } from "../src/components/CollapsibleSection";
 import { BonusTrackCard } from "../src/components/lofi/BonusTrackCard";
@@ -24,8 +25,10 @@ import { computeBonusTrack } from "../src/core/bonusTrack";
 import { generateWhileYouWereAway } from "../src/core/briefing";
 import { buildCompanionNote } from "../src/core/companionNote";
 import { getFollowUpsDue } from "../src/core/career";
+import { buildCareerHubSummary } from "../src/core/careerHub";
 import { buildNextMoveSummary } from "../src/core/nextMoveContract";
 import { computePrimaryAction } from "../src/core/primaryAction";
+import { buildTodayCareerShortcuts } from "../src/core/todayCareerShortcuts";
 import { ACTIVE_CARD_LIMIT, getActiveLimitStatus, getMainQuest } from "../src/core/guards";
 import { buildSourceScheduleStats } from "../src/core/jobSourceSchedule";
 import { computeCardProgress } from "../src/core/progress";
@@ -49,7 +52,8 @@ export default function TodayScreen() {
     featureSprintPlans,
     featureSprintRunnerRuns,
     chatSummaries,
-    memoryItems
+    memoryItems,
+    setMainQuest
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [proofPulse, setProofPulse] = useState(false);
@@ -75,6 +79,19 @@ export default function TodayScreen() {
   const activeLimit = getActiveLimitStatus(cards);
   const followUpsDue = getFollowUpsDue(cards, now);
   const scheduleStats = buildSourceScheduleStats(jobSources, jobSourceRuns, now);
+  const careerHubSummary = buildCareerHubSummary({
+    jobCandidates,
+    cards,
+    jobSources,
+    jobSourceRuns,
+    resumeModules,
+    hasCareerPack: Boolean(careerSourcePack),
+    now
+  });
+  const todayCareerShortcuts = buildTodayCareerShortcuts(
+    careerHubSummary,
+    scheduleStats.dueSources
+  );
   const pounceLogged = dailyState.pounceStarted;
   const nextMove = buildNextMoveSummary(
     {
@@ -147,6 +164,8 @@ export default function TodayScreen() {
           companionNote={companionNote}
           now={now}
         />
+
+        <DemoTriageBanner cards={cards} dailyState={dailyState} />
 
         <ActiveLimitBanner />
 
@@ -227,7 +246,25 @@ export default function TodayScreen() {
                 {activeLimit.count}/{ACTIVE_CARD_LIMIT} active
               </Text>
               {activeCards.map((card) => (
-                <CardTile key={card.id} card={card} logs={logs} compact />
+                <View key={card.id} style={{ marginBottom: 8 }}>
+                  <CardTile card={card} logs={logs} compact />
+                  {dailyState.mainQuestId === card.id ? (
+                    <Text style={styles.mainQuestBadge}>Main quest</Text>
+                  ) : (
+                    <Pressable
+                      style={StyleSheet.flatten([styles.smallButton, { marginTop: 6, alignSelf: "flex-start" }])}
+                      onPress={() => {
+                        const result = setMainQuest(card.id);
+                        showNotice({
+                          kind: result.ok ? "success" : "warning",
+                          message: result.message ?? (result.ok ? "Main quest set." : "Could not set main quest.")
+                        });
+                      }}
+                    >
+                      <Text style={styles.smallButtonText}>Set as main quest</Text>
+                    </Pressable>
+                  )}
+                </View>
               ))}
             </>
           )}
@@ -241,30 +278,23 @@ export default function TodayScreen() {
           {primaryAction.kind === "pounce" ? (
             <View style={{ gap: 8, marginTop: 8 }}>
               <Text style={styles.label}>Jobs shortcuts</Text>
-              <Link href="/career" asChild>
-                <Pressable style={styles.secondaryAction}>
-                  <Text style={styles.secondaryActionText}>Open Jobs</Text>
-                </Pressable>
-              </Link>
-              <Link href="/candidate-intake" asChild>
-                <Pressable style={styles.secondaryAction}>
-                  <Text style={styles.secondaryActionText}>Paste a job</Text>
-                </Pressable>
-              </Link>
-              <Link href="/job-candidates" asChild>
-                <Pressable style={styles.secondaryAction}>
-                  <Text style={styles.secondaryActionText}>Review queue</Text>
-                </Pressable>
-              </Link>
-              <Link href="/job-sources" asChild>
-                <Pressable style={styles.secondaryAction}>
-                  <Text style={styles.secondaryActionText}>
-                    {scheduleStats.dueSources > 0
-                      ? `Run Due Job Sources (${scheduleStats.dueSources})`
-                      : "Run an Approved Job Source"}
-                  </Text>
-                </Pressable>
-              </Link>
+              {todayCareerShortcuts.map((shortcut) => (
+                <Link key={`${shortcut.kind}-${shortcut.href}`} href={shortcut.href as Href} asChild>
+                  <Pressable
+                    style={shortcut.kind === "primary" ? styles.primaryAction : styles.secondaryAction}
+                  >
+                    <Text
+                      style={
+                        shortcut.kind === "primary"
+                          ? styles.primaryActionText
+                          : styles.secondaryActionText
+                      }
+                    >
+                      {shortcut.label}
+                    </Text>
+                  </Pressable>
+                </Link>
+              ))}
             </View>
           ) : null}
         </CollapsibleSection>

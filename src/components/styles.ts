@@ -734,6 +734,86 @@ export const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
     marginBottom: spacing.xs
   },
+  boardSlotStrip: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 3,
+    borderWidth: 1,
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+    padding: spacing.md
+  },
+  boardSlotStripTitle: {
+    color: colors.textSecondary,
+    fontSize: typography.labelLarge,
+    fontWeight: "700"
+  },
+  demoTriageBanner: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: lofiColors.warningAmber,
+    borderRadius: 3,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    padding: spacing.md
+  },
+  demoTriageTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.labelLarge,
+    fontWeight: "700"
+  },
+  activeLimitTriagePanel: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: lofiColors.warningAmber,
+    borderRadius: 3,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.md
+  },
+  activeLimitTriageRow: {
+    gap: spacing.xs
+  },
+  activeLimitTriageActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  newCardForm: {
+    gap: spacing.sm,
+    marginBottom: spacing.sm
+  },
+  newCardAreaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs
+  },
+  newCardFormActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  waitingNudge: {
+    backgroundColor: colors.bgSecondary,
+    borderColor: colors.borderSubtle,
+    borderRadius: 3,
+    borderWidth: 1,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.md
+  },
+  waitingNudgeActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm
+  },
+  mainQuestBadge: {
+    color: lofiColors.actionAmber,
+    fontSize: typography.labelSmall,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase"
+  },
   emptyText: {
     color: colors.textMuted,
     fontSize: typography.bodyMedium,

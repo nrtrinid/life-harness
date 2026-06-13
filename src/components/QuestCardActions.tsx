@@ -9,6 +9,7 @@ import {
 } from "../core/questCardActions";
 import type { CardState } from "../core/types";
 import { useLifeHarness } from "../state/LifeHarnessState";
+import { ActiveLimitTriagePanel } from "./ActiveLimitTriagePanel";
 import { Notice } from "./Notice";
 import { styles } from "./styles";
 
@@ -19,15 +20,17 @@ interface QuestCardActionsProps {
 
 export function QuestCardActions({ cardId, currentState }: QuestCardActionsProps) {
   const router = useRouter();
-  const { setCardState } = useLifeHarness();
+  const { cards, setCardState } = useLifeHarness();
   const [moreOpen, setMoreOpen] = useState(false);
   const [warning, setWarning] = useState<string | undefined>();
   const [success, setSuccess] = useState<string | undefined>();
+  const [showTriage, setShowTriage] = useState(false);
 
   const card = { state: currentState };
   const startAction = getQuestStartAction(card);
   const secondaryActions = getQuestSecondaryActions(card);
   const doneAvailable = isQuestDoneAvailable(card);
+  const activeCards = cards.filter((item) => item.state === "active");
 
   useEffect(() => {
     if (!success) {
@@ -42,9 +45,13 @@ export function QuestCardActions({ cardId, currentState }: QuestCardActionsProps
     if (!result.ok) {
       setSuccess(undefined);
       setWarning(result.message);
+      if (state === "active") {
+        setShowTriage(true);
+      }
       return;
     }
     setWarning(undefined);
+    setShowTriage(false);
     setMoreOpen(false);
     if (result.message) {
       setSuccess(result.message);
@@ -104,6 +111,13 @@ export function QuestCardActions({ cardId, currentState }: QuestCardActionsProps
             </Pressable>
           ))}
         </View>
+      ) : null}
+      {showTriage ? (
+        <ActiveLimitTriagePanel
+          activeCards={activeCards}
+          onStateChange={(targetId, state) => setCardState(targetId, state)}
+          onDismiss={() => setShowTriage(false)}
+        />
       ) : null}
       {warning ? <Notice kind="warning" message={warning} /> : null}
       {success ? <Notice kind="success" message={success} /> : null}

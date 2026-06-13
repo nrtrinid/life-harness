@@ -56,7 +56,8 @@ export default function ProgressScreen() {
     persistenceAvailable,
     exportSnapshot,
     importSnapshot,
-    resetToSeed
+    resetToSeed,
+    resetToClean
   } = useLifeHarness();
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [importDraft, setImportDraft] = useState("");
@@ -85,9 +86,32 @@ export default function ProgressScreen() {
     showNotice(result.ok ? "success" : "error", result.message ?? "Import failed.");
   }
 
-  function confirmReset() {
+  function confirmResetToClean() {
     const message =
-      "This clears local persistence and restores seed demo data. Your current board state will be replaced.";
+      "This clears local persistence and starts an empty board. Your current board state will be replaced.";
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
+      if (window.confirm(message)) {
+        const result = resetToClean();
+        showNotice(result.ok ? "success" : "error", result.message ?? "Reset failed.");
+      }
+      return;
+    }
+    Alert.alert("Reset to clean board?", message, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reset",
+        style: "destructive",
+        onPress: () => {
+          const result = resetToClean();
+          showNotice(result.ok ? "success" : "error", result.message ?? "Reset failed.");
+        }
+      }
+    ]);
+  }
+
+  function confirmResetToDemo() {
+    const message =
+      "This clears local persistence and restores demo seed data. Your current board state will be replaced.";
     if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
       if (window.confirm(message)) {
         const result = resetToSeed();
@@ -95,7 +119,7 @@ export default function ProgressScreen() {
       }
       return;
     }
-    Alert.alert("Reset to Seed?", message, [
+    Alert.alert("Reset to demo?", message, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Reset",
@@ -338,8 +362,11 @@ export default function ProgressScreen() {
         <Pressable style={styles.secondaryAction} onPress={handleImport}>
           <Text style={styles.secondaryActionText}>Import</Text>
         </Pressable>
-        <Pressable style={styles.secondaryAction} onPress={confirmReset}>
-          <Text style={styles.secondaryActionText}>Reset to Seed</Text>
+        <Pressable style={styles.secondaryAction} onPress={confirmResetToClean}>
+          <Text style={styles.secondaryActionText}>Reset to clean board</Text>
+        </Pressable>
+        <Pressable style={styles.secondaryAction} onPress={confirmResetToDemo}>
+          <Text style={styles.secondaryActionText}>Reset to demo seed</Text>
         </Pressable>
       </Section>
       </CollapsibleSection>

@@ -20,6 +20,7 @@ interface CardTileProps {
 
 export function CardTile({ card, logs, compact = false, actionVariant = "none" }: CardTileProps) {
   const { dailyState } = useLifeHarness();
+  const isMainQuest = dailyState.mainQuestId === card.id;
   const isQuest = actionVariant === "quest";
   const tileStyle = StyleSheet.flatten([
     isQuest ? styles.questCardTile : styles.cardTile,
@@ -37,6 +38,7 @@ export function CardTile({ card, logs, compact = false, actionVariant = "none" }
             <Text style={styles.cardTitle}>{card.title}</Text>
             <Text style={isQuest ? styles.questCardWarmth : styles.cardWarmth}>{WARMTH_LABELS[warmth]}</Text>
           </View>
+          {isMainQuest ? <Text style={styles.mainQuestBadge}>Main quest</Text> : null}
           <Text style={styles.cardMeta}>
             {AREA_LABELS[card.area]}
             {card.careerApplication ? ` · ${card.careerApplication.company}` : ""} · {card.state}

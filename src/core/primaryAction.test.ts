@@ -161,6 +161,6 @@ describe("computePrimaryAction", () => {
     const action = computePrimaryAction(briefing, baseDaily, cards, [], NOW);
 
     expect(action.kind).toBe("pounce");
-    expect(action.targetRoute).toBe("/candidate-intake");
+    expect(action.targetRoute).toBe("/career?tab=find&add=1");
   });
 });

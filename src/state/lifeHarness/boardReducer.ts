@@ -10,7 +10,10 @@ const BOARD_ACTION_TYPES = new Set<BoardLifeHarnessAction["type"]>([
   "mvd_completed",
   "salvage_completed",
   "quick_capture_applied",
-  "card_state_applied"
+  "card_state_applied",
+  "main_quest_applied",
+  "create_card_applied",
+  "demo_triage_dismissed"
 ]);
 
 export function isBoardAction(action: { type: string }): action is BoardLifeHarnessAction {
@@ -42,6 +45,9 @@ export function boardReducer(
     case "quick_capture_applied":
       return action.state;
     case "card_state_applied":
+    case "main_quest_applied":
+    case "create_card_applied":
+    case "demo_triage_dismissed":
       return action.state;
     default:
       return state;
