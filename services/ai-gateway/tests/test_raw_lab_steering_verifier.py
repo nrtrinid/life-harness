@@ -172,3 +172,31 @@ def test_raw_lab_steering_repair_not_leaked_into_answer(client):
     answer = response.json()["answer"]
     assert "End declaratively without a reflexive handoff question" not in answer
     assert "Collapse unnecessary blank lines" not in answer
+
+
+def test_raw_lab_haunted_mansion_delivers_code_not_deferral(client):
+    response = client.post(
+        "/raw-lab",
+        json={
+            "message": "yes let's see how it looks",
+            "recent_turns": [
+                {
+                    "role": "user",
+                    "content": "Let's make a haunted mansion text adventure with Kent and Elias.",
+                },
+                {
+                    "role": "assistant",
+                    "content": "I'll write the code step-by-step. Would you like to start?",
+                },
+                {"role": "user", "content": "yeah start with rooms and exits"},
+            ],
+            "thread_state": {
+                "open_loops": ["Haunted mansion text adventure with Kent and Elias"],
+            },
+        },
+    )
+    assert response.status_code == 200
+    answer = response.json()["answer"].lower()
+    assert "```python" in answer
+    assert "entrance_hall" in answer
+    assert "ready to see" not in answer

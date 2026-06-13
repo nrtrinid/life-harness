@@ -316,16 +316,16 @@ def check_raw_lab_no_board_context_claim(payload: dict[str, Any]) -> list[str]:
 
 
 def check_raw_lab_no_productivity_push(payload: dict[str, Any]) -> list[str]:
+    from app.raw_lab_utils import RAW_LAB_PRODUCTIVITY_PUSH_PHRASES, has_productivity_push_phrasing
+
     text = _raw_lab_joined_answer(payload)
-    pushy = [
-        "pounce mission",
-        "minimum viable day",
-        "salvage mode",
-        "next tiny action",
-        "you should be productive",
-        "get back to work",
+    if not has_productivity_push_phrasing(text):
+        return []
+    return [
+        f"productivity push detected: {phrase!r}"
+        for phrase in RAW_LAB_PRODUCTIVITY_PUSH_PHRASES
+        if phrase in text.lower()
     ]
-    return [f"productivity push detected: {phrase!r}" for phrase in pushy if phrase in text]
 
 
 def check_raw_lab_mentions_thread_mind(payload: dict[str, Any]) -> list[str]:

@@ -1376,6 +1376,7 @@ class MockProvider:
             conversation_history=history,
             companion_self_memory_count=len(request.companion_self_memories),
             thread_state=request.thread_state,
+            recent_turns=request.recent_turns,
         )
         if not verification.ok and verification.check in DETERMINISTIC_STEERING_CHECKS:
             answer = finalize_raw_lab_answer(
@@ -1415,6 +1416,25 @@ class MockProvider:
                 words = answer.split()
                 shortened = " ".join(words[: max(8, len(words) // 2)]).rstrip(".,;:") + "."
                 answer = f"{prefix}{shortened}" if prefix else shortened
+            elif verification.check == "raw_lab_artifact_deferral" and artifact_due:
+                if "codex" in message_lower or "dogfood script" in message_lower:
+                    answer = f"{prefix}{CODEX_PROMPT_ARTIFACT}"
+                else:
+                    answer = (
+                        f"{prefix}Here's the first tiny playable Python skeleton. "
+                        f"I'm assuming we start with Entrance Hall, Kitchen, Upstairs, and Locked Basement.\n\n"
+                        f"{HAUNTED_MANSION_CODE_SKELETON}"
+                    )
+            elif verification.check == "raw_lab_false_execution":
+                answer = (
+                    f"{prefix}Raw Lab can't execute code here. Expected output might look like: "
+                    "Kent looks around the entrance hall."
+                )
+            elif verification.check == "raw_lab_productivity_push":
+                answer = (
+                    f"{prefix}I'm here with you — no tasks, no homework. "
+                    "We can just keep the conversation loose."
+                )
 
         answer = finalize_raw_lab_answer(
             answer,

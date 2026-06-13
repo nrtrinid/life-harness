@@ -67,7 +67,27 @@ _RAW_LAB_RUNTIME_AWARENESS_REPAIR = (
     "hidden memory, board memory, Memory Bank, tools, files, and internet access."
 )
 
-DETERMINISTIC_STEERING_CHECKS = frozenset({"raw_lab_handoff_ending", "raw_lab_line_breaks"})
+_RAW_LAB_FALSE_EXECUTION_REPAIR = (
+    "Raw Lab cannot run code or use tools. Rewrite with expected/example output language; "
+    'remove "I ran/executed/tested" claims.'
+)
+
+_RAW_LAB_ARTIFACT_DEFERRAL_REPAIR = (
+    "Produce the requested artifact now (code fence, plan, or sample output). "
+    'Do not ask permission or defer with "ready to see" / "would you like". '
+    "State brief assumptions and deliver."
+)
+
+_RAW_LAB_PRODUCTIVITY_PUSH_REPAIR = (
+    "User asked to hang out. Stay present and companionable. "
+    "Remove productivity framing, pounce missions, and task homework."
+)
+
+DETERMINISTIC_STEERING_CHECKS = frozenset({
+    "raw_lab_handoff_ending",
+    "raw_lab_line_breaks",
+    "raw_lab_false_execution",
+})
 
 _NO_HANDOFF_STEERING_MARKERS = (
     "avoid reflexive handoff",
@@ -644,15 +664,19 @@ def verify_raw_lab_response(
     conversation_history: list[ConversationTurn],
     companion_self_memory_count: int = 0,
     thread_state: RawLabThreadState | None = None,
+    recent_turns: list | None = None,
 ) -> VerificationResult:
-    if _answer_claims_restricted_board_context(answer, _RAW_LAB_BOARD_PATTERNS):
-        return VerificationResult(
-            ok=False,
-            check="raw_lab_board_claim",
-            repair_instruction=(
-                "Raw Lab has no board or Memory Bank access. Rewrite without claiming board context."
-            ),
-        )
+    from app.raw_lab_utils import (
+        artifact_request_active,
+        execution_context_active,
+        has_deferral_phrasing,
+        has_false_execution_claim,
+        has_productivity_push_phrasing,
+        normalize_recent_turns,
+        strong_hangout_intent_active,
+    )
+
+    turns = normalize_recent_turns(recent_turns, conversation_history)
 
     if re.match(r"^\s*what is\b", user_message.lower()) and not re.search(
         r"\bis\b|\bare\b|\bmeans\b", answer.lower()
@@ -689,6 +713,35 @@ def verify_raw_lab_response(
                 check="ignored_steering",
                 repair_instruction="The user asked for a shorter answer. Rewrite more concisely.",
             )
+
+    if execution_context_active(user_message) and has_false_execution_claim(
+        answer, execution_context=True
+    ):
+        return VerificationResult(
+            ok=False,
+            check="raw_lab_false_execution",
+            repair_instruction=_RAW_LAB_FALSE_EXECUTION_REPAIR,
+        )
+
+    if _answer_claims_restricted_board_context(answer, _RAW_LAB_BOARD_PATTERNS):
+        return VerificationResult(
+            ok=False,
+            check="raw_lab_board_claim",
+            repair_instruction=(
+                "Raw Lab has no board or Memory Bank access. Rewrite without claiming board context."
+            ),
+        )
+
+    if _raw_lab_runtime_awareness_failure(
+        answer=answer,
+        user_message=user_message,
+        companion_self_memory_count=companion_self_memory_count,
+    ):
+        return VerificationResult(
+            ok=False,
+            check="raw_lab_runtime_awareness",
+            repair_instruction=_RAW_LAB_RUNTIME_AWARENESS_REPAIR,
+        )
 
     if no_handoff_steering_active(thread_state, user_message) and has_handoff_ending(
         answer,
@@ -743,15 +796,22 @@ def verify_raw_lab_response(
                 repair_instruction="Collapse unnecessary blank lines while preserving lists.",
             )
 
-    if _raw_lab_runtime_awareness_failure(
-        answer=answer,
-        user_message=user_message,
-        companion_self_memory_count=companion_self_memory_count,
+    if artifact_request_active(user_message, turns, thread_state) and has_deferral_phrasing(
+        answer
     ):
         return VerificationResult(
             ok=False,
-            check="raw_lab_runtime_awareness",
-            repair_instruction=_RAW_LAB_RUNTIME_AWARENESS_REPAIR,
+            check="raw_lab_artifact_deferral",
+            repair_instruction=_RAW_LAB_ARTIFACT_DEFERRAL_REPAIR,
+        )
+
+    if strong_hangout_intent_active(user_message, turns, thread_state) and has_productivity_push_phrasing(
+        answer
+    ):
+        return VerificationResult(
+            ok=False,
+            check="raw_lab_productivity_push",
+            repair_instruction=_RAW_LAB_PRODUCTIVITY_PUSH_REPAIR,
         )
 
     return VerificationResult(ok=True, check="ok")

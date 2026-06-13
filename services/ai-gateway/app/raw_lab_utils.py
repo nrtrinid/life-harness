@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
-from app.models import ChatRole, RawLabThreadState, RawLabTurn
+from app.models import ChatRole, ConversationTurn, RawLabThreadState, RawLabTurn
 
 RAW_LAB_REPETITION_SIMILARITY_THRESHOLD = 0.82
 
@@ -226,7 +226,33 @@ _FALSE_EXECUTION_PATTERNS = [
     re.compile(r"\bi executed (?:the )?code\b", re.I),
     re.compile(r"\bi ran it\b", re.I),
     re.compile(r"\bi executed it\b", re.I),
+    re.compile(r"\bi tested (?:the )?code\b", re.I),
+    re.compile(r"\bi tested it\b", re.I),
 ]
+
+RAW_LAB_PRODUCTIVITY_PUSH_PHRASES = (
+    "pounce mission",
+    "minimum viable day",
+    "salvage mode",
+    "next tiny action",
+    "you should be productive",
+    "get back to work",
+)
+
+_STRONG_HANGOUT_INTENT_RE = re.compile(
+    r"\b("
+    r"just hang out"
+    r"|don'?t make this productivity"
+    r"|no productivity"
+    r"|not be pushed into productivity"
+    r"|don'?t turn this into a task"
+    r"|no pounce"
+    r"|not a task"
+    r"|i don'?t want homework"
+    r"|no homework"
+    r")\b",
+    re.I,
+)
 
 _EXECUTION_CAVEAT_RE = re.compile(
     r"\b("
@@ -264,6 +290,54 @@ _DEFERRAL_ECHO_PHRASES = (
     "what do you expect to see",
     "what should kent see first",
 )
+
+
+def normalize_recent_turns(
+    recent_turns: list | None,
+    conversation_history: list[ConversationTurn] | None = None,
+) -> list[dict[str, str]]:
+    """Return [{role, content}, ...] for artifact/execution/hangout helpers."""
+    if recent_turns:
+        normalized: list[dict[str, str]] = []
+        for turn in recent_turns:
+            if isinstance(turn, dict):
+                role = str(turn.get("role", ""))
+                content = str(turn.get("content", ""))
+            else:
+                role = turn.role.value if hasattr(turn.role, "value") else str(turn.role)
+                content = turn.content
+            if role and content.strip():
+                normalized.append({"role": role, "content": content})
+        return normalized
+    if conversation_history:
+        return [
+            {"role": turn.role.value, "content": turn.content}
+            for turn in conversation_history
+            if turn.content.strip()
+        ]
+    return []
+
+
+def has_productivity_push_phrasing(text: str) -> bool:
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in RAW_LAB_PRODUCTIVITY_PUSH_PHRASES)
+
+
+def strong_hangout_intent_active(
+    message: str,
+    recent_turns: list[RawLabTurn] | list[dict[str, str]] | None = None,
+    thread_state: RawLabThreadState | None = None,
+) -> bool:
+    if artifact_request_active(message, recent_turns, thread_state):
+        return False
+    if artifact_build_context_active(recent_turns, message=message, thread_state=thread_state):
+        return False
+
+    texts = [message]
+    if thread_state is not None:
+        texts.extend(thread_state.user_steering)
+
+    return bool(_STRONG_HANGOUT_INTENT_RE.search("\n".join(texts)))
 
 
 def _turn_texts(

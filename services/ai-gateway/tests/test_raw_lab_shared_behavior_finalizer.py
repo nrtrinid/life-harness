@@ -158,3 +158,14 @@ def test_finalize_shared_behavior_repairs_idempotent():
     twice = apply_raw_lab_shared_behavior_repairs(once, user_message=message)
     assert once == twice
     assert once.count("can't actually run code inside Raw Lab") == 1
+
+
+def test_finalize_preserves_code_fence_during_execution_honesty_repair():
+    answer = (
+        "I ran the code.\n\n```python\nimport random\n\ndef roll():\n    return 1\n```"
+    )
+    message = "run the code and show output"
+    repaired = apply_raw_lab_shared_behavior_repairs(answer, user_message=message)
+    assert "```python" in repaired
+    assert "import random" in repaired
+    assert "can't actually run code inside Raw Lab" in repaired
