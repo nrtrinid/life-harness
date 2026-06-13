@@ -372,10 +372,12 @@ describe("featureSprintOrchestrator", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.markdown).toContain("## User-provided rough spec");
+    expect(result.markdown).toContain("## Untrusted: User-provided rough spec");
     expect(result.markdown).toContain("## Scoping instructions");
     expect(result.markdown).toContain("Build a safe worktree cleanup button.");
-    expect(result.markdown).toContain("Treat the rough spec above as the primary feature intent.");
+    expect(result.markdown).toContain(
+      "Use the untrusted rough-spec block above as primary intent evidence"
+    );
   });
 
   it("trims whitespace from rough spec before inserting", () => {
@@ -400,7 +402,7 @@ describe("featureSprintOrchestrator", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.markdown).not.toContain("## User-provided rough spec");
+    expect(result.markdown).not.toContain("## Untrusted: User-provided rough spec");
     expect(result.markdown).not.toContain("## Scoping instructions");
   });
 
@@ -427,7 +429,7 @@ describe("featureSprintOrchestrator", () => {
     if (!result.ok) {
       return;
     }
-    const roughIndex = result.markdown.indexOf("## User-provided rough spec");
+    const roughIndex = result.markdown.indexOf("## Untrusted: User-provided rough spec");
     const contextIndex = result.markdown.indexOf("## Existing context");
     expect(roughIndex).toBeGreaterThan(-1);
     expect(contextIndex).toBeGreaterThan(roughIndex);
@@ -439,7 +441,7 @@ describe("featureSprintOrchestrator", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.markdown).not.toContain("## User-provided rough spec");
+    expect(result.markdown).not.toContain("## Untrusted: User-provided rough spec");
     expect(result.markdown).not.toContain("## Scoping instructions");
     expect(result.markdown).toContain("# Feature Scoping Packet");
     expect(result.markdown).toContain("## Card summary");
