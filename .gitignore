@@ -7,7 +7,12 @@ web-build/
 npm-debug.log*
 tmp/
 
-# Local personal career import (S1 — do not commit)
+# Local personal career source + generated packs (S1 — do not commit real data)
+private/**
+!private/README.md
+!private/career-source/
+private/career-source/**
+!private/career-source/README.md
 resume_pack/
 exports/life_harness_career_pack*.json
 
@@ -20,6 +25,3 @@ services/ai-gateway/models/
 
 expo-env.d.ts
 # @end expo-cli
-
-resume_pack/
-exports/life_harness_career_pack*.json

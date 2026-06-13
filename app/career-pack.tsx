@@ -174,13 +174,22 @@ export default function CareerPackScreen() {
         <Section title="Refresh from file">
           <Text style={styles.helpText}>
             Build locally, then pick the JSON file. Secrets are rejected. Contact details may trigger
-            warnings. Keep real packs in local resume_pack/ only — never commit them.
+            warnings. Keep real source in private/career-source/ and generated packs in resume_pack/
+            — both gitignored; never commit them.
           </Text>
           {Platform.OS === "web" ? (
-            <Text style={styles.helpText}>
-              Local builder: npm run career:pack:build -- --source ../career-source --out
-              resume_pack/life_harness_career_pack.v1.json
-            </Text>
+            <>
+              <Text style={styles.helpText}>
+                Local private source: npm run career:pack:build:local
+              </Text>
+              <Text style={styles.helpText}>
+                Validate local pack: npm run career:pack:validate:local
+              </Text>
+              <Text style={styles.helpText}>
+                External repo: npm run career:pack:build -- --source ../career-source --out
+                resume_pack/life_harness_career_pack.v1.json
+              </Text>
+            </>
           ) : null}
           <View style={styles.cardActions}>
             <Pressable style={styles.primaryAction} onPress={() => void handlePickFile()}>

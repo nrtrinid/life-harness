@@ -7,7 +7,7 @@ Refresh Career Source Pack v1 from a **local JSON file** without copy/paste. Pre
 Build stays outside the app:
 
 ```text
-edit career-source/  →  npm run career:pack:build  →  Career Pack screen  →  Pick file  →  Apply refresh
+edit private/career-source/ (or ../career-source/)  →  npm run career:pack:build:local  →  Career Pack screen  →  Pick file  →  Apply refresh
 ```
 
 ## Flow
@@ -15,6 +15,10 @@ edit career-source/  →  npm run career:pack:build  →  Career Pack screen  �
 1. Run the local builder:
 
 ```bash
+# Preferred — in-repo private source
+npm run career:pack:build:local
+
+# Fallback — sibling private repo
 npm run career:pack:build -- --source ../career-source --out resume_pack/life_harness_career_pack.v1.json
 ```
 

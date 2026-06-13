@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import { buildCareerSourcePackFromMarkdown } from "../src/core/careerSourcePackBuilder";
+import { collectCareerSourceMarkdownFiles } from "../src/core/careerSourcePackLocal";
 
 interface CliOptions {
   source?: string;
@@ -21,37 +22,21 @@ function parseArgs(argv: string[]): CliOptions {
   return options;
 }
 
-function collectMarkdownFiles(root: string, dir = root): Array<{ path: string; content: string }> {
-  const files: Array<{ path: string; content: string }> = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === ".git" || entry.name === "node_modules") {
-      continue;
-    }
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...collectMarkdownFiles(root, fullPath));
-      continue;
-    }
-    if (!entry.isFile() || !/\.(md|txt)$/i.test(entry.name)) {
-      continue;
-    }
-    files.push({
-      path: relative(root, fullPath).replace(/\\/g, "/"),
-      content: readFileSync(fullPath, "utf8")
-    });
-  }
-  return files.sort((a, b) => a.path.localeCompare(b.path));
-}
-
 const options = parseArgs(process.argv.slice(2));
 if (!options.source || !options.out) {
-  throw new Error("Usage: npm run career:pack:build -- --source ../career-source --out resume_pack/life_harness_career_pack.v1.json");
+  throw new Error(
+    [
+      "Missing --source and --out.",
+      "Local private source: npm run career:pack:build:local",
+      "External repo: npm run career:pack:build -- --source ../career-source --out resume_pack/life_harness_career_pack.v1.json"
+    ].join(" ")
+  );
 }
 
 const sourceRoot = resolve(options.source);
 const outPath = resolve(options.out);
 const result = buildCareerSourcePackFromMarkdown({
-  files: collectMarkdownFiles(sourceRoot),
+  files: collectCareerSourceMarkdownFiles(sourceRoot),
   sourceRepo: sourceRoot
 });
 

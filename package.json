@@ -17,7 +17,9 @@
     "feature-runner:test": "vitest run services/feature-sprint-runner/tests",
     "resume:build": "tsx scripts/build-resume-docx.ts",
     "resume:build:application": "tsx scripts/build-application-resume-docx.ts",
-    "career:pack:build": "tsx scripts/build-career-source-pack.ts"
+    "career:pack:build": "tsx scripts/build-career-source-pack.ts",
+    "career:pack:build:local": "tsx scripts/build-career-source-pack.ts -- --source private/career-source --out resume_pack/life_harness_career_pack.v1.json",
+    "career:pack:validate:local": "tsx scripts/validate-career-source-pack.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~56.0.14",

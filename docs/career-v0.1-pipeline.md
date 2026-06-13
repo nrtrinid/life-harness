@@ -33,7 +33,9 @@ Can I export and manually review the DOCX?
 
 Career Source Packs are local, user-provided source material. The app paste-imports the JSON into local state and does not upload it to a provider. Import validation rejects secret-like content and warns on likely contact details or PII-shaped fields so private source files stay private.
 
-Keep real source packs outside the repo, such as in a local `resume_pack/` folder. Commit only fixtures or sanitized examples.
+Keep real authoring source in gitignored `private/career-source/` (preferred) or a sibling `../career-source` repo (fallback). Generated packs go in gitignored `resume_pack/`. Commit only fixtures or sanitized examples (`public/fixtures/sample-career-source-pack.v1.json`).
+
+See [`career-private-source-v0.1.md`](career-private-source-v0.1.md).
 
 ## Resume Draft Packets
 

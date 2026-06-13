@@ -13,7 +13,8 @@ No cloud AI, auto-apply, or resume generation in this ticket.
 ## Privacy
 
 - Real packs live in local `resume_pack/` only — **never commit** them.
-- `.gitignore` blocks `resume_pack/` and `exports/life_harness_career_pack*.json`.
+- Personal authoring source may live in gitignored `private/career-source/` (preferred) or a sibling `../career-source` repo (fallback).
+- `.gitignore` blocks `private/` (except README placeholders), `resume_pack/`, and `exports/life_harness_career_pack*.json`.
 - Committed test fixture: `public/fixtures/sample-career-source-pack.v1.json` (synthetic, no PII).
 - Import rejects secret-like strings (`SUPABASE_SERVICE_ROLE`, `api_key`, `sk-`, `ghp_`, `AKIA`, etc.).
 - PII-like keys or email/phone patterns produce **warnings**, not hard rejects.
@@ -65,8 +66,8 @@ When a pack is imported, **Queue** adds:
 
 ## Dogfood
 
-1. Export or copy your local `resume_pack/life_harness_career_pack.v1.json`.
-2. Open **Career Pack** (`/career-pack`) and paste.
+1. Build locally: `npm run career:pack:build:local` (or external-source command in [`career-private-source-v0.1.md`](career-private-source-v0.1.md)).
+2. Open **Career Pack** (`/career-pack`) and pick `resume_pack/life_harness_career_pack.v1.json` (or paste).
 3. Review warnings, then open **Queue** with pack filters.
 4. Approve a strong match — resume angle and project emphasis may pre-fill from pack match.
 
