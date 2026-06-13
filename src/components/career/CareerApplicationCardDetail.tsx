@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link, type Href } from "expo-router";
 import { Linking, Pressable, Text, View } from "react-native";
 
 import type { ResumeModulePatch } from "../../core/actions";
@@ -18,6 +19,7 @@ import {
   RESUME_MODULE_SECTION_ORDER
 } from "../../core/resumeModuleBank";
 import { computeCardProgress } from "../../core/progress";
+import { getFollowUpsDue } from "../../core/career";
 import type { ApplicationResumeReadiness } from "../../core/resumeReadiness";
 import type {
   JobCandidate,
@@ -116,6 +118,11 @@ export function CareerApplicationCardDetail({
         warning.category === "missing_bullets" ||
         warning.category === "missing_proof")
   );
+  const jobsBoardHref = useMemo((): Href => {
+    const now = new Date();
+    const isFollowUpDue = getFollowUpsDue([card], now).some((due) => due.id === card.id);
+    return (isFollowUpDue ? "/career?tab=followup" : "/career?tab=apply") as Href;
+  }, [card]);
 
   return (
     <>
@@ -126,6 +133,14 @@ export function CareerApplicationCardDetail({
         onFocusSection={(section) => setFocusSection(section)}
         onPatchModule={(moduleId) => setPatchModuleId(moduleId)}
       />
+
+      <View style={styles.cardActionsRow}>
+        <Link href={jobsBoardHref} asChild>
+          <Pressable style={styles.secondaryAction}>
+            <Text style={styles.secondaryActionText}>Open in Jobs board</Text>
+          </Pressable>
+        </Link>
+      </View>
 
       {patchModule && patchWarnings.length > 0 ? (
         <ResumeModulePatchSheet

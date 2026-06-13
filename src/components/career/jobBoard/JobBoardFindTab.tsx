@@ -30,6 +30,7 @@ interface JobBoardFindTabProps {
   onHandoff?: (handoff: JobBoardHandoff) => void;
   showPasteForm?: boolean;
   pasteOnly?: boolean;
+  focusPasteForm?: boolean;
 }
 
 export function JobBoardFindTab({
@@ -37,7 +38,8 @@ export function JobBoardFindTab({
   onNotice,
   onHandoff,
   showPasteForm = true,
-  pasteOnly = false
+  pasteOnly = false,
+  focusPasteForm = false
 }: JobBoardFindTabProps) {
   const {
     jobCandidates,
@@ -173,7 +175,7 @@ export function JobBoardFindTab({
   }
 
   const pasteFormSection = showPasteForm ? (
-    <Section title="Paste a posting">
+    <Section title={focusPasteForm ? "Paste a posting — start here" : "Paste a posting"}>
       <Text style={styles.helpText}>
         Manual paste skips the runner. The role lands in Review for Start application.
       </Text>
@@ -230,6 +232,8 @@ export function JobBoardFindTab({
 
   return (
     <View style={{ gap: 12 }}>
+      {focusPasteForm ? pasteFormSection : null}
+
       <PrimaryMovePanel
         label="Find next"
         title={batchLifecycle.primaryPanelTitle}
@@ -286,7 +290,7 @@ export function JobBoardFindTab({
         </Link>
       </Section>
 
-      {pasteFormSection}
+      {!focusPasteForm ? pasteFormSection : null}
     </View>
   );
 }

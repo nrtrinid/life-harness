@@ -337,9 +337,9 @@ export default function CareerPackScreen() {
               <Text style={styles.secondaryActionText}>Resume Bank</Text>
             </Pressable>
           </Link>
-          <Link href="/job-candidates" asChild>
+          <Link href="/career?tab=review" asChild>
             <Pressable style={StyleSheet.flatten([styles.secondaryAction, { marginTop: 8 }])}>
-              <Text style={styles.secondaryActionText}>Job Candidates Queue</Text>
+              <Text style={styles.secondaryActionText}>Review queue</Text>
             </Pressable>
           </Link>
         </Section>

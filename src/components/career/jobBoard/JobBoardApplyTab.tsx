@@ -1,8 +1,10 @@
 import { Link, type Href } from "expo-router";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { PrimaryMovePanel, SignalStrip, UsefulEmptyState } from "../../AlivePatterns";
 import { Section } from "../../Section";
+import { WaitingNudge } from "../../WaitingNudge";
 import { styles } from "../../styles";
 import { CARD_STATE_LABELS } from "../../../core/labels";
 import {
@@ -24,7 +26,8 @@ interface JobBoardApplyTabProps {
 }
 
 export function JobBoardApplyTab({ onSelectTab }: JobBoardApplyTabProps) {
-  const { cards, resumeModules, jobCandidates, careerSourcePack } = useLifeHarness();
+  const { cards, resumeModules, jobCandidates, careerSourcePack, setCardState } = useLifeHarness();
+  const [dismissedWaitingNudgeFor, setDismissedWaitingNudgeFor] = useState<string | undefined>();
   const applicationSummaries = sortApplicationsForApplyQueue({
     cards,
     resumeModules,
@@ -41,6 +44,11 @@ export function JobBoardApplyTab({ onSelectTab }: JobBoardApplyTabProps) {
   const leadHref = leadApplication && leadAction
     ? (buildCardResumeHref(leadApplication.card.id, leadAction) as Href)
     : undefined;
+  const showWaitingNudge =
+    leadApplication &&
+    leadApplication.card.state === "active" &&
+    leadApplication.readiness.status === "ready_to_export" &&
+    dismissedWaitingNudgeFor !== leadApplication.card.id;
 
   return (
     <View style={{ gap: 12 }}>
@@ -79,6 +87,15 @@ export function JobBoardApplyTab({ onSelectTab }: JobBoardApplyTabProps) {
           footnote="One real application beats more setup."
         />
       )}
+
+      {showWaitingNudge && leadApplication ? (
+        <WaitingNudge
+          cardId={leadApplication.card.id}
+          label="Move to Waiting"
+          onMove={setCardState}
+          onDismiss={() => setDismissedWaitingNudgeFor(leadApplication.card.id)}
+        />
+      ) : null}
 
       <Section title={`Other applications (${remainingApplications.length})`}>
         {remainingApplications.length === 0 ? (

@@ -37,10 +37,10 @@ export function JobBoardFollowUpTab() {
           title={leadFollowUp.title}
           reason={leadFollowUp.nextTinyAction}
           primaryAction={{
-            label: "Open application",
+            label: "Open card & log follow-up",
             href: `/card/${leadFollowUp.id}` as Href
           }}
-          footnote="One follow-up keeps the loop warm. Send it, log it, then stop."
+          footnote="Follow-up is board work — open the card, send it, log proof, then stop."
         >
           <SignalStrip
             label="Due signal"
@@ -75,7 +75,7 @@ export function JobBoardFollowUpTab() {
                 <Text style={styles.helpText}>{card.nextTinyAction}</Text>
                 <Link href={`/card/${card.id}`} asChild>
                   <Pressable style={styles.primaryAction}>
-                    <Text style={styles.primaryActionText}>Open application</Text>
+                    <Text style={styles.primaryActionText}>Open card & log follow-up</Text>
                   </Pressable>
                 </Link>
               </View>

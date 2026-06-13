@@ -26,9 +26,14 @@ function parseAddParam(value: string | string[] | undefined): boolean {
   return raw === "1" || raw === "true";
 }
 
+function parsePasteParam(value: string | string[] | undefined): boolean {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "1" || raw === "true";
+}
+
 export function JobBoardScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string; add?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; add?: string; paste?: string }>();
   const {
     jobCandidates,
     cards,
@@ -64,6 +69,7 @@ export function JobBoardScreen() {
   );
   const activeTab = resolveJobBoardTab(params.tab, summary);
   const showAddSheet = parseAddParam(params.add);
+  const focusPasteForm = parsePasteParam(params.paste);
 
   useEffect(() => {
     if (!__DEV__ || runnerOk || devAutoStartAttempted.current) {
@@ -73,11 +79,12 @@ export function JobBoardScreen() {
     void requestJobScoutRunnerStart();
   }, [runnerOk]);
 
-  function selectTab(tab: JobBoardTab, options?: { clearAdd?: boolean }) {
+  function selectTab(tab: JobBoardTab, options?: { clearAdd?: boolean; clearPaste?: boolean }) {
     setHandoff(null);
     router.setParams({
       tab,
-      ...(options?.clearAdd || showAddSheet ? { add: "" } : {})
+      ...(options?.clearAdd || showAddSheet ? { add: "" } : {}),
+      ...(options?.clearPaste || focusPasteForm ? { paste: "" } : {})
     });
   }
 
@@ -132,7 +139,8 @@ export function JobBoardScreen() {
         <JobBoardAddJobSheet
           onClose={closeAddSheet}
           onPasteJob={() => {
-            selectTab("find", { clearAdd: true });
+            router.setParams({ tab: "find", add: "", paste: "1" });
+            setHandoff(null);
           }}
         />
       ) : null}
@@ -142,6 +150,7 @@ export function JobBoardScreen() {
           onSelectTab={selectTab}
           onNotice={handleNotice}
           onHandoff={handleFindHandoff}
+          focusPasteForm={focusPasteForm}
         />
       ) : null}
       {activeTab === "review" ? (

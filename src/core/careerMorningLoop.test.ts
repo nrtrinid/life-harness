@@ -181,7 +181,7 @@ describe("buildCareerMorningLoop", () => {
     expect(result.status.failedSourceCount).toBe(1);
   });
 
-  it("suggests reviewing candidates on /job-candidates when queue has matches", () => {
+  it("suggests reviewing candidates on /career?tab=review when queue has matches", () => {
     const result = loop({
       jobCandidates: [candidate()],
       jobSources: [
@@ -200,7 +200,7 @@ describe("buildCareerMorningLoop", () => {
     });
 
     expect(result.nextMove.kind).toBe("review_candidates");
-    expect(result.nextMove.href).toBe("/job-candidates");
+    expect(result.nextMove.href).toBe("/career?tab=review");
     expect(result.nextMove.ctaLabel).toBe("Review matches");
     expect(result.nextMove.why).toContain("before running");
     expect(result.status.waitingCandidateCount).toBe(1);
@@ -290,7 +290,7 @@ describe("buildCareerMorningLoop", () => {
     expect(result.status.needsResumeCount).toBe(1);
   });
 
-  it("suggests pasting a job on /candidate-intake when career state is empty", () => {
+  it("suggests pasting a job on /career?tab=find&add=1 when career state is empty", () => {
     const result = loop({
       jobCandidates: [],
       cards: [],
@@ -299,7 +299,7 @@ describe("buildCareerMorningLoop", () => {
     });
 
     expect(result.nextMove.kind).toBe("paste_job");
-    expect(result.nextMove.href).toBe("/candidate-intake");
+    expect(result.nextMove.href).toBe("/career?tab=find&add=1");
     expect(result.nextMove.why).toContain("sources can wait");
   });
 

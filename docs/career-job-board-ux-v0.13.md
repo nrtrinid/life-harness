@@ -29,8 +29,8 @@ Find jobs → Review matches → Start applications → Follow up
 
 **Unified add job:** Job Board hero / **Add a job** opens two paths:
 
-1. **Review a posting first** → `/candidate-intake`
-2. **Start application now** → `/career-intake`
+1. **Review a posting first** → `/career?tab=find&add=1` (paste form focused with `?paste=1`)
+2. **Start application now** → `/career-intake` (advanced secondary path)
 
 ## Review queue UX
 

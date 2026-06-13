@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { Notice, type NoticeState } from "../src/components/Notice";
+import { WaitingNudge } from "../src/components/WaitingNudge";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
 import { colors, styles } from "../src/components/styles";
@@ -15,7 +16,7 @@ const ROLE_TYPES = Object.keys(ROLE_TYPE_LABELS) as RoleType[];
 
 export default function CareerIntakeScreen() {
   const router = useRouter();
-  const { submitCareerIntake } = useLifeHarness();
+  const { submitCareerIntake, setCardState } = useLifeHarness();
   const [company, setCompany] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
@@ -24,6 +25,10 @@ export default function CareerIntakeScreen() {
   const [applicationStatus, setApplicationStatus] = useState<CardState>("inbox");
   const [followUpDate, setFollowUpDate] = useState("");
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [waitingNudge, setWaitingNudge] = useState<
+    { cardId: string; label: string; state: CardState } | undefined
+  >();
+  const [createdCardId, setCreatedCardId] = useState<string | undefined>();
 
   function handleSubmit() {
     if (!company.trim() || !roleTitle.trim() || !jobDescription.trim()) {
@@ -42,6 +47,12 @@ export default function CareerIntakeScreen() {
     });
 
     if (result.ok && result.cardId) {
+      if (result.suggestedCardState) {
+        setCreatedCardId(result.cardId);
+        setWaitingNudge(result.suggestedCardState);
+        setNotice({ kind: "success", message: result.message ?? "Application card created." });
+        return;
+      }
       router.push(`/card/${result.cardId}`);
       return;
     }
@@ -116,6 +127,7 @@ export default function CareerIntakeScreen() {
           </View>
 
           <Text style={[styles.label, { marginTop: 12 }]}>Application Status</Text>
+          <Text style={styles.helpText}>Already applied? Choose Waiting — it does not use an Active slot.</Text>
           <View style={styles.cardActions}>
             {INTAKE_STATUSES.map((status) => (
               <Pressable
@@ -147,6 +159,19 @@ export default function CareerIntakeScreen() {
           <Pressable style={[styles.primaryAction, { marginTop: 16 }]} onPress={handleSubmit}>
             <Text style={styles.primaryActionText}>Create Application Card</Text>
           </Pressable>
+          {waitingNudge ? (
+            <WaitingNudge
+              cardId={waitingNudge.cardId}
+              label={waitingNudge.label}
+              onMove={setCardState}
+              onDismiss={() => {
+                setWaitingNudge(undefined);
+                if (createdCardId) {
+                  router.push(`/card/${createdCardId}`);
+                }
+              }}
+            />
+          ) : null}
         </Section>
       </ScrollView>
     </Screen>

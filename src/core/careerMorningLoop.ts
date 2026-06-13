@@ -301,7 +301,7 @@ function deriveNextMove(
       title: `${bestCandidate.company} — ${bestCandidate.roleTitle}`,
       why: "New matches are waiting — review one before running more sources.",
       ctaLabel: "Review matches",
-      href: "/job-candidates",
+      href: "/career?tab=review",
       candidateId: bestCandidate.id
     };
   }
@@ -342,7 +342,7 @@ function deriveNextMove(
       title: `${bestCandidate.company} — ${bestCandidate.roleTitle}`,
       why: "Pick a resume angle or pass — one decision is enough for today.",
       ctaLabel: "Open review queue",
-      href: "/job-candidates",
+      href: "/career?tab=review",
       candidateId: bestCandidate.id
     };
   }
@@ -399,7 +399,7 @@ function deriveNextMove(
       title: "Paste one job posting",
       why: "Paste one posting to start the review queue — sources can wait.",
       ctaLabel: "Paste a job",
-      href: "/candidate-intake"
+      href: "/career?tab=find&add=1"
     };
   }
 

@@ -1,69 +1,76 @@
 # Career Hub v0.1
 
-The **Career** screen (`/career`) is the career pipeline home — overview chips, Fit Finder, and links to career tools.
+The **Jobs** screen (`/career`) is the career pipeline home — one board for the full loop:
+
+```text
+Find → Review → Apply → Follow up
+```
+
+See [`career-unified-workflow-v0.16.md`](career-unified-workflow-v0.16.md) for the authoritative workflow spec.
 
 ## Purpose
 
 ```text
-Open Career → see queue pressure, follow-ups, due sources → jump to the right tool or run Fit Finder.
+Open Jobs → see pipeline counts + next contract → work one tab → hand off to the next stage.
 ```
 
-Complements Today (daily pounce/recovery) with a durable career-work surface.
+Complements Today (daily pounce/recovery) with a durable career-work surface. Today’s collapsed **Jobs shortcuts** use the same next-action signal via [`buildTodayCareerShortcuts()`](../src/core/todayCareerShortcuts.ts).
 
-## Pipeline chips
+## Pipeline header chips
 
-Built by [`buildCareerPipelineState()`](../src/core/careerPipeline.ts) from current board state:
+Built by [`buildCareerPipelineState()`](../src/core/careerPipeline.ts):
 
 | Chip | Meaning |
 |------|---------|
-| **N in queue** | Job candidates with status `new` or `saved` |
-| **N active apps** | Application cards in `active` state |
+| **N in queue** | Candidates with status `new` or `saved` |
+| **N applications** | Application cards in Active + Waiting |
 | **N follow-ups** | Follow-ups due today or overdue |
-| **N due sources** | Enabled job sources past their cadence |
+| **N due sources** | Enabled sources past cadence |
+| **pack imported / no pack** | Career pack presence |
 
-Chips accent when count > 0.
+## Tabs
 
-## Fit Finder
+| Tab | Route | Primary work |
+|-----|-------|----------------|
+| **Find** | `/career?tab=find` | Run sources, paste posting (`?paste=1` focuses paste form) |
+| **Review** | `/career?tab=review` | Save / Pass / **Start application** |
+| **Apply** | `/career?tab=apply` | Application cards + resume readiness + Waiting nudge |
+| **Follow up** | `/career?tab=followup` | Due follow-up dates |
 
-**Find jobs that fit me** runs [`runFitFinder`](../src/state/LifeHarnessState.tsx) → [`src/core/jobScout.ts`](../src/core/jobScout.ts):
+Sticky chrome: **Pipeline stepper**, **Next contract** ([`buildCareerHubSummary()`](../src/core/careerHub.ts)), **Add a job** (`?add=1`), handoff banners after Find/Review.
 
-1. Collects all runnable enabled job sources
-2. Batch-runs them via the local runner (`npm run scout:runner` on `127.0.0.1:8122`)
-3. Creates new candidates in the queue
-4. Surfaces result notice (created count, runner unreachable, etc.)
+## Add a job
 
-Without the runner, Fit Finder shows a start-runner message — no browser fetch fallback.
+**Add a job** (`/career?add=1` or `?tab=find&add=1`):
 
-## Tool links
+1. **Paste a posting** → Find tab with paste form first (`?paste=1`)
+2. **Start application card directly** → `/career-intake` (advanced / secondary)
 
-| Link | Route | Purpose |
-|------|-------|---------|
-| Intake | `/career-intake` | Create application card directly |
-| Paste | `/candidate-intake` | Paste posting into candidate queue |
-| Queue | `/job-candidates` | Review and approve candidates |
-| Bank | `/resume-bank` | Resume modules |
-| Sources | `/job-sources` | Run approved sources (due/all) |
-| Setup | `/source-setup` | Detect and save adapters |
+Legacy `/candidate-intake` redirects to `/career?tab=find&add=1`.
+
+## More career tools (footer)
+
+Resume Bank, Career Pack, Sources, Source setup — machinery stays reachable but demoted under the tab content.
 
 ## Navigation
 
-Career sits in the **Primary** nav group alongside Today, Board, and Playback. Career support screens live under **Career Tools**, while Setup lives in **Backroom**. See [`career-command-board-v0.1.md`](./career-command-board-v0.1.md) for career flow details.
-
-## Related Job Scout docs
-
-| Version | Doc |
-|---------|-----|
-| v0.2 | [`job-scout-foundation-v0.2.md`](./job-scout-foundation-v0.2.md) — resume bank, candidates, manual intake |
-| v0.3 | [`job-scout-approved-sources-v0.3.md`](./job-scout-approved-sources-v0.3.md) — approved source fetch |
-| v0.4 | [`job-scout-runner-v0.4.md`](./job-scout-runner-v0.4.md) — local runner service |
-| v0.5 | [`persistence-audit-v0.5.md`](./persistence-audit-v0.5.md) — JSON snapshot persistence |
-| v0.6–v0.11 | Run due, setup, GovernmentJobs, Workday adapters — see [`docs/README.md`](./README.md) |
+**Jobs** is in **Primary** nav (`/career`). Backroom lists Resume Bank, Sources, Paste/Review deep links, and **Direct application (advanced)**. See [`nav-backroom-cleanup-v0.1.md`](nav-backroom-cleanup-v0.1.md).
 
 ## Code map
 
 | File | Role |
 |------|------|
-| [`app/career.tsx`](../app/career.tsx) | Career hub screen |
+| [`app/career.tsx`](../app/career.tsx) | Jobs screen shell + chips |
+| [`src/components/career/jobBoard/JobBoardScreen.tsx`](../src/components/career/jobBoard/JobBoardScreen.tsx) | Tab router, stepper, next contract |
+| [`src/core/careerHub.ts`](../src/core/careerHub.ts) | Next action + summary |
 | [`src/core/careerPipeline.ts`](../src/core/careerPipeline.ts) | Pipeline aggregation |
-| [`src/core/career.ts`](../src/core/career.ts) | Application cards, follow-ups |
-| [`src/core/jobScout.ts`](../src/core/jobScout.ts) | Fit Finder logic |
+| [`src/core/todayCareerShortcuts.ts`](../src/core/todayCareerShortcuts.ts) | Today ↔ hub shortcut parity |
+
+## Related docs
+
+| Version | Doc |
+|---------|-----|
+| Integration v0.2 | [`plans/career-hub-integration-v0.2.md`](plans/career-hub-integration-v0.2.md) |
+| Unified workflow | [`career-unified-workflow-v0.16.md`](career-unified-workflow-v0.16.md) |
+| Job Board UX | [`career-job-board-ux-v0.13.md`](career-job-board-ux-v0.13.md) |
+| Job Scout foundation | [`job-scout-foundation-v0.2.md`](job-scout-foundation-v0.2.md) |

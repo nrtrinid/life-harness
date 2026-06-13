@@ -294,7 +294,7 @@ export default function JobSourcesScreen() {
           Queue: {findings.counts.waiting} waiting - {findings.counts.newFetched} new fetched -{" "}
           {findings.counts.savedManual} saved/manual
         </Text>
-        <Link href="/job-candidates" asChild>
+        <Link href="/career?tab=review" asChild>
           <Pressable style={styles.secondaryAction}>
             <Text style={styles.secondaryActionText}>Review queue</Text>
           </Pressable>
