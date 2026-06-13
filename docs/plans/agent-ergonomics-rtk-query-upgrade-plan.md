@@ -284,6 +284,17 @@ Hook policy:
 - Hooks should not embed long policy text.
 - Hooks should be warnings first unless the rule protects secrets, dependencies, generated lockfile noise, or known containment boundaries.
 
+## Agent Autopilot v0.1: Automatic Preflight + Auto-Check
+
+**Status:** Implemented as a follow-up agent-tooling extension. Added `agent:preflight` for compact first-move packets and `agent:auto-check` for changed-file-aware verification selection. These commands compose existing agent scripts only; they do not add runtime app behavior, dependencies, RTK Query, subagents, or gateway/UI/state wiring.
+
+Autopilot behavior:
+
+- `agent:preflight` summarizes branch, bounded changed files, likely task areas, matching context-map blocks, likely tests, first commands, boundary risks, and do-not-read reminders.
+- `agent:auto-check` classifies changed files and runs a compact existing-script sequence for docs, tooling/hooks, core TypeScript, app/UI TypeScript, Job Scout, Raw Lab/ai-gateway, package/dependency, or mixed work.
+- `agent:auto-check -- --dry-run` prints selected checks without running them.
+- `agent:auto-check -- --full` may delegate to `agent:verify` when broader verification is explicitly requested.
+
 ## Subagent Guidance
 
 Subagents can help when parallel exploration is genuinely cheaper than one agent reading everything.

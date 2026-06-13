@@ -87,14 +87,14 @@ Resume automation unlocks after 5 manual career actions.
 For every task:
 
 1. Read `docs/01_final_design_doc.md`, `docs/02_v0_1_scope.md`, and this `AGENTS.md`.
-2. Run or consult `npm run agent:bootstrap`, then use `docs/AGENT_CONTEXT_MAP.md` for task-specific docs/files/tests.
+2. Run or consult `npm run agent:preflight`, then use `docs/AGENT_CONTEXT_MAP.md` for task-specific docs/files/tests.
 3. Obey `.agentignore`; do not broad-read archived, planning, historical, fixture, sample-output, or compiled context files by default.
 4. Make the smallest change that satisfies the ticket.
 5. Do not introduce new product concepts.
 6. Keep code modular and portable.
 7. Put product rules in core logic, not scattered in UI.
 8. Add or update tests when core logic changes.
-9. Run typecheck/tests before finishing.
+9. Run `npm run agent:auto-check` before finishing when files changed, or run the narrower checks named by the ticket.
 10. Summarize what changed, commands run, and remaining gaps.
 
 ## Product Quality Bar

@@ -1,10 +1,10 @@
 # Agent Context Map
 
-Use this file after reading root `AGENTS.md` and, when useful, running `npm run agent:bootstrap`.
+Use this file after reading root `AGENTS.md` and running or consulting `npm run agent:preflight`.
 
 This is a router, not a full architecture doc. Read only the task block that matches the ticket, then inspect the listed files directly. Respect `.agentignore` and avoid archived/planning/historical docs unless a task explicitly asks for them.
 
-Useful first commands: `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:tests-for -- --changed`, and `npm run agent:grep -- "<query>"`. Use `npm run check:boundaries` before boundary-sensitive changes. Optional project hooks are documented in `docs/CODEX_HOOKS.md`.
+Useful first commands: `npm run agent:preflight`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:tests-for -- --changed`, and `npm run agent:grep -- "<query>"`. Use `npm run agent:auto-check` near the end of a changed-file task and `npm run check:boundaries` before boundary-sensitive changes. Optional project hooks are documented in `docs/CODEX_HOOKS.md`.
 
 ## Task: core-board-product-logic
 
