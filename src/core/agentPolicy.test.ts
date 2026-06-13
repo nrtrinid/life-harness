@@ -11,6 +11,11 @@ import {
   AGENT_PERFORMANCE_MODES,
   AGENT_VERIFICATION_DEPTHS,
   agentPolicyPermissionsMatchRegistry,
+  checkAgentPolicyContainment,
+  checkAgentPolicyContextSource,
+  checkAgentPolicyMutation,
+  checkAgentPolicyOperation,
+  checkAgentPolicyProviderSurface,
   listAgentPolicySummaries,
   listResolvedAgentPolicies,
   resolveAgentPolicySummary,
@@ -244,6 +249,299 @@ describe("agentPolicy", () => {
       expect(policies).toHaveLength(AGENT_WORKFLOWS.length);
       expect(summaries).toHaveLength(AGENT_WORKFLOWS.length);
       expect(summaries.every((summary) => summary.performanceMode === performanceMode)).toBe(true);
+    }
+  });
+
+  it("returns compact stable allow and deny decisions", () => {
+    expect(
+      checkAgentPolicyProviderSurface({
+        workflowId: "chat_harness",
+        providerSurface: "ai_gateway"
+      })
+    ).toEqual({
+      allowed: true,
+      reason: "allowed_by_policy",
+      workflowId: "chat_harness",
+      performanceMode: "balanced",
+      detail: "Provider surface ai_gateway is allowed by policy."
+    });
+
+    expect(
+      checkAgentPolicyProviderSurface({
+        workflowId: "chat_harness",
+        providerSurface: "feature_sprint_runner"
+      })
+    ).toEqual({
+      allowed: false,
+      reason: "provider_surface_denied",
+      workflowId: "chat_harness",
+      performanceMode: "balanced",
+      detail:
+        "Requested provider surface feature_sprint_runner does not match policy surface ai_gateway."
+    });
+  });
+
+  it("denies unknown workflows without throwing", () => {
+    const unknown = "missing_workflow" as AgentWorkflowId;
+
+    expect(
+      checkAgentPolicyOperation({
+        workflowId: unknown,
+        providerSurface: "ai_gateway"
+      })
+    ).toEqual({
+      allowed: false,
+      reason: "workflow_unknown",
+      workflowId: "missing_workflow",
+      performanceMode: "balanced",
+      detail: "Workflow missing_workflow is not registered."
+    });
+  });
+
+  it("checks provider surface permissions", () => {
+    for (const workflow of AGENT_WORKFLOWS) {
+      expect(
+        checkAgentPolicyProviderSurface({
+          workflowId: workflow.id,
+          providerSurface: workflow.providerSurface
+        }).allowed
+      ).toBe(true);
+    }
+
+    expect(
+      checkAgentPolicyProviderSurface({
+        workflowId: "context_packet_build",
+        providerSurface: "ai_gateway"
+      }).reason
+    ).toBe("provider_surface_denied");
+    expect(
+      checkAgentPolicyProviderSurface({
+        workflowId: "raw_lab",
+        providerSurface: "feature_sprint_runner"
+      }).reason
+    ).toBe("provider_surface_denied");
+    expect(
+      checkAgentPolicyProviderSurface({
+        workflowId: "feature_sprint_runner",
+        providerSurface: "ai_gateway"
+      }).reason
+    ).toBe("provider_surface_denied");
+  });
+
+  it("checks context source permissions", () => {
+    for (const workflow of AGENT_WORKFLOWS) {
+      for (const contextSource of workflow.contextSources) {
+        expect(
+          checkAgentPolicyContextSource({
+            workflowId: workflow.id,
+            contextSource
+          }).allowed
+        ).toBe(true);
+      }
+    }
+
+    expect(
+      checkAgentPolicyContextSource({
+        workflowId: "raw_lab",
+        contextSource: "board_snapshot"
+      }).reason
+    ).toBe("context_source_denied");
+    expect(
+      checkAgentPolicyContextSource({
+        workflowId: "chat_harness",
+        contextSource: "raw_lab_thread_state"
+      }).reason
+    ).toBe("context_source_denied");
+    expect(
+      checkAgentPolicyContextSource({
+        workflowId: "deep_synthesis",
+        contextSource: "raw_lab_turns"
+      }).reason
+    ).toBe("context_source_denied");
+  });
+
+  it("checks mutation permissions", () => {
+    expect(checkAgentPolicyMutation({ workflowId: "raw_lab", mutation: "direct_mutation" }).reason).toBe(
+      "mutation_denied"
+    );
+    expect(checkAgentPolicyMutation({ workflowId: "raw_lab", mutation: "user_approved_action" }).reason).toBe(
+      "mutation_denied"
+    );
+    expect(checkAgentPolicyMutation({ workflowId: "deep_synthesis", mutation: "proposal" }).allowed).toBe(
+      true
+    );
+    expect(
+      checkAgentPolicyMutation({ workflowId: "deep_synthesis", mutation: "direct_mutation" }).reason
+    ).toBe("mutation_denied");
+    expect(
+      checkAgentPolicyMutation({ workflowId: "chat_harness", mutation: "user_approved_action" })
+        .allowed
+    ).toBe(true);
+    expect(
+      checkAgentPolicyMutation({ workflowId: "chat_harness", mutation: "direct_mutation" }).reason
+    ).toBe("mutation_denied");
+    expect(
+      checkAgentPolicyMutation({ workflowId: "context_packet_build", mutation: "proposal" }).reason
+    ).toBe("mutation_denied");
+    expect(
+      checkAgentPolicyMutation({
+        workflowId: "feature_sprint_runner",
+        mutation: "external_agent_scope"
+      }).allowed
+    ).toBe(true);
+  });
+
+  it("checks containment boundaries", () => {
+    expect(checkAgentPolicyContainment({ workflowId: "raw_lab", containment: "raw_lab_isolated" }).allowed).toBe(
+      true
+    );
+    expect(checkAgentPolicyContainment({ workflowId: "raw_lab", containment: "board_context" }).reason).toBe(
+      "containment_denied"
+    );
+    expect(
+      checkAgentPolicyContainment({ workflowId: "raw_lab", containment: "board_persistence" })
+        .reason
+    ).toBe("containment_denied");
+    expect(
+      checkAgentPolicyContainment({
+        workflowId: "chat_harness",
+        containment: "raw_lab_runtime_authority"
+      }).reason
+    ).toBe("containment_denied");
+    expect(
+      checkAgentPolicyContainment({
+        workflowId: "feature_sprint_runner",
+        containment: "dev_agent"
+      }).allowed
+    ).toBe(true);
+    expect(
+      checkAgentPolicyContainment({
+        workflowId: "deep_synthesis",
+        containment: "companion_runtime_authority"
+      }).allowed
+    ).toBe(true);
+  });
+
+  it("checks aggregate operations in stable denial order", () => {
+    expect(
+      checkAgentPolicyOperation({
+        workflowId: "chat_harness",
+        providerSurface: "ai_gateway",
+        contextSource: "board_snapshot",
+        mutation: "user_approved_action",
+        containment: "grounded"
+      }).allowed
+    ).toBe(true);
+
+    expect(checkAgentPolicyOperation({ workflowId: "chat_harness" })).toEqual({
+      allowed: true,
+      reason: "allowed_by_policy",
+      workflowId: "chat_harness",
+      performanceMode: "balanced",
+      detail: "Operation request is allowed by policy."
+    });
+
+    expect(
+      checkAgentPolicyOperation({
+        workflowId: "chat_harness",
+        providerSurface: "feature_sprint_runner",
+        contextSource: "raw_lab_turns",
+        mutation: "direct_mutation",
+        containment: "raw_lab_runtime_authority"
+      }).reason
+    ).toBe("provider_surface_denied");
+    expect(
+      checkAgentPolicyOperation({
+        workflowId: "chat_harness",
+        providerSurface: "ai_gateway",
+        contextSource: "raw_lab_turns",
+        mutation: "direct_mutation",
+        containment: "raw_lab_runtime_authority"
+      }).reason
+    ).toBe("context_source_denied");
+    expect(
+      checkAgentPolicyOperation({
+        workflowId: "chat_harness",
+        providerSurface: "ai_gateway",
+        contextSource: "board_snapshot",
+        mutation: "direct_mutation",
+        containment: "raw_lab_runtime_authority"
+      }).reason
+    ).toBe("mutation_denied");
+    expect(
+      checkAgentPolicyOperation({
+        workflowId: "chat_harness",
+        providerSurface: "ai_gateway",
+        contextSource: "board_snapshot",
+        mutation: "user_approved_action",
+        containment: "raw_lab_runtime_authority"
+      }).reason
+    ).toBe("containment_denied");
+  });
+
+  it("keeps policy guard decisions invariant across performance modes", () => {
+    for (const workflow of AGENT_WORKFLOWS) {
+      const providerReasons = new Set(
+        AGENT_PERFORMANCE_MODES.map(
+          (performanceMode) =>
+            checkAgentPolicyProviderSurface({
+              workflowId: workflow.id,
+              performanceMode,
+              providerSurface: workflow.providerSurface
+            }).reason
+        )
+      );
+      expect(providerReasons).toEqual(new Set(["allowed_by_policy"]));
+
+      const deniedProviderReasons = new Set(
+        AGENT_PERFORMANCE_MODES.map(
+          (performanceMode) =>
+            checkAgentPolicyProviderSurface({
+              workflowId: workflow.id,
+              performanceMode,
+              providerSurface:
+                workflow.providerSurface === "ai_gateway" ? "none" : "ai_gateway"
+            }).reason
+        )
+      );
+      expect(deniedProviderReasons.size).toBe(1);
+
+      const firstContextSource = workflow.contextSources[0];
+      const contextReasons = new Set(
+        AGENT_PERFORMANCE_MODES.map(
+          (performanceMode) =>
+            checkAgentPolicyContextSource({
+              workflowId: workflow.id,
+              performanceMode,
+              contextSource: firstContextSource
+            }).reason
+        )
+      );
+      expect(contextReasons).toEqual(new Set(["allowed_by_policy"]));
+
+      const mutationReasons = new Set(
+        AGENT_PERFORMANCE_MODES.map(
+          (performanceMode) =>
+            checkAgentPolicyMutation({
+              workflowId: workflow.id,
+              performanceMode,
+              mutation: "direct_mutation"
+            }).reason
+        )
+      );
+      expect(mutationReasons.size).toBe(1);
+
+      const containmentReasons = new Set(
+        AGENT_PERFORMANCE_MODES.map(
+          (performanceMode) =>
+            checkAgentPolicyContainment({
+              workflowId: workflow.id,
+              performanceMode,
+              containment: workflow.containment
+            }).reason
+        )
+      );
+      expect(containmentReasons).toEqual(new Set(["allowed_by_policy"]));
     }
   });
 });

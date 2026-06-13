@@ -56,6 +56,46 @@ export type AgentPolicySummary = {
   keepWarm: boolean;
 };
 
+export type AgentPolicyDecisionReason =
+  | "workflow_unknown"
+  | "allowed_by_policy"
+  | "provider_surface_denied"
+  | "context_source_denied"
+  | "mutation_denied"
+  | "containment_denied";
+
+export type AgentPolicyDecision = {
+  allowed: boolean;
+  reason: AgentPolicyDecisionReason;
+  workflowId: string;
+  performanceMode: AgentPerformanceMode;
+  detail: string;
+};
+
+export type AgentPolicyMutationRequest =
+  | "none"
+  | "proposal"
+  | "user_approved_action"
+  | "direct_mutation"
+  | "external_agent_scope";
+
+export type AgentPolicyContainmentRequest =
+  | AgentContainmentType
+  | "board_context"
+  | "board_mutation"
+  | "board_persistence"
+  | "raw_lab_runtime_authority"
+  | "companion_runtime_authority";
+
+export type AgentPolicyOperationRequest = {
+  workflowId: AgentWorkflowId;
+  performanceMode?: AgentPerformanceMode;
+  providerSurface?: AgentProviderSurface;
+  contextSource?: AgentContextSourceId;
+  mutation?: AgentPolicyMutationRequest;
+  containment?: AgentPolicyContainmentRequest;
+};
+
 const MODE_BUDGETS: Record<
   AgentPerformanceMode,
   {
@@ -229,6 +269,151 @@ export function agentPolicyPermissionsMatchRegistry(policy: ResolvedAgentPolicy)
   );
 }
 
+export function checkAgentPolicyProviderSurface(request: {
+  workflowId: AgentWorkflowId;
+  performanceMode?: AgentPerformanceMode;
+  providerSurface: AgentProviderSurface;
+}): AgentPolicyDecision {
+  const policy = resolveWorkflowAgentPolicy(request.workflowId, request.performanceMode);
+  if (!policy) {
+    return denyUnknownWorkflow(request.workflowId, request.performanceMode);
+  }
+
+  if (policy.providerSurface !== request.providerSurface) {
+    return denyPolicy(
+      policy,
+      "provider_surface_denied",
+      `Requested provider surface ${request.providerSurface} does not match policy surface ${policy.providerSurface}.`
+    );
+  }
+
+  return allowPolicy(policy, `Provider surface ${request.providerSurface} is allowed by policy.`);
+}
+
+export function checkAgentPolicyContextSource(request: {
+  workflowId: AgentWorkflowId;
+  performanceMode?: AgentPerformanceMode;
+  contextSource: AgentContextSourceId;
+}): AgentPolicyDecision {
+  const policy = resolveWorkflowAgentPolicy(request.workflowId, request.performanceMode);
+  if (!policy) {
+    return denyUnknownWorkflow(request.workflowId, request.performanceMode);
+  }
+
+  if (!policy.contextSources.includes(request.contextSource)) {
+    return denyPolicy(
+      policy,
+      "context_source_denied",
+      `Context source ${request.contextSource} is not listed in policy context sources.`
+    );
+  }
+
+  return allowPolicy(policy, `Context source ${request.contextSource} is allowed by policy.`);
+}
+
+export function checkAgentPolicyMutation(request: {
+  workflowId: AgentWorkflowId;
+  performanceMode?: AgentPerformanceMode;
+  mutation: AgentPolicyMutationRequest;
+}): AgentPolicyDecision {
+  const policy = resolveWorkflowAgentPolicy(request.workflowId, request.performanceMode);
+  if (!policy) {
+    return denyUnknownWorkflow(request.workflowId, request.performanceMode);
+  }
+
+  if (!mutationAllowedByPolicy(policy.mutationPolicy, request.mutation)) {
+    return denyPolicy(
+      policy,
+      "mutation_denied",
+      `Mutation ${request.mutation} is denied by policy mutation ${policy.mutationPolicy}.`
+    );
+  }
+
+  return allowPolicy(
+    policy,
+    `Mutation ${request.mutation} is allowed by policy mutation ${policy.mutationPolicy}.`
+  );
+}
+
+export function checkAgentPolicyContainment(request: {
+  workflowId: AgentWorkflowId;
+  performanceMode?: AgentPerformanceMode;
+  containment: AgentPolicyContainmentRequest;
+}): AgentPolicyDecision {
+  const policy = resolveWorkflowAgentPolicy(request.workflowId, request.performanceMode);
+  if (!policy) {
+    return denyUnknownWorkflow(request.workflowId, request.performanceMode);
+  }
+
+  if (!containmentAllowedByPolicy(policy.containment, request.containment)) {
+    return denyPolicy(
+      policy,
+      "containment_denied",
+      `Containment request ${request.containment} is denied by policy containment ${policy.containment}.`
+    );
+  }
+
+  return allowPolicy(
+    policy,
+    `Containment request ${request.containment} is allowed by policy containment ${policy.containment}.`
+  );
+}
+
+export function checkAgentPolicyOperation(
+  request: AgentPolicyOperationRequest
+): AgentPolicyDecision {
+  const policy = resolveWorkflowAgentPolicy(request.workflowId, request.performanceMode);
+  if (!policy) {
+    return denyUnknownWorkflow(request.workflowId, request.performanceMode);
+  }
+
+  if (request.providerSurface !== undefined) {
+    const decision = checkAgentPolicyProviderSurface({
+      workflowId: request.workflowId,
+      performanceMode: request.performanceMode,
+      providerSurface: request.providerSurface
+    });
+    if (!decision.allowed) {
+      return decision;
+    }
+  }
+
+  if (request.contextSource !== undefined) {
+    const decision = checkAgentPolicyContextSource({
+      workflowId: request.workflowId,
+      performanceMode: request.performanceMode,
+      contextSource: request.contextSource
+    });
+    if (!decision.allowed) {
+      return decision;
+    }
+  }
+
+  if (request.mutation !== undefined) {
+    const decision = checkAgentPolicyMutation({
+      workflowId: request.workflowId,
+      performanceMode: request.performanceMode,
+      mutation: request.mutation
+    });
+    if (!decision.allowed) {
+      return decision;
+    }
+  }
+
+  if (request.containment !== undefined) {
+    const decision = checkAgentPolicyContainment({
+      workflowId: request.workflowId,
+      performanceMode: request.performanceMode,
+      containment: request.containment
+    });
+    if (!decision.allowed) {
+      return decision;
+    }
+  }
+
+  return allowPolicy(policy, "Operation request is allowed by policy.");
+}
+
 function fromRegistry(
   workflow: AgentWorkflowDefinition,
   performanceMode: AgentPerformanceMode
@@ -341,4 +526,81 @@ function sameContextSources(
   right: readonly AgentContextSourceId[]
 ): boolean {
   return left.length === right.length && left.every((source, index) => source === right[index]);
+}
+
+function mutationAllowedByPolicy(
+  policy: AgentMutationPolicy,
+  mutation: AgentPolicyMutationRequest
+): boolean {
+  if (mutation === "none") {
+    return true;
+  }
+
+  switch (policy) {
+    case "none":
+      return false;
+    case "user_approved_proposals_only":
+      return mutation === "proposal";
+    case "user_approved_actions_only":
+      return mutation === "proposal" || mutation === "user_approved_action";
+    case "external_agent_scoped":
+      return mutation === "external_agent_scope";
+  }
+}
+
+function containmentAllowedByPolicy(
+  policy: AgentContainmentType,
+  containment: AgentPolicyContainmentRequest
+): boolean {
+  if (containment === policy) {
+    return true;
+  }
+
+  switch (policy) {
+    case "grounded":
+      return containment === "board_context" || containment === "companion_runtime_authority";
+    case "raw_lab_isolated":
+      return false;
+    case "dev_agent":
+      return containment === "board_context";
+    case "deterministic_local":
+      return containment === "board_context";
+  }
+}
+
+function allowPolicy(policy: ResolvedAgentPolicy, detail: string): AgentPolicyDecision {
+  return {
+    allowed: true,
+    reason: "allowed_by_policy",
+    workflowId: policy.workflowId,
+    performanceMode: policy.performanceMode,
+    detail
+  };
+}
+
+function denyPolicy(
+  policy: ResolvedAgentPolicy,
+  reason: Exclude<AgentPolicyDecisionReason, "allowed_by_policy" | "workflow_unknown">,
+  detail: string
+): AgentPolicyDecision {
+  return {
+    allowed: false,
+    reason,
+    workflowId: policy.workflowId,
+    performanceMode: policy.performanceMode,
+    detail
+  };
+}
+
+function denyUnknownWorkflow(
+  workflowId: AgentWorkflowId,
+  performanceMode: AgentPerformanceMode = "balanced"
+): AgentPolicyDecision {
+  return {
+    allowed: false,
+    reason: "workflow_unknown",
+    workflowId,
+    performanceMode,
+    detail: `Workflow ${workflowId} is not registered.`
+  };
 }

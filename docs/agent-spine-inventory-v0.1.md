@@ -84,6 +84,12 @@ The summary shape is intentionally small: workflow label, performance mode, prov
 
 No gateway, UI, state, provider execution, or mutation behavior is wired to policy yet. Permissions still come from the workflow registry, and `agentPolicyPermissionsMatchRegistry` exists to keep that invariant explicit.
 
+### Agent Policy v0.3
+
+Agent Policy v0.3 adds pure enforcement primitives for future consumers. `checkAgentPolicyProviderSurface`, `checkAgentPolicyContextSource`, `checkAgentPolicyMutation`, `checkAgentPolicyContainment`, and `checkAgentPolicyOperation` return compact allow/deny decisions instead of throwing.
+
+These helpers are intended to be called before provider, context, mutation-sensitive, or containment-sensitive actions. They still do not wire policy into UI, gateway, state, provider execution, or board mutation. Performance mode remains compute-only; permission decisions continue to derive from the workflow registry.
+
 ---
 
 ## Workflow inventory (condensed)
