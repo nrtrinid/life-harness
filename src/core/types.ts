@@ -495,6 +495,24 @@ export type HarnessFeatureSprintStep = {
   completedAt?: string;
 };
 
+export type HarnessFeatureSprintNextSliceProposal = {
+  title: string;
+  goal: string;
+  acceptanceCriteria: string[];
+  nonGoals: string[];
+  riskTier?: "tiny" | "normal" | "risky";
+};
+
+export type HarnessFeatureSprintSpecUpdate = {
+  stepId: string;
+  revisedSpec: string;
+  changelog: string[];
+  completedSliceSummary: string;
+  remainingWork: string[];
+  featureComplete: boolean;
+  importedAt: string;
+};
+
 export type HarnessFeatureSprintRunnerRunStatus = "running" | "succeeded" | "failed";
 
 export type HarnessFeatureSprintRunnerRun = {
@@ -548,6 +566,8 @@ export type HarnessFeatureSprintPlan = {
   evidenceLogId?: string;
   evidenceProofItemId?: string;
   featureSpec?: HarnessFeatureSpec;
+  latestSpecUpdate?: HarnessFeatureSprintSpecUpdate;
+  nextSliceProposal?: HarnessFeatureSprintNextSliceProposal;
   automationPhase?: HarnessFeatureSprintAutomationPhase;
 };
 
