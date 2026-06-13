@@ -2,6 +2,7 @@ import type { ReasoningDepth } from "./chatHarnessClient";
 import type { ChatHarnessMode } from "./harnessContext";
 import type { RawLabBudgetLevel } from "./rawLabContextBudget";
 import type { RawLabThreadState } from "./rawLabThreadState";
+import { buildDisplayThreadMemoryState } from "./rawLabThreadState";
 
 export type ChatStateChipTone = "default" | "accent" | "warning";
 
@@ -36,19 +37,24 @@ export function formatBudgetChipLabel(input: BudgetChipInput): string {
 }
 
 export function countRawLabThreadMemoryItems(threadState: RawLabThreadState): number {
-  let count = threadState.pinnedFacts.length;
-  count += threadState.decisions.length;
-  count += threadState.openLoops.length;
-  count += threadState.userSteering.length;
-  count += threadState.doNotRepeat.length;
-  count += threadState.recurringTopics.length;
-  count += threadState.provisionalStances.length;
-  count += threadState.selfObservations.length;
-  count += threadState.questionsToRevisit.length;
+  const display = buildDisplayThreadMemoryState(threadState);
+  let count = display.pinnedFacts.length;
+  count += display.decisions.length;
+  count += display.openLoops.length;
+  count += display.userSteering.length;
+  count += display.doNotRepeat.length;
+  count += display.recurringTopics.length;
+  count += display.provisionalStances.length;
+  count += display.selfObservations.length;
+  count += display.questionsToRevisit.length;
   if (threadState.recentDigest) {
     count += 1;
   }
-  if (threadState.currentVibe) {
+  if (display.currentVibe) {
+    count += 1;
+  }
+  const currentTension = threadState.smartCompactedContext?.currentTension?.trim();
+  if (currentTension) {
     count += 1;
   }
   return count;

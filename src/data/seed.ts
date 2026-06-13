@@ -271,6 +271,17 @@ export const seedProofItems: ProofItem[] = [
   }
 ];
 
+/** Stable IDs for demo seed cards — used to detect demo board during triage. */
+export const SEED_DEMO_CARD_IDS = [
+  "career-networking",
+  "ev-tracker-kalshi",
+  "text-rpg",
+  "fitness-return",
+  "local-llm-setup",
+  "life-harness",
+  "qualcomm-application"
+] as const;
+
 export const seedDailyState: DailyState = {
   date: "2026-06-09",
   mode: "normal",

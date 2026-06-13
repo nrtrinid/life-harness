@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ChatThreadItem } from "../components/askHarness/types";
+import type { ChatThreadItem } from "./chatHarnessTypes";
 import { createSeedState } from "../data/createSeedState";
 import {
   buildChatHarnessSendBundle,

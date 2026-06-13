@@ -58,6 +58,63 @@ NOTES:
 - Keep changes narrow and preserve local seed/state behavior.
 - Add or update tests when core logic changes.
 
+## Task: core-board-usability
+
+READ_FIRST:
+- `AGENTS.md`
+- `docs/plans/board-usability-v0.1.md`
+- `docs/05_product_rules.md`
+
+LIKELY_FILES:
+- `src/data/createSeedState.ts`
+- `src/core/boardUsability.ts`
+- `src/core/actions.ts`
+- `src/core/briefing.ts`
+- `src/core/guards.ts`
+- `src/core/labels.ts`
+- `app/board.tsx`
+- `app/index.tsx`
+- `app/progress.tsx`
+
+LIKELY_TESTS:
+- `src/core/boardUsability.test.ts`
+- `src/core/actions.test.ts`
+- `src/state/lifeHarness/persistence.test.ts`
+
+VERIFY:
+- `npm run agent:typecheck`
+- `npm run agent:test -- -- src/core/boardUsability.test.ts src/core/actions.test.ts`
+
+## Task: core-career-hub
+
+READ_FIRST:
+- `AGENTS.md`
+- `docs/plans/career-hub-integration-v0.2.md`
+- `docs/career-unified-workflow-v0.16.md`
+- `docs/career-hub-v0.1.md`
+
+LIKELY_FILES:
+- `src/core/careerHub.ts`
+- `src/core/careerPipeline.ts`
+- `src/core/todayCareerShortcuts.ts`
+- `src/core/careerMorningLoop.ts`
+- `src/core/primaryAction.ts`
+- `src/components/career/jobBoard/JobBoardScreen.tsx`
+- `src/components/career/jobBoard/JobBoardApplyTab.tsx`
+- `app/career.tsx`
+- `app/index.tsx`
+
+LIKELY_TESTS:
+- `src/core/careerHub.test.ts`
+- `src/core/todayCareerShortcuts.test.ts`
+- `src/core/careerMorningLoop.test.ts`
+- `src/core/primaryAction.test.ts`
+- `src/components/navRoutes.test.ts`
+
+VERIFY:
+- `npm run agent:typecheck`
+- `npm run agent:test -- -- src/core/careerHub.test.ts src/core/todayCareerShortcuts.test.ts src/core/careerMorningLoop.test.ts`
+
 ## Task: career-job-scout
 
 READ_FIRST:

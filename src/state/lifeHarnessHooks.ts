@@ -17,7 +17,10 @@ export function useBoardActions() {
     completeMinimumViableDay,
     completeSalvage,
     submitQuickCapture,
-    setCardState
+    setCardState,
+    setMainQuest,
+    submitCreateCard,
+    dismissDemoTriage
   } = useLifeHarness();
 
   return useMemo(
@@ -26,9 +29,21 @@ export function useBoardActions() {
       completeMinimumViableDay,
       completeSalvage,
       submitQuickCapture,
-      setCardState
+      setCardState,
+      setMainQuest,
+      submitCreateCard,
+      dismissDemoTriage
     }),
-    [pounce, completeMinimumViableDay, completeSalvage, submitQuickCapture, setCardState]
+    [
+      pounce,
+      completeMinimumViableDay,
+      completeSalvage,
+      submitQuickCapture,
+      setCardState,
+      setMainQuest,
+      submitCreateCard,
+      dismissDemoTriage
+    ]
   );
 }
 

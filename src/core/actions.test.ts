@@ -9,6 +9,7 @@ import {
   applyToggleResumeDraftPacketModule,
   applyCardStateChange,
   applyCareerIntake,
+  applyCreateCard,
   applyDismissJobCandidate,
   applyJobCandidateIntake,
   applyMvd,
@@ -18,7 +19,8 @@ import {
   applyRunJobSourceResult,
   applySalvage,
   applySaveJobCandidate,
-  applySaveJobSourceWithOptionalImport
+  applySaveJobSourceWithOptionalImport,
+  applySetMainQuest
 } from "./actions";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { buildProofLedger } from "./proofLedger";
@@ -260,7 +262,7 @@ describe("applyQuickCapture", () => {
     expect(result.state.cards[0]?.title).toContain("Try a smaller slice first.");
     expect(result.state.logs.length).toBe(state.logs.length + 1);
     expect(result.state.proofItems.length).toBe(state.proofItems.length + 1);
-    expect(result.message).toContain("Idea captured");
+    expect(result.message).toContain("Added to Inbox");
   });
 
   it("logs follow-up without proof when no card matches", () => {
@@ -668,5 +670,50 @@ describe("job candidate actions", () => {
     expect(result.state.jobCandidates[0]?.sourceId).toBe(result.state.jobSources[0]?.id);
     expect(result.state.jobSourceRuns).toHaveLength(1);
     expect(result.state.jobSourceRuns[0]?.sourceId).toBe(result.state.jobSources[0]?.id);
+  });
+});
+
+describe("applySetMainQuest", () => {
+  it("sets main quest for active cards only", () => {
+    const state = createState();
+    const active = state.cards.find((card) => card.state === "active");
+    expect(active).toBeDefined();
+
+    const result = applySetMainQuest(state, active!.id);
+    expect(result.ok).toBe(true);
+    expect(result.state.dailyState.mainQuestId).toBe(active!.id);
+  });
+
+  it("clears main quest when card leaves active", () => {
+    const state = createState();
+    const active = state.cards.find((card) => card.state === "active");
+    expect(active).toBeDefined();
+    const withQuest = applySetMainQuest(state, active!.id).state;
+    const parked = applyCardStateChange(withQuest, active!.id, "parked");
+
+    expect(parked.ok).toBe(true);
+    expect(parked.state.dailyState.mainQuestId).toBeUndefined();
+  });
+});
+
+describe("applyCreateCard", () => {
+  it("creates inbox cards only", () => {
+    const state = createState({ mainQuestId: undefined });
+    const result = applyCreateCard(state, { title: "Garage cleanup", area: "build" });
+
+    expect(result.ok).toBe(true);
+    expect(result.state.cards[0]?.title).toBe("Garage cleanup");
+    expect(result.state.cards[0]?.state).toBe("inbox");
+    expect(result.message).toContain("Added to Inbox");
+  });
+});
+
+describe("applyQuickCapture idea message", () => {
+  it("includes inbox destination in success message", () => {
+    const state = createState();
+    const result = applyQuickCapture(state, "new idea: test project");
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("Added to Inbox: test project");
   });
 });

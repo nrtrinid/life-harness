@@ -1,4 +1,4 @@
-import type { ChatThreadItem } from "../components/askHarness/types";
+import type { ChatThreadItem } from "./chatHarnessTypes";
 import type { ConversationTurn } from "./harnessContext";
 import {
   CHAT_HARNESS_MAX_HISTORY_CHARS,

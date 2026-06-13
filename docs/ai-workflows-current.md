@@ -2,6 +2,8 @@
 
 This map records the implemented AI-adjacent surfaces as of the dogfood-blocked readiness pass. The v0.1 board remains rules-only and usable without ai-gateway.
 
+**Machine-readable inventory:** [`agent-spine-inventory-v0.1.md`](agent-spine-inventory-v0.1.md) and [`src/core/agentWorkflowRegistry.ts`](../src/core/agentWorkflowRegistry.ts) — typed workflow registry with tests. That registry is documentation-only in v0.1; it does not change runtime behavior.
+
 ## Boundaries
 
 - **Core app loop:** Today, Board, Career, Playback, Log, Review, Quick Capture, Pounce, MVD, Salvage, Proof Shelf, and persistence are local app behavior.
@@ -35,6 +37,16 @@ This map records the implemented AI-adjacent surfaces as of the dogfood-blocked 
 - **Context sent:** recent turns, temporary Raw Lab thread state, temporary personality state, and approved Companion Self-Memories.
 - **Never sent:** board context, Memory Bank, action tools, mutation fields, Ask Harness personality export, or hidden memory.
 - **Persistence:** Thread/personality state is in-memory only. Approved Companion Self-Memories are visible, editable, and deletable.
+
+## Feature Sprint (Backroom builder loop)
+
+- **Routes:** Card Detail → Backroom → Feature Sprint; Backroom dashboard at `/feature-sprints`.
+- **Authority:** [`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md).
+- **Purpose:** Card-anchored developer-agent control plane — scope, implement, review, and complete feature slices with manual gates.
+- **Role split:** architect scopes (ChatGPT / Codex xhigh), worker implements (Cursor / Codex in worktree), evaluator reviews (Codex xhigh), Life Harness stores plan/state/proof, user approves at trust boundaries.
+- **Runner:** Optional localhost bridge for scoping, implementation, and review packets — see `feature-sprint-local-runner-v0.1.md`. Runner fills textareas; **Import plan**, **Save agent output**, **Import review verdict**, **Advance**, and **Mark complete** remain manual.
+- **Not sent to board AI surfaces:** Feature Sprint packets and runner output do not flow into Ask Harness or Raw Lab automatically.
+- **Sensitivity:** S3/redacted cards block the builder loop in core logic.
 
 ## Memory Surfaces
 

@@ -32,6 +32,7 @@
     "scout:runner": "tsx services/job-scout-runner/src/server.ts",
     "scout:runner:test": "vitest run services/job-scout-runner/tests",
     "feature-runner": "tsx services/feature-sprint-runner/src/server.ts",
+    "feature-runner:real": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-feature-runner-real.ps1",
     "feature-runner:mock": "tsx services/feature-sprint-runner/scripts/startMockRunner.ts",
     "feature-runner:cursor": "tsx services/feature-sprint-runner/scripts/startCursorRunner.ts",
     "feature-runner:setup-check": "tsx services/feature-sprint-runner/scripts/setupCheck.ts",

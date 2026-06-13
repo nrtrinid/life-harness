@@ -16,6 +16,8 @@
 | Persistence | [`persistence-audit-v0.5.md`](persistence-audit-v0.5.md) |
 | Memory Bank | [`memory-bank-v0.1.md`](memory-bank-v0.1.md) |
 | AI workflow map | [`ai-workflows-current.md`](ai-workflows-current.md) |
+| Agent spine inventory | [`agent-spine-inventory-v0.1.md`](agent-spine-inventory-v0.1.md) |
+| Feature Sprint / builder loop | [`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md) (authority), [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md), [`feature-sprint-flow-guide-v0.3.md`](feature-sprint-flow-guide-v0.3.md), `feature-sprint-*.md` slices |
 | Ask Harness | [`ask-harness-v0.1.md`](ask-harness-v0.1.md) |
 | Thread intelligence | [`conversation-thread-intelligence.md`](conversation-thread-intelligence.md) |
 | Raw Lab | [`raw-lab-architecture.md`](raw-lab-architecture.md), [`raw-lab-thread-state.md`](raw-lab-thread-state.md), [`raw-lab-deep.md`](raw-lab-deep.md), [`raw-lab-emergence-review-pack.md`](raw-lab-emergence-review-pack.md), [`raw-lab-benchmark-runner.md`](raw-lab-benchmark-runner.md) |
@@ -34,9 +36,21 @@
 - Gateway / synthesis: [`plans/ai-gateway-model-slots-v0.1.md`](plans/ai-gateway-model-slots-v0.1.md), [`plans/deep-synthesis-overnight-brain-v0.1.md`](plans/deep-synthesis-overnight-brain-v0.1.md), [`plans/phi4-critic-deep-pass-v0.1.md`](plans/phi4-critic-deep-pass-v0.1.md)
 - Companion / context: [`plans/companion-reflection-engine-v0.1.md`](plans/companion-reflection-engine-v0.1.md), [`plans/context-packet-builder-v0.1.md`](plans/context-packet-builder-v0.1.md)
 - Evals / agents: [`plans/local-ai-evals-v0.1.md`](plans/local-ai-evals-v0.1.md), [`plans/agent-instructions-local-ai.md`](plans/agent-instructions-local-ai.md)
+- Feature Sprint roadmap: [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md)
+- Board usability (dogfood / exec-function loop): [`plans/board-usability-v0.1.md`](plans/board-usability-v0.1.md)
+- Career hub integration (UX-007 / route unification): [`plans/career-hub-integration-v0.2.md`](plans/career-hub-integration-v0.2.md)
 - Agent ergonomics / RTK Query control plane: [`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)
 - [`10_future_roadmap.md`](10_future_roadmap.md)
 - Recovery audit: [`plans/stash-recovery-a770-thinking-audit.md`](plans/stash-recovery-a770-thinking-audit.md)
+
+## Agent commands
+
+- [`AGENT_CONTEXT_MAP.md`](AGENT_CONTEXT_MAP.md) - narrow task router for agents
+- `npm run check:boundaries` - deterministic import-boundary scanner
+- `npm run verify:core` - narrow core Vitest suite
+- `npm run verify:app` - app typecheck plus full Vitest suite
+- `npm run verify:job-scout` - job scout runner tests
+- `npm run verify` - broad verification sequence for app, job scout, and boundaries
 
 ## Meta / design artifacts
 

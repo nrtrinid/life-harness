@@ -1,7 +1,7 @@
-import { startSession } from "../../core/briefing";
+import { applyAppSessionStart } from "../../core/briefing";
 import { nowIso } from "../../core/ids";
 import type { LifeHarnessData } from "../../core/lifeHarnessData";
-import { createSeedState } from "../../data/createSeedState";
+import { createCleanBootstrapState, createSeedState } from "../../data/createSeedState";
 import { STORAGE_KEY as LIFE_HARNESS_SNAPSHOT_KEY } from "../../storage/localStorageAdapter";
 import {
   clearPersistedState,
@@ -24,12 +24,9 @@ export function hydrateLifeHarnessState(
 ): LifeHarnessData {
   const loaded = loadPersistedState(adapter, now);
   if (loaded) {
-    return {
-      ...loaded,
-      dailyState: startSession(loaded.dailyState, nowIso())
-    };
+    return applyAppSessionStart(loaded, now);
   }
-  return createSeedState(nowIso());
+  return applyAppSessionStart(createCleanBootstrapState(nowIso()), now);
 }
 
 export function persistLifeHarnessState(

@@ -279,6 +279,8 @@ export interface DailyState {
   briefingSinceAt?: string;
   /** Starter sources merged this session — cleared when user dismisses banner */
   newStarterSourceIds?: string[];
+  /** When set, demo triage banner stays hidden until reset. */
+  demoTriageDismissedAt?: string;
 }
 
 export interface Briefing {
@@ -400,6 +402,80 @@ export type HarnessFeatureSprintReviewStatus =
   | "needs_changes"
   | "blocked";
 
+export type HarnessFeatureSpecSource = "chatgpt_web" | "manual" | "other";
+
+export type HarnessFeatureSpec = {
+  body: string;
+  source?: HarnessFeatureSpecSource;
+  updatedAt: string;
+  approvedAt?: string;
+  approvedBy?: "user";
+};
+
+export type HarnessFeatureSprintAutomationPhase =
+  | "spec_unapproved"
+  | "spec_approved"
+  | "slice_scoping"
+  | "localizing"
+  | "prompt_auditing"
+  | "implementing"
+  | "proof_normalizing"
+  | "reviewing"
+  | "spec_updating"
+  | "awaiting_user_approval";
+
+export type HarnessFeatureSprintStepLocalization = {
+  rawOutput: string;
+  likelyFiles: string[];
+  existingHelpers: string[];
+  testsToRun: string[];
+  risks: string[];
+  revisedImplementationPrompt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HarnessFeatureSprintPromptAuditVerdict = "ready" | "tighten_first";
+
+export type HarnessFeatureSprintStepPromptAudit = {
+  rawOutput: string;
+  verdict: HarnessFeatureSprintPromptAuditVerdict;
+  risks: string[];
+  requiredPromptChanges: string[];
+  finalImplementationPrompt: string;
+  mustCheckFiles: string[];
+  verificationCommands: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HarnessFeatureSprintVerificationProofResult =
+  | "pass"
+  | "partial"
+  | "fail"
+  | "not_run";
+
+export type HarnessFeatureSprintStepImplementationProofRunnerEvidence = {
+  diffStat?: string;
+  gitStatus?: string;
+  verificationSummary?: string[];
+};
+
+export type HarnessFeatureSprintStepImplementationProof = {
+  rawOutput: string;
+  filesChanged: string[];
+  behaviorChanged: string[];
+  testsRun: string[];
+  testsNotRun: string[];
+  verificationResult: HarnessFeatureSprintVerificationProofResult;
+  knownRisks: string[];
+  suggestedReviewFocus: string[];
+  sourceRunnerRunId?: string;
+  runnerEvidence?: HarnessFeatureSprintStepImplementationProofRunnerEvidence;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type HarnessFeatureSprintStep = {
   id: string;
   title: string;
@@ -407,6 +483,9 @@ export type HarnessFeatureSprintStep = {
   status: HarnessFeatureSprintStepStatus;
   acceptanceCriteria: string[];
   suggestedPrompt?: string;
+  promptLocalization?: HarnessFeatureSprintStepLocalization;
+  promptAudit?: HarnessFeatureSprintStepPromptAudit;
+  implementationProof?: HarnessFeatureSprintStepImplementationProof;
   agentSessionId?: string;
   outputSummary?: string;
   reviewVerdict?: string;
@@ -468,6 +547,8 @@ export type HarnessFeatureSprintPlan = {
   completedAt?: string;
   evidenceLogId?: string;
   evidenceProofItemId?: string;
+  featureSpec?: HarnessFeatureSpec;
+  automationPhase?: HarnessFeatureSprintAutomationPhase;
 };
 
 export type PrimaryActionKind =

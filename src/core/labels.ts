@@ -35,7 +35,7 @@ export const CARD_STATE_LABELS: Record<CardState, string> = {
   parked: "Parked",
   waiting: "Waiting",
   done: "Done",
-  killed: "Killed"
+  killed: "Archived"
 };
 
 export const ROLE_TYPE_LABELS: Record<RoleType, string> = {

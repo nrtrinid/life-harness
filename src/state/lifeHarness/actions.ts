@@ -21,6 +21,9 @@ export type LifeHarnessAction =
   | { type: "salvage_completed"; optionLabel: string }
   | { type: "quick_capture_applied"; state: LifeHarnessData }
   | { type: "card_state_applied"; state: LifeHarnessData }
+  | { type: "main_quest_applied"; state: LifeHarnessData }
+  | { type: "create_card_applied"; state: LifeHarnessData }
+  | { type: "demo_triage_dismissed"; state: LifeHarnessData }
   | { type: "career_intake_applied"; state: LifeHarnessData }
   | { type: "job_candidate_intake_applied"; state: LifeHarnessData }
   | { type: "job_candidate_updated"; state: LifeHarnessData }
@@ -66,6 +69,9 @@ export type BoardLifeHarnessAction = Extract<
   | { type: "salvage_completed" }
   | { type: "quick_capture_applied" }
   | { type: "card_state_applied" }
+  | { type: "main_quest_applied" }
+  | { type: "create_card_applied" }
+  | { type: "demo_triage_dismissed" }
 >;
 
 export type CareerLifeHarnessAction = Extract<

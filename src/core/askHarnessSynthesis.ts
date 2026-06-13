@@ -1,4 +1,4 @@
-import type { ChatThreadItem, ContextExportMode } from "../components/askHarness/types";
+import type { ChatThreadItem, ContextExportMode } from "./chatHarnessTypes";
 import { buildConversationHistoryFromThread } from "./askHarnessThreadAdapter";
 import { buildChatHarnessSendBundle } from "./chatHarnessSendBudget";
 import type { ReasoningDepth } from "./chatHarnessClient";

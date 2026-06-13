@@ -4,6 +4,7 @@ import { createCareerApplicationCard, syncApplicationStatus, type CareerIntakeIn
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
 import { canActivateCard, getActiveLimitStatus, ACTIVE_CARD_LIMIT } from "./guards";
+import { applyDismissDemoTriage } from "./boardUsability";
 import { AREA_LABELS } from "./labels";
 import {
   buildCareerIntakeFromCandidate,
@@ -97,6 +98,11 @@ export interface ActionResult {
   ok: boolean;
   cardId?: string;
   candidateId?: string;
+  suggestedCardState?: {
+    cardId: string;
+    state: CardState;
+    label: string;
+  };
 }
 
 function prependLog(logs: LifeLogEntry[], log: LifeLogEntry): LifeLogEntry[] {
@@ -197,7 +203,7 @@ function cardStateMessage(card: LifeCard, newState: CardState): string {
     case "done":
       return `Marked ${card.title} done.`;
     case "killed":
-      return `Killed ${card.title}.`;
+      return `Archived ${card.title}.`;
     case "parked":
       return withProofSuffix(`Parked ${card.title}.`, true);
     default:
@@ -382,7 +388,7 @@ export function applyQuickCapture(state: LifeHarnessData, rawText: string): Acti
         proofItems: prependProof(proofItems, proof)
       },
       ok: true,
-      message: withProofSuffix("Idea captured to Inbox", true)
+      message: withProofSuffix(`Added to Inbox: ${card.title}`, true)
     };
   }
 
@@ -483,10 +489,22 @@ export function applyQuickCapture(state: LifeHarnessData, rawText: string): Acti
       : `+${log.xp} XP · Resume export logged`;
   }
 
+  const suggestedCardState =
+    intent.type === "followed_up" &&
+    matched?.careerApplication &&
+    matched.state === "active"
+      ? {
+          cardId: matched.id,
+          state: "waiting" as CardState,
+          label: "Move to Waiting"
+        }
+      : undefined;
+
   return {
     state: { ...state, cards, logs, proofItems },
     ok: true,
-    message
+    message,
+    suggestedCardState
   };
 }
 
@@ -512,17 +530,109 @@ export function applyCardStateChange(
   }
 
   if (newState === "parked") {
-    return applyParkCard(state, cardId, `Parked ${card.title}`);
+    const parkResult = applyParkCard(state, cardId, `Parked ${card.title}`);
+    if (!parkResult.ok) {
+      return parkResult;
+    }
+    if (parkResult.state.dailyState.mainQuestId === cardId) {
+      return {
+        ...parkResult,
+        state: {
+          ...parkResult.state,
+          dailyState: { ...parkResult.state.dailyState, mainQuestId: undefined }
+        }
+      };
+    }
+    return parkResult;
   }
 
   const cards = updateCard(state.cards, cardId, (item) =>
     syncApplicationStatus(touchCard(item), newState)
   );
 
+  let dailyState = state.dailyState;
+  if (dailyState.mainQuestId === cardId && newState !== "active") {
+    dailyState = { ...dailyState, mainQuestId: undefined };
+  }
+
   return {
-    state: { ...state, cards },
+    state: { ...state, cards, dailyState },
     ok: true,
     message: cardStateMessage(card, newState)
+  };
+}
+
+export function applySetMainQuest(state: LifeHarnessData, cardId: string): ActionResult {
+  const card = state.cards.find((item) => item.id === cardId);
+  if (!card) {
+    return { state, ok: false, message: "Card not found." };
+  }
+  if (card.state !== "active") {
+    return { state, ok: false, message: "Main quest must be an Active card." };
+  }
+
+  return {
+    state: {
+      ...state,
+      dailyState: {
+        ...state.dailyState,
+        mainQuestId: cardId
+      }
+    },
+    ok: true,
+    message: `${card.title} is now your main quest.`
+  };
+}
+
+export interface CreateCardInput {
+  title: string;
+  area: LifeArea;
+  nextTinyAction?: string;
+}
+
+export function applyCreateCard(state: LifeHarnessData, input: CreateCardInput): ActionResult {
+  const title = input.title.trim();
+  if (!title) {
+    return { state, ok: false, message: "Title is required." };
+  }
+
+  const card: LifeCard = {
+    id: createId("card"),
+    title,
+    area: input.area,
+    state: "inbox",
+    progress: 0,
+    warmth: "cold",
+    nextTinyAction: input.nextTinyAction?.trim() || "Define the next tiny action.",
+    recentWins: [],
+    openLoops: [],
+    optimizationIdeas: [],
+    proofItemIds: []
+  };
+
+  const log = createLogEntry({
+    rawText: `Created card: ${title}`,
+    area: input.area,
+    type: "clarity",
+    cardId: card.id
+  });
+
+  return {
+    state: {
+      ...state,
+      cards: [card, ...state.cards],
+      logs: prependLog(state.logs, log)
+    },
+    ok: true,
+    message: `Added to Inbox: ${title}`,
+    cardId: card.id
+  };
+}
+
+export function applyDismissDemoTriageAction(state: LifeHarnessData, now = nowIso()): LifeHarnessData {
+  return {
+    ...state,
+    dailyState: applyDismissDemoTriage(state.dailyState, now)
   };
 }
 
@@ -616,7 +726,11 @@ export function applyCareerIntake(state: LifeHarnessData, input: CareerIntakeInp
     },
     ok: true,
     message: withProofSuffix(`Created ${card.title} in ${status}.`, true),
-    cardId: card.id
+    cardId: card.id,
+    suggestedCardState:
+      status === "active" && input.followUpDate?.trim()
+        ? { cardId: card.id, state: "waiting", label: "Move to Waiting" }
+        : undefined
   };
 }
 

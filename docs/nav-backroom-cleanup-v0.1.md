@@ -45,10 +45,12 @@ Grouped in prose for readability; the shell renders one flat collapsed list.
 - Resume Bank (`/resume-bank`)
 - Job Sources (`/job-sources`)
 - Career Pack (`/career-pack`)
-- Queue (`/job-candidates`)
-- Candidate Intake (`/candidate-intake`)
-- Career Intake (`/career-intake`)
+- Paste a job (`/career?tab=find&add=1`)
+- Review queue (`/career?tab=review`)
+- Direct application — advanced (`/career-intake`)
 - Source Setup (`/source-setup`)
+
+Legacy wrappers (bookmarks only): `/candidate-intake` → Find add sheet; `/job-candidates` → Review tab wrapper.
 
 ## What changed
 

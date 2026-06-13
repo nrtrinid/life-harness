@@ -1,7 +1,15 @@
 import { syncApplicationStatus } from "./career";
+import { coerceAutomationPhase, normalizeFeatureSprintStep } from "./featureSprintOrchestrator";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { normalizeResumeModules } from "./resumeModuleBank";
-import type { CardState, DailyState, JobCandidate, JobSource, LifeCard } from "./types";
+import type {
+  CardState,
+  DailyState,
+  HarnessFeatureSprintPlan,
+  JobCandidate,
+  JobSource,
+  LifeCard
+} from "./types";
 import { seedJobSources, seedResumeModules, STARTER_JOB_SOURCE_IDS } from "../data/seedJobScout";
 
 export const RUN_INTERRUPTED_MESSAGE = "Run interrupted — reset on load.";
@@ -36,6 +44,31 @@ function defaultDailyState(): DailyState {
     minimumViableDayCompleted: false,
     salvageCompleted: false
   };
+}
+
+export function normalizeFeatureSprintPlan(plan: HarnessFeatureSprintPlan): HarnessFeatureSprintPlan {
+  const body = plan.featureSpec?.body?.trim();
+  const featureSpec =
+    body && plan.featureSpec
+      ? {
+          ...plan.featureSpec,
+          body
+        }
+      : undefined;
+  const automationPhase = coerceAutomationPhase(plan.automationPhase);
+
+  return {
+    ...plan,
+    featureSpec,
+    automationPhase,
+    steps: plan.steps.map(normalizeFeatureSprintStep)
+  };
+}
+
+export function normalizeFeatureSprintPlans(
+  plans: HarnessFeatureSprintPlan[] | undefined
+): HarnessFeatureSprintPlan[] {
+  return (plans ?? []).map(normalizeFeatureSprintPlan);
 }
 
 export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessData {
@@ -78,7 +111,7 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     memoryItems: partial.memoryItems ?? [],
     projects: partial.projects ?? [],
     agentSessions: partial.agentSessions ?? [],
-    featureSprintPlans: partial.featureSprintPlans ?? [],
+    featureSprintPlans: normalizeFeatureSprintPlans(partial.featureSprintPlans),
     featureSprintRunnerRuns: partial.featureSprintRunnerRuns ?? [],
     careerSourcePack: partial.careerSourcePack ?? null,
     jobSourcePackMode: partial.jobSourcePackMode ?? "core"

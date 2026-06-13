@@ -1,0 +1,164 @@
+# Agent Spine Inventory v0.1
+
+## Purpose
+
+This document records the **first consolidation layer** for Life Harness AI-adjacent workflows. The machine-readable source of truth is [`src/core/agentWorkflowRegistry.ts`](../src/core/agentWorkflowRegistry.ts), with parity tests in [`src/core/agentWorkflowRegistry.test.ts`](../src/core/agentWorkflowRegistry.test.ts).
+
+**This sprint intentionally changes no runtime behavior.** The registry documents what exists today; clients, gateway routes, UI, and containment boundaries are unchanged.
+
+For the human-oriented workflow map, see [`ai-workflows-current.md`](ai-workflows-current.md).
+
+---
+
+## Three runtimes (partial spine today)
+
+Life Harness already has a **partial agent spine** split across three runtimes:
+
+```mermaid
+flowchart TB
+  subgraph gateway [ai-gateway :8111]
+    Chat[POST /chat-harness]
+    Synth[POST /ai/deep-synthesis]
+    RawLab[POST /raw-lab]
+  end
+  subgraph core [src/core]
+    Packet[contextPacketBuilder]
+    Clients[chatHarnessClient rawLabClient etc]
+    Actions[assistantActionRegistry]
+  end
+  subgraph fsr [feature-sprint-runner :8127]
+    Run[POST /feature-sprint/run]
+  end
+  core --> gateway
+  core --> fsr
+```
+
+| Runtime | Role | Examples |
+|---------|------|----------|
+| **ai-gateway** | Local LLM gateway (mock default, OpenVINO optional) | Chat Harness, Raw Lab, Deep Synthesis, transcript analysis |
+| **src/core** | Context packing, send budgets, clients, permissioned actions, run history | `contextPacketBuilder`, `chatHarnessSendBudget`, `featureSprintRunnerHistory` |
+| **feature-sprint-runner** | External Codex/Cursor bridge (not ai-gateway) | Scoping, implementation, review packets |
+
+Job Scout (`job-scout-runner` on :8122) is **adjacent but deterministic** — fetch/parse only, no LLM.
+
+---
+
+## Registry helpers
+
+```typescript
+import {
+  AGENT_WORKFLOWS,
+  getAgentWorkflowDefinition,
+  listAgentWorkflowDefinitions,
+  listGatewayAgentWorkflows,
+  listIsolatedAgentWorkflows,
+  listMutableAgentWorkflows
+} from "../src/core/agentWorkflowRegistry";
+```
+
+- **`listGatewayAgentWorkflows()`** — workflows whose `providerSurface` is `ai_gateway`
+- **`listIsolatedAgentWorkflows()`** — Raw Lab containment (`raw_lab_isolated`)
+- **`listMutableAgentWorkflows()`** — any workflow with a non-`none` mutation policy
+
+---
+
+## Workflow inventory (condensed)
+
+Status labels are honest: **implemented**, **partial**, **stale**, **doc_only**.
+
+### ai-gateway (:8111)
+
+| ID | Label | Status | Endpoint | Model tier | Mutation |
+|----|-------|--------|----------|------------|----------|
+| `chat_harness` | Companion (Chat Harness) | implemented | `POST /chat-harness` | companion_fast | user_approved_actions_only |
+| `ask_harness_legacy` | Ask Harness (legacy) | stale | `POST /ask-harness` | companion_fast | none |
+| `deep_synthesis` | Deep Synthesis (inline) | implemented | `POST /ai/deep-synthesis` | companion_fast | user_approved_proposals_only |
+| `deep_synthesis_job` | Deep Synthesis (async) | implemented | `POST /ai/deep-synthesis-jobs` | critic_small / stretch_batch | user_approved_proposals_only |
+| `ai_job_status` | AI job poll | implemented | `GET /ai/jobs/{id}` | none | none |
+| `raw_lab` | Raw Signal | implemented | `POST /raw-lab` | companion_fast | none |
+| `raw_lab_stream` | Raw Lab streaming | partial | `POST /raw-lab/stream` | companion_fast | none |
+| `raw_lab_self_reflection` | Raw Lab self-reflection | implemented | `POST /raw-lab/self-reflection` | companion_fast | user_approved_proposals_only |
+| `raw_lab_thread_reflection` | Raw Lab thread reflection | implemented | `POST /raw-lab/reflect-thread` | companion_fast | user_approved_proposals_only |
+| `analyze_transcript` | Transcript analysis | partial | `POST /analyze-transcript` | companion_fast | none |
+| `gateway_health` | Gateway health | implemented | `GET /health` | none | none |
+| `gateway_playground` | Dev playground | doc_only | `GET /playground` | none | none |
+
+**Partial / stale notes:**
+
+- **`ask_harness_legacy`**: Gateway endpoint retained; Expo app uses `POST /chat-harness`.
+- **`analyze_transcript`**: Scripts and gateway only; no app UI.
+- **`raw_lab_stream`**: SSE chunks a complete answer; not true token streaming.
+- **`deep_synthesis_job`**: `with_stretch` profile is partially mock-simulated; `stretch_batch` slot disabled in `models.yaml`.
+
+### External runners
+
+| ID | Label | Status | Endpoint | Model tier | Mutation |
+|----|-------|--------|----------|------------|----------|
+| `feature_sprint_runner` | Feature Sprint runner | implemented | `POST /feature-sprint/run` | external_frontier | external_agent_scoped |
+| `feature_sprint_worktree_cleanup` | Worktree cleanup | implemented | `POST /feature-sprint/cleanup-worktree` | none | external_agent_scoped |
+| `job_scout_runner` | Job Scout runner | implemented | `POST /run-source` | none | none |
+
+### Deterministic adjacency (no model)
+
+| ID | Label | Status | Notes |
+|----|-------|--------|-------|
+| `context_packet_build` | Context packet builder | implemented | Feeds grounded gateway workflows |
+| `memory_bank` | Memory Bank | implemented | User-approved durable memories |
+| `feature_sprint_orchestrator` | Feature Sprint orchestrator | implemented | Rules-only; S3 blocked |
+| `agent_workbench` | Agent Workbench | implemented | Manual packets + session log |
+| `career_source_pack` | Career Source Pack | implemented | JSON/markdown import |
+| `assistant_actions_apply` | Assistant actions | implemented | Post-processes chat output; user approves |
+| `raw_lab_companion_handoff` | Raw Lab → Companion handoff | implemented | Sanitized digest navigation only |
+
+---
+
+## Shared spine components (already exist)
+
+| Component | Location | Used by |
+|-----------|----------|---------|
+| Context packet build + redaction | `src/core/contextPacket*.ts` | Chat Harness, Deep Synthesis |
+| Send budget / compaction | `chatHarnessSendBudget.ts`, `rawLabContextBudget.ts` | Companion, Raw Lab (parallel impl) |
+| Thread verifier | `services/ai-gateway/app/thread_verifier.py` | Chat finalize, Raw Lab finalize |
+| Chat finalize + repair | `chat_harness_finalize.py` | Chat Harness |
+| Deep critic pipeline | `chat_harness_deep.py`, `critic_backend.py` | Chat `reasoning_depth=deep` |
+| Synthesis verifier | `synthesis_verifier.py` | Deep Synthesis |
+| AI job queue | `synthesis_jobs.py`, `aiJobClient.ts` | Deep Synthesis async profiles |
+| Inference orchestrator | `orchestrator/inference_orchestrator.py` | **Chat Harness only** today |
+| Model slot manager | `slots/manager.py`, `models.yaml` | Slot catalog; only `companion_fast` enabled by default |
+
+---
+
+## Known gaps (not fixed in v0.1)
+
+- **InferenceOrchestrator** routes only `/chat-harness`; Raw Lab and Deep Synthesis call providers directly.
+- **`stretch_batch`**, **`coder_daily`**, **`memory_embed`** slots catalogued but disabled; no `/ai/code-*` endpoints.
+- **No unified AgentRun log** across gateway jobs, Feature Sprint runs, and Companion sends.
+- **Raw Lab** lacks S3 sensitivity gate (commented TODO in gateway `main.py`).
+- **RTK Query network layer** remains doc-only ([`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)).
+
+---
+
+## Next consolidation phases
+
+1. **Phase 1 (this sprint)** — Typed workflow registry + tests + this doc. **Done when registry and tests land; no runtime wiring.**
+2. **Phase 2** — Shared `AgentPolicy` / performance mode mapping from user-facing depth to slot plans.
+3. **Phase 3** — Shared run log schema (gateway jobs + feature sprint history + optional Companion trace).
+4. **Phase 4** — Shared verifier/repair hook facade in gateway.
+5. **Phase 5** — Optional Ultra/Performance mode: enable critic/stretch slots with VRAM mutex.
+
+---
+
+## Verify
+
+```powershell
+npm run agent:typecheck
+npm run agent:test -- -- src/core/agentWorkflowRegistry.test.ts
+```
+
+Gateway contract tests remain separate:
+
+```powershell
+cd services/ai-gateway
+$env:SCOUT_PROVIDER="mock"
+pytest -q
+```

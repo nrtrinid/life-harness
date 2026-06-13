@@ -25,7 +25,9 @@ import {
   applyCompleteAgentSessionWithEvidence,
   applyImportCareerSourcePack,
   applyCardStateChange,
+  applyCreateCard,
   applyCareerIntake,
+  applyDismissDemoTriageAction,
   applyDismissJobCandidate,
   applyJobCandidateIntake,
   applyMvd,
@@ -36,7 +38,9 @@ import {
   applySalvage,
   applySaveJobCandidate,
   applySaveJobSourceWithOptionalImport,
+  applySetMainQuest,
   applyUpdateJobSource,
+  type CreateCardInput,
   withProofSuffix,
   type JobSourceInput,
   type JobSourcePatch
@@ -65,7 +69,7 @@ import {
   RunnerUnreachableError,
   runSourceViaRunner
 } from "../core/jobScoutRunnerClient";
-import { startSession } from "../core/briefing";
+import { applyAppSessionStart } from "../core/briefing";
 import {
   applyDeleteChatSummary,
   applySaveChatSummary
@@ -98,11 +102,17 @@ import {
   createFeatureSprintPlanForCard,
   deleteFeatureSprintPlan,
   importFeatureReviewVerdictFromText,
+  importFeaturePromptLocalizationFromText,
+  importFeaturePromptAuditFromText,
   importFeatureSprintPlanFromText,
+  normalizeImplementationProofForStep,
+  approveFeatureSpecForPlan,
+  saveFeatureSpecForCard,
   updateFeatureSprintPlan,
   type FeatureSprintPlanCreateInput,
   type FeatureSprintPlanUpdateInput,
-  type FeatureSprintStepUpdateInput
+  type FeatureSprintStepUpdateInput,
+  type FeatureSpecSaveInput
 } from "../core/featureSprintOrchestrator";
 import type { FeatureSprintRunnerResponse, FeatureSprintWorktreeCleanupResponse } from "../core/featureSprintRunner";
 import {
@@ -110,8 +120,10 @@ import {
   createFeatureSprintRunnerRun,
   markFeatureSprintRunnerRunWorktreeCleanup,
   markMostRecentFeatureSprintRunnerRunImported,
+  markReviewRunnerRunImportedForVerdict,
   type FeatureSprintRunnerRunCreateInput,
-  type FeatureSprintRunnerRunImportMarkFilter
+  type FeatureSprintRunnerRunImportMarkFilter,
+  type ReviewRunnerRunImportMarkInput
 } from "../core/featureSprintRunnerHistory";
 import {
   applyDeleteProjectForCard,
@@ -119,7 +131,7 @@ import {
   type HarnessProjectUpsertInput
 } from "../core/projectRegistry";
 import { nowIso } from "../core/ids";
-import { createSeedState } from "../data/createSeedState";
+import { createCleanBootstrapState, createSeedState } from "../data/createSeedState";
 import {
   clearPersistedState,
   loadPersistedState,
@@ -154,6 +166,9 @@ type LifeHarnessAction =
   | { type: "salvage_completed"; optionLabel: string }
   | { type: "quick_capture_applied"; state: LifeHarnessData }
   | { type: "card_state_applied"; state: LifeHarnessData }
+  | { type: "main_quest_applied"; state: LifeHarnessData }
+  | { type: "create_card_applied"; state: LifeHarnessData }
+  | { type: "demo_triage_dismissed"; state: LifeHarnessData }
   | { type: "career_intake_applied"; state: LifeHarnessData }
   | { type: "job_candidate_intake_applied"; state: LifeHarnessData }
   | { type: "job_candidate_updated"; state: LifeHarnessData }
@@ -196,8 +211,17 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   pounce: () => { ok: boolean; message?: string };
   completeMinimumViableDay: () => { ok: boolean; message?: string };
   completeSalvage: (optionLabel: string) => { ok: boolean; message?: string };
-  submitQuickCapture: (rawText: string) => { ok: boolean; message?: string };
-  submitCareerIntake: (input: CareerIntakeInput) => { ok: boolean; message?: string; cardId?: string };
+  submitQuickCapture: (rawText: string) => {
+    ok: boolean;
+    message?: string;
+    suggestedCardState?: { cardId: string; state: CardState; label: string };
+  };
+  submitCareerIntake: (input: CareerIntakeInput) => {
+    ok: boolean;
+    message?: string;
+    cardId?: string;
+    suggestedCardState?: { cardId: string; state: CardState; label: string };
+  };
   submitJobCandidateIntake: (
     input: JobCandidateIntakeInput
   ) => { ok: boolean; message?: string; candidateId?: string };
@@ -238,6 +262,10 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   exportSnapshot: () => { ok: boolean; message?: string };
   importSnapshot: (json: string) => { ok: boolean; message?: string };
   resetToSeed: () => { ok: boolean; message?: string };
+  resetToClean: () => { ok: boolean; message?: string };
+  setMainQuest: (cardId: string) => { ok: boolean; message?: string };
+  submitCreateCard: (input: CreateCardInput) => { ok: boolean; message?: string; cardId?: string };
+  dismissDemoTriage: () => void;
   saveChatSummary: (summary: HarnessChatSummary) => void;
   deleteChatSummary: (summaryId: string) => void;
   saveMemoryItem: (item: HarnessMemoryItem) => void;
@@ -287,9 +315,28 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     cardId: string,
     text: string
   ) => { ok: boolean; message?: string; planId?: string };
+  saveFeatureSpecForCard: (
+    cardId: string,
+    input: FeatureSpecSaveInput
+  ) => { ok: boolean; message?: string; planId?: string };
+  approveFeatureSpecForPlan: (planId: string) => { ok: boolean; message?: string; planId?: string };
   importFeatureReviewVerdictForPlan: (
     planId: string,
     text: string,
+    stepId?: string
+  ) => { ok: boolean; message?: string };
+  importFeaturePromptLocalizationForPlan: (
+    planId: string,
+    text: string,
+    stepId?: string
+  ) => { ok: boolean; message?: string };
+  importFeaturePromptAuditForPlan: (
+    planId: string,
+    text: string,
+    stepId?: string
+  ) => { ok: boolean; message?: string };
+  normalizeImplementationProofForPlan: (
+    planId: string,
     stepId?: string
   ) => { ok: boolean; message?: string };
   createFeatureSprintRunnerRun: (
@@ -301,6 +348,9 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   ) => { ok: boolean; message?: string };
   markMostRecentFeatureSprintRunnerRunImported: (
     filter: FeatureSprintRunnerRunImportMarkFilter
+  ) => { ok: boolean; message?: string; runId?: string };
+  markReviewRunnerRunImportedForVerdict: (
+    input: ReviewRunnerRunImportMarkInput
   ) => { ok: boolean; message?: string; runId?: string };
   markFeatureSprintRunnerRunWorktreeCleanup: (
     runId: string,
@@ -354,21 +404,15 @@ function outcomeFromRun(source: JobSource, result: ReturnType<typeof applyRunJob
 function createInitialState(): LifeHarnessData {
   const loaded = loadPersistedState();
   if (loaded) {
-    return {
-      ...loaded,
-      dailyState: startSession(loaded.dailyState, nowIso())
-    };
+    return applyAppSessionStart(loaded, new Date());
   }
-  return createSeedState(nowIso());
+  return applyAppSessionStart(createCleanBootstrapState(nowIso()), new Date());
 }
 
 function lifeHarnessReducer(state: LifeHarnessData, action: LifeHarnessAction): LifeHarnessData {
   switch (action.type) {
     case "app_session_started":
-      return {
-        ...state,
-        dailyState: startSession(state.dailyState, nowIso())
-      };
+      return applyAppSessionStart(state, new Date());
     case "pounce": {
       const result = applyPounce(state);
       return result.ok ? result.state : state;
@@ -384,6 +428,12 @@ function lifeHarnessReducer(state: LifeHarnessData, action: LifeHarnessAction): 
     case "quick_capture_applied":
       return action.state;
     case "card_state_applied":
+      return action.state;
+    case "main_quest_applied":
+      return action.state;
+    case "create_card_applied":
+      return action.state;
+    case "demo_triage_dismissed":
       return action.state;
     case "career_intake_applied":
       return action.state;
@@ -513,7 +563,11 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       if (result.ok) {
         dispatch({ type: "quick_capture_applied", state: result.state });
       }
-      return { ok: result.ok, message: result.message };
+      return {
+        ok: result.ok,
+        message: result.message,
+        suggestedCardState: result.suggestedCardState
+      };
     },
     [state]
   );
@@ -523,7 +577,12 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       const result = applyCareerIntake(state, input);
       if (result.ok) {
         dispatch({ type: "career_intake_applied", state: result.state });
-        return { ok: true, message: result.message, cardId: result.cardId };
+        return {
+          ok: true,
+          message: result.message,
+          cardId: result.cardId,
+          suggestedCardState: result.suggestedCardState
+        };
       }
       return { ok: false, message: result.message };
     },
@@ -749,8 +808,47 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   const resetToSeed = useCallback(() => {
     clearPersistedState();
     dispatch({ type: "state_replaced", state: createSeedState(nowIso()) });
-    return { ok: true, message: "Restored seed state." };
+    return { ok: true, message: "Restored demo seed board." };
   }, []);
+
+  const resetToClean = useCallback(() => {
+    clearPersistedState();
+    dispatch({
+      type: "state_replaced",
+      state: applyAppSessionStart(createCleanBootstrapState(nowIso()), new Date())
+    });
+    return { ok: true, message: "Reset to clean board." };
+  }, []);
+
+  const setMainQuest = useCallback(
+    (cardId: string) => {
+      const result = applySetMainQuest(state, cardId);
+      if (result.ok) {
+        dispatch({ type: "main_quest_applied", state: result.state });
+      }
+      return { ok: result.ok, message: result.message };
+    },
+    [state]
+  );
+
+  const submitCreateCard = useCallback(
+    (input: CreateCardInput) => {
+      const result = applyCreateCard(state, input);
+      if (result.ok) {
+        dispatch({ type: "create_card_applied", state: result.state });
+        return { ok: true, message: result.message, cardId: result.cardId };
+      }
+      return { ok: false, message: result.message };
+    },
+    [state]
+  );
+
+  const dismissDemoTriage = useCallback(() => {
+    dispatch({
+      type: "demo_triage_dismissed",
+      state: applyDismissDemoTriageAction(state, nowIso())
+    });
+  }, [state]);
 
   const saveChatSummary = useCallback((summary: HarnessChatSummary) => {
     dispatch({ type: "save_chat_summary", summary });
@@ -931,6 +1029,24 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     return { ok: true, message: "Feature sprint plan imported.", planId: result.planId };
   }, []);
 
+  const saveFeatureSpecForCardAction = useCallback((cardId: string, input: FeatureSpecSaveInput) => {
+    const result = saveFeatureSpecForCard(stateRef.current, cardId, input);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    dispatch({ type: "state_replaced", state: result.state });
+    return { ok: true, message: "Feature spec saved.", planId: result.planId };
+  }, []);
+
+  const approveFeatureSpecForPlanAction = useCallback((planId: string) => {
+    const result = approveFeatureSpecForPlan(stateRef.current, planId);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    dispatch({ type: "state_replaced", state: result.state });
+    return { ok: true, message: "Feature spec approved.", planId: result.planId };
+  }, []);
+
   const importFeatureReviewVerdictForPlanAction = useCallback(
     (planId: string, text: string, stepId?: string) => {
       const result = importFeatureReviewVerdictFromText(
@@ -944,6 +1060,56 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       }
       dispatch({ type: "state_replaced", state: result.state });
       return { ok: true, message: "Review verdict imported." };
+    },
+    []
+  );
+
+  const importFeaturePromptLocalizationForPlanAction = useCallback(
+    (planId: string, text: string, stepId?: string) => {
+      const result = importFeaturePromptLocalizationFromText(
+        stateRef.current,
+        planId,
+        text,
+        stepId
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Localization imported." };
+    },
+    []
+  );
+
+  const importFeaturePromptAuditForPlanAction = useCallback(
+    (planId: string, text: string, stepId?: string) => {
+      const result = importFeaturePromptAuditFromText(
+        stateRef.current,
+        planId,
+        text,
+        stepId
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Prompt audit imported." };
+    },
+    []
+  );
+
+  const normalizeImplementationProofForPlanAction = useCallback(
+    (planId: string, stepId?: string) => {
+      const result = normalizeImplementationProofForStep(
+        stateRef.current,
+        planId,
+        stepId
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Implementation proof normalized for review." };
     },
     []
   );
@@ -975,6 +1141,24 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   const markMostRecentFeatureSprintRunnerRunImportedAction = useCallback(
     (filter: FeatureSprintRunnerRunImportMarkFilter) => {
       const result = markMostRecentFeatureSprintRunnerRunImported(stateRef.current, filter);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      if (result.runId) {
+        dispatch({ type: "state_replaced", state: result.state });
+      }
+      return {
+        ok: true,
+        message: result.runId ? "Runner output marked imported." : "No matching runner run to mark.",
+        runId: result.runId
+      };
+    },
+    []
+  );
+
+  const markReviewRunnerRunImportedForVerdictAction = useCallback(
+    (input: ReviewRunnerRunImportMarkInput) => {
+      const result = markReviewRunnerRunImportedForVerdict(stateRef.current, input);
       if (!result.ok) {
         return { ok: false, message: result.error };
       }
@@ -1271,6 +1455,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       exportSnapshot,
       importSnapshot,
       resetToSeed,
+      resetToClean,
+      setMainQuest,
+      submitCreateCard,
+      dismissDemoTriage,
       saveChatSummary,
       deleteChatSummary,
       saveMemoryItem,
@@ -1291,11 +1479,17 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       completeFeatureSprintPlan: completeFeatureSprintPlanAction,
       deleteFeatureSprintPlan: deleteFeatureSprintPlanAction,
       importFeatureSprintPlanForCard: importFeatureSprintPlanForCardAction,
+      saveFeatureSpecForCard: saveFeatureSpecForCardAction,
+      approveFeatureSpecForPlan: approveFeatureSpecForPlanAction,
       importFeatureReviewVerdictForPlan: importFeatureReviewVerdictForPlanAction,
+      importFeaturePromptLocalizationForPlan: importFeaturePromptLocalizationForPlanAction,
+      importFeaturePromptAuditForPlan: importFeaturePromptAuditForPlanAction,
+      normalizeImplementationProofForPlan: normalizeImplementationProofForPlanAction,
       createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImported:
         markMostRecentFeatureSprintRunnerRunImportedAction,
+      markReviewRunnerRunImportedForVerdict: markReviewRunnerRunImportedForVerdictAction,
       markFeatureSprintRunnerRunWorktreeCleanup:
         markFeatureSprintRunnerRunWorktreeCleanupAction,
       confirmAssistantAction,
@@ -1336,6 +1530,10 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       exportSnapshot,
       importSnapshot,
       resetToSeed,
+      resetToClean,
+      setMainQuest,
+      submitCreateCard,
+      dismissDemoTriage,
       saveChatSummary,
       deleteChatSummary,
       saveMemoryItem,
@@ -1356,10 +1554,16 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       completeFeatureSprintPlanAction,
       deleteFeatureSprintPlanAction,
       importFeatureSprintPlanForCardAction,
+      saveFeatureSpecForCardAction,
+      approveFeatureSpecForPlanAction,
       importFeatureReviewVerdictForPlanAction,
+      importFeaturePromptLocalizationForPlanAction,
+      importFeaturePromptAuditForPlanAction,
+      normalizeImplementationProofForPlanAction,
       createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImportedAction,
+      markReviewRunnerRunImportedForVerdictAction,
       markFeatureSprintRunnerRunWorktreeCleanupAction,
       confirmAssistantAction,
       isBatchRunning,

@@ -34,9 +34,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/resume-bank", label: "Resume Bank" },
       { href: "/job-sources", label: "Job Sources" },
       { href: "/career-pack", label: "Career Pack" },
-      { href: "/career?tab=review", label: "Review queue" },
       { href: "/career?tab=find&add=1", label: "Paste a job" },
-      { href: "/career-intake", label: "Career Intake" },
+      { href: "/career?tab=review", label: "Review queue" },
+      { href: "/career-intake", label: "Direct application (advanced)" },
       { href: "/source-setup", label: "Source Setup" }
     ]
   }

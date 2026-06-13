@@ -1,9 +1,10 @@
 import { Platform } from "react-native";
 import type { Dispatch } from "react";
 
+import { applyAppSessionStart } from "../../core/briefing";
 import { nowIso } from "../../core/ids";
 import type { LifeHarnessData } from "../../core/lifeHarnessData";
-import { createSeedState } from "../../data/createSeedState";
+import { createCleanBootstrapState, createSeedState } from "../../data/createSeedState";
 import {
   clearLifeHarnessPersistence,
   parseLifeHarnessImport,
@@ -58,7 +59,16 @@ export function createSnapshotProviderActions(
     resetToSeed: () => {
       clearLifeHarnessPersistence();
       dispatch({ type: "state_replaced", state: createSeedState(nowIso()) });
-      return { ok: true, message: "Restored seed state." };
+      return { ok: true, message: "Restored demo seed board." };
+    },
+
+    resetToClean: () => {
+      clearLifeHarnessPersistence();
+      dispatch({
+        type: "state_replaced",
+        state: applyAppSessionStart(createCleanBootstrapState(nowIso()), new Date())
+      });
+      return { ok: true, message: "Reset to clean board." };
     }
   };
 }

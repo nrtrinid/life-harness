@@ -95,6 +95,340 @@ describe("normalizeData", () => {
     const normalized = normalizeData(withoutPack);
     expect(normalized.careerSourcePack).toBeNull();
   });
+
+  it("round-trips feature sprint plan featureSpec and automationPhase", () => {
+    const normalized = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-1",
+          cardId: "card-1",
+          title: "Web architect",
+          goal: "Persist spec",
+          status: "planning",
+          acceptanceCriteria: ["Spec saved"],
+          nonGoals: [],
+          constraints: [],
+          steps: [],
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z",
+          featureSpec: {
+            body: "Approved body",
+            source: "chatgpt_web",
+            updatedAt: "2026-06-09T12:00:00.000Z",
+            approvedAt: "2026-06-09T12:00:00.000Z",
+            approvedBy: "user"
+          },
+          automationPhase: "spec_approved"
+        }
+      ]
+    });
+
+    expect(normalized.featureSprintPlans[0]?.featureSpec).toMatchObject({
+      body: "Approved body",
+      approvedAt: "2026-06-09T12:00:00.000Z"
+    });
+    expect(normalized.featureSprintPlans[0]?.automationPhase).toBe("spec_approved");
+  });
+
+  it("strips empty featureSpec body and invalid automationPhase on load", () => {
+    const normalized = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-1",
+          cardId: "card-1",
+          title: "Empty spec",
+          goal: "Hydrate",
+          status: "planning",
+          acceptanceCriteria: ["Hydrate"],
+          nonGoals: [],
+          constraints: [],
+          steps: [],
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z",
+          featureSpec: {
+            body: "   ",
+            updatedAt: "2026-06-09T12:00:00.000Z"
+          },
+          automationPhase: "not_a_real_phase" as never
+        }
+      ]
+    });
+
+    expect(normalized.featureSprintPlans[0]?.featureSpec).toBeUndefined();
+    expect(normalized.featureSprintPlans[0]?.automationPhase).toBeUndefined();
+  });
+
+  it("round-trips step promptLocalization and strips empty revised prompt", () => {
+    const normalized = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-1",
+          cardId: "card-1",
+          title: "Localization",
+          goal: "Persist localization",
+          status: "in_progress",
+          acceptanceCriteria: ["Saved"],
+          nonGoals: [],
+          constraints: [],
+          steps: [
+            {
+              id: "step-1",
+              title: "Core",
+              goal: "Add localization",
+              status: "ready",
+              acceptanceCriteria: ["Tests pass"],
+              promptLocalization: {
+                rawOutput: "raw",
+                likelyFiles: ["src/core/types.ts"],
+                existingHelpers: [],
+                testsToRun: [],
+                risks: [],
+                revisedImplementationPrompt: "Implement B1.",
+                createdAt: "2026-06-09T12:00:00.000Z",
+                updatedAt: "2026-06-09T12:00:00.000Z"
+              },
+              createdAt: "2026-06-09T12:00:00.000Z",
+              updatedAt: "2026-06-09T12:00:00.000Z"
+            }
+          ],
+          currentStepId: "step-1",
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(normalized.featureSprintPlans[0]?.steps[0]?.promptLocalization?.revisedImplementationPrompt).toBe(
+      "Implement B1."
+    );
+
+    const stripped = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-2",
+          cardId: "card-1",
+          title: "Empty localization",
+          goal: "Strip",
+          status: "in_progress",
+          acceptanceCriteria: ["Strip"],
+          nonGoals: [],
+          constraints: [],
+          steps: [
+            {
+              id: "step-1",
+              title: "Core",
+              goal: "Strip",
+              status: "ready",
+              acceptanceCriteria: ["Tests pass"],
+              promptLocalization: {
+                rawOutput: "   ",
+                likelyFiles: [],
+                existingHelpers: [],
+                testsToRun: [],
+                risks: [],
+                revisedImplementationPrompt: "   ",
+                createdAt: "2026-06-09T12:00:00.000Z",
+                updatedAt: "2026-06-09T12:00:00.000Z"
+              },
+              createdAt: "2026-06-09T12:00:00.000Z",
+              updatedAt: "2026-06-09T12:00:00.000Z"
+            }
+          ],
+          currentStepId: "step-1",
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(stripped.featureSprintPlans[0]?.steps[0]?.promptLocalization).toBeUndefined();
+  });
+
+  it("round-trips step promptAudit and strips invalid audit", () => {
+    const normalized = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-1",
+          cardId: "card-1",
+          title: "Audit",
+          goal: "Persist audit",
+          status: "in_progress",
+          acceptanceCriteria: ["Saved"],
+          nonGoals: [],
+          constraints: [],
+          steps: [
+            {
+              id: "step-1",
+              title: "Core",
+              goal: "Add audit",
+              status: "ready",
+              acceptanceCriteria: ["Tests pass"],
+              promptAudit: {
+                rawOutput: "raw",
+                verdict: "ready",
+                risks: [],
+                requiredPromptChanges: [],
+                finalImplementationPrompt: "Audited prompt.",
+                mustCheckFiles: [],
+                verificationCommands: [],
+                createdAt: "2026-06-09T12:00:00.000Z",
+                updatedAt: "2026-06-09T12:00:00.000Z"
+              },
+              createdAt: "2026-06-09T12:00:00.000Z",
+              updatedAt: "2026-06-09T12:00:00.000Z"
+            }
+          ],
+          currentStepId: "step-1",
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(normalized.featureSprintPlans[0]?.steps[0]?.promptAudit?.finalImplementationPrompt).toBe(
+      "Audited prompt."
+    );
+
+    const stripped = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-2",
+          cardId: "card-1",
+          title: "Empty audit",
+          goal: "Strip",
+          status: "in_progress",
+          acceptanceCriteria: ["Strip"],
+          nonGoals: [],
+          constraints: [],
+          steps: [
+            {
+              id: "step-1",
+              title: "Core",
+              goal: "Strip",
+              status: "ready",
+              acceptanceCriteria: ["Tests pass"],
+              promptAudit: {
+                rawOutput: "   ",
+                verdict: "not_valid" as never,
+                risks: [],
+                requiredPromptChanges: [],
+                finalImplementationPrompt: "   ",
+                mustCheckFiles: [],
+                verificationCommands: [],
+                createdAt: "2026-06-09T12:00:00.000Z",
+                updatedAt: "2026-06-09T12:00:00.000Z"
+              },
+              createdAt: "2026-06-09T12:00:00.000Z",
+              updatedAt: "2026-06-09T12:00:00.000Z"
+            }
+          ],
+          currentStepId: "step-1",
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(stripped.featureSprintPlans[0]?.steps[0]?.promptAudit).toBeUndefined();
+  });
+
+  it("round-trips step implementationProof and strips invalid proof", () => {
+    const normalized = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-1",
+          cardId: "card-1",
+          title: "Proof",
+          goal: "Persist proof",
+          status: "in_progress",
+          acceptanceCriteria: ["Saved"],
+          nonGoals: [],
+          constraints: [],
+          steps: [
+            {
+              id: "step-1",
+              title: "Core",
+              goal: "Add proof",
+              status: "ready",
+              acceptanceCriteria: ["Tests pass"],
+              implementationProof: {
+                rawOutput: "Changed files\n- src/core/foo.ts",
+                filesChanged: ["src/core/foo.ts"],
+                behaviorChanged: ["See raw implementation output."],
+                testsRun: ["npm test"],
+                testsNotRun: [],
+                verificationResult: "pass",
+                knownRisks: [],
+                suggestedReviewFocus: ["Review scope"],
+                runnerEvidence: {
+                  diffStat: "1 file changed",
+                  gitStatus: "M src/core/foo.ts",
+                  verificationSummary: ["npm test: passed"]
+                },
+                createdAt: "2026-06-09T12:00:00.000Z",
+                updatedAt: "2026-06-09T12:00:00.000Z"
+              },
+              createdAt: "2026-06-09T12:00:00.000Z",
+              updatedAt: "2026-06-09T12:00:00.000Z"
+            }
+          ],
+          currentStepId: "step-1",
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(normalized.featureSprintPlans[0]?.steps[0]?.implementationProof?.filesChanged).toEqual([
+      "src/core/foo.ts"
+    ]);
+    expect(
+      normalized.featureSprintPlans[0]?.steps[0]?.implementationProof?.runnerEvidence?.diffStat
+    ).toContain("1 file changed");
+
+    const stripped = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-2",
+          cardId: "card-1",
+          title: "Empty proof",
+          goal: "Strip",
+          status: "in_progress",
+          acceptanceCriteria: ["Strip"],
+          nonGoals: [],
+          constraints: [],
+          steps: [
+            {
+              id: "step-1",
+              title: "Core",
+              goal: "Strip",
+              status: "ready",
+              acceptanceCriteria: ["Tests pass"],
+              implementationProof: {
+                rawOutput: "   ",
+                filesChanged: [],
+                behaviorChanged: [],
+                testsRun: [],
+                testsNotRun: [],
+                verificationResult: "not_valid" as never,
+                knownRisks: [],
+                suggestedReviewFocus: [],
+                createdAt: "2026-06-09T12:00:00.000Z",
+                updatedAt: "2026-06-09T12:00:00.000Z"
+              },
+              createdAt: "2026-06-09T12:00:00.000Z",
+              updatedAt: "2026-06-09T12:00:00.000Z"
+            }
+          ],
+          currentStepId: "step-1",
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(stripped.featureSprintPlans[0]?.steps[0]?.implementationProof).toBeUndefined();
+  });
 });
 
 describe("mergeSeedDefaults", () => {

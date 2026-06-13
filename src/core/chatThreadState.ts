@@ -294,6 +294,8 @@ export function updateSharedChatThreadStateAfterTurn(args: {
   assistantAnswer: string;
   turns: ChatTurn[];
   now?: string;
+  /** When false, skip auto-deriving doNotRepeat from assistant answer prefixes. Default true. */
+  deriveDoNotRepeatFromAssistant?: boolean;
 }): SharedChatThreadState {
   const now = args.now ?? new Date().toISOString();
   const userMessage = args.userMessage.trim();
@@ -329,12 +331,15 @@ export function updateSharedChatThreadStateAfterTurn(args: {
     }
   }
 
-  const doNotRepeatSnippet = deriveDoNotRepeatSnippet(args.assistantAnswer);
-  if (doNotRepeatSnippet) {
-    next = {
-      ...next,
-      doNotRepeat: appendCappedUnique(next.doNotRepeat, doNotRepeatSnippet, MAX_DO_NOT_REPEAT)
-    };
+  const deriveDoNotRepeatFromAssistant = args.deriveDoNotRepeatFromAssistant ?? true;
+  if (deriveDoNotRepeatFromAssistant) {
+    const doNotRepeatSnippet = deriveDoNotRepeatSnippet(args.assistantAnswer);
+    if (doNotRepeatSnippet) {
+      next = {
+        ...next,
+        doNotRepeat: appendCappedUnique(next.doNotRepeat, doNotRepeatSnippet, MAX_DO_NOT_REPEAT)
+      };
+    }
   }
 
   const lastOptions = extractLastOptions(args.assistantAnswer);

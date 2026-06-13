@@ -65,11 +65,11 @@ function createStateWithRun(): LifeHarnessData {
 describe("lifeHarness persistence boundary", () => {
   const fixedNow = new Date("2026-06-09T12:00:00.000Z");
 
-  it("hydrates seed state when snapshot is missing", () => {
+  it("hydrates clean bootstrap when snapshot is missing", () => {
     const adapter = createMockAdapter();
     const hydrated = hydrateLifeHarnessState(adapter, fixedNow);
 
-    expect(hydrated.cards.length).toBeGreaterThan(0);
+    expect(hydrated.cards).toEqual([]);
     expect(hydrated.jobSourceRuns).toEqual([]);
   });
 
@@ -83,12 +83,12 @@ describe("lifeHarness persistence boundary", () => {
     expect(hydrated.jobCandidates.some((item) => item.id === "candidate-test")).toBe(true);
   });
 
-  it("falls back to seed when stored snapshot JSON is invalid", () => {
+  it("falls back to clean bootstrap when stored snapshot JSON is invalid", () => {
     const adapter = createMockAdapter("{bad");
     const hydrated = hydrateLifeHarnessState(adapter, fixedNow);
 
     expect(hydrated.jobSourceRuns).toEqual([]);
-    expect(hydrated.cards.length).toBeGreaterThan(0);
+    expect(hydrated.cards).toEqual([]);
   });
 
   it("falls back to seed when stored snapshot schema is incompatible", () => {
@@ -113,7 +113,7 @@ describe("lifeHarness persistence boundary", () => {
     expect(adapter.stored).toContain('"schemaVersion": 1');
   });
 
-  it("clears persisted snapshot so hydrate returns seed", () => {
+  it("clears persisted snapshot so hydrate returns clean bootstrap", () => {
     const adapter = createMockAdapter();
     persistLifeHarnessState(createStateWithRun(), adapter);
     clearLifeHarnessPersistence(adapter);
