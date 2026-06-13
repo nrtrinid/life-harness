@@ -11,11 +11,14 @@ import {
   AGENT_PERFORMANCE_MODES,
   AGENT_VERIFICATION_DEPTHS,
   agentPolicyPermissionsMatchRegistry,
+  buildAgentPolicyAuditReport,
+  buildAgentPolicyAuditRow,
   checkAgentPolicyContainment,
   checkAgentPolicyContextSource,
   checkAgentPolicyMutation,
   checkAgentPolicyOperation,
   checkAgentPolicyProviderSurface,
+  listAgentPolicyAuditRows,
   listAgentPolicySummaries,
   listResolvedAgentPolicies,
   resolveAgentPolicySummary,
@@ -249,6 +252,159 @@ describe("agentPolicy", () => {
       expect(policies).toHaveLength(AGENT_WORKFLOWS.length);
       expect(summaries).toHaveLength(AGENT_WORKFLOWS.length);
       expect(summaries.every((summary) => summary.performanceMode === performanceMode)).toBe(true);
+    }
+  });
+
+  it("builds compact audit rows with permission fields and derived flags", () => {
+    const row = buildAgentPolicyAuditRow("chat_harness");
+
+    expect(row).toMatchObject({
+      workflowId: "chat_harness",
+      label: "Companion (Chat Harness)",
+      providerSurface: "ai_gateway",
+      mutationPolicy: "user_approved_actions_only",
+      containment: "grounded",
+      modelFree: false,
+      providerEnabled: true,
+      boardContextAllowed: true,
+      rawLabRuntimeAuthorityAllowed: false,
+      directMutationAllowed: false,
+      proposalOnly: false,
+      userApprovalRequired: true,
+      externalAgentScoped: false,
+      isolated: false
+    });
+    expect(row?.contextSources).toContain("board_snapshot");
+    expect(row?.findings.map((finding) => finding.code)).toEqual([
+      "workflow_provider_enabled",
+      "workflow_user_approved"
+    ]);
+    expect(Object.keys(row ?? {})).not.toContain("rationale");
+    expect(Object.keys(row ?? {})).not.toContain("coreFiles");
+    expect(Object.keys(row ?? {})).not.toContain("testFiles");
+    expect(Object.keys(row ?? {})).not.toContain("endpoint");
+  });
+
+  it("represents important workflow postures in audit rows", () => {
+    expect(buildAgentPolicyAuditRow("raw_lab")).toMatchObject({
+      isolated: true,
+      boardContextAllowed: false,
+      rawLabRuntimeAuthorityAllowed: false,
+      directMutationAllowed: false
+    });
+    expect(buildAgentPolicyAuditRow("raw_lab")?.findings.map((finding) => finding.code)).toEqual([
+      "workflow_provider_enabled",
+      "workflow_isolated"
+    ]);
+
+    expect(buildAgentPolicyAuditRow("deep_synthesis")).toMatchObject({
+      proposalOnly: true,
+      userApprovalRequired: true,
+      directMutationAllowed: false
+    });
+    expect(buildAgentPolicyAuditRow("chat_harness")).toMatchObject({
+      proposalOnly: false,
+      userApprovalRequired: true,
+      directMutationAllowed: false
+    });
+    expect(buildAgentPolicyAuditRow("context_packet_build")).toMatchObject({
+      modelFree: true,
+      providerEnabled: false,
+      directMutationAllowed: false
+    });
+    expect(buildAgentPolicyAuditRow("feature_sprint_runner")).toMatchObject({
+      providerSurface: "feature_sprint_runner",
+      containment: "dev_agent",
+      externalAgentScoped: true,
+      directMutationAllowed: false
+    });
+  });
+
+  it("lists audit rows for every workflow in stable order for every performance mode", () => {
+    const expectedIds = listAgentWorkflowDefinitions().map((workflow) => workflow.id);
+
+    for (const performanceMode of AGENT_PERFORMANCE_MODES) {
+      const rows = listAgentPolicyAuditRows(performanceMode);
+
+      expect(rows.map((row) => row.workflowId)).toEqual(expectedIds);
+      expect(rows).toHaveLength(AGENT_WORKFLOWS.length);
+      expect(rows.every((row) => row.findings.every((finding) => finding.workflowId === row.workflowId))).toBe(
+        true
+      );
+    }
+  });
+
+  it("builds deterministic audit reports without current invariant errors", () => {
+    const first = buildAgentPolicyAuditReport();
+    const second = buildAgentPolicyAuditReport();
+
+    expect(first).toEqual(second);
+    expect(first.performanceMode).toBe("balanced");
+    expect(first.workflowCount).toBe(AGENT_WORKFLOWS.length);
+    expect(first.rows).toHaveLength(first.workflowCount);
+    expect(first.findings).toEqual([]);
+    expect(first.hasErrors).toBe(false);
+    expect(first.hasWarnings).toBe(false);
+  });
+
+  it("supports audit reports in every performance mode without permission drift", () => {
+    for (const performanceMode of AGENT_PERFORMANCE_MODES) {
+      const report = buildAgentPolicyAuditReport(performanceMode);
+
+      expect(report.performanceMode).toBe(performanceMode);
+      expect(report.workflowCount).toBe(AGENT_WORKFLOWS.length);
+      expect(report.findings.map((finding) => finding.code)).not.toContain(
+        "permission_mode_drift"
+      );
+      expect(report.findings.map((finding) => finding.code)).not.toContain(
+        "registry_permission_mismatch"
+      );
+      expect(report.hasErrors).toBe(false);
+    }
+  });
+
+  it("keeps audit finding codes stable and deterministic", () => {
+    const deepSynthesisFindings = buildAgentPolicyAuditRow("deep_synthesis")?.findings;
+    const featureSprintFindings = buildAgentPolicyAuditRow("feature_sprint_runner")?.findings;
+
+    expect(deepSynthesisFindings).toEqual([
+      {
+        severity: "info",
+        code: "workflow_provider_enabled",
+        workflowId: "deep_synthesis",
+        message: "Workflow uses provider surface ai_gateway."
+      },
+      {
+        severity: "info",
+        code: "workflow_proposal_only",
+        workflowId: "deep_synthesis",
+        message: "Workflow can produce proposals only."
+      },
+      {
+        severity: "info",
+        code: "workflow_user_approved",
+        workflowId: "deep_synthesis",
+        message: "Workflow requires user approval for policy-permitted mutations."
+      }
+    ]);
+    expect(featureSprintFindings?.map((finding) => finding.code)).toEqual([
+      "workflow_provider_enabled",
+      "workflow_external_agent_scope"
+    ]);
+  });
+
+  it("keeps audit permissions invariant across performance modes", () => {
+    for (const workflow of AGENT_WORKFLOWS) {
+      const balanced = buildAgentPolicyAuditRow(workflow.id, "balanced");
+
+      for (const performanceMode of AGENT_PERFORMANCE_MODES) {
+        const row = buildAgentPolicyAuditRow(workflow.id, performanceMode);
+
+        expect(row?.providerSurface).toBe(balanced?.providerSurface);
+        expect(row?.contextSources).toEqual(balanced?.contextSources);
+        expect(row?.mutationPolicy).toBe(balanced?.mutationPolicy);
+        expect(row?.containment).toBe(balanced?.containment);
+      }
     }
   });
 

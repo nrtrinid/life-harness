@@ -90,6 +90,12 @@ Agent Policy v0.3 adds pure enforcement primitives for future consumers. `checkA
 
 These helpers are intended to be called before provider, context, mutation-sensitive, or containment-sensitive actions. They still do not wire policy into UI, gateway, state, provider execution, or board mutation. Performance mode remains compute-only; permission decisions continue to derive from the workflow registry.
 
+### Agent Policy v0.4
+
+Agent Policy v0.4 adds pure audit/report helpers for dev and debug introspection. `buildAgentPolicyAuditRow`, `listAgentPolicyAuditRows`, and `buildAgentPolicyAuditReport` summarize provider surface, context posture, mutation policy, containment, and compact findings for each registered workflow.
+
+The audit report is descriptive only. Future UI, gateway, and runtime consumers should still use the v0.3 check helpers for actual decisions. The report also checks that performance modes do not drift permissions and that resolved policy permissions still match the registry. Performance mode remains compute-only.
+
 ---
 
 ## Workflow inventory (condensed)

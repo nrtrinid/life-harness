@@ -96,6 +96,55 @@ export type AgentPolicyOperationRequest = {
   containment?: AgentPolicyContainmentRequest;
 };
 
+export type AgentPolicyAuditSeverity = "info" | "warning" | "error";
+
+export type AgentPolicyAuditFindingCode =
+  | "workflow_model_free"
+  | "workflow_provider_enabled"
+  | "workflow_proposal_only"
+  | "workflow_user_approved"
+  | "workflow_direct_mutation"
+  | "workflow_external_agent_scope"
+  | "workflow_isolated"
+  | "workflow_containment_risk"
+  | "permission_mode_drift"
+  | "registry_permission_mismatch";
+
+export type AgentPolicyAuditFinding = {
+  severity: AgentPolicyAuditSeverity;
+  code: AgentPolicyAuditFindingCode;
+  workflowId: string;
+  message: string;
+};
+
+export type AgentPolicyAuditRow = {
+  workflowId: AgentWorkflowId;
+  label: string;
+  providerSurface: AgentProviderSurface;
+  contextSources: AgentContextSourceId[];
+  mutationPolicy: AgentMutationPolicy;
+  containment: AgentContainmentType;
+  modelFree: boolean;
+  providerEnabled: boolean;
+  boardContextAllowed: boolean;
+  rawLabRuntimeAuthorityAllowed: boolean;
+  directMutationAllowed: boolean;
+  proposalOnly: boolean;
+  userApprovalRequired: boolean;
+  externalAgentScoped: boolean;
+  isolated: boolean;
+  findings: AgentPolicyAuditFinding[];
+};
+
+export type AgentPolicyAuditReport = {
+  performanceMode: AgentPerformanceMode;
+  workflowCount: number;
+  rows: AgentPolicyAuditRow[];
+  findings: AgentPolicyAuditFinding[];
+  hasErrors: boolean;
+  hasWarnings: boolean;
+};
+
 const MODE_BUDGETS: Record<
   AgentPerformanceMode,
   {
@@ -414,6 +463,86 @@ export function checkAgentPolicyOperation(
   return allowPolicy(policy, "Operation request is allowed by policy.");
 }
 
+export function buildAgentPolicyAuditRow(
+  workflowId: AgentWorkflowId,
+  performanceMode: AgentPerformanceMode = "balanced"
+): AgentPolicyAuditRow | undefined {
+  const workflow = getAgentWorkflowDefinition(workflowId);
+  const policy = resolveWorkflowAgentPolicy(workflowId, performanceMode);
+  if (!workflow || !policy) {
+    return undefined;
+  }
+
+  const directMutationAllowed = checkAgentPolicyMutation({
+    workflowId,
+    performanceMode,
+    mutation: "direct_mutation"
+  }).allowed;
+  const rawLabRuntimeAuthorityAllowed = checkAgentPolicyContainment({
+    workflowId,
+    performanceMode,
+    containment: "raw_lab_runtime_authority"
+  }).allowed;
+  const boardContextAllowed = policy.contextSources.includes("board_snapshot");
+  const proposalOnly = policy.mutationPolicy === "user_approved_proposals_only";
+  const userApprovalRequired =
+    policy.mutationPolicy === "user_approved_actions_only" || proposalOnly;
+  const externalAgentScoped = policy.mutationPolicy === "external_agent_scoped";
+  const isolated = policy.containment === "raw_lab_isolated";
+
+  const row: AgentPolicyAuditRow = {
+    workflowId,
+    label: workflow.label,
+    providerSurface: policy.providerSurface,
+    contextSources: [...policy.contextSources],
+    mutationPolicy: policy.mutationPolicy,
+    containment: policy.containment,
+    modelFree: policy.modelTier === "none",
+    providerEnabled: policy.providerSurface !== "none",
+    boardContextAllowed,
+    rawLabRuntimeAuthorityAllowed,
+    directMutationAllowed,
+    proposalOnly,
+    userApprovalRequired,
+    externalAgentScoped,
+    isolated,
+    findings: []
+  };
+
+  row.findings = buildAgentPolicyAuditRowFindings(row);
+  return row;
+}
+
+export function listAgentPolicyAuditRows(
+  performanceMode: AgentPerformanceMode = "balanced"
+): AgentPolicyAuditRow[] {
+  return listAgentWorkflowDefinitions().map((workflow) => {
+    const row = buildAgentPolicyAuditRow(workflow.id, performanceMode);
+    if (!row) {
+      throw new Error(`Missing agent policy audit row for registered workflow: ${workflow.id}`);
+    }
+    return row;
+  });
+}
+
+export function buildAgentPolicyAuditReport(
+  performanceMode: AgentPerformanceMode = "balanced"
+): AgentPolicyAuditReport {
+  const rows = listAgentPolicyAuditRows(performanceMode);
+  const findings = buildGlobalAgentPolicyAuditFindings(performanceMode);
+
+  return {
+    performanceMode,
+    workflowCount: rows.length,
+    rows,
+    findings,
+    hasErrors: findings.some((finding) => finding.severity === "error"),
+    hasWarnings:
+      findings.some((finding) => finding.severity === "warning") ||
+      rows.some((row) => row.findings.some((finding) => finding.severity === "warning"))
+  };
+}
+
 function fromRegistry(
   workflow: AgentWorkflowDefinition,
   performanceMode: AgentPerformanceMode
@@ -566,6 +695,158 @@ function containmentAllowedByPolicy(
     case "deterministic_local":
       return containment === "board_context";
   }
+}
+
+function buildAgentPolicyAuditRowFindings(
+  row: AgentPolicyAuditRow
+): AgentPolicyAuditFinding[] {
+  const findings: AgentPolicyAuditFinding[] = [];
+
+  if (row.modelFree) {
+    findings.push(
+      auditFinding("info", "workflow_model_free", row.workflowId, "Workflow uses no model tier.")
+    );
+  }
+
+  if (row.providerEnabled) {
+    findings.push(
+      auditFinding(
+        "info",
+        "workflow_provider_enabled",
+        row.workflowId,
+        `Workflow uses provider surface ${row.providerSurface}.`
+      )
+    );
+  }
+
+  if (row.proposalOnly) {
+    findings.push(
+      auditFinding(
+        "info",
+        "workflow_proposal_only",
+        row.workflowId,
+        "Workflow can produce proposals only."
+      )
+    );
+  }
+
+  if (row.userApprovalRequired) {
+    findings.push(
+      auditFinding(
+        "info",
+        "workflow_user_approved",
+        row.workflowId,
+        "Workflow requires user approval for policy-permitted mutations."
+      )
+    );
+  }
+
+  if (row.directMutationAllowed) {
+    findings.push(
+      auditFinding(
+        "warning",
+        "workflow_direct_mutation",
+        row.workflowId,
+        "Workflow policy permits direct mutation."
+      )
+    );
+  }
+
+  if (row.externalAgentScoped) {
+    findings.push(
+      auditFinding(
+        "info",
+        "workflow_external_agent_scope",
+        row.workflowId,
+        "Workflow is scoped to an external/dev-agent runner."
+      )
+    );
+  }
+
+  if (row.isolated) {
+    findings.push(
+      auditFinding(
+        "info",
+        "workflow_isolated",
+        row.workflowId,
+        "Workflow is isolated from grounded board authority."
+      )
+    );
+  }
+
+  if (row.isolated && (row.boardContextAllowed || row.rawLabRuntimeAuthorityAllowed)) {
+    findings.push(
+      auditFinding(
+        "warning",
+        "workflow_containment_risk",
+        row.workflowId,
+        "Isolated workflow has board context or raw runtime authority beyond its containment."
+      )
+    );
+  }
+
+  return findings;
+}
+
+function buildGlobalAgentPolicyAuditFindings(
+  performanceMode: AgentPerformanceMode
+): AgentPolicyAuditFinding[] {
+  const findings: AgentPolicyAuditFinding[] = [];
+
+  for (const workflow of listAgentWorkflowDefinitions()) {
+    const policy = resolveWorkflowAgentPolicy(workflow.id, performanceMode);
+    if (!policy || !agentPolicyPermissionsMatchRegistry(policy)) {
+      findings.push(
+        auditFinding(
+          "error",
+          "registry_permission_mismatch",
+          workflow.id,
+          "Resolved policy permissions do not match the workflow registry."
+        )
+      );
+    }
+
+    const baseline = resolveWorkflowAgentPolicy(workflow.id, "balanced");
+    if (!baseline) {
+      continue;
+    }
+
+    for (const mode of AGENT_PERFORMANCE_MODES) {
+      const candidate = resolveWorkflowAgentPolicy(workflow.id, mode);
+      if (
+        !candidate ||
+        candidate.providerSurface !== baseline.providerSurface ||
+        !sameContextSources(candidate.contextSources, baseline.contextSources) ||
+        candidate.mutationPolicy !== baseline.mutationPolicy ||
+        candidate.containment !== baseline.containment
+      ) {
+        findings.push(
+          auditFinding(
+            "error",
+            "permission_mode_drift",
+            workflow.id,
+            `Performance mode ${mode} changes registry-derived permissions.`
+          )
+        );
+      }
+    }
+  }
+
+  return findings;
+}
+
+function auditFinding(
+  severity: AgentPolicyAuditSeverity,
+  code: AgentPolicyAuditFindingCode,
+  workflowId: string,
+  message: string
+): AgentPolicyAuditFinding {
+  return {
+    severity,
+    code,
+    workflowId,
+    message
+  };
 }
 
 function allowPolicy(policy: ResolvedAgentPolicy, detail: string): AgentPolicyDecision {
