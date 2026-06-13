@@ -55,6 +55,7 @@ import {
   cleanupFeatureSprintWorktree,
   composeImplementationRunnerOutputSummary,
   guardRunnerAgentAvailability,
+  resolveFeatureSprintRunnerToken,
   runFeatureSprintPacket,
   summarizeVerificationResults,
   type FeatureSprintRunnerHealthProbe
@@ -1097,6 +1098,7 @@ export default function CardDetailScreen() {
     void (async () => {
       const health = await checkFeatureSprintRunnerHealth();
       if (!cancelled) {
+        setRunnerHealthProbe(health);
         setRunnerHealth(health.ok ? "available" : "unavailable");
       }
     })();
@@ -1309,6 +1311,7 @@ export default function CardDetailScreen() {
           onSelectRunnerAgent={setRunnerAgent}
           runnerHealth={runnerHealth}
           runnerHealthProbe={runnerHealthProbe}
+          appTokenConfigured={Boolean(resolveFeatureSprintRunnerToken())}
           isCheckingRunner={isCheckingRunner}
           isRunningScoping={isRunningScoping}
           hasProjectMetadata={Boolean(cardProject)}
@@ -1323,6 +1326,9 @@ export default function CardDetailScreen() {
           }}
           onRunScoping={() => {
             void handleRunScoping();
+          }}
+          onSetupNotice={(kind, message) => {
+            showNotice(kind, message);
           }}
         />
 

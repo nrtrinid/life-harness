@@ -53,6 +53,11 @@ import {
   type SharedChatThreadState
 } from "../src/core/chatThreadState";
 import { buildAiContextPacket } from "../src/core/contextPacketBuilder";
+import { formatCapabilityRoutingSummary } from "../src/core/capabilityRouter";
+import {
+  formatUntrustedBlockSummary,
+  resolveTrustedUserMessage
+} from "../src/core/untrustedContextBlock";
 import { formatPacketSliceSummary } from "../src/core/contextPacketShim";
 import { toWireContextPacket } from "../src/core/contextPacketWire";
 import {
@@ -304,7 +309,16 @@ export default function AskHarnessDevScreen() {
     () => formatPacketSliceSummary(previewPacket),
     [previewPacket]
   );
+  const previewRoutingSummary = useMemo(
+    () => (previewPacket.routing ? formatCapabilityRoutingSummary(previewPacket.routing) : undefined),
+    [previewPacket]
+  );
   const packetSliceSummary = lastSentPacketSummary ?? previewPacketSummary;
+  const routingSummary = previewRoutingSummary;
+  const untrustedBlockSummary = useMemo(
+    () => formatUntrustedBlockSummary(previewPacket.untrustedBlocks ?? []),
+    [previewPacket]
+  );
   const synthesis = useDeepSynthesisJob({
     baseUrl,
     thread,
@@ -470,9 +484,13 @@ export default function AskHarnessDevScreen() {
     try {
       const sendPacket = buildInspectorPacket(trimmed, threadState, contextMode);
       setLastSentPacketSummary(formatPacketSliceSummary(sendPacket));
+      const gatewayMessage =
+        sendPacket.untrustedBlocks?.length && sendPacket.routing
+          ? resolveTrustedUserMessage(trimmed, sendPacket.routing, sendPacket.untrustedBlocks)
+          : trimmed;
       const sendBundle = buildChatHarnessSendBundle({
         exportInput,
-        message: trimmed,
+        message: gatewayMessage,
         priorThread,
         threadState,
         preferredContextMode: contextMode,
@@ -492,7 +510,7 @@ export default function AskHarnessDevScreen() {
 
       const result = await askChatHarness({
         baseUrl,
-        message: trimmed,
+        message: gatewayMessage,
         mode,
         sensitivity,
         context: sendBundle.context,
@@ -611,6 +629,8 @@ export default function AskHarnessDevScreen() {
       promptOverBudget={promptOverBudget}
       gatewayMaxInputChars={gatewayBudget.maxInputChars}
       packetSliceSummary={packetSliceSummary}
+      routingSummary={routingSummary}
+      untrustedBlockSummary={untrustedBlockSummary}
       qualitySummary={qualitySummary}
       qualityOpen={qualityOpen}
       onQualityOpenToggle={() => setQualityOpen((open) => !open)}
@@ -704,6 +724,7 @@ export default function AskHarnessDevScreen() {
         loading={loading}
         memoryItems={harnessState.memoryItems}
         lifeHarnessData={lifeHarnessData}
+        sensitivity={sensitivity}
         proposalStatuses={proposalStatuses}
         onApproveProposal={handleApproveProposal}
         onDismissProposal={handleDismissProposal}

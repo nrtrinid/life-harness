@@ -7,6 +7,7 @@ import { createSeedState } from "../data/createSeedState";
 import { buildAiContextPacket } from "./contextPacketBuilder";
 import { ContextPacketBuildError } from "./contextPacket";
 import { formatPacketSliceSummary, packetToHarnessContext } from "./contextPacketShim";
+import { UNTRUSTED_TRUSTED_MESSAGE_STUB } from "./untrustedContextBlock";
 import type { HarnessExportInput } from "./harnessContext";
 import type { LifeCard, LifeLogEntry } from "./types";
 
@@ -227,6 +228,40 @@ describe("buildAiContextPacket", () => {
     expect(summary).toContain("active");
     expect(summary).toContain("headroom");
     expect(summary.toLowerCase()).not.toContain("openvino");
+  });
+
+  it("attaches routing metadata and denies sprint caps on career requests", () => {
+    const packet = buildPacket({}, "Tailor my resume for this job post", "general");
+
+    expect(packet.routing?.intent).toBe("career_tailor");
+    expect(packet.routing?.denied).toContain("feature_sprint");
+    expect(packet.tools.allowed).not.toContain("create_agent_session");
+    expect(packet.tools.notes.some((note) => note.includes("career_tailor"))).toBe(true);
+  });
+
+  it("routes feature sprint capabilities into packet metadata", () => {
+    const packet = buildPacket({}, "Run the next feature sprint step in the worktree", "operator");
+
+    expect(packet.routing?.intent).toBe("feature_sprint");
+    expect(packet.tools.notes.some((note) => note.includes("feature_sprint"))).toBe(true);
+    expect(packet.tools.allowed).toContain("create_agent_session");
+  });
+
+  it("wraps long pasted companion messages in untrusted blocks", () => {
+    const pasted = "Must have 5 years experience. ".repeat(20);
+    const packet = buildPacket({}, pasted, "general");
+
+    expect(packet.untrustedBlocks?.length).toBeGreaterThan(0);
+    expect(packet.userIntent.message).not.toBe(pasted);
+    expect(packet.userIntent.message).toBe(UNTRUSTED_TRUSTED_MESSAGE_STUB);
+  });
+
+  it("keeps a short first-line question when pasted companion text follows", () => {
+    const pasted = `Should I apply?\n${"Must have 5 years experience. ".repeat(20)}`;
+    const packet = buildPacket({}, pasted, "general");
+
+    expect(packet.untrustedBlocks?.length).toBeGreaterThan(0);
+    expect(packet.userIntent.message).toBe("Should I apply?");
   });
 });
 

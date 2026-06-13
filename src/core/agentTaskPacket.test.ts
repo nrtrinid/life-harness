@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createSeedState } from "../data/createSeedState";
 import type { LifeHarnessData } from "./lifeHarnessData";
+import { createCareerApplicationCard } from "./career";
 import {
   buildAgentSessionCreateInputFromTaskPacket,
   buildAgentTaskPacket,
@@ -11,6 +12,7 @@ import {
   resolveDefaultTaskGoal,
   truncatePacketExcerpt
 } from "./agentTaskPacket";
+import { UNTRUSTED_CONTEXT_BANNER } from "./untrustedContextBlock";
 import type { LifeCard } from "./types";
 
 const FIXED_NOW = new Date("2026-06-09T12:00:00.000Z");
@@ -333,6 +335,33 @@ describe("agentTaskPacket", () => {
     expect(result.packet.verificationCommands).toEqual([]);
     expect(result.markdown).toContain("## Likely files\n(not specified)");
     expect(result.markdown).toContain("## Verification\n(not specified)");
+  });
+
+  it("wraps career job descriptions in untrusted blocks inside embedded card context", () => {
+    const card = createCareerApplicationCard({
+      company: "Acme Corp",
+      roleTitle: "Software Engineer",
+      jobDescription: "Build reliable TypeScript services with strong testing.",
+      roleType: "software"
+    });
+    const result = buildAgentTaskPacket(baseData({ cards: [card] }), {
+      cardId: card.id,
+      goal: "Draft cover letter bullets.",
+      now: FIXED_NOW
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.markdown).toContain("## Existing context");
+    expect(result.markdown).toContain("## Untrusted: Job posting");
+    expect(result.markdown).toContain(UNTRUSTED_CONTEXT_BANNER);
+    expect(result.markdown).toContain("Build reliable TypeScript services with strong testing.");
+    expect(result.markdown).not.toMatch(
+      /## Career application[\s\S]*- Job description: Build reliable TypeScript services/
+    );
   });
 
   it("includes agent session context through embedded card context", () => {

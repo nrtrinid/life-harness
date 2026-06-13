@@ -6,6 +6,10 @@
 - [`02_v0_1_scope.md`](02_v0_1_scope.md) — v0.1 boundaries
 - [`05_product_rules.md`](05_product_rules.md) — board rules (Active cap, Inbox, parking)
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — local dev setup
+- [`AGENT_BUDGETS.md`](AGENT_BUDGETS.md) — token budgets and bootstrap guardrails for coding agents
+- [`AGENT_CONTEXT_MAP.md`](AGENT_CONTEXT_MAP.md) — task-scoped docs/files/tests router for coding agents
+
+Agent quickstart: `npm run agent:bootstrap`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run check:boundaries`, `npm run agent:review-packet`. Compact verification logs are written by `npm run agent:typecheck`, `npm run agent:test`, and `npm run agent:verify` to `tmp/agent-logs/`. Human verification commands include `npm run verify:core`, `npm run verify:job-scout`, `npm run verify:app`, and `npm run verify`.
 
 ## Features (by version)
 
@@ -33,6 +37,7 @@
 - Roadmaps: [`plans/a770-local-intelligence-integrated-roadmap.md`](plans/a770-local-intelligence-integrated-roadmap.md), [`plans/a770-local-intelligence-roadmap.md`](plans/a770-local-intelligence-roadmap.md)
 - Gateway / synthesis: [`plans/ai-gateway-model-slots-v0.1.md`](plans/ai-gateway-model-slots-v0.1.md), [`plans/deep-synthesis-overnight-brain-v0.1.md`](plans/deep-synthesis-overnight-brain-v0.1.md), [`plans/phi4-critic-deep-pass-v0.1.md`](plans/phi4-critic-deep-pass-v0.1.md)
 - Companion / context: [`plans/companion-reflection-engine-v0.1.md`](plans/companion-reflection-engine-v0.1.md), [`plans/context-packet-builder-v0.1.md`](plans/context-packet-builder-v0.1.md)
+- Pattern extraction: [`plans/odysseus-patterns-repo-map-v0.1.md`](plans/odysseus-patterns-repo-map-v0.1.md)
 - Evals / agents: [`plans/local-ai-evals-v0.1.md`](plans/local-ai-evals-v0.1.md), [`plans/agent-instructions-local-ai.md`](plans/agent-instructions-local-ai.md)
 - Agent ergonomics / RTK Query control plane: [`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)
 - [`10_future_roadmap.md`](10_future_roadmap.md)

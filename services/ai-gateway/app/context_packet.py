@@ -239,6 +239,14 @@ class PacketRedactionWire(StrictModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class UntrustedContextBlockWire(StrictModel):
+    id: str
+    kind: str
+    title: str
+    sensitivity: str
+    markdown: str
+
+
 class AiContextPacketWire(StrictModel):
     packet_version: Literal["0.1"]
     generated_at: str
@@ -254,6 +262,7 @@ class AiContextPacketWire(StrictModel):
     project_docs: list[RankedProjectDocSlice] = Field(default_factory=list)
     output_schema: OutputSchemaRefWire
     tools: ToolPermissionContextWire
+    untrusted_blocks: list[UntrustedContextBlockWire] | None = None
     budget: PacketBudgetWire
     redaction: PacketRedactionWire
 

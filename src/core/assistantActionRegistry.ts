@@ -1,4 +1,6 @@
 import { applyCardStateChange, applyQuickCapture } from "./actions";
+import type { CapabilityRoutingResult } from "./capabilityRouter";
+import { isAssistantActionAllowed } from "./capabilityRouter";
 import type { LifeHarnessData } from "./actions";
 import { createAgentSessionForCard, normalizeAgentKind } from "./agentSessionLog";
 import { shouldIncludeCard } from "./contextPacketRedaction";
@@ -351,8 +353,16 @@ export function stripAssistantActionBlocks(text: string): string {
 
 export function validateAssistantAction(
   data: LifeHarnessData,
-  action: AssistantProposedAction
+  action: AssistantProposedAction,
+  routing?: CapabilityRoutingResult
 ): AssistantActionValidationResult {
+  if (routing && !isAssistantActionAllowed(action.type, routing)) {
+    return {
+      ok: false,
+      error: `Action "${action.type}" is not allowed for this request intent (${routing.intent}).`
+    };
+  }
+
   const risk = riskForAction(action.type);
 
   switch (action.type) {

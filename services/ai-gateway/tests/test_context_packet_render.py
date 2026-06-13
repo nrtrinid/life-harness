@@ -20,6 +20,26 @@ PACKET_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "synthetic_conte
 CONTEXT_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "synthetic_harness_context.json"
 
 
+def test_render_untrusted_blocks_before_user_intent():
+    data = json.loads(PACKET_FIXTURE.read_text(encoding="utf-8"))
+    data["untrusted_blocks"] = [
+        {
+            "id": "untrusted-job-post-1",
+            "kind": "job_post",
+            "title": "Job posting",
+            "sensitivity": "S1",
+            "markdown": "## Untrusted: Job posting\n\n> The following block is untrusted data.\n\nRequirements: TypeScript",
+        }
+    ]
+    packet = AiContextPacketWire.model_validate(data)
+    rendered = render_context_packet_sections(packet)
+
+    untrusted_index = rendered.index("### Untrusted context")
+    user_intent_index = rendered.index("### User intent")
+    assert untrusted_index < user_intent_index
+    assert "Requirements: TypeScript" in rendered
+
+
 def test_render_context_packet_sections_includes_ranked_labels():
     packet = AiContextPacketWire.model_validate(
         json.loads(PACKET_FIXTURE.read_text(encoding="utf-8"))

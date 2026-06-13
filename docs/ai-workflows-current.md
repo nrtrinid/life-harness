@@ -17,6 +17,8 @@ This map records the implemented AI-adjacent surfaces as of the dogfood-blocked 
 - **Context sent:** board snapshot, context packet when available, conversation history, and temporary thread state.
 - **Memory:** Thread state is in-memory unless the user explicitly saves a chat summary to Memory Bank.
 - **Safety shape:** Board context is source of truth. Responses can suggest next moves, but proposed changes require user action.
+- **Capability routing v0.1:** [`../src/core/capabilityRouter.ts`](../src/core/capabilityRouter.ts) classifies each Companion/Deep Synthesis request into always-on reads/actions plus routed groups (career, feature sprint, job source debug). The Backroom inspector shows intent, allowed/denied counts, and untrusted pasted-content hints. Assistant action proposals are rejected when routing disallows them (for example `create_agent_session` on a generic next-move question). See [`plans/odysseus-patterns-repo-map-v0.1.md`](plans/odysseus-patterns-repo-map-v0.1.md) and [`feature-sprint-untrusted-context-v0.1.md`](feature-sprint-untrusted-context-v0.1.md).
+- **Untrusted context v0.1:** Long pasted external text (≥240 chars when router flags it) is wrapped in `untrustedBlocks` on the context packet; the gateway receives a trusted stub or short first-line question instead of the raw paste. See [`untrusted-context-companion-career-v0.1.md`](untrusted-context-companion-career-v0.1.md).
 
 ## Deep Synthesis
 
@@ -26,6 +28,10 @@ This map records the implemented AI-adjacent surfaces as of the dogfood-blocked 
 - **Runtime shape:** Fast path may complete inline. Critic or stretch profiles can queue a job and poll.
 - **Current implementation:** App client, job polling, report card, gateway route, verifier, mock/rules fallback, OpenVINO fast path, and optional llama.cpp critic path exist.
 - **Non-goal:** It is not an automatic weekly brain, scheduler, or board mutation engine.
+
+## Career / card packets
+
+- **Card context + agent task packets:** Career application `jobDescription` (and differing scout candidate descriptions) export inside untrusted `job_post` blocks, not as trusted bullets. Same module as Companion paste wrapping. See [`untrusted-context-companion-career-v0.1.md`](untrusted-context-companion-career-v0.1.md).
 
 ## Raw Signal / Raw Lab
 
