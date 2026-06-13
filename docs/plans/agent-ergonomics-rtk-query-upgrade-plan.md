@@ -1,6 +1,6 @@
 # Agent Ergonomics + RTK Query Upgrade Plan
 
-**Status:** Planning only. No runtime implementation in this ticket.  
+**Status:** Planning plus agent tooling in progress. No runtime app implementation in this ticket.  
 **Goal:** Reduce coding-agent token spend and improve repo operability for future work.  
 **Important framing:** RTK Query improves network/request ergonomics and future discoverability, but it is not the main token saver by itself. The main token savers are the agent control plane: budgets, bootstrap packets, task maps, bounded search, output diet wrappers, boundary checks, failure summaries, and review packets.
 
@@ -128,7 +128,7 @@ RTK Query note:
 
 ## PR 2: Repo Tooling
 
-**Status:** Implemented across PR 2A, PR 2.5, and PR 2B. PR 2A added `agent:map`, `agent:grep`, `agent:symbols`, `agent:exports`, `agent:tests-for`, and `agent:impact`; PR 2.5 added `agent:failures`, `agent:review-packet`, and compact output wrappers; PR 2B added `verify`, `verify:app`, `verify:core`, `verify:job-scout`, and `check:boundaries`.
+**Status:** Implemented across PR 2A, PR 2.5, and PR 2B. PR 2A added `agent:map`, `agent:grep`, `agent:symbols`, `agent:exports`, `agent:tests-for`, and `agent:impact`; PR 2.5 added `agent:failures`, `agent:review-packet`, and compact output wrappers; PR 2B added `verify`, `verify:app`, `verify:core`, `verify:job-scout`, `check:boundaries`, `scripts/check-boundaries.ts`, and the agent context map command references.
 
 Add deterministic scripts that agents can run before reading large files or asking broad questions.
 

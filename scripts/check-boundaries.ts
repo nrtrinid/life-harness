@@ -73,7 +73,10 @@ function isCore(file: string): boolean {
 
 function isRawLabRuntime(file: string): boolean {
   if (!isRuntimeSource(file)) return false;
-  return /raw[-_]?lab|rawLab|RawLab/.test(file);
+  if (file.startsWith("app/")) return false;
+  if (file.startsWith("src/core/")) return /raw[-_]?lab|rawLab|RawLab/.test(file);
+  if (file.startsWith("src/")) return /(^|\/)(raw[-_]?lab|rawLab|RawLab)[^/]*\.(ts|js)$/.test(file);
+  return false;
 }
 
 function isAskHarnessRuntime(file: string): boolean {
