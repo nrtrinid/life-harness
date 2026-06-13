@@ -1,0 +1,29 @@
+# Agent-facing tools should skip these by default.
+node_modules/
+dist/
+build/
+coverage/
+.expo/
+.next/
+
+# Lockfiles and logs are usually too noisy for default agent context.
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+*.log
+
+# Local/generated outputs.
+tmp/
+.agent-runs/
+.agent-logs/
+
+# Fixtures and sample outputs are opt-in context.
+fixtures/
+public/fixtures/
+services/ai-gateway/docs/sample-outputs/
+services/ai-gateway/evals/
+
+# Large historical/compiled docs are not default-read.
+docs/meta/Life_Harness_Compiled_Context.md
+docs/ux/current_ux_audit.md
+docs/plans/archive/
