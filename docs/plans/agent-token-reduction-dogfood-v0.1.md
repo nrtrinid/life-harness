@@ -70,3 +70,8 @@ rtk -- npm run agent:auto-check -- --dry-run
 ## Working recommendation
 
 Use Life Harness `agent:*` commands as the default control plane because they know repo boundaries, context maps, likely tests, and review packets. Use Rust Token Killer as an outer compression layer for verbose commands that the repo wrappers do not already summarize.
+
+## Results
+
+- Normalized token benchmark pass: [`agent-token-reduction-benchmark-v0.2.md`](agent-token-reduction-benchmark-v0.2.md)
+- Noisy-command comparison pass: [`agent-token-reduction-noisy-command-benchmark-v0.3.md`](agent-token-reduction-noisy-command-benchmark-v0.3.md)
