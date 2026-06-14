@@ -71,9 +71,9 @@ import {
   DEFAULT_GATEWAY_MAX_INPUT_CHARS
 } from "../src/core/gatewayBudget";
 import {
-  fetchGatewayHealthBudget,
   type GatewayHealthBudget
 } from "../src/core/gatewayHealthClient";
+import { useLazyGetGatewayHealthBudgetQuery } from "../src/network";
 import type { RawLabBudgetLevel, RawLabCompactionNotice } from "../src/core/rawLabContextBudget";
 import {
   reflectOnRawLab,
@@ -169,6 +169,7 @@ export default function RawLabScreen() {
   const [reasoningDepth, setReasoningDepth] = useState<ReasoningDepth>("fast");
   const [backroomOpen, setBackroomOpen] = useState(false);
   const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
+  const [loadGatewayHealthBudget] = useLazyGetGatewayHealthBudgetQuery();
   const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
   const gatewayHealthPolledRef = useRef(false);
 
@@ -177,7 +178,7 @@ export default function RawLabScreen() {
       return;
     }
     gatewayHealthPolledRef.current = true;
-    void fetchGatewayHealthBudget(baseUrl).then((budget) => {
+    void loadGatewayHealthBudget(baseUrl, true).unwrap().then((budget) => {
       setGatewayBudget(budget);
     });
   }

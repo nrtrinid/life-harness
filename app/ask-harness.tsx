@@ -61,10 +61,9 @@ import {
 import { formatPacketSliceSummary } from "../src/core/contextPacketShim";
 import { toWireContextPacket } from "../src/core/contextPacketWire";
 import {
-  fallbackGatewayHealthBudget,
-  fetchGatewayHealthBudget,
-  type GatewayHealthBudget
+  fallbackGatewayHealthBudget
 } from "../src/core/gatewayHealthClient";
+import { useGetGatewayHealthBudgetQuery } from "../src/network";
 import {
   buildCompactHarnessContext,
   buildContextQualitySummary,
@@ -163,9 +162,8 @@ export default function AskHarnessDevScreen() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
   const [lastSentPacketSummary, setLastSentPacketSummary] = useState<string | null>(null);
-  const [gatewayBudget, setGatewayBudget] = useState<GatewayHealthBudget>(() =>
-    fallbackGatewayHealthBudget()
-  );
+  const fallbackGatewayBudget = useMemo(() => fallbackGatewayHealthBudget(), []);
+  const { data: gatewayBudget = fallbackGatewayBudget } = useGetGatewayHealthBudgetQuery(baseUrl);
   const [backroomOpen, setBackroomOpen] = useState(false);
   const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
   const [lastBudgetNotice, setLastBudgetNotice] = useState<string | null>(null);
@@ -238,18 +236,6 @@ export default function AskHarnessDevScreen() {
     setThread([]);
     setThreadState(createEmptySharedChatThreadState());
   }, [digestParam]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchGatewayHealthBudget(baseUrl).then((budget) => {
-      if (!cancelled) {
-        setGatewayBudget(budget);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [baseUrl]);
 
   const exportInput = useMemo(() => buildExportInput(harnessState), [harnessState]);
   const fullContext = useMemo(() => buildHarnessContext(exportInput), [exportInput]);

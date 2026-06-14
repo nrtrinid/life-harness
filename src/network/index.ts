@@ -5,6 +5,7 @@ export {
   useCheckJobScoutRunnerHealthQuery,
   useGetAiJobQuery,
   useGetGatewayHealthBudgetQuery,
+  useLazyGetGatewayHealthBudgetQuery,
   useLazyGetAiJobQuery,
   useReflectOnRawLabMutation,
   useReflectRawLabThreadMutation,

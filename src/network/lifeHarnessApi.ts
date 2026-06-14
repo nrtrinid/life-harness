@@ -135,6 +135,7 @@ export const lifeHarnessApi = createApi({
 
 export const {
   useGetGatewayHealthBudgetQuery,
+  useLazyGetGatewayHealthBudgetQuery,
   useCheckJobScoutRunnerHealthQuery,
   useStartJobScoutRunnerMutation,
   useRunJobSourceMutation,
