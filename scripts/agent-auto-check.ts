@@ -52,6 +52,13 @@ function classify(files: string[], docsOnlyFlag: boolean): string {
   if (hasAny(files, (file) => taskAreaForPath(file) === "career-job-scout")) {
     return "job scout";
   }
+  if (
+    hasAny(files, (file) => file.startsWith("app/") && /\.(ts|tsx)$/.test(file)) ||
+    hasAny(files, (file) => file.startsWith("src/network/") && /\.(ts|tsx)$/.test(file)) ||
+    hasAny(files, (file) => file.startsWith("src/state/") && /\.(ts|tsx)$/.test(file))
+  ) {
+    return "app/network TypeScript";
+  }
   if (hasAny(files, (file) => taskAreaForPath(file) === "raw-lab-containment" || file.startsWith("services/ai-gateway/"))) {
     return "Raw Lab / ai-gateway";
   }
@@ -124,7 +131,7 @@ function checksFor(classification: string, full: boolean): CheckPlan {
     };
   }
 
-  if (classification === "app/UI TypeScript") {
+  if (classification === "app/UI TypeScript" || classification === "app/network TypeScript") {
     return {
       classification,
       checks: compactUnique([
