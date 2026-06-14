@@ -322,6 +322,8 @@ Every subagent request should include:
 
 ## PR 4: RTK Query Foundation
 
+**Status:** PR 4A implemented as a network-only foundation. Added `src/network/` store/API exports and root provider wiring while keeping `LifeHarnessProvider` as owner of local board/product state. No call sites are migrated yet.
+
 Add RTK Query as a network/request ergonomics layer only.
 
 Planned scope:
