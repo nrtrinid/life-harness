@@ -46,6 +46,7 @@ Agent quickstart: `npm run agent:preflight`, `npm run agent:map`, `npm run agent
 - Board usability (dogfood / exec-function loop): [`plans/board-usability-v0.1.md`](plans/board-usability-v0.1.md)
 - Career hub integration (UX-007 / route unification): [`plans/career-hub-integration-v0.2.md`](plans/career-hub-integration-v0.2.md)
 - Agent ergonomics / RTK Query control plane: [`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)
+- Agent token reduction dogfood: [`plans/agent-token-reduction-dogfood-v0.1.md`](plans/agent-token-reduction-dogfood-v0.1.md)
 - [`10_future_roadmap.md`](10_future_roadmap.md)
 - Recovery audit: [`plans/stash-recovery-a770-thinking-audit.md`](plans/stash-recovery-a770-thinking-audit.md)
 

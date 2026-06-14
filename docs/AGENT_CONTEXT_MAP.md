@@ -340,6 +340,7 @@ BOUNDARIES:
 - keep root `AGENTS.md` short and stable
 
 NOTES: Prefer links and task routers over copied context. Mark missing planned scripts as planned.
+For token-reduction dogfood, use `docs/plans/agent-token-reduction-dogfood-v0.1.md` and keep changes docs-only.
 
 ## Task: rtk-query-network-layer
 
