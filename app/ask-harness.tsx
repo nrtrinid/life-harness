@@ -38,7 +38,6 @@ import {
   type ChatStateChipDescriptor
 } from "../src/core/chatBackroomSummary";
 import {
-  askChatHarness,
   ChatHarnessError,
   DEFAULT_CHAT_HARNESS_URL,
   type ReasoningDepth
@@ -63,7 +62,7 @@ import { toWireContextPacket } from "../src/core/contextPacketWire";
 import {
   fallbackGatewayHealthBudget
 } from "../src/core/gatewayHealthClient";
-import { useGetGatewayHealthBudgetQuery } from "../src/network";
+import { useAskChatHarnessMutation, useGetGatewayHealthBudgetQuery } from "../src/network";
 import {
   buildCompactHarnessContext,
   buildContextQualitySummary,
@@ -126,6 +125,20 @@ function formatSendError(error: unknown): { text: string; status?: number } {
     return { text: error.message, status: error.status };
   }
 
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const nested =
+      record.error && typeof record.error === "object"
+        ? (record.error as Record<string, unknown>)
+        : record;
+    if (typeof nested.message === "string") {
+      return {
+        text: nested.message,
+        status: typeof nested.status === "number" ? nested.status : undefined
+      };
+    }
+  }
+
   return {
     text: "Unexpected error while contacting Companion. Check the gateway URL and try again."
   };
@@ -164,6 +177,7 @@ export default function AskHarnessDevScreen() {
   const [lastSentPacketSummary, setLastSentPacketSummary] = useState<string | null>(null);
   const fallbackGatewayBudget = useMemo(() => fallbackGatewayHealthBudget(), []);
   const { data: gatewayBudget = fallbackGatewayBudget } = useGetGatewayHealthBudgetQuery(baseUrl);
+  const [askChatHarness] = useAskChatHarnessMutation();
   const [backroomOpen, setBackroomOpen] = useState(false);
   const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
   const [lastBudgetNotice, setLastBudgetNotice] = useState<string | null>(null);
@@ -504,7 +518,7 @@ export default function AskHarnessDevScreen() {
         conversationHistory: sendBundle.conversationHistory,
         threadState: sendBundle.wireThreadState,
         reasoningDepth
-      });
+      }).unwrap();
 
       const completedTurns = buildCompletedChatTurns(priorThread, trimmed, result.answer);
       setThreadState((previous) =>

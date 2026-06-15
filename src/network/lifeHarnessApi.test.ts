@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { lifeHarnessApi } from "./lifeHarnessApi";
 import { createLifeHarnessNetworkStore } from "./store";
 import { JOB_SCOUT_RUNNER_URL, type RunSourceRequest } from "../core/jobScoutRunnerClient";
+import { DEFAULT_CHAT_HARNESS_URL } from "../core/chatHarnessClient";
+import type { HarnessContext } from "../core/harnessContext";
 import type { JobSource } from "../core/types";
 
 afterEach(() => {
@@ -22,6 +24,14 @@ const runSourceRequest: RunSourceRequest = {
   source,
   existingCandidates: [],
   resumeModules: []
+};
+
+const chatHarnessContext: HarnessContext = {
+  cards: [],
+  logs: [],
+  proof_items: [],
+  recent_analyses: [],
+  decisions: []
 };
 
 describe("lifeHarnessApi", () => {
@@ -112,6 +122,40 @@ describe("lifeHarnessApi", () => {
         message: "Local Job Scout Runner is not running. Tap Start runner or run npm run scout:runner.",
         name: "RunnerUnreachableError"
       })
+    );
+  });
+
+  it("delegates Chat Harness requests to the existing client", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            answer: "Try one tiny move.",
+            used_context: true,
+            confidence_notes: ["Inferred — from cards only."],
+            safety_notes: ["No state mutation claims."]
+          })
+      })
+    );
+
+    const store = createLifeHarnessNetworkStore();
+    const result = await store.dispatch(
+      lifeHarnessApi.endpoints.askChatHarness.initiate({
+        baseUrl: DEFAULT_CHAT_HARNESS_URL,
+        message: "What should I do next?",
+        mode: "operator",
+        sensitivity: "S1",
+        context: chatHarnessContext
+      })
+    );
+
+    expect(result.data?.answer).toBe("Try one tiny move.");
+    expect(fetch).toHaveBeenCalledWith(
+      `${DEFAULT_CHAT_HARNESS_URL}/chat-harness`,
+      expect.objectContaining({ method: "POST" })
     );
   });
 
