@@ -5,7 +5,11 @@ import {
   AiJobPollTimeoutError,
   pollAiJobUntilDone
 } from "./aiJobClient";
-import { DeepSynthesisError, requestDeepSynthesis } from "./deepSynthesisClient";
+import { DeepSynthesisError } from "./deepSynthesisClient";
+import {
+  pollAiJobThroughNetwork,
+  requestDeepSynthesisThroughNetwork
+} from "../network/deepSynthesisRequest";
 import type { DeepSynthesisCompletedResult } from "./deepSynthesisTypes";
 import {
   isSynthesisResultStale,
@@ -51,8 +55,8 @@ export type RunAskDeepSynthesisInput = {
   getCurrentFingerprint: () => AskThreadFingerprint;
   isCancelled: () => boolean;
   onStateChange: (state: DeepSynthesisJobState) => void;
-  requestDeepSynthesisImpl?: typeof requestDeepSynthesis;
-  pollAiJobUntilDoneImpl?: typeof pollAiJobUntilDone;
+  requestDeepSynthesisImpl?: typeof requestDeepSynthesisThroughNetwork;
+  pollAiJobUntilDoneImpl?: typeof pollAiJobThroughNetwork;
 };
 
 export function formatDeepSynthesisError(error: unknown): { message: string; canRetry: boolean } {
@@ -114,8 +118,9 @@ export function evaluateSynthesisCompletion(args: {
 }
 
 export async function runAskDeepSynthesisJob(input: RunAskDeepSynthesisInput): Promise<void> {
-  const requestDeepSynthesisFn = input.requestDeepSynthesisImpl ?? requestDeepSynthesis;
-  const pollAiJobUntilDoneFn = input.pollAiJobUntilDoneImpl ?? pollAiJobUntilDone;
+  const requestDeepSynthesisFn =
+    input.requestDeepSynthesisImpl ?? requestDeepSynthesisThroughNetwork;
+  const pollAiJobUntilDoneFn = input.pollAiJobUntilDoneImpl ?? pollAiJobThroughNetwork;
   const startedAt = Date.now();
   const requestFingerprint = input.requestFingerprint;
 

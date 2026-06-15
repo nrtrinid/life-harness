@@ -57,6 +57,7 @@ export interface GetAiJobInput {
 }
 
 export interface PollAiJobUntilDoneOptions extends GetAiJobInput {
+  getAiJobImpl?: typeof getAiJob;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   pollIntervalMs?: number;
@@ -148,6 +149,7 @@ export async function pollAiJobUntilDone(
   const backoffAfterMs = options.backoffAfterMs ?? POLL_BACKOFF_AFTER_MS;
   const maxConsecutivePollErrors =
     options.maxConsecutivePollErrors ?? MAX_CONSECUTIVE_POLL_ERRORS;
+  const getAiJobFn = options.getAiJobImpl ?? getAiJob;
 
   const startedAt = now();
   let consecutivePollErrors = 0;
@@ -160,7 +162,7 @@ export async function pollAiJobUntilDone(
 
     let job: AiJobStatusResponse;
     try {
-      job = await getAiJob(options);
+      job = await getAiJobFn(options);
       consecutivePollErrors = 0;
     } catch (error) {
       if (

@@ -21,6 +21,11 @@ export {
   runnerUnreachableMessage
 } from "./runJobSourceRequest";
 export {
+  getAiJobThroughNetwork,
+  pollAiJobThroughNetwork,
+  requestDeepSynthesisThroughNetwork
+} from "./deepSynthesisRequest";
+export {
   createLifeHarnessNetworkStore,
   lifeHarnessNetworkStore,
   type LifeHarnessNetworkDispatch,
