@@ -65,10 +65,13 @@ import {
   type JobSourceRunOutput
 } from "../core/jobSourceRunner";
 import {
-  RUNNER_UNREACHABLE_MESSAGE,
-  RunnerUnreachableError,
-  runSourceViaRunner
+  RUNNER_UNREACHABLE_MESSAGE
 } from "../core/jobScoutRunnerClient";
+import {
+  isRunnerUnreachableMutationError,
+  runnerUnreachableMessage,
+  useRunJobSourceMutation
+} from "../network";
 import { applyAppSessionStart } from "../core/briefing";
 import {
   applyDeleteChatSummary,
@@ -516,6 +519,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   const persistenceAvailable = localStorageAdapter.isAvailable();
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [batchRunProgress, setBatchRunProgress] = useState<BatchRunProgress | null>(null);
+  const [runJobSource] = useRunJobSourceMutation();
 
   useEffect(() => {
     stateRef.current = state;
@@ -1205,11 +1209,11 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       dispatch({ type: "state_replaced", state: next });
 
       try {
-        const output = await runSourceViaRunner({
+        const output = await runJobSource({
           source,
           existingCandidates: next.jobCandidates,
           resumeModules: next.resumeModules
-        });
+        }).unwrap();
         const result = applyRunJobSourceResult(next, output);
         next = result.state;
         dispatch({ type: "state_replaced", state: next });
@@ -1219,10 +1223,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
           runnerUnreachable: false
         };
       } catch (error) {
-        const message =
-          error instanceof RunnerUnreachableError
-            ? RUNNER_UNREACHABLE_MESSAGE
-            : "Local Job Scout Runner request failed.";
+        const message = runnerUnreachableMessage(error);
         const result = applyRunJobSourceResult(next, buildFetchErrorRunOutput(source, message));
         next = result.state;
         dispatch({ type: "state_replaced", state: next });
@@ -1230,13 +1231,13 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
           state: next,
           outcome: {
             ...outcomeFromRun(source, result),
-            runnerUnreachable: error instanceof RunnerUnreachableError
+            runnerUnreachable: isRunnerUnreachableMutationError(error)
           },
-          runnerUnreachable: error instanceof RunnerUnreachableError
+          runnerUnreachable: isRunnerUnreachableMutationError(error)
         };
       }
     },
-    []
+    [runJobSource]
   );
 
   const runOneJobSource = useCallback(

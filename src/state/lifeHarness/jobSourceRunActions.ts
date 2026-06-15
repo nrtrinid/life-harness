@@ -3,10 +3,13 @@ import type { Dispatch, MutableRefObject } from "react";
 import { applyRunJobSourceResult } from "../../core/actions";
 import { buildFitFinderResult } from "../../core/jobScout";
 import {
-  RUNNER_UNREACHABLE_MESSAGE,
-  RunnerUnreachableError,
-  runSourceViaRunner
+  RUNNER_UNREACHABLE_MESSAGE
 } from "../../core/jobScoutRunnerClient";
+import {
+  isRunnerUnreachableMutationError,
+  runJobSourceRequest,
+  runnerUnreachableMessage
+} from "../../network";
 import type { LifeHarnessData } from "../../core/lifeHarnessData";
 import {
   buildRunAllSummary,
@@ -52,7 +55,7 @@ export function createJobSourceRunActions(
     dispatch({ type: "state_replaced", state: next });
 
     try {
-      const output = await runSourceViaRunner({
+      const output = await runJobSourceRequest({
         source,
         existingCandidates: next.jobCandidates,
         resumeModules: next.resumeModules
@@ -66,10 +69,7 @@ export function createJobSourceRunActions(
         runnerUnreachable: false
       };
     } catch (error) {
-      const message =
-        error instanceof RunnerUnreachableError
-          ? RUNNER_UNREACHABLE_MESSAGE
-          : "Local Job Scout Runner request failed.";
+      const message = runnerUnreachableMessage(error);
       const result = applyRunJobSourceResult(next, buildFetchErrorRunOutput(source, message));
       next = result.state;
       dispatch({ type: "state_replaced", state: next });
@@ -77,9 +77,9 @@ export function createJobSourceRunActions(
         state: next,
         outcome: {
           ...outcomeFromRun(source, result),
-          runnerUnreachable: error instanceof RunnerUnreachableError
+          runnerUnreachable: isRunnerUnreachableMutationError(error)
         },
-        runnerUnreachable: error instanceof RunnerUnreachableError
+        runnerUnreachable: isRunnerUnreachableMutationError(error)
       };
     }
   };

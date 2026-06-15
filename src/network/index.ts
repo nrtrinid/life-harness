@@ -16,6 +16,11 @@ export {
   type LifeHarnessNetworkError
 } from "./lifeHarnessApi";
 export {
+  isRunnerUnreachableMutationError,
+  runJobSourceRequest,
+  runnerUnreachableMessage
+} from "./runJobSourceRequest";
+export {
   createLifeHarnessNetworkStore,
   lifeHarnessNetworkStore,
   type LifeHarnessNetworkDispatch,

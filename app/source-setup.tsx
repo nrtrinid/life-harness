@@ -19,11 +19,11 @@ import {
   formatFitScore,
   getSuggestedResumeModules
 } from "../src/core/jobScout";
+import { RUNNER_UNREACHABLE_MESSAGE } from "../src/core/jobScoutRunnerClient";
 import {
-  RUNNER_UNREACHABLE_MESSAGE,
-  RunnerUnreachableError,
-  runSourceViaRunner
-} from "../src/core/jobScoutRunnerClient";
+  isRunnerUnreachableMutationError,
+  useRunJobSourceMutation
+} from "../src/network";
 import { buildTemporaryJobSource, isValidSourceUrl, type JobSourceRunOutput } from "../src/core/jobSourceRunner";
 import { ICIMS_ZERO_LISTINGS_MESSAGE, WORKDAY_ZERO_LISTINGS_MESSAGE } from "../src/core/jobSourceAdapters";
 import { parseJsonBodyText, validateJobSourceRequestConfig } from "../src/core/jobSourceRequestConfig";
@@ -91,6 +91,7 @@ export default function SourceSetupScreen() {
   const [paginationEnabled, setPaginationEnabled] = useState(false);
   const [paginationLimit, setPaginationLimit] = useState("20");
   const [paginationMaxPages, setPaginationMaxPages] = useState("3");
+  const [runJobSource] = useRunJobSourceMutation();
 
   const activeUrl = endpointMode ? endpointUrl : form.url;
 
@@ -320,19 +321,20 @@ export default function SourceSetupScreen() {
     setImportPreview(false);
 
     try {
-      const output = await runSourceViaRunner({
+      const output = await runJobSource({
         source: payload.tempSource,
         existingCandidates: jobCandidates,
         resumeModules
-      });
+      }).unwrap();
       setPreviewOutput(output);
       setNotice({
         kind: output.result.errors.length === 0 ? "success" : "warning",
         message: output.result.message
       });
     } catch (error) {
-      const message =
-        error instanceof RunnerUnreachableError ? RUNNER_UNREACHABLE_MESSAGE : "Source test failed.";
+      const message = isRunnerUnreachableMutationError(error)
+        ? RUNNER_UNREACHABLE_MESSAGE
+        : "Source test failed.";
       setNotice({ kind: "warning", message });
     } finally {
       setIsTesting(false);
