@@ -102,6 +102,7 @@ import {
   applyDeleteFeatureSprintPlan,
   applyUpdateFeatureSprintPlan,
   applyUpdateFeatureSprintStep,
+  advanceFeatureSprintStep,
   createFeatureSprintPlanForCard,
   deleteFeatureSprintPlan,
   importFeatureSpecUpdateFromText,
@@ -997,11 +998,11 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   );
 
   const advanceFeatureSprintStepAction = useCallback((planId: string, stepId: string) => {
-    const existing = stateRef.current.featureSprintPlans.find((plan) => plan.id === planId);
-    if (!existing) {
-      return { ok: false, message: "Plan not found." };
+    const result = advanceFeatureSprintStep(stateRef.current, planId, stepId);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
     }
-    dispatch({ type: "advance_feature_sprint_step", planId, stepId });
+    dispatch({ type: "state_replaced", state: result.state });
     return { ok: true, message: "Feature sprint step advanced." };
   }, []);
 

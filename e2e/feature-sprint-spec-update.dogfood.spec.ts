@@ -42,6 +42,11 @@ test.describe("Feature Sprint spec-update dogfood", () => {
     await expect(page.getByText("Approve the persisted feature spec before running implementation")).toBeVisible();
 
     await page.getByTestId("feature-sprint-advance-step").click();
+    await expect(
+      page.getByText(
+        "Import a spec update for this reviewed step and approve the revised feature spec before advancing."
+      )
+    ).toBeVisible();
     await expect(page.getByText("Core module · reviewing · review accepted")).toBeVisible();
     await expect(page.getByText("▸ UI · planned")).toBeVisible();
     await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible();
