@@ -25,6 +25,18 @@ function compactUnique(commands: Array<string | null>): string[] {
   return Array.from(new Set(commands.filter((command): command is string => Boolean(command))));
 }
 
+function isTypeScriptSourceOrTest(file: string): boolean {
+  return /\.(ts|tsx)$/.test(file);
+}
+
+function hasTypeScriptSourceChanges(files: string[]): boolean {
+  return hasAny(files, isTypeScriptSourceOrTest);
+}
+
+function isPackageManifestFile(file: string): boolean {
+  return file === "package.json" || /(?:^|\/)(?:package-lock|yarn.lock|pnpm-lock)\./.test(file);
+}
+
 function classify(files: string[], docsOnlyFlag: boolean): string {
   if (docsOnlyFlag) {
     return "docs/instructions only";
@@ -46,7 +58,7 @@ function classify(files: string[], docsOnlyFlag: boolean): string {
   if (hasAny(files, (file) => file.startsWith("scripts/") || file.startsWith(".codex/"))) {
     return "agent tooling/hooks";
   }
-  if (hasAny(files, (file) => file === "package.json" || /(?:^|\/)(?:package-lock|yarn.lock|pnpm-lock)\./.test(file))) {
+  if (hasAny(files, isPackageManifestFile) && !hasTypeScriptSourceChanges(files)) {
     return "package/dependency";
   }
   if (hasAny(files, (file) => taskAreaForPath(file) === "career-job-scout")) {
@@ -176,7 +188,7 @@ function checksFor(classification: string, full: boolean): CheckPlan {
 }
 
 function packageFilesChanged(files: string[]): boolean {
-  return hasAny(files, (file) => file === "package.json" || /(?:^|\/)(?:package-lock|yarn.lock|pnpm-lock)\./.test(file));
+  return hasAny(files, isPackageManifestFile);
 }
 
 function printChangedFiles(files: string[]): void {

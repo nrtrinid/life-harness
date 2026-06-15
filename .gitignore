@@ -10,6 +10,9 @@ web-build/
 .expo-start.pid
 npm-debug.log*
 tmp/
+test-results/
+playwright-report/
+.e2e-artifacts/
 
 # Local personal career source + generated packs (S1 — do not commit real data)
 private/**

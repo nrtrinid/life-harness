@@ -40,6 +40,9 @@
     "feature-runner:cursor": "tsx services/feature-sprint-runner/scripts/startCursorRunner.ts",
     "feature-runner:setup-check": "tsx services/feature-sprint-runner/scripts/setupCheck.ts",
     "feature-runner:test": "vitest run services/feature-sprint-runner/tests",
+    "dogfood:e2e": "playwright test -c e2e/playwright.config.ts",
+    "dogfood:e2e:install": "playwright install chromium",
+    "dogfood:test": "vitest run src/dogfood",
     "resume:build": "tsx scripts/build-resume-docx.ts",
     "resume:build:application": "tsx scripts/build-application-resume-docx.ts",
     "career:pack:build": "tsx scripts/build-career-source-pack.ts",
@@ -68,6 +71,7 @@
     "react-redux": "^9.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "jszip": "^3.10.1",
     "tsx": "^4.20.5",
     "typescript": "~6.0.3",

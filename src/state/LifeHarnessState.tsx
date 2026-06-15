@@ -104,6 +104,7 @@ import {
   applyUpdateFeatureSprintStep,
   createFeatureSprintPlanForCard,
   deleteFeatureSprintPlan,
+  importFeatureSpecUpdateFromText,
   importFeatureReviewVerdictFromText,
   importFeaturePromptLocalizationFromText,
   importFeaturePromptAuditFromText,
@@ -334,6 +335,11 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     stepId?: string
   ) => { ok: boolean; message?: string };
   importFeaturePromptAuditForPlan: (
+    planId: string,
+    text: string,
+    stepId?: string
+  ) => { ok: boolean; message?: string };
+  importFeatureSpecUpdateForPlan: (
     planId: string,
     text: string,
     stepId?: string
@@ -1102,6 +1108,23 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const importFeatureSpecUpdateForPlanAction = useCallback(
+    (planId: string, text: string, stepId?: string) => {
+      const result = importFeatureSpecUpdateFromText(
+        stateRef.current,
+        planId,
+        text,
+        stepId
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Spec update imported." };
+    },
+    []
+  );
+
   const normalizeImplementationProofForPlanAction = useCallback(
     (planId: string, stepId?: string) => {
       const result = normalizeImplementationProofForStep(
@@ -1485,6 +1508,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       importFeatureReviewVerdictForPlan: importFeatureReviewVerdictForPlanAction,
       importFeaturePromptLocalizationForPlan: importFeaturePromptLocalizationForPlanAction,
       importFeaturePromptAuditForPlan: importFeaturePromptAuditForPlanAction,
+      importFeatureSpecUpdateForPlan: importFeatureSpecUpdateForPlanAction,
       normalizeImplementationProofForPlan: normalizeImplementationProofForPlanAction,
       createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,

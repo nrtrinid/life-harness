@@ -6,12 +6,14 @@ import { styles } from "./styles";
 interface CollapsibleSectionProps extends PropsWithChildren {
   title: string;
   defaultOpen?: boolean;
+  testID?: string;
 }
 
 export function CollapsibleSection({
   title,
   children,
-  defaultOpen = false
+  defaultOpen = false,
+  testID
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -20,6 +22,8 @@ export function CollapsibleSection({
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
+        accessibilityLabel={title}
+        testID={testID}
         onPress={() => setOpen((value) => !value)}
         style={styles.collapsibleHeader}
       >

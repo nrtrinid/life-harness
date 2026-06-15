@@ -36,7 +36,9 @@ import {
   buildFeatureStepPromptAuditPacket,
   buildFeatureStepReviewPacket,
   canRunFeatureSprintImplementation,
+  doesFeatureSprintStepRequireSpecUpdate,
   getActiveFeatureSprintPlanForCard,
+  hasApprovedSpecUpdateForStep,
   hasPersistedFeatureSpec,
   hasStepPromptAudit,
   hasStepImplementationProof,
@@ -274,6 +276,7 @@ export default function CardDetailScreen() {
     importFeatureReviewVerdictForPlan,
     importFeaturePromptLocalizationForPlan,
     importFeaturePromptAuditForPlan,
+    importFeatureSpecUpdateForPlan,
     normalizeImplementationProofForPlan,
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
@@ -314,6 +317,7 @@ export default function CardDetailScreen() {
   const [reviewImportText, setReviewImportText] = useState("");
   const [localizationImportText, setLocalizationImportText] = useState("");
   const [promptAuditImportText, setPromptAuditImportText] = useState("");
+  const [specUpdateImportText, setSpecUpdateImportText] = useState("");
   const [agentOutputText, setAgentOutputText] = useState("");
   const [runnerHealth, setRunnerHealth] = useState<"unknown" | "available" | "unavailable">(
     "unknown"
@@ -638,6 +642,19 @@ export default function CardDetailScreen() {
   const automationPhaseDisplay = activeFeatureSprintPlan
     ? resolveAutomationPhaseDisplay(activeFeatureSprintPlan, currentFeatureStep)
     : undefined;
+  const stepRequiresSpecUpdate = doesFeatureSprintStepRequireSpecUpdate(
+    activeFeatureSprintPlan,
+    currentFeatureStep
+  );
+  const currentStepSpecUpdateSatisfied = hasApprovedSpecUpdateForStep(
+    activeFeatureSprintPlan,
+    currentFeatureStep
+  );
+  const latestSpecUpdateForCurrentStep =
+    activeFeatureSprintPlan?.latestSpecUpdate?.stepId &&
+    activeFeatureSprintPlan.latestSpecUpdate.stepId === activeFeatureSprintPlan.currentStepId
+      ? activeFeatureSprintPlan.latestSpecUpdate
+      : undefined;
 
   useEffect(() => {
     setFeatureSpecText(activeFeatureSprintPlan?.featureSpec?.body ?? "");
@@ -661,6 +678,7 @@ export default function CardDetailScreen() {
 
   useEffect(() => {
     setReviewImportText("");
+    setSpecUpdateImportText("");
     setSelectedRunnerRunId(null);
     if (!featureSprintPlanId || !featureSprintCurrentStepId) {
       setAgentOutputText("");
@@ -712,6 +730,7 @@ export default function CardDetailScreen() {
         ),
         reviewVerdictImported: currentFeatureStep?.reviewStatus != null,
         stepReviewAccepted: currentFeatureStep?.reviewStatus === "accepted",
+        currentStepSpecUpdateSatisfied,
         scopingOutputReady: Boolean(
           latestScopingRun?.outputText?.trim() || latestScopingRun?.outputExcerpt?.trim()
         ),
@@ -959,6 +978,27 @@ export default function CardDetailScreen() {
     });
     setReviewImportText("");
     showNotice("success", result.message ?? "Review verdict imported.");
+  }
+
+  function handleImportSpecUpdate() {
+    if (!activeFeatureSprintPlan) {
+      showNotice("warning", "No active feature sprint plan.");
+      return;
+    }
+    if (!activeFeatureSprintPlan.currentStepId) {
+      showNotice("warning", "No current step to attach a spec update.");
+      return;
+    }
+    const result = importFeatureSpecUpdateForPlan(
+      activeFeatureSprintPlan.id,
+      specUpdateImportText,
+      activeFeatureSprintPlan.currentStepId
+    );
+    if (!result.ok) {
+      showNotice("warning", result.message ?? "Could not import spec update.");
+      return;
+    }
+    showNotice("success", result.message ?? "Spec update imported.");
   }
 
   function handleAdvanceFeatureStep() {
@@ -1466,6 +1506,9 @@ export default function CardDetailScreen() {
           return (
             <Pressable
               key={mode}
+              accessibilityRole="button"
+              accessibilityLabel={`${label} mode`}
+              testID={mode === "backroom" ? "card-detail-mode-backroom" : "card-detail-mode-act"}
               style={StyleSheet.flatten([
                 active ? styles.primaryAction : styles.secondaryAction,
                 { flex: 1, minWidth: 100 }
@@ -1621,7 +1664,11 @@ export default function CardDetailScreen() {
         </Section>
       ) : null}
 
-      <CollapsibleSection title="Backroom — sprint & metadata" defaultOpen={false}>
+      <CollapsibleSection
+        title="Backroom — sprint & metadata"
+        defaultOpen={false}
+        testID="card-backroom-sprint-metadata"
+      >
       <Section title="Feature Sprint">
         <Text style={styles.helpText}>
           Manual planner → implementer → reviewer loop. ChatGPT/Codex scopes and reviews; Cursor/Codex
@@ -2105,6 +2152,7 @@ export default function CardDetailScreen() {
                 </Text>
               ) : null}
               <Pressable
+                testID="feature-sprint-run-implementation"
                 style={[
                   styles.secondaryAction,
                   (isRunningImplementation || !canRunImplementation) && { opacity: 0.5 }
@@ -2259,8 +2307,92 @@ export default function CardDetailScreen() {
               <Text style={styles.secondaryActionText}>Import review verdict</Text>
             </Pressable>
 
+            <Text style={[styles.label, { marginTop: 16 }]}>Import spec update (GPT output)</Text>
+            <Text style={styles.helpText}>
+              Paste GPT output with a feature-spec-update fenced block. This updates the persisted feature
+              spec and sets it back to unapproved — you must review and Approve feature spec again. Import
+              is manual and never advances the step automatically.
+            </Text>
+            {stepRequiresSpecUpdate && !currentStepSpecUpdateSatisfied ? (
+              <Text
+                testID="feature-sprint-spec-update-gate-warning"
+                style={[styles.helpText, { marginTop: 6, color: colors.accentDanger }]}
+              >
+                This step requires a spec update + re-approval before advancing.
+              </Text>
+            ) : null}
+            {latestSpecUpdateForCurrentStep ? (
+              <CollapsibleSection
+                title="Latest imported spec update"
+                defaultOpen={false}
+                testID="feature-sprint-spec-update-summary"
+              >
+                <Text style={styles.helpText}>
+                  Imported at: {latestSpecUpdateForCurrentStep.importedAt
+                    .slice(0, 16)
+                    .replace("T", " ")}
+                </Text>
+                <Text style={[styles.label, { marginTop: 8 }]}>Completed slice summary</Text>
+                <Text
+                  testID="feature-sprint-spec-update-completed-summary"
+                  style={styles.bodyText}
+                >
+                  {latestSpecUpdateForCurrentStep.completedSliceSummary}
+                </Text>
+                {latestSpecUpdateForCurrentStep.changelog.length > 0 ? (
+                  <>
+                    <Text style={[styles.label, { marginTop: 12 }]}>Changelog</Text>
+                    {latestSpecUpdateForCurrentStep.changelog.map((item) => (
+                      <Text key={item} style={styles.listItem}>
+                        ▸ {item}
+                      </Text>
+                    ))}
+                  </>
+                ) : null}
+                {latestSpecUpdateForCurrentStep.remainingWork.length > 0 ? (
+                  <>
+                    <Text style={[styles.label, { marginTop: 12 }]}>Remaining work</Text>
+                    {latestSpecUpdateForCurrentStep.remainingWork.map((item) => (
+                      <Text key={item} style={styles.listItem}>
+                        ▸ {item}
+                      </Text>
+                    ))}
+                  </>
+                ) : null}
+                <Text style={[styles.helpText, { marginTop: 12 }]}>
+                  Feature complete: {latestSpecUpdateForCurrentStep.featureComplete ? "yes" : "no"}
+                </Text>
+                {activeFeatureSprintPlan.nextSliceProposal ? (
+                  <>
+                    <Text style={[styles.label, { marginTop: 12 }]}>Next slice proposal</Text>
+                    <Text style={styles.bodyText}>{activeFeatureSprintPlan.nextSliceProposal.title}</Text>
+                  </>
+                ) : null}
+              </CollapsibleSection>
+            ) : null}
+            <TextInput
+              testID="feature-sprint-spec-update-input"
+              style={[styles.captureInput, { minHeight: 120, textAlignVertical: "top", marginTop: 8 }]}
+              value={specUpdateImportText}
+              onChangeText={setSpecUpdateImportText}
+              placeholder="Paste output with a feature-spec-update fenced block"
+              placeholderTextColor={colors.inputPlaceholder}
+              multiline
+            />
+            <Pressable
+              testID="feature-sprint-spec-update-import"
+              style={[styles.secondaryAction, { marginTop: 12 }]}
+              onPress={handleImportSpecUpdate}
+            >
+              <Text style={styles.secondaryActionText}>Import spec update</Text>
+            </Pressable>
+
             <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
-              <Pressable style={styles.secondaryAction} onPress={handleAdvanceFeatureStep}>
+              <Pressable
+                testID="feature-sprint-advance-step"
+                style={styles.secondaryAction}
+                onPress={handleAdvanceFeatureStep}
+              >
                 <Text style={styles.secondaryActionText}>Advance step</Text>
               </Pressable>
               <Pressable style={styles.secondaryAction} onPress={handleCompleteFeatureSprint}>
