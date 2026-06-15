@@ -73,15 +73,15 @@ import {
 import {
   type GatewayHealthBudget
 } from "../src/core/gatewayHealthClient";
-import { useLazyGetGatewayHealthBudgetQuery } from "../src/network";
-import type { RawLabBudgetLevel, RawLabCompactionNotice } from "../src/core/rawLabContextBudget";
 import {
-  reflectOnRawLab,
-  type RawLabSelfMemoryProposal
-} from "../src/core/rawLabSelfReflectionClient";
+  useLazyGetGatewayHealthBudgetQuery,
+  useReflectOnRawLabMutation,
+  useReflectRawLabThreadMutation
+} from "../src/network";
+import type { RawLabBudgetLevel, RawLabCompactionNotice } from "../src/core/rawLabContextBudget";
+import type { RawLabSelfMemoryProposal } from "../src/core/rawLabSelfReflectionClient";
 import {
   applyRawLabThreadReflection,
-  reflectRawLabThread,
   type RawLabThreadReflectionResponse
 } from "../src/core/rawLabThreadReflectionClient";
 import { buildGroundedHandoffDigest, shouldSuggestGroundedHandoff } from "../src/core/chatThreadState";
@@ -116,6 +116,20 @@ const QUICK_QUESTIONS = [
 function formatSendError(error: unknown): { text: string; status?: number } {
   if (error instanceof RawLabError) {
     return { text: error.message, status: error.status };
+  }
+
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const nested =
+      record.error && typeof record.error === "object"
+        ? (record.error as Record<string, unknown>)
+        : record;
+    if (typeof nested.message === "string") {
+      return {
+        text: nested.message,
+        status: typeof nested.status === "number" ? nested.status : undefined
+      };
+    }
   }
 
   return {
@@ -170,6 +184,8 @@ export default function RawLabScreen() {
   const [backroomOpen, setBackroomOpen] = useState(false);
   const [backroomSection, setBackroomSection] = useState<ChatBackroomSectionId | null>(null);
   const [loadGatewayHealthBudget] = useLazyGetGatewayHealthBudgetQuery();
+  const [reflectOnRawLab] = useReflectOnRawLabMutation();
+  const [reflectRawLabThread] = useReflectRawLabThreadMutation();
   const pendingUsedMemoryIdsRef = useRef<Set<string>>(new Set());
   const gatewayHealthPolledRef = useRef(false);
 
@@ -413,7 +429,7 @@ export default function RawLabScreen() {
         turns,
         threadState,
         existingSelfMemories: companionMemories
-      });
+      }).unwrap();
       setReflectionProposals(result.proposals);
       if (result.safety_notes.length > 0) {
         setNotice({ kind: "info", message: result.safety_notes.join(" ") });
@@ -438,7 +454,7 @@ export default function RawLabScreen() {
         turns,
         threadState,
         companionSelfMemories: memoriesForSend()
-      });
+      }).unwrap();
       setThreadReflection(result);
       if (result.safety_notes.length > 0) {
         setNotice({ kind: "info", message: result.safety_notes.join(" ") });

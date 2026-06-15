@@ -114,4 +114,84 @@ describe("lifeHarnessApi", () => {
       })
     );
   });
+
+  it("delegates Raw Lab self-reflection to the existing client", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            proposals: [
+              {
+                kind: "self_observation",
+                subject: "companion_self",
+                text: "I tend to keep answers short.",
+                confidence: 0.7,
+                sensitivity: "S0",
+                reason: "thread pattern"
+              }
+            ],
+            safety_notes: [],
+            used_context: false
+          })
+      })
+    );
+
+    const store = createLifeHarnessNetworkStore();
+    const result = await store.dispatch(
+      lifeHarnessApi.endpoints.reflectOnRawLab.initiate({
+        baseUrl: "http://127.0.0.1:8111",
+        turns: [{ id: "turn-1", role: "user", content: "hello", createdAt: "2026-06-14T09:00:00.000Z" }]
+      })
+    );
+
+    expect(result.data?.proposals).toHaveLength(1);
+    expect(result.data?.used_context).toBe(false);
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:8111/raw-lab/self-reflection",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("delegates Raw Lab thread reflection to the existing client", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            proposals: {
+              self_observations: ["I'm noticing I tend to keep the thread coherent."],
+              questions_to_revisit: ["What were we circling?"],
+              provisional_stances: [],
+              current_vibe: "",
+              do_not_repeat: [],
+              user_steering: []
+            },
+            safety_notes: [],
+            used_context: false
+          })
+      })
+    );
+
+    const store = createLifeHarnessNetworkStore();
+    const result = await store.dispatch(
+      lifeHarnessApi.endpoints.reflectRawLabThread.initiate({
+        baseUrl: "http://127.0.0.1:8111",
+        turns: [{ id: "turn-1", role: "user", content: "What were we circling?", createdAt: "2026-06-14T09:00:00.000Z" }]
+      })
+    );
+
+    expect(result.data?.used_context).toBe(false);
+    expect(result.data?.proposals.self_observations).toContain(
+      "I'm noticing I tend to keep the thread coherent."
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:8111/raw-lab/reflect-thread",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
 });
