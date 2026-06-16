@@ -183,11 +183,24 @@ export type FeatureSprintPlanCreateInput = {
 };
 
 export type FeatureSprintPlanUpdateInput = Partial<
-  Omit<HarnessFeatureSprintPlan, "id" | "cardId" | "createdAt" | "steps" | "automationPhase">
+  Omit<
+    HarnessFeatureSprintPlan,
+    | "id"
+    | "cardId"
+    | "createdAt"
+    | "steps"
+    | "automationPhase"
+    | "nextSliceProposal"
+    | "currentStepId"
+  >
 > & {
   steps?: HarnessFeatureSprintStep[];
   /** Pass null to clear automationPhase on the plan. */
   automationPhase?: HarnessFeatureSprintAutomationPhase | null;
+  /** Pass null to clear nextSliceProposal on the plan. */
+  nextSliceProposal?: HarnessFeatureSprintNextSliceProposal | null;
+  /** Pass null to clear currentStepId on the plan. */
+  currentStepId?: string | null;
 };
 
 export type FeatureSprintStepUpdateInput = Partial<
@@ -698,7 +711,11 @@ export function updateFeatureSprintPlan(
       patch.constraints !== undefined ? cleanStringList(patch.constraints) : existing.constraints,
     steps: patch.steps ?? existing.steps,
     currentStepId:
-      patch.currentStepId !== undefined ? patch.currentStepId : existing.currentStepId,
+      patch.currentStepId === null
+        ? undefined
+        : patch.currentStepId !== undefined
+          ? patch.currentStepId
+          : existing.currentStepId,
     latestReviewVerdict:
       patch.latestReviewVerdict !== undefined
         ? cleanOptional(patch.latestReviewVerdict)
@@ -711,7 +728,11 @@ export function updateFeatureSprintPlan(
     latestSpecUpdate:
       patch.latestSpecUpdate !== undefined ? patch.latestSpecUpdate : existing.latestSpecUpdate,
     nextSliceProposal:
-      patch.nextSliceProposal !== undefined ? patch.nextSliceProposal : existing.nextSliceProposal,
+      patch.nextSliceProposal === null
+        ? undefined
+        : patch.nextSliceProposal !== undefined
+          ? patch.nextSliceProposal
+          : existing.nextSliceProposal,
     automationPhase:
       patch.automationPhase === null
         ? undefined
@@ -860,7 +881,7 @@ export function advanceFeatureSprintStep(
   );
 
   let planStatus: HarnessFeatureSprintStatus = "in_progress";
-  let currentStepId = existing.currentStepId;
+  let currentStepId: string | null | undefined = existing.currentStepId;
 
   if (nextIndex >= 0) {
     steps[nextIndex] = {
@@ -871,13 +892,139 @@ export function advanceFeatureSprintStep(
     currentStepId = steps[nextIndex].id;
   } else {
     planStatus = "reviewing";
-    currentStepId = undefined;
+    currentStepId = null;
   }
 
   const planPatch: FeatureSprintPlanUpdateInput = {
     steps,
     status: planStatus,
     currentStepId
+  };
+  if (
+    existing.automationPhase === "localizing" ||
+    existing.automationPhase === "prompt_auditing" ||
+    existing.automationPhase === "proof_normalizing"
+  ) {
+    planPatch.automationPhase = isFeatureSpecApproved(existing) ? "spec_approved" : null;
+  }
+
+  return updateFeatureSprintPlan(data, planId, planPatch, now);
+}
+
+function normalizeNextSliceTitle(title: string): string {
+  return title.trim().toLowerCase();
+}
+
+function buildStepFromNextSliceProposal(
+  proposal: HarnessFeatureSprintNextSliceProposal,
+  timestamp: string
+): HarnessFeatureSprintStep {
+  return {
+    id: createId("feature_step"),
+    title: proposal.title.trim(),
+    goal: proposal.goal.trim(),
+    status: "ready",
+    acceptanceCriteria: cleanStringList(proposal.acceptanceCriteria),
+    suggestedPrompt: proposal.goal.trim(),
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
+
+function applyNextSliceProposalToStep(
+  step: HarnessFeatureSprintStep,
+  proposal: HarnessFeatureSprintNextSliceProposal,
+  timestamp: string
+): HarnessFeatureSprintStep {
+  return {
+    id: step.id,
+    title: proposal.title.trim(),
+    goal: proposal.goal.trim(),
+    status: "ready",
+    acceptanceCriteria: cleanStringList(proposal.acceptanceCriteria),
+    suggestedPrompt: proposal.goal.trim(),
+    createdAt: step.createdAt,
+    updatedAt: timestamp
+  };
+}
+
+export function canAdoptNextSliceProposal(
+  plan: HarnessFeatureSprintPlan | undefined
+): boolean {
+  if (!plan?.nextSliceProposal?.title?.trim()) {
+    return false;
+  }
+  if (plan.steps.some((item) => item.status === "ready")) {
+    return false;
+  }
+  const currentStep = plan.currentStepId
+    ? plan.steps.find((item) => item.id === plan.currentStepId)
+    : undefined;
+  if (currentStep && currentStep.status !== "done") {
+    return false;
+  }
+  return true;
+}
+
+export function adoptNextSliceProposalForPlan(
+  data: LifeHarnessData,
+  planId: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const existing = findPlan(data, planId);
+  if (!existing) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+  if (!canAdoptNextSliceProposal(existing)) {
+    if (!existing.nextSliceProposal?.title?.trim()) {
+      return { ok: false, error: "No next slice proposal to adopt." };
+    }
+    if (existing.steps.some((item) => item.status === "ready")) {
+      return {
+        ok: false,
+        error: "A step is already ready. Use the current slice handoff below."
+      };
+    }
+    const currentStep = existing.currentStepId
+      ? existing.steps.find((item) => item.id === existing.currentStepId)
+      : undefined;
+    if (currentStep && currentStep.status !== "done") {
+      return {
+        ok: false,
+        error: "Advance the current step before adopting the proposed next slice."
+      };
+    }
+    return { ok: false, error: "Next slice proposal cannot be adopted yet." };
+  }
+
+  const proposal = existing.nextSliceProposal!;
+  const timestamp = resolveNow(now);
+  const proposalTitle = normalizeNextSliceTitle(proposal.title);
+  const plannedMatch = existing.steps.find(
+    (item) =>
+      (item.status === "planned" || item.status === "blocked") &&
+      normalizeNextSliceTitle(item.title) === proposalTitle
+  );
+
+  let adoptedStepId: string;
+  let steps: HarnessFeatureSprintStep[];
+
+  if (plannedMatch) {
+    adoptedStepId = plannedMatch.id;
+    steps = existing.steps.map((item) =>
+      item.id === plannedMatch.id ? applyNextSliceProposalToStep(item, proposal, timestamp) : item
+    );
+  } else {
+    const adoptedStep = buildStepFromNextSliceProposal(proposal, timestamp);
+    adoptedStepId = adoptedStep.id;
+    steps = [...existing.steps, adoptedStep];
+  }
+
+  const planPatch: FeatureSprintPlanUpdateInput = {
+    steps,
+    currentStepId: adoptedStepId,
+    status: "in_progress",
+    nextSliceProposal: null
   };
   if (
     existing.automationPhase === "localizing" ||
@@ -2448,6 +2595,15 @@ export function applyAdvanceFeatureSprintStep(
   now?: Date
 ): LifeHarnessData {
   const result = advanceFeatureSprintStep(state, planId, stepId, now);
+  return result.ok ? result.state : state;
+}
+
+export function applyAdoptNextSliceProposalForPlan(
+  state: LifeHarnessData,
+  planId: string,
+  now?: Date
+): LifeHarnessData {
+  const result = adoptNextSliceProposalForPlan(state, planId, now);
   return result.ok ? result.state : state;
 }
 

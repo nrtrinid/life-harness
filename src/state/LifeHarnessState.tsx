@@ -103,6 +103,7 @@ import {
   applyUpdateFeatureSprintPlan,
   applyUpdateFeatureSprintStep,
   advanceFeatureSprintStep,
+  adoptNextSliceProposalForPlan,
   createFeatureSprintPlanForCard,
   deleteFeatureSprintPlan,
   importFeatureSpecUpdateFromText,
@@ -311,6 +312,7 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     planId: string,
     stepId: string
   ) => { ok: boolean; message?: string };
+  adoptNextSliceProposalForPlan: (planId: string) => { ok: boolean; message?: string };
   completeFeatureSprintPlan: (
     planId: string,
     input?: { proofText?: string }
@@ -1006,6 +1008,15 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     return { ok: true, message: "Feature sprint step advanced." };
   }, []);
 
+  const adoptNextSliceProposalForPlanAction = useCallback((planId: string) => {
+    const result = adoptNextSliceProposalForPlan(stateRef.current, planId);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    dispatch({ type: "state_replaced", state: result.state });
+    return { ok: true, message: "Next slice adopted as the current slice." };
+  }, []);
+
   const completeFeatureSprintPlanAction = useCallback(
     (planId: string, input?: { proofText?: string }) => {
       const existing = stateRef.current.featureSprintPlans.find((plan) => plan.id === planId);
@@ -1501,6 +1512,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       updateFeatureSprintPlan: updateFeatureSprintPlanAction,
       updateFeatureSprintStep: updateFeatureSprintStepAction,
       advanceFeatureSprintStep: advanceFeatureSprintStepAction,
+      adoptNextSliceProposalForPlan: adoptNextSliceProposalForPlanAction,
       completeFeatureSprintPlan: completeFeatureSprintPlanAction,
       deleteFeatureSprintPlan: deleteFeatureSprintPlanAction,
       importFeatureSprintPlanForCard: importFeatureSprintPlanForCardAction,
@@ -1577,6 +1589,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       updateFeatureSprintPlanAction,
       updateFeatureSprintStepAction,
       advanceFeatureSprintStepAction,
+      adoptNextSliceProposalForPlanAction,
       completeFeatureSprintPlanAction,
       deleteFeatureSprintPlanAction,
       importFeatureSprintPlanForCardAction,

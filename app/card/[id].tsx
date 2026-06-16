@@ -36,6 +36,7 @@ import {
   buildFeatureStepPromptAuditPacket,
   buildFeatureStepReviewPacket,
   canRunFeatureSprintImplementation,
+  canAdoptNextSliceProposal,
   doesFeatureSprintStepRequireSpecUpdate,
   getActiveFeatureSprintPlanForCard,
   hasApprovedSpecUpdateForStep,
@@ -268,6 +269,7 @@ export default function CardDetailScreen() {
     deleteAgentSession,
     updateFeatureSprintStep,
     advanceFeatureSprintStep,
+    adoptNextSliceProposalForPlan,
     completeFeatureSprintPlan,
     deleteFeatureSprintPlan,
     importFeatureSprintPlanForCard,
@@ -655,6 +657,8 @@ export default function CardDetailScreen() {
     activeFeatureSprintPlan.latestSpecUpdate.stepId === activeFeatureSprintPlan.currentStepId
       ? activeFeatureSprintPlan.latestSpecUpdate
       : undefined;
+  const canAdoptNextSlice = canAdoptNextSliceProposal(activeFeatureSprintPlan);
+  const nextSliceProposal = activeFeatureSprintPlan?.nextSliceProposal;
 
   useEffect(() => {
     setFeatureSpecText(activeFeatureSprintPlan?.featureSpec?.body ?? "");
@@ -1012,6 +1016,15 @@ export default function CardDetailScreen() {
       activeFeatureSprintPlan.currentStepId
     );
     showNotice(result.ok ? "success" : "warning", result.message ?? "Could not advance step.");
+  }
+
+  function handleAdoptNextSlice() {
+    if (!activeFeatureSprintPlan) {
+      showNotice("warning", "No active feature sprint plan.");
+      return;
+    }
+    const result = adoptNextSliceProposalForPlan(activeFeatureSprintPlan.id);
+    showNotice(result.ok ? "success" : "warning", result.message ?? "Could not adopt next slice.");
   }
 
   function handleCompleteFeatureSprint() {
@@ -2377,10 +2390,26 @@ export default function CardDetailScreen() {
                 <Text style={[styles.helpText, { marginTop: 12 }]}>
                   Feature complete: {latestSpecUpdateForCurrentStep.featureComplete ? "yes" : "no"}
                 </Text>
-                {activeFeatureSprintPlan.nextSliceProposal ? (
+                {nextSliceProposal ? (
                   <>
                     <Text style={[styles.label, { marginTop: 12 }]}>Next slice proposal</Text>
-                    <Text style={styles.bodyText}>{activeFeatureSprintPlan.nextSliceProposal.title}</Text>
+                    <Text style={styles.bodyText}>{nextSliceProposal.title}</Text>
+                    <Text style={[styles.helpText, { marginTop: 4 }]}>{nextSliceProposal.goal}</Text>
+                    {nextSliceProposal.acceptanceCriteria.length > 0 ? (
+                      <>
+                        <Text style={[styles.label, { marginTop: 8 }]}>Acceptance criteria</Text>
+                        {nextSliceProposal.acceptanceCriteria.map((item) => (
+                          <Text key={item} style={styles.listItem}>
+                            ▸ {item}
+                          </Text>
+                        ))}
+                      </>
+                    ) : null}
+                    {canAdoptNextSlice ? (
+                      <Text style={[styles.helpText, { marginTop: 8, color: colors.accentPrimary }]}>
+                        Use Adopt next slice below to make this the current slice.
+                      </Text>
+                    ) : null}
                   </>
                 ) : null}
               </CollapsibleSection>
@@ -2402,7 +2431,16 @@ export default function CardDetailScreen() {
               <Text style={styles.secondaryActionText}>Import spec update</Text>
             </Pressable>
 
-            <View style={[styles.cardActionsRow, { marginTop: 12 }]}>
+            <View style={[styles.cardActionsRow, { marginTop: 12, flexWrap: "wrap" }]}>
+              {canAdoptNextSlice ? (
+                <Pressable
+                  testID="feature-sprint-adopt-next-slice"
+                  style={styles.secondaryAction}
+                  onPress={handleAdoptNextSlice}
+                >
+                  <Text style={styles.secondaryActionText}>Adopt next slice</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 testID="feature-sprint-advance-step"
                 style={styles.secondaryAction}

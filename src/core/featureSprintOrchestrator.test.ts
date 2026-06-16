@@ -4,7 +4,9 @@ import { createSeedState } from "../data/createSeedState";
 import { normalizeData } from "./stateHydration";
 import {
   advanceFeatureSprintStep,
+  adoptNextSliceProposalForPlan,
   approveFeatureSpecForPlan,
+  canAdoptNextSliceProposal,
   buildFeatureReviewVerdictFenceDraft,
   buildFeatureScopingPacket,
   describeReviewVerdictImportFailure,
@@ -1137,6 +1139,176 @@ describe("featureSprintOrchestrator", () => {
       expect(plan?.nextSliceProposal?.title).toBe("Do not create me");
       expect(plan?.latestSpecUpdate?.featureComplete).toBe(true);
       expect(plan?.completedAt).toBeUndefined();
+    });
+
+    it("adopts next slice proposal as a new current slice after advance with no ready step", () => {
+      const oneStepPlan = `
+\`\`\`feature-sprint-plan
+{
+  "title": "Living spec loop",
+  "goal": "Close one slice at a time",
+  "acceptanceCriteria": ["Slices can be adopted"],
+  "nonGoals": [],
+  "constraints": [],
+  "steps": [
+    {
+      "title": "Core module",
+      "goal": "Add orchestrator core",
+      "acceptanceCriteria": ["CRUD helpers exist"]
+    }
+  ]
+}
+\`\`\``;
+      const saved = saveFeatureSpecForCard(
+        baseData(),
+        "card-build-test",
+        { body: "Approved initial spec." },
+        FIXED_NOW
+      );
+      expect(saved.ok).toBe(true);
+      if (!saved.ok) {
+        return;
+      }
+      const approved = approveFeatureSpecForPlan(saved.state, saved.planId!, FIXED_NOW);
+      expect(approved.ok).toBe(true);
+      if (!approved.ok) {
+        return;
+      }
+      const imported = importFeatureSprintPlanFromText(
+        approved.state,
+        "card-build-test",
+        oneStepPlan,
+        FIXED_NOW
+      );
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+      const stepId = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test")?.currentStepId;
+      if (!stepId || !imported.planId) {
+        return;
+      }
+      const reviewed = updateFeatureSprintStep(
+        imported.state,
+        imported.planId,
+        stepId,
+        {
+          outputSummary: "Implemented core.",
+          reviewStatus: "accepted",
+          reviewVerdict: "Accepted.",
+          status: "reviewing"
+        },
+        FIXED_NOW
+      );
+      expect(reviewed.ok).toBe(true);
+      if (!reviewed.ok) {
+        return;
+      }
+      const specUpdated = importFeatureSpecUpdateFromText(
+        reviewed.state,
+        imported.planId,
+        `\`\`\`feature-spec-update
+{
+  "revisedSpec": "Revised spec after step 1.",
+  "changelog": ["Step 1 complete"],
+  "completedSliceSummary": "Core module landed.",
+  "remainingWork": ["UI"],
+  "nextSlice": {
+    "title": "UI",
+    "goal": "Backroom section",
+    "acceptanceCriteria": ["Buttons copy packets"],
+    "nonGoals": [],
+    "riskTier": "normal"
+  },
+  "featureComplete": false
+}
+\`\`\``,
+        stepId,
+        FIXED_NOW
+      );
+      expect(specUpdated.ok).toBe(true);
+      if (!specUpdated.ok) {
+        return;
+      }
+      const approvedUpdate = approveFeatureSpecForPlan(
+        specUpdated.state,
+        imported.planId,
+        new Date("2026-06-09T12:01:00.000Z")
+      );
+      expect(approvedUpdate.ok).toBe(true);
+      if (!approvedUpdate.ok) {
+        return;
+      }
+      const advanced = advanceFeatureSprintStep(
+        approvedUpdate.state,
+        imported.planId,
+        stepId,
+        FIXED_NOW
+      );
+      expect(advanced.ok).toBe(true);
+      if (!advanced.ok) {
+        return;
+      }
+      const beforeAdopt = getActiveFeatureSprintPlanForCard(advanced.state, "card-build-test");
+      expect(beforeAdopt?.currentStepId).toBeUndefined();
+      expect(canAdoptNextSliceProposal(beforeAdopt)).toBe(true);
+
+      const adopted = adoptNextSliceProposalForPlan(advanced.state, imported.planId, FIXED_NOW);
+      expect(adopted.ok).toBe(true);
+      if (!adopted.ok) {
+        return;
+      }
+      const plan = getActiveFeatureSprintPlanForCard(adopted.state, "card-build-test");
+      expect(plan?.status).toBe("in_progress");
+      expect(plan?.nextSliceProposal).toBeUndefined();
+      expect(plan?.steps).toHaveLength(2);
+      const adoptedStep = plan?.steps.find((step) => step.id === plan.currentStepId);
+      expect(adoptedStep?.title).toBe("UI");
+      expect(adoptedStep?.status).toBe("ready");
+      expect(adoptedStep?.goal).toBe("Backroom section");
+    });
+
+    it("blocks adopt when a step is already ready", () => {
+      const saved = saveFeatureSpecForCard(
+        baseData(),
+        "card-build-test",
+        { body: "Approved initial spec." },
+        FIXED_NOW
+      );
+      expect(saved.ok).toBe(true);
+      if (!saved.ok) {
+        return;
+      }
+      const imported = importFeatureSprintPlanFromText(
+        saved.state,
+        "card-build-test",
+        SAMPLE_PLAN_BLOCK,
+        FIXED_NOW
+      );
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+      const plan = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test");
+      const withProposal = {
+        ...imported.state,
+        featureSprintPlans: imported.state.featureSprintPlans.map((item) =>
+          item.id === imported.planId
+            ? {
+                ...item,
+                nextSliceProposal: {
+                  title: "UI",
+                  goal: "Backroom section",
+                  acceptanceCriteria: ["Buttons copy packets"],
+                  nonGoals: []
+                }
+              }
+            : item
+        )
+      };
+      expect(canAdoptNextSliceProposal(plan)).toBe(false);
+      const blocked = adoptNextSliceProposalForPlan(withProposal, imported.planId!, FIXED_NOW);
+      expect(blocked.ok).toBe(false);
     });
 
     it("includes draft spec in scoping packet and approved spec in implementation packet", () => {

@@ -84,7 +84,10 @@ test.describe("Feature Sprint full mock loop dogfood", () => {
       )
     ).toBeVisible();
 
-    await page.getByTestId("feature-sprint-approve-feature-spec").click();
+    await page.getByTestId("feature-sprint-approve-feature-spec").scrollIntoViewIfNeeded();
+    const approveSpecButton = page.getByTestId("feature-sprint-approve-feature-spec");
+    await expect(approveSpecButton).toBeEnabled({ timeout: 30_000 });
+    await approveSpecButton.click();
     await expect(page.getByText("Feature spec approved.")).toBeVisible();
     await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toHaveCount(0);
     await expect(

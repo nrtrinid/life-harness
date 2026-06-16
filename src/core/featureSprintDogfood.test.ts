@@ -374,6 +374,25 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     expect(nextKind(data)).toBe("advance_step");
   });
 
+  it("points adoptable next slice proposal to adopt_next_slice", () => {
+    const data = baseData({
+      featureSprintPlans: [
+        fixturePlan({
+          status: "reviewing",
+          currentStepId: undefined,
+          steps: [fixtureStep({ status: "done", completedAt: FIXED_NOW })],
+          nextSliceProposal: {
+            title: "UI",
+            goal: "Backroom section",
+            acceptanceCriteria: ["Buttons copy packets"],
+            nonGoals: []
+          }
+        })
+      ]
+    });
+    expect(nextKind(data)).toBe("adopt_next_slice");
+  });
+
   it("points accepted review with unapproved spec update to approve revised feature spec", () => {
     const seed = createFeatureSprintSpecUpdateDogfoodState(new Date(FIXED_NOW));
     const plan = seed.featureSprintPlans[0];

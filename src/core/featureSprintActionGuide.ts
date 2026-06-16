@@ -308,6 +308,12 @@ export function buildFeatureSprintActionGuide(
         )
       ];
       break;
+    case "adopt_next_slice":
+      steps = markCurrent([
+        step("adopt_next_slice", "Review proposed next slice and click Adopt next slice", "current"),
+        step("run_implementation", `Run implementation with ${agentLabel}`, "upcoming")
+      ]);
+      break;
     case "complete_feature":
       steps = markCurrent([
         step("complete_feature", "Click Mark feature complete", "current"),

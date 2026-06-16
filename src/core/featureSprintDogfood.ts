@@ -7,7 +7,8 @@ import {
   hasStepPromptAudit,
   hasStepImplementationProof,
   hasStepPromptLocalization,
-  isFeatureSpecApproved
+  isFeatureSpecApproved,
+  canAdoptNextSliceProposal
 } from "./featureSprintOrchestrator";
 import { getFeatureSprintRunnerRunsForCard } from "./featureSprintRunnerHistory";
 import type { FeatureSprintRunnerHealthProbe } from "./featureSprintRunnerHealth";
@@ -60,6 +61,7 @@ export type FeatureSprintDogfoodNextAction = {
     | "run_review"
     | "import_review"
     | "advance_step"
+    | "adopt_next_slice"
     | "complete_feature"
     | "inspect_proof"
     | "manual";
@@ -511,6 +513,14 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
     };
   }
 
+  if (!step && canAdoptNextSliceProposal(plan)) {
+    return {
+      kind: "adopt_next_slice",
+      label: "Adopt proposed next slice",
+      detail: `Review "${plan!.nextSliceProposal!.title}" in the spec update summary, then use Adopt next slice below.`
+    };
+  }
+
   if (!step && (plan.status === "reviewing" || allStepsDone(plan))) {
     return {
       kind: "complete_feature",
@@ -585,14 +595,6 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
       kind: "advance_step",
       label: "Advance step",
       detail: "The review accepted this step. Use Advance step below."
-    };
-  }
-
-  if (allStepsDone(plan) || (plan.status === "reviewing" && !step)) {
-    return {
-      kind: "complete_feature",
-      label: "Mark feature complete",
-      detail: "The plan is at the completion gate. Use Mark feature complete below."
     };
   }
 
