@@ -58,7 +58,8 @@ The next action is deterministic and intentionally simple:
 2. Runner not checked/unavailable -> Check runner
 3. Scoping output exists with no active plan -> Import plan
 4. No active plan -> Run scoping (via **Start feature** panel step 3)
-5. No current step and plan is reviewing/done-ready -> Mark feature complete
+5. No current step and a next slice proposal exists -> Adopt next slice
+6. No current step and plan is reviewing/done-ready -> Mark feature complete
 6. Implementation output exists but step output is not saved -> View details, then Save agent output
 7. Ready/planned step with no output -> Run implementation
 8. Review output exists but verdict is not imported -> Import review verdict
@@ -84,6 +85,7 @@ Use the mock runner path for safe loop testing:
 8. Run review with the selected runner agent
 9. Import verdict
 10. Advance step
+11. (Optional, living-spec loop) Import spec update → approve revised spec → advance step → adopt next slice
 11. Mark feature complete
 12. Clean worktree when done (Force clean only after inspection)
 ```
