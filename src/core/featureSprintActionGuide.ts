@@ -104,6 +104,31 @@ function implementationLoopSteps(input: FeatureSprintActionGuideInput): FeatureS
   return steps;
 }
 
+function needsRevisedSpecApproval(input: FeatureSprintActionGuideInput): boolean {
+  return Boolean(
+    input.stepReviewAccepted && input.currentStepSpecUpdateSatisfied === false
+  );
+}
+
+function prependRevisedSpecApprovalSteps(
+  steps: FeatureSprintActionGuideStep[],
+  input: FeatureSprintActionGuideInput
+): FeatureSprintActionGuideStep[] {
+  if (!needsRevisedSpecApproval(input)) {
+    return steps;
+  }
+  return [
+    step(
+      "approve_revised_feature_spec",
+      "Approve revised feature spec in Start feature (step 1)",
+      "current"
+    ),
+    ...steps.map((item) =>
+      item.status === "current" ? { ...item, status: "upcoming" as const } : item
+    )
+  ];
+}
+
 function prependSaveFeatureSpecStep(
   steps: FeatureSprintActionGuideStep[],
   dirty: boolean
@@ -196,7 +221,7 @@ export function buildFeatureSprintActionGuide(
       steps = markCurrent([
         step("start_runner", "Start npm run feature-runner in a terminal", "current"),
         step("check_runner", "Click Check runner in Start feature", "upcoming"),
-        step("run_scoping", "Run scoping or copy scoping packet", "upcoming")
+        step("run_scoping", "Copy for ChatGPT/Codex scoping or run scoping", "upcoming")
       ]);
       break;
     case "run_scoping":
@@ -205,7 +230,7 @@ export function buildFeatureSprintActionGuide(
         step("save_feature_spec", "Save feature spec", "upcoming"),
         step(
           "run_scoping",
-          `Run scoping with ${agentLabel} or copy scoping packet`,
+          "Copy for ChatGPT/Codex scoping or run scoping with runner",
           "upcoming"
         ),
         step("import_plan", "Import plan", "upcoming")
@@ -298,5 +323,8 @@ export function buildFeatureSprintActionGuide(
       steps = [];
   }
 
-  return prependSaveFeatureSpecStep(steps, Boolean(input.featureSpecDirty));
+  return prependRevisedSpecApprovalSteps(
+    prependSaveFeatureSpecStep(steps, Boolean(input.featureSpecDirty)),
+    input
+  );
 }

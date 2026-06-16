@@ -50,5 +50,14 @@ test.describe("Feature Sprint spec-update dogfood", () => {
     await expect(page.getByText("Core module · reviewing · review accepted")).toBeVisible();
     await expect(page.getByText("▸ UI · planned")).toBeVisible();
     await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible();
+
+    await page.getByTestId("feature-sprint-approve-feature-spec").click();
+    await expect(page.getByText("Feature spec approved.")).toBeVisible();
+    await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toHaveCount(0);
+
+    await page.getByTestId("feature-sprint-advance-step").click();
+    await expect(page.getByText("Feature sprint step advanced.")).toBeVisible();
+    await expect(page.getByText("▸ Core module · done · review accepted")).toBeVisible();
+    await expect(page.getByText("▸ UI · ready")).toBeVisible();
   });
 });

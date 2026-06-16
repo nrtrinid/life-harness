@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { createSeedState } from "../data/createSeedState";
 import {
+  createFeatureSprintSpecUpdateDogfoodState,
+  FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_GPT_OUTPUT
+} from "../dogfood/featureSprintSpecUpdateSeed";
+import { importFeatureSpecUpdateFromText } from "./featureSprintOrchestrator";
+import {
   buildFeatureSprintDogfoodSummary,
   type FeatureSprintDogfoodNextAction
 } from "./featureSprintDogfood";
@@ -367,6 +372,35 @@ describe("buildFeatureSprintDogfoodSummary", () => {
       ]
     });
     expect(nextKind(data)).toBe("advance_step");
+  });
+
+  it("points accepted review with unapproved spec update to approve revised feature spec", () => {
+    const seed = createFeatureSprintSpecUpdateDogfoodState(new Date(FIXED_NOW));
+    const plan = seed.featureSprintPlans[0];
+    const stepId = plan?.currentStepId;
+    if (!plan || !stepId) {
+      throw new Error("Missing dogfood plan step.");
+    }
+    const updated = importFeatureSpecUpdateFromText(
+      seed,
+      plan.id,
+      FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_GPT_OUTPUT,
+      stepId,
+      new Date(FIXED_NOW)
+    );
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) {
+      return;
+    }
+    const summary = buildFeatureSprintDogfoodSummary(updated.state, CARD_ID, {
+      runnerHealth: "available"
+    });
+    expect(summary.nextAction).toMatchObject({
+      kind: "approve_feature_spec",
+      label: "Approve revised feature spec"
+    });
+    expect(summary.nextAction.detail).toContain("Approve the revised feature spec");
+    expect(summary.checks.find((check) => check.id === "advance_gate")?.status).toBe("warning");
   });
 
   it("points reviewing plan without current step to complete_feature", () => {

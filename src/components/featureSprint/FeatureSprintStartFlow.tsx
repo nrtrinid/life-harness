@@ -21,6 +21,7 @@ export type FeatureSprintStartFlowProps = {
   isFeatureSpecDirty: boolean;
   isFeatureSpecApproved: boolean;
   hasPersistedFeatureSpec: boolean;
+  revisedSpecAwaitingApproval?: boolean;
   onSaveFeatureSpec: () => void;
   onApproveFeatureSpec: () => void;
 
@@ -141,6 +142,7 @@ export function FeatureSprintStartFlow({
   isFeatureSpecDirty,
   isFeatureSpecApproved,
   hasPersistedFeatureSpec,
+  revisedSpecAwaitingApproval = false,
   onSaveFeatureSpec,
   onApproveFeatureSpec,
   runnerAgent,
@@ -201,6 +203,10 @@ export function FeatureSprintStartFlow({
           <Text style={[styles.helpText, { marginTop: 4, color: colors.accentSuccess }]}>
             Spec approved and ready for implementation gating.
           </Text>
+        ) : hasPersistedFeatureSpec && revisedSpecAwaitingApproval ? (
+          <Text style={[styles.helpText, { marginTop: 4, color: colors.accentPrimary }]}>
+            Revised spec imported. Approve it before advancing or running implementation.
+          </Text>
         ) : hasPersistedFeatureSpec ? (
           <Text style={[styles.helpText, { marginTop: 4 }]}>
             Spec saved. Approve it before running implementation.
@@ -217,6 +223,7 @@ export function FeatureSprintStartFlow({
             <Text style={styles.secondaryActionText}>Save feature spec</Text>
           </Pressable>
           <Pressable
+            testID="feature-sprint-approve-feature-spec"
             style={[
               styles.secondaryAction,
               (!hasPersistedFeatureSpec || isFeatureSpecDirty || isFeatureSpecApproved) && {
@@ -279,7 +286,7 @@ export function FeatureSprintStartFlow({
         <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
           {canCopyScopingPacket ? (
             <Pressable style={styles.secondaryAction} onPress={onCopyScopingPacket}>
-              <Text style={styles.secondaryActionText}>Copy scoping packet</Text>
+              <Text style={styles.secondaryActionText}>Copy for ChatGPT/Codex scoping</Text>
             </Pressable>
           ) : (
             <Text style={styles.helpText}>Clipboard copy unavailable in this environment.</Text>

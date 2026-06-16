@@ -757,7 +757,8 @@ export default function CardDetailScreen() {
       featureSpecDirty,
       stepLocalizationSaved,
       stepPromptAuditSaved,
-      stepImplementationProofSaved
+      stepImplementationProofSaved,
+      currentStepSpecUpdateSatisfied
     ]
   );
   const showAgentOutputReadyHelper =
@@ -1693,6 +1694,9 @@ export default function CardDetailScreen() {
           isFeatureSpecDirty={featureSpecDirty}
           isFeatureSpecApproved={featureSpecApproved}
           hasPersistedFeatureSpec={persistedFeatureSpec}
+          revisedSpecAwaitingApproval={
+            stepRequiresSpecUpdate && !currentStepSpecUpdateSatisfied && Boolean(latestSpecUpdateForCurrentStep)
+          }
           onSaveFeatureSpec={handleSaveFeatureSpec}
           onApproveFeatureSpec={handleApproveFeatureSpec}
           runnerAgent={runnerAgent}
@@ -2143,7 +2147,9 @@ export default function CardDetailScreen() {
                     );
                   }}
                 >
-                  <Text style={styles.secondaryActionText}>Copy implementation prompt</Text>
+                  <Text style={styles.secondaryActionText}>
+                    Copy for {runnerAgentLabel(runnerAgent)} implementation
+                  </Text>
                 </Pressable>
               ) : null}
               {!canRunImplementation ? (
@@ -2184,7 +2190,7 @@ export default function CardDetailScreen() {
                     );
                   }}
                 >
-                  <Text style={styles.secondaryActionText}>Copy review packet</Text>
+                  <Text style={styles.secondaryActionText}>Copy for ChatGPT/Codex review</Text>
                 </Pressable>
               ) : null}
               <Pressable

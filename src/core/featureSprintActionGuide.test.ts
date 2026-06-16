@@ -254,6 +254,26 @@ describe("buildFeatureSprintActionGuide", () => {
     expect(steps.find((item) => item.id === "advance_step")?.status).toBe("current");
   });
 
+  it("prepends revised spec approval before advance when spec update gate is open", () => {
+    const steps = buildFeatureSprintActionGuide({
+      nextActionKind: "advance_step",
+      implementationRunViewed: false,
+      stepOutputSaved: false,
+      reviewOutputReady: false,
+      reviewVerdictImported: true,
+      stepReviewAccepted: true,
+      currentStepSpecUpdateSatisfied: false,
+      scopingOutputReady: false,
+      planImportTextReady: false
+    });
+
+    expect(steps[0]).toMatchObject({
+      id: "approve_revised_feature_spec",
+      status: "current"
+    });
+    expect(steps.find((item) => item.id === "advance_step")?.status).toBe("upcoming");
+  });
+
   it("guides normalize proof after output is saved", () => {
     const steps = buildFeatureSprintActionGuide({
       nextActionKind: "save_agent_output",

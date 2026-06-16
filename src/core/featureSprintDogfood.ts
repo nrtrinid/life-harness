@@ -1,6 +1,8 @@
 import { shouldIncludeCard } from "./contextPacketRedaction";
 import {
+  doesFeatureSprintStepRequireSpecUpdate,
   getActiveFeatureSprintPlanForCard,
+  hasApprovedSpecUpdateForStep,
   hasPersistedFeatureSpec,
   hasStepPromptAudit,
   hasStepImplementationProof,
@@ -281,7 +283,12 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
       ? "No persisted spec yet."
       : isFeatureSpecApproved(plan)
         ? "Spec is approved for implementation."
-        : "Approve the persisted spec before running implementation."
+        : plan?.latestSpecUpdate &&
+            step &&
+            doesFeatureSprintStepRequireSpecUpdate(plan, step) &&
+            !hasApprovedSpecUpdateForStep(plan, step)
+          ? "Revised spec imported. Approve it in Start feature before advancing or running implementation."
+          : "Approve the persisted spec before running implementation."
   });
 
   checks.push({
@@ -409,10 +416,25 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
   checks.push({
     id: "advance_gate",
     label: "Advance gate",
-    status: step?.reviewStatus === "accepted" && step.status !== "done" ? "ready" : step?.status === "done" ? "done" : "missing",
+    status:
+      step?.reviewStatus === "accepted" && step.status !== "done"
+        ? plan &&
+          step &&
+          doesFeatureSprintStepRequireSpecUpdate(plan, step) &&
+          !hasApprovedSpecUpdateForStep(plan, step)
+          ? "warning"
+          : "ready"
+        : step?.status === "done"
+          ? "done"
+          : "missing",
     detail:
       step?.reviewStatus === "accepted" && step.status !== "done"
-        ? "Step is accepted and ready to advance."
+        ? plan &&
+          step &&
+          doesFeatureSprintStepRequireSpecUpdate(plan, step) &&
+          !hasApprovedSpecUpdateForStep(plan, step)
+          ? "Review accepted. Approve the revised feature spec, then use Advance step."
+          : "Step is accepted and ready to advance."
         : step?.status === "done"
           ? "Current step is already done."
           : "Advance only after an accepted review."
@@ -547,6 +569,18 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
   }
 
   if (step?.reviewStatus === "accepted" && step.status !== "done") {
+    if (
+      plan &&
+      doesFeatureSprintStepRequireSpecUpdate(plan, step) &&
+      !hasApprovedSpecUpdateForStep(plan, step)
+    ) {
+      return {
+        kind: "approve_feature_spec",
+        label: "Approve revised feature spec",
+        detail:
+          "Spec update imported. Approve the revised feature spec in Start feature (step 1), then use Advance step below."
+      };
+    }
     return {
       kind: "advance_step",
       label: "Advance step",
