@@ -7,6 +7,7 @@ import {
   FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_GPT_OUTPUT,
   FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_NEXT_SLICE_TITLE
 } from "../src/dogfood/featureSprintSpecUpdateSeed";
+import { openFeatureSprintBackroom } from "./helpers/featureSprintBackroom";
 import { seedWebDogfoodState } from "./helpers/webSeed";
 
 test.describe("Feature Sprint spec-update dogfood", () => {
@@ -14,20 +15,18 @@ test.describe("Feature Sprint spec-update dogfood", () => {
     page
   }) => {
     await seedWebDogfoodState(page, createFeatureSprintSpecUpdateDogfoodState());
-
-    await page.goto(`/card/${FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_CARD_ID}`, {
-      waitUntil: "domcontentloaded"
-    });
-    await page.getByTestId("card-detail-mode-backroom").waitFor();
-    await page.getByTestId("card-detail-mode-backroom").click();
-    await page.getByTestId("card-backroom-sprint-metadata").click();
+    await openFeatureSprintBackroom(page, FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_CARD_ID);
 
     const specUpdateInput = page.getByTestId("feature-sprint-spec-update-input");
     await specUpdateInput.scrollIntoViewIfNeeded();
+    await specUpdateInput.click();
     await specUpdateInput.fill(FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_GPT_OUTPUT);
+    await expect(specUpdateInput).toHaveValue(FEATURE_SPRINT_SPEC_UPDATE_DOGFOOD_GPT_OUTPUT);
+    await specUpdateInput.press("Tab");
 
     await page.getByTestId("feature-sprint-spec-update-import").click();
     await expect(page.getByText("Spec update imported.")).toBeVisible();
+    await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible();
 
     await page.getByTestId("feature-sprint-spec-update-summary").click();
     await expect(page.getByTestId("feature-sprint-spec-update-completed-summary")).toHaveText(
@@ -54,6 +53,9 @@ test.describe("Feature Sprint spec-update dogfood", () => {
     await page.getByTestId("feature-sprint-approve-feature-spec").click();
     await expect(page.getByText("Feature spec approved.")).toBeVisible();
     await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toHaveCount(0);
+    await expect(
+      page.getByText("Spec approved and ready for implementation gating.")
+    ).toBeVisible({ timeout: 30_000 });
 
     await page.getByTestId("feature-sprint-advance-step").click();
     await expect(page.getByText("Feature sprint step advanced.")).toBeVisible();

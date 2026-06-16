@@ -2228,6 +2228,7 @@ export default function CardDetailScreen() {
           </Pressable>
         ) : null}
         <TextInput
+          testID="feature-sprint-plan-import-input"
           style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top", marginTop: 8 }]}
           value={planImportText}
           onChangeText={setPlanImportText}
@@ -2235,7 +2236,11 @@ export default function CardDetailScreen() {
           placeholderTextColor={colors.inputPlaceholder}
           multiline
         />
-        <Pressable style={[styles.secondaryAction, { marginTop: 12 }]} onPress={handleImportFeaturePlan}>
+        <Pressable
+          testID="feature-sprint-import-plan"
+          style={[styles.secondaryAction, { marginTop: 12 }]}
+          onPress={handleImportFeaturePlan}
+        >
           <Text style={styles.secondaryActionText}>Import plan</Text>
         </Pressable>
 
@@ -2254,6 +2259,7 @@ export default function CardDetailScreen() {
               </Text>
             ) : null}
             <TextInput
+              testID="feature-sprint-agent-output-input"
               style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
               value={agentOutputText}
               onChangeText={setAgentOutputText}
@@ -2262,6 +2268,7 @@ export default function CardDetailScreen() {
               multiline
             />
             <Pressable
+              testID="feature-sprint-save-agent-output"
               style={[styles.secondaryAction, { marginTop: 12 }]}
               onPress={handleSaveAgentOutput}
             >
@@ -2299,6 +2306,7 @@ export default function CardDetailScreen() {
               </View>
             ) : null}
             <TextInput
+              testID="feature-sprint-review-import-input"
               style={[styles.captureInput, { minHeight: 100, textAlignVertical: "top" }]}
               value={reviewImportText}
               onChangeText={setReviewImportText}
@@ -2307,6 +2315,7 @@ export default function CardDetailScreen() {
               multiline
             />
             <Pressable
+              testID="feature-sprint-import-review-verdict"
               style={[styles.secondaryAction, { marginTop: 12 }]}
               onPress={handleImportReviewVerdict}
             >
