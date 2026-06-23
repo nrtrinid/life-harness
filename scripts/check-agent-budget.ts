@@ -149,7 +149,7 @@ function main(): void {
   if (existsSync(absolute("docs/AGENT_CONTEXT_MAP.md"))) {
     checkLineBudget("docs/AGENT_CONTEXT_MAP.md", 400, "Agent context map");
   } else {
-    warn("docs/AGENT_CONTEXT_MAP.md", "Missing planned context map; PR 1 should add it.");
+    warn("docs/AGENT_CONTEXT_MAP.md", "Missing required agent context map.");
   }
 
   warnLargePlanningDocs();

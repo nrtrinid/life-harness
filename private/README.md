@@ -7,6 +7,7 @@ This folder holds **personal career material** that must never be committed.
 ```text
 private/
   career-source/     # Markdown resume evidence (authoring source)
+  fitness/           # Personal lift / movement reference (Fitness Return card)
 resume_pack/         # Generated Career Pack JSON (repo root, also gitignored)
 ```
 

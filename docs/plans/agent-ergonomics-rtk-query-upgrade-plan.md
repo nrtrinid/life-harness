@@ -33,7 +33,7 @@ Planned package scripts:
 
 ```text
 check:agent-budget
-agent:bootstrap
+agent:preflight
 ```
 
 Default budgets:
@@ -58,7 +58,7 @@ docs/meta/Life_Harness_Compiled_Context.md
 docs/ux/current_ux_audit.md
 ```
 
-`agent:bootstrap` should provide a cheap first move:
+`agent:preflight` should provide a cheap first move:
 
 - current branch and concise git status
 - changed files grouped by area
@@ -248,7 +248,7 @@ Optional skills, only if they stay short:
 Skill rules:
 
 - Skills are short workflow launchers.
-- Skills call `agent:bootstrap`, `agent:map`, `agent:impact`, `agent:tests-for`, and relevant verify commands.
+- Skills call `agent:preflight`, `agent:map`, `agent:impact`, `agent:tests-for`, and relevant verify commands.
 - Skills read docs through `docs/AGENT_CONTEXT_MAP.md`.
 - Skills do not duplicate long docs.
 - Skills do not contain the full product architecture.
@@ -393,7 +393,7 @@ Planned commands:
 
 ```text
 npm run check:agent-budget
-npm run agent:bootstrap
+npm run agent:preflight
 npm run agent:map
 npm run agent:grep
 npm run agent:symbols
@@ -432,8 +432,8 @@ No app-facing route changes are part of this plan.
 PR 0:
 
 - budget checker fixture cases for too-large `AGENTS.md`, oversized skill, missing status, and allowed short docs
-- `.agentignore` respected by `agent:bootstrap` and future agent scripts
-- `agent:bootstrap` handles clean and dirty worktrees without dumping full diffs
+- `.agentignore` respected by `agent:preflight` and future agent scripts
+- `agent:preflight` handles clean and dirty worktrees without dumping full diffs
 
 PR 1:
 
@@ -489,7 +489,7 @@ Docs-only verification:
 
 ## Acceptance Criteria
 
-- A future coding agent can start with `npm run agent:bootstrap`.
+- A future coding agent can start with `npm run agent:preflight`.
 - A future coding agent can identify relevant files and tests without broad repo reading.
 - A future coding agent gets short failure summaries instead of giant terminal dumps.
 - Root `AGENTS.md` stays small and stable.

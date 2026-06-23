@@ -19,18 +19,20 @@ These are guardrails, not perfect laws. The checker enforces only the budgets it
 |------|--------|
 | Root `AGENTS.md` | <= 150 lines |
 | Each `.agents/skills/**/SKILL.md` | <= 120 lines once skills exist |
-| `docs/AGENT_CONTEXT_MAP.md` | <= 400 lines once created |
-| Default `agent:bootstrap` output | <= 200 lines |
+| `docs/AGENT_CONTEXT_MAP.md` | <= 400 lines |
+| Default `agent:preflight` output | <= 200 lines |
 | Generated repo maps | <= 300 lines once implemented |
 | Default-read docs | Avoid or status-review files over 15 KB |
 
 ## Default Agent Flow
 
-1. Run `npm run agent:bootstrap`.
+1. Run `npm run agent:preflight`.
 2. Read root `AGENTS.md` if present.
-3. Use `docs/AGENT_CONTEXT_MAP.md` once PR 1 creates it.
+3. Use `docs/AGENT_CONTEXT_MAP.md`.
 4. Prefer targeted search, symbol summaries, impact maps, and narrow tests.
 5. Do not start RTK, Redux, runtime app, persistence, or Raw Lab streaming work unless the ticket explicitly asks for it.
+
+Bootstrap compatibility: if you need the old bootstrap-style repo orientation, run `npm run agent:preflight -- --bootstrap`.
 
 ## Output Policy
 

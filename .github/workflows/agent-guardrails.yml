@@ -1,0 +1,36 @@
+name: agent-guardrails
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  agent-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Agent budget check
+        run: npm run check:agent-budget
+
+      - name: Boundary check
+        run: npm run check:boundaries
+
+      - name: Agent auto-check (dry run)
+        run: npm run agent:auto-check -- --dry-run

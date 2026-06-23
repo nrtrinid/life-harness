@@ -4,6 +4,7 @@ import {
   gitStatusLines,
   likelyTestsFor,
   packageScripts,
+  parseArgs,
   parseTaskBlocks,
   readAgentIgnore,
   taskAreaForPath,
@@ -11,6 +12,7 @@ import {
 } from "./agent-utils";
 import { basename } from "node:path";
 import { REPO_ROOT } from "./agent-utils";
+import { execSync } from "node:child_process";
 
 const STATUS_LIMIT = 30;
 const TEST_LIMIT = 20;
@@ -60,7 +62,7 @@ function likelyTests(files: string[]): string[] {
 
 function recommendedFirstCommands(areas: string[], tests: string[]): string[] {
   const scripts = packageScripts();
-  const commands = ["npm run agent:bootstrap"];
+  const commands: string[] = [];
   for (const area of areas) {
     if (area !== "unknown/mixed") {
       commands.push(`npm run agent:map -- --task ${area}`);
@@ -91,7 +93,21 @@ function printList(items: string[], empty: string, limit: number): void {
   }
 }
 
+function printBootstrapOrientation(): void {
+  // Intentionally uses the existing bootstrap output for backwards-compatible repo orientation.
+  // We keep bootstrap as an internal helper surfaced via `agent:preflight -- --bootstrap`.
+  const output = execSync("npm run agent:bootstrap", {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  console.log(output.trimEnd());
+}
+
 function main(): void {
+  const { flags } = parseArgs(process.argv.slice(2).filter((arg) => arg !== "--"));
+  const includeBootstrap = flags.has("bootstrap");
+
   const repoName = basename(REPO_ROOT);
   const branch = currentBranch();
   const statuses = gitStatusLines();
@@ -123,8 +139,14 @@ function main(): void {
   console.log("");
 
   console.log("## Recommended First Commands");
-  for (const command of recommendedFirstCommands(areas, tests)) {
-    console.log(`- ${command}`);
+  console.log("- npm run agent:preflight (this command)");
+  for (const command of recommendedFirstCommands(areas, tests)) console.log(`- ${command}`);
+  if (includeBootstrap) {
+    console.log("");
+    console.log("## Bootstrap Orientation (compat helper)");
+    printBootstrapOrientation();
+  } else {
+    console.log("- optional: npm run agent:preflight -- --bootstrap (compat repo orientation)");
   }
   console.log("");
 

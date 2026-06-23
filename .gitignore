@@ -20,6 +20,9 @@ private/**
 !private/career-source/
 private/career-source/**
 !private/career-source/README.md
+!private/fitness/
+private/fitness/**
+!private/fitness/README.md
 resume_pack/
 exports/life_harness_career_pack*.json
 

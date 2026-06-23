@@ -2,6 +2,8 @@
 
 Use this file after reading root `AGENTS.md` and running or consulting `npm run agent:preflight`.
 
+Agent prompts: [`../prompts/agent_task_prompt_template.md`](../prompts/agent_task_prompt_template.md) (default implementation; context scout for uncertain work).
+
 This is a router, not a full architecture doc. Read only the task block that matches the ticket, then inspect the listed files directly. Respect `.agentignore` and avoid archived/planning/historical docs unless a task explicitly asks for them.
 
 Useful first commands: `npm run agent:preflight`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:tests-for -- --changed`, and `npm run agent:grep -- "<query>"`. Use `npm run agent:auto-check` near the end of a changed-file task and `npm run check:boundaries` before boundary-sensitive changes. Optional project hooks are documented in `docs/CODEX_HOOKS.md`.
@@ -322,7 +324,7 @@ LIKELY_TESTS:
 VERIFY:
 - `npm run check:agent-budget`
 - `npm run check:boundaries`
-- `npm run agent:bootstrap`
+- `npm run agent:preflight`
 - `npm run agent:impact -- --changed`
 - `npm run agent:review-packet`
 - `npm run codex:hooks:smoke` for hook changes

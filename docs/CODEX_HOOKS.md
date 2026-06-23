@@ -33,7 +33,7 @@ Use overrides only when the task explicitly scopes that risk, and call it out in
 Hooks are guardrails, not replacements for:
 
 ```bash
-npm run agent:bootstrap
+npm run agent:preflight
 npm run agent:impact
 npm run agent:review-packet
 npm run check:boundaries

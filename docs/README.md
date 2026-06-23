@@ -8,6 +8,7 @@
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — local dev setup
 - [`AGENT_BUDGETS.md`](AGENT_BUDGETS.md) — token budgets and bootstrap guardrails for coding agents
 - [`AGENT_CONTEXT_MAP.md`](AGENT_CONTEXT_MAP.md) — task-scoped docs/files/tests router for coding agents
+- [`../prompts/agent_task_prompt_template.md`](../prompts/agent_task_prompt_template.md) — default implementation + context-scout agent prompts
 - [`CODEX_HOOKS.md`](CODEX_HOOKS.md) — optional local Codex hook guardrails
 
 Agent quickstart: `npm run agent:preflight`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:auto-check -- --dry-run`, and `npm run agent:review-packet`. Optional hook smoke test: `npm run codex:hooks:smoke`. Compact verification logs are written by `npm run agent:typecheck`, `npm run agent:test`, `npm run agent:verify`, and `npm run agent:auto-check` to `tmp/agent-logs/`. Human verification commands include `npm run verify:core`, `npm run verify:job-scout`, `npm run verify:app`, and `npm run verify`.

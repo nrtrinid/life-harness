@@ -124,17 +124,14 @@ function main(): void {
   console.log("## Pointers");
   console.log("- Plan: docs/plans/agent-ergonomics-rtk-query-upgrade-plan.md");
   console.log("- Budgets: docs/AGENT_BUDGETS.md");
-  console.log(
-    existsSync(resolve(REPO_ROOT, "docs/AGENT_CONTEXT_MAP.md"))
-      ? "- Context map: docs/AGENT_CONTEXT_MAP.md"
-      : "- Context map: docs/AGENT_CONTEXT_MAP.md (planned; may not exist yet)"
-  );
+  console.log("- Context map: docs/AGENT_CONTEXT_MAP.md");
   if (existsSync(resolve(REPO_ROOT, "AGENTS.md"))) {
     console.log("- Root rules: AGENTS.md");
   }
 
   console.log("");
   console.log("## Suggested First Commands");
+  console.log("- npm run agent:preflight");
   console.log("- npm run check:agent-budget");
   if (scripts["verify:core"]) {
     console.log("- npm run verify:core");
@@ -163,7 +160,7 @@ function main(): void {
   console.log("");
   console.log("## Reminders");
   console.log("- Read root AGENTS.md if present.");
-  console.log("- Use docs/AGENT_CONTEXT_MAP.md once it exists.");
+  console.log("- Use docs/AGENT_CONTEXT_MAP.md.");
   console.log("- Prefer targeted search and narrow tests before broad repo reading.");
   console.log("- Do not start RTK, Redux, runtime app, persistence, or Raw Lab streaming work unless the ticket says so.");
 }

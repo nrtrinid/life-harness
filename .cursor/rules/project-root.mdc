@@ -1,0 +1,19 @@
+---
+description: Life Harness project-root guardrails and canonical agent entry
+alwaysApply: true
+---
+
+## Canonical agent entry
+- Run `npm run agent:preflight` first.
+- Do not treat `agent:bootstrap` as the canonical entrypoint.
+## Bootstrap compatibility
+- Keep `npm run agent:bootstrap` as a backwards-compatible/internal helper.
+- If you need the old bootstrap-style repo orientation, use `npm run agent:preflight -- --bootstrap`.
+## Guardrails / boundaries
+- Keep `src/core` UI-independent.
+- `app/` and `src/` must not import from `services/`.
+- Raw Lab runtime must not import board state/actions/provider/persistence.
+- Ask Harness runtime must not import Raw Lab personality/thread internals.
+## Cheap checks
+- `npm run check:agent-budget`
+- `npm run check:boundaries`

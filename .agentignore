@@ -28,3 +28,8 @@ services/ai-gateway/evals/
 docs/meta/Life_Harness_Compiled_Context.md
 docs/ux/current_ux_audit.md
 docs/plans/archive/
+
+# Private/personal and large planning/meta docs are opt-in.
+private/
+docs/plans/
+docs/meta/

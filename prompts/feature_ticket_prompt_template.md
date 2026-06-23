@@ -1,6 +1,8 @@
 # Feature Ticket Prompt Template
 
-Use this for small Codex tasks after the initial scaffold.
+Use this for small Codex **v0.1 feature** tasks after the initial scaffold.
+
+For general implementation or context-scout prompts, use [`agent_task_prompt_template.md`](agent_task_prompt_template.md).
 
 ```text
 You are working on Life Harness v0.1.
