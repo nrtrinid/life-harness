@@ -230,6 +230,9 @@ Failure summaries:
 
 ## PR 3: Repo-Local Codex Skills
 
+**Status:** Implemented in the PR 3 repo-local skills slice.
+
+
 Add a small set of repo skills after the deterministic scripts exist.
 
 Required skills:

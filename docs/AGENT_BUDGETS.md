@@ -18,7 +18,7 @@ These are guardrails, not perfect laws. The checker enforces only the budgets it
 | Item | Target |
 |------|--------|
 | Root `AGENTS.md` | <= 150 lines |
-| Each `.agents/skills/**/SKILL.md` | <= 120 lines once skills exist |
+| Each `.agents/skills/**/SKILL.md` | <= 120 lines (CI-enforced) |
 | `docs/AGENT_CONTEXT_MAP.md` | <= 400 lines |
 | Default `agent:preflight` output | <= 200 lines |
 | Generated repo maps | <= 300 lines once implemented |

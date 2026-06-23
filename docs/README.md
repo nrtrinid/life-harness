@@ -53,6 +53,7 @@ Agent quickstart: `npm run agent:preflight`, `npm run agent:map`, `npm run agent
 
 ## Agent commands
 
+- [`.agents/skills/`](../.agents/skills/) — Codex workflow skills (`life-harness-ticket`, `job-scout-adapter`, `raw-lab-containment`, `ask-harness-threading`, `agent-review`)
 - [`AGENT_CONTEXT_MAP.md`](AGENT_CONTEXT_MAP.md) - narrow task router for agents
 - [`CODEX_HOOKS.md`](CODEX_HOOKS.md) - optional project-local hook guardrails
 - `npm run agent:preflight` - compact first-move packet for changed files and likely task areas

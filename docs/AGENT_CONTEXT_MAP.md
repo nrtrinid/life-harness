@@ -8,6 +8,10 @@ This is a router, not a full architecture doc. Read only the task block that mat
 
 Useful first commands: `npm run agent:preflight`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:tests-for -- --changed`, and `npm run agent:grep -- "<query>"`. Use `npm run agent:auto-check` near the end of a changed-file task and `npm run check:boundaries` before boundary-sensitive changes. Optional project hooks are documented in `docs/CODEX_HOOKS.md`.
 
+## Skills (Codex)
+
+`.agents/skills/`: `life-harness-ticket` → `core-board-product-logic`; `job-scout-adapter` → `career-job-scout`; `raw-lab-containment` → `raw-lab-containment`; `ask-harness-threading` → `ask-harness`; `agent-review` → `docs-planning`.
+
 ## Task: core-board-product-logic
 
 READ_FIRST:

@@ -86,7 +86,7 @@ Resume automation unlocks after 5 manual career actions.
 ## Agent Workflow
 For every task:
 
-Prompt templates: [`prompts/agent_task_prompt_template.md`](prompts/agent_task_prompt_template.md) (default implementation + context scout).
+Prompt templates: [`prompts/agent_task_prompt_template.md`](prompts/agent_task_prompt_template.md) (default implementation + context scout). Optional Codex workflow skills: `.agents/skills/`.
 
 1. Read `docs/01_final_design_doc.md`, `docs/02_v0_1_scope.md`, and this `AGENTS.md`.
 2. Run or consult `npm run agent:preflight`, then use `docs/AGENT_CONTEXT_MAP.md` for task-specific docs/files/tests.

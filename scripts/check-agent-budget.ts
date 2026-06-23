@@ -99,7 +99,25 @@ function walkFiles(root: string, predicate: (path: string) => boolean): string[]
   return results.sort();
 }
 
+const REQUIRED_SKILLS = [
+  "life-harness-ticket",
+  "job-scout-adapter",
+  "raw-lab-containment",
+  "ask-harness-threading",
+  "agent-review"
+] as const;
+
+function checkRequiredSkills(): void {
+  for (const skill of REQUIRED_SKILLS) {
+    const skillPath = `.agents/skills/${skill}/SKILL.md`;
+    if (!existsSync(absolute(skillPath))) {
+      fail(skillPath, `Missing required repo skill: ${skill}.`);
+    }
+  }
+}
+
 function checkSkillBudgets(): void {
+  checkRequiredSkills();
   const skillFiles = walkFiles(".agents/skills", (path) => path.endsWith("SKILL.md"));
   for (const file of skillFiles) {
     const lines = lineCount(file);
