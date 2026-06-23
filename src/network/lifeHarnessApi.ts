@@ -137,6 +137,7 @@ export const {
   useGetGatewayHealthBudgetQuery,
   useLazyGetGatewayHealthBudgetQuery,
   useCheckJobScoutRunnerHealthQuery,
+  useLazyCheckJobScoutRunnerHealthQuery,
   useStartJobScoutRunnerMutation,
   useRunJobSourceMutation,
   useAskChatHarnessMutation,

@@ -3,6 +3,7 @@ export {
   useAskChatHarnessMutation,
   useAskRawLabMutation,
   useCheckJobScoutRunnerHealthQuery,
+  useLazyCheckJobScoutRunnerHealthQuery,
   useGetAiJobQuery,
   useGetGatewayHealthBudgetQuery,
   useLazyGetGatewayHealthBudgetQuery,

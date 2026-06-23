@@ -16,7 +16,7 @@ Reducer and provider logic now live under `src/state/lifeHarness/`:
 | `proofReducer.ts` | Proof / playback | Domain marker; proof/log mutations still flow through board + harness core actions today |
 | `rootReducer.ts` | Composition | Delegates to domain reducers; handles `state_replaced` |
 | `*ProviderActions.ts` | Provider edge | Domain-grouped dispatch helpers used by `LifeHarnessProvider` |
-| `jobSourceRunActions.ts` | Career runner | Async batch source runs (unchanged behavior) |
+| `LifeHarnessState.tsx` (inline) | Career runner | Async batch source runs via RTK `useRunJobSourceMutation` (unchanged behavior) |
 
 `src/state/LifeHarnessState.tsx` remains the public entry point (thin composition layer — **~108 lines**, down from ~1,203 before v0.2 integration):
 

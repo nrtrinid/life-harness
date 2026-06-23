@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  checkJobScoutRunnerHealth,
-  requestJobScoutRunnerStart
-} from "../core/jobScoutRunnerClient";
+  lifeHarnessApi,
+  lifeHarnessNetworkStore,
+  useLazyCheckJobScoutRunnerHealthQuery,
+  useStartJobScoutRunnerMutation
+} from "../network";
 
 const HEALTH_TTL_MS = 30_000;
 
@@ -23,11 +25,18 @@ export function useRunnerHealth(): RunnerHealthState {
   const [checking, setChecking] = useState(true);
   const [starting, setStarting] = useState(false);
   const mountedRef = useRef(true);
+  const [triggerHealthCheck] = useLazyCheckJobScoutRunnerHealthQuery();
+  const [startJobScoutRunner] = useStartJobScoutRunnerMutation();
 
   const refresh = useCallback(async () => {
     const now = Date.now();
     if (sessionRunnerOk !== null && now - sessionCheckedAt < HEALTH_TTL_MS) {
-      const cached = { ok: sessionRunnerOk, message: sessionRunnerOk ? "Runner awake on 127.0.0.1:8122." : "Local Job Scout Runner is not running." };
+      const cached = {
+        ok: sessionRunnerOk,
+        message: sessionRunnerOk
+          ? "Runner awake on 127.0.0.1:8122."
+          : "Local Job Scout Runner is not running."
+      };
       if (mountedRef.current) {
         setStatus(cached);
         setChecking(false);
@@ -36,28 +45,43 @@ export function useRunnerHealth(): RunnerHealthState {
     }
 
     setChecking(true);
-    const result = await checkJobScoutRunnerHealth();
-    sessionRunnerOk = result.ok;
-    sessionCheckedAt = Date.now();
-    if (mountedRef.current) {
-      setStatus(result);
-      setChecking(false);
+    try {
+      const result = await triggerHealthCheck(undefined, true).unwrap();
+      sessionRunnerOk = result.ok;
+      sessionCheckedAt = Date.now();
+      if (mountedRef.current) {
+        setStatus(result);
+        setChecking(false);
+      }
+      return result;
+    } catch {
+      const failed = { ok: false, message: "Local Job Scout Runner is not running." };
+      sessionRunnerOk = false;
+      sessionCheckedAt = Date.now();
+      if (mountedRef.current) {
+        setStatus(failed);
+        setChecking(false);
+      }
+      return failed;
     }
-    return result;
-  }, []);
+  }, [triggerHealthCheck]);
 
   const startRunner = useCallback(async () => {
     setStarting(true);
-    const start = await requestJobScoutRunnerStart();
-    if (!start.ok) {
+    try {
+      const start = await startJobScoutRunner().unwrap();
+      if (!start.ok) {
+        return { ok: false, message: start.message };
+      }
+      sessionCheckedAt = 0;
+      const health = await refresh();
+      return { ok: health.ok, message: health.ok ? start.message : health.message };
+    } catch {
+      return { ok: false, message: "Could not start Job Scout Runner." };
+    } finally {
       setStarting(false);
-      return { ok: false, message: start.message };
     }
-    sessionCheckedAt = 0;
-    const health = await refresh();
-    setStarting(false);
-    return { ok: health.ok, message: health.ok ? start.message : health.message };
-  }, [refresh]);
+  }, [refresh, startJobScoutRunner]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -79,4 +103,5 @@ export function useRunnerHealth(): RunnerHealthState {
 export function invalidateRunnerHealthCache(): void {
   sessionRunnerOk = null;
   sessionCheckedAt = 0;
+  lifeHarnessNetworkStore.dispatch(lifeHarnessApi.util.invalidateTags(["JobScoutRunner"]));
 }

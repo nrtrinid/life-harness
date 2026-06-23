@@ -25,7 +25,7 @@ The module **composes** existing primitives — it does not replace them:
 
 Wired consumers:
 
-- [`jobSourceRunActions.ts`](../src/state/lifeHarness/jobSourceRunActions.ts) — empty batch messages
+- [`LifeHarnessState.tsx`](../src/state/LifeHarnessState.tsx) — empty batch messages and batch run orchestration
 - [`JobBoardFindTab.tsx`](../src/components/career/jobBoard/JobBoardFindTab.tsx) — primary panel action/title/reason
 - [`app/job-sources.tsx`](../app/job-sources.tsx) — per-source status line and last-run detail
 
@@ -69,7 +69,7 @@ Empty messages (unchanged strings):
 
 ## Preparation for future scheduling
 
-This boundary isolates **decision/copy** from **execution**. A future scheduler can call the same helpers to decide what to run and what to show, while `jobSourceRunActions` or a background worker performs runs — without scattering phase logic across UI components.
+This boundary isolates **decision/copy** from **execution**. A future scheduler can call the same helpers to decide what to run and what to show, while `LifeHarnessState` runner batch logic or a background worker performs runs — without scattering phase logic across UI components.
 
 Scheduling is **not** implemented in v0.2.
 

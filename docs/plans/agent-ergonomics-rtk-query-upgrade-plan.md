@@ -1,6 +1,6 @@
 # Agent Ergonomics + RTK Query Upgrade Plan
 
-**Status:** Planning plus agent tooling in progress. No runtime app implementation in this ticket.  
+**Status:** Agent tooling complete; RTK non-streaming call-site migration complete for scoped flows.  
 **Goal:** Reduce coding-agent token spend and improve repo operability for future work.  
 **Important framing:** RTK Query improves network/request ergonomics and future discoverability, but it is not the main token saver by itself. The main token savers are the agent control plane: budgets, bootstrap packets, task maps, bounded search, output diet wrappers, boundary checks, failure summaries, and review packets.
 
@@ -325,7 +325,7 @@ Every subagent request should include:
 
 ## PR 4: RTK Query Foundation
 
-**Status:** PR 4A implemented as a network-only foundation. Added `src/network/` store/API exports and root provider wiring while keeping `LifeHarnessProvider` as owner of local board/product state. No call sites are migrated yet.
+**Status:** PR 4A implemented. `src/network/` store/API exports and root provider wiring are in place; non-streaming call sites use RTK hooks/helpers while `LifeHarnessProvider` remains owner of local board/product state.
 
 Add RTK Query as a network/request ergonomics layer only.
 
@@ -364,6 +364,9 @@ RTK Query non-goals:
 - no product behavior change
 
 ## PR 5: RTK Query Migration
+
+**Status:** Implemented in the PR 5 finish-gaps slice (runner health/start via RTK; remaining call sites migrated).
+
 
 Migrate non-streaming request flows gradually, keeping local board state in `LifeHarnessProvider`.
 

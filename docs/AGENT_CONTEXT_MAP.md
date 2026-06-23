@@ -394,4 +394,4 @@ BOUNDARIES:
 - existing pure request/parse clients stay available
 - app/src must not import from `services/`
 
-NOTES: RTK Query helps future agents find network calls; it is not the main token saver. Do not add RTK dependencies until PR 4.
+NOTES: RTK Query helps future agents find network calls; non-streaming app requests go through `src/network/` hooks/helpers while core `*Client.ts` files remain parse/fetch implementations.

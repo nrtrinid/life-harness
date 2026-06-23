@@ -10,8 +10,8 @@ import { styles } from "../../styles";
 import { buildCareerHubSummary } from "../../../core/careerHub";
 import { buildCareerPipelineState } from "../../../core/careerPipeline";
 import { resolveJobBoardTab, type JobBoardTab } from "../../../core/jobBoardTab";
-import { requestJobScoutRunnerStart } from "../../../core/jobScoutRunnerClient";
 import { useRunnerHealth } from "../../../hooks/useRunnerHealth";
+import { useStartJobScoutRunnerMutation } from "../../../network";
 import { useLifeHarness } from "../../../state/LifeHarnessState";
 import { JobBoardAddJobSheet } from "./JobBoardAddJobSheet";
 import { JobBoardApplyTab } from "./JobBoardApplyTab";
@@ -45,6 +45,7 @@ export function JobBoardScreen() {
     dismissStarterSourceAnnouncement
   } = useLifeHarness();
   const { ok: runnerOk } = useRunnerHealth();
+  const [startJobScoutRunner] = useStartJobScoutRunnerMutation();
   const devAutoStartAttempted = useRef(false);
 
   const [notice, setNotice] = useState<NoticeState | null>(null);
@@ -76,8 +77,8 @@ export function JobBoardScreen() {
       return;
     }
     devAutoStartAttempted.current = true;
-    void requestJobScoutRunnerStart();
-  }, [runnerOk]);
+    void startJobScoutRunner();
+  }, [runnerOk, startJobScoutRunner]);
 
   function selectTab(tab: JobBoardTab, options?: { clearAdd?: boolean; clearPaste?: boolean }) {
     setHandoff(null);
