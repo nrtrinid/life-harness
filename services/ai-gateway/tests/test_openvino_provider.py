@@ -96,6 +96,75 @@ def test_openvino_rejects_overlong_input(openvino_settings):
     assert "SCOUT_MAX_INPUT_CHARS" in exc.value.message
 
 
+def test_openvino_native_chat_used_for_deep_draft_only(openvino_settings, monkeypatch):
+    from app.models import ChatHarnessRequest, HarnessContext
+
+    native_calls: list[str] = []
+    generate_calls: list[str] = []
+
+    openvino_settings = Settings(
+        provider=openvino_settings.provider,
+        host=openvino_settings.host,
+        port=openvino_settings.port,
+        model_path=openvino_settings.model_path,
+        model_id=openvino_settings.model_id,
+        device=openvino_settings.device,
+        max_new_tokens=openvino_settings.max_new_tokens,
+        timeout_seconds=openvino_settings.timeout_seconds,
+        max_input_chars=openvino_settings.max_input_chars,
+        raw_lab_max_input_chars=openvino_settings.raw_lab_max_input_chars,
+        temperature=openvino_settings.temperature,
+        raw_lab_max_new_tokens=openvino_settings.raw_lab_max_new_tokens,
+        raw_lab_temperature=openvino_settings.raw_lab_temperature,
+        raw_lab_repetition_penalty=openvino_settings.raw_lab_repetition_penalty,
+        dev_cors=openvino_settings.dev_cors,
+        deep_enabled=True,
+        chat_harness_native_chat=True,
+        deep_max_extra_passes=2,
+        models_config_path=openvino_settings.models_config_path,
+        warm_slots=openvino_settings.warm_slots,
+        critic_slot=openvino_settings.critic_slot,
+        critic_model_path=openvino_settings.critic_model_path,
+        llama_base_url=openvino_settings.llama_base_url,
+        llama_timeout_seconds=openvino_settings.llama_timeout_seconds,
+        llama_api_key=openvino_settings.llama_api_key,
+        llama_base_url_explicit=openvino_settings.llama_base_url_explicit,
+        critic_runtime=openvino_settings.critic_runtime,
+        critic_base_url=openvino_settings.critic_base_url,
+        critic_model=openvino_settings.critic_model,
+        critic_timeout_seconds=openvino_settings.critic_timeout_seconds,
+        critic_heavy=openvino_settings.critic_heavy,
+        debug_thinking_trace=openvino_settings.debug_thinking_trace,
+        critic_context_max_chars=openvino_settings.critic_context_max_chars,
+        real_model_bench_enabled=openvino_settings.real_model_bench_enabled,
+    )
+    provider = OpenVinoProvider(openvino_settings)
+    monkeypatch.setattr(provider, "_ensure_pipeline", lambda: None)
+
+    def _fake_generate(prompt: str) -> str:
+        generate_calls.append(prompt)
+        return '{"needs_revision": false, "checks": [{"id": "no_issue", "severity": "info", "message": "ok"}], "revision_instruction": ""}'
+
+    def _fake_native(_request, fallback_prompt: str) -> str:
+        native_calls.append(fallback_prompt)
+        return '{"answer":"draft","used_context":false,"confidence_notes":[],"safety_notes":[]}'
+
+    monkeypatch.setattr(provider, "_generate", _fake_generate)
+    monkeypatch.setattr(provider, "_generate_chat_harness_native", _fake_native)
+
+    request = ChatHarnessRequest(
+        message="test deep",
+        mode="general",
+        sensitivity="S1",
+        context=HarnessContext(cards=[], logs=[], proof_items=[], recent_analyses=[], decisions=[]),
+        conversation_history=[],
+        reasoning_depth="deep",
+    )
+    response = provider._run_chat_harness_deep(request)
+    assert response.answer == "draft"
+    assert len(native_calls) == 1
+    assert not any("Critic verdict:" in item for item in native_calls)
+
 def test_raw_lab_generation_config_sets_repetition_penalty_when_supported(openvino_settings):
     import os
 

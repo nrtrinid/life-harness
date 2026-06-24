@@ -548,6 +548,7 @@ class MockProvider:
     def _run_chat_harness_deep(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
         from app.chat_harness_critic import append_deep_critic_note
         from app.chat_harness_deep import run_chat_harness_deep
+        from app.chat_harness_draft_generate import build_chat_harness_deep_draft_generate
         from app.config import get_settings
         from app.critic_backend import get_critic_backend
         from app.prompt_loader import build_chat_harness_prompt
@@ -591,7 +592,7 @@ class MockProvider:
 
         simulate_draft_repair = request.message.lower().startswith("deep-draft-repair")
 
-        def draft_generate(generation_prompt: str) -> str:
+        def _generate_non_native(generation_prompt: str) -> str:
             nonlocal stored_draft
             if "Critic verdict:" in generation_prompt:
                 assert stored_draft is not None and last_verdict
@@ -605,6 +606,20 @@ class MockProvider:
             if simulate_draft_repair:
                 return "not valid json"
             return stored_draft.model_dump_json()
+
+        def _generate_native(_request: ChatHarnessRequest, _fallback_prompt: str) -> str:
+            nonlocal stored_draft
+            stored_draft = self._build_chat_harness_mock_draft(request)
+            if simulate_draft_repair:
+                return "not valid json"
+            return stored_draft.model_dump_json()
+
+        draft_generate = build_chat_harness_deep_draft_generate(
+            settings=settings,
+            request=request,
+            generate=_generate_non_native,
+            generate_native=_generate_native,
+        )
 
         draft_repair_generate = None
         if simulate_draft_repair:
