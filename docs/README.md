@@ -23,7 +23,9 @@ Agent quickstart: `npm run agent:preflight`, `npm run agent:map`, `npm run agent
 | Memory Bank | [`memory-bank-v0.1.md`](memory-bank-v0.1.md) |
 | AI workflow map | [`ai-workflows-current.md`](ai-workflows-current.md) |
 | Agent spine inventory / policy resolver, guards, and audit | [`agent-spine-inventory-v0.1.md`](agent-spine-inventory-v0.1.md) |
-| Feature Sprint / builder loop | [`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md) (authority), [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md), [`feature-sprint-flow-guide-v0.3.md`](feature-sprint-flow-guide-v0.3.md), `feature-sprint-*.md` slices |
+| Feature Sprint / builder loop | [`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md) (authority), [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md), [`feature-sprint-flow-guide-v0.3.md`](feature-sprint-flow-guide-v0.3.md), [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md), `feature-sprint-*.md` slices |
+
+**Feature Sprint status (mid-v2):** Living spec, typed handoffs, proof normalization, spec updates, and next-slice adoption are partially or mostly landed. The next architectural jump is **`currentSlice` + phase machine**, then risk-tier routing and UI consolidation around **Next Handoff**. Codex is optional — not a structural dependency.
 | Ask Harness | [`ask-harness-v0.1.md`](ask-harness-v0.1.md) |
 | Thread intelligence | [`conversation-thread-intelligence.md`](conversation-thread-intelligence.md) |
 | Raw Lab | [`raw-lab-architecture.md`](raw-lab-architecture.md), [`raw-lab-thread-state.md`](raw-lab-thread-state.md), [`raw-lab-deep.md`](raw-lab-deep.md), [`raw-lab-emergence-review-pack.md`](raw-lab-emergence-review-pack.md), [`raw-lab-benchmark-runner.md`](raw-lab-benchmark-runner.md) |
@@ -44,18 +46,32 @@ Agent quickstart: `npm run agent:preflight`, `npm run agent:map`, `npm run agent
 - Pattern extraction: [`plans/odysseus-patterns-repo-map-v0.1.md`](plans/odysseus-patterns-repo-map-v0.1.md)
 - Evals / agents: [`plans/local-ai-evals-v0.1.md`](plans/local-ai-evals-v0.1.md), [`plans/agent-instructions-local-ai.md`](plans/agent-instructions-local-ai.md)
 - Feature Sprint roadmap: [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md)
+- Feature Sprint v2 living spec: [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md)
 - Board usability (dogfood / exec-function loop): [`plans/board-usability-v0.1.md`](plans/board-usability-v0.1.md)
 - Career hub integration (UX-007 / route unification): [`plans/career-hub-integration-v0.2.md`](plans/career-hub-integration-v0.2.md)
 - Agent ergonomics / RTK Query control plane: [`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)
 - Agent token reduction dogfood: [`plans/agent-token-reduction-dogfood-v0.1.md`](plans/agent-token-reduction-dogfood-v0.1.md)
+- Cross-repo agent ergonomics: [`STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md`](STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md)
+- Cross-repo audit runbook: [`AGENT_CROSS_REPO_AUDIT.md`](AGENT_CROSS_REPO_AUDIT.md)
 - [`10_future_roadmap.md`](10_future_roadmap.md)
 - Recovery audit: [`plans/stash-recovery-a770-thinking-audit.md`](plans/stash-recovery-a770-thinking-audit.md)
 
 ## Agent commands
 
+### Portable contract vs Life Harness extras
+
+Cross-repo goal: same first-five-minutes contract (`life-harness`, `text-adventure`, `ev-tracker`), not identical scripts. Full split: [`STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md`](STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md).
+
+- **Required first moves:** `AGENTS.md` → `npm run agent:preflight` → matching block in `AGENT_CONTEXT_MAP.md`; finish with `agent:auto-check` and `check:boundaries` when relevant.
+- **Portable pattern:** entrypoint, context map, preflight, changed-file test routing, no-touch zones, handoff shape (Changed / Tests / Docs / Risks / Did not touch / Next safe step).
+- **Life Harness extras (optional):** skills, Codex hooks, review packets, budget-depth checks, and the broader `agent:*` helper suite.
+
 - [`.agents/skills/`](../.agents/skills/) — Codex workflow skills (`life-harness-ticket`, `job-scout-adapter`, `raw-lab-containment`, `ask-harness-threading`, `agent-review`)
 - [`AGENT_CONTEXT_MAP.md`](AGENT_CONTEXT_MAP.md) - narrow task router for agents
 - [`CODEX_HOOKS.md`](CODEX_HOOKS.md) - optional project-local hook guardrails
+- `npm run check:agent-budget` - line/skill/context-map budgets
+- `npm run check:agent-commands` - smoke portable agent scripts and scan docs for stale npm script references
+- `npm run audit:agent-ergonomics` - portable-contract self-audit (CI); use `-- --all` for manual sibling pass
 - `npm run agent:preflight` - compact first-move packet for changed files and likely task areas
 - `src/network/` - RTK Query network layer; app UI uses hooks/helpers here for non-streaming requests
 - `npm run agent:auto-check` - changed-file-aware compact verification selector

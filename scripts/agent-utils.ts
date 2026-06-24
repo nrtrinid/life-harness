@@ -316,6 +316,16 @@ export function likelyTestsFor(sourcePath: string): { existing: string[]; possib
   };
 }
 
+export function collectLikelyTestsForFiles(files: string[]): string[] {
+  const tests = new Set<string>();
+  for (const file of files) {
+    for (const test of likelyTestsFor(file).existing) {
+      tests.add(test);
+    }
+  }
+  return Array.from(tests).sort();
+}
+
 export function taskAreaForPath(path: string): string {
   const p = repoPath(path);
   if (p.startsWith("services/ai-gateway/")) return "ai-gateway";

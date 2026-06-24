@@ -26,7 +26,7 @@ npm run agent:tests-for -- --changed
 
 ## Read via context map
 
-Use [`docs/AGENT_CONTEXT_MAP.md`](../../../docs/AGENT_CONTEXT_MAP.md) task block `career-job-scout` for READ_FIRST, LIKELY_FILES, LIKELY_TESTS, DO_NOT_READ, and BOUNDARIES.
+Use [`docs/AGENT_CONTEXT_MAP.md`](../../../docs/AGENT_CONTEXT_MAP.md) task block `career-job-scout` — confirm `Use when:` matches, then READ_FIRST, LIKELY_FILES, LIKELY_TESTS, DO_NOT_READ, and BOUNDARIES.
 
 Authority docs typically include `docs/career-hub-v0.1.md` and relevant `docs/job-scout-*.md`. Runner-only work: `services/job-scout-runner/README.md`.
 

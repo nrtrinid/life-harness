@@ -4,15 +4,18 @@ Use this file after reading root `AGENTS.md` and running or consulting `npm run 
 
 Agent prompts: [`../prompts/agent_task_prompt_template.md`](../prompts/agent_task_prompt_template.md) (default implementation; context scout for uncertain work).
 
-This is a router, not a full architecture doc. Read only the task block that matches the ticket, then inspect the listed files directly. Respect `.agentignore` and avoid archived/planning/historical docs unless a task explicitly asks for them.
+Router only — read the matching task block; respect `.agentignore`. Portable contract: [`STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md`](STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md). Task block shape: `Use when:` → `READ_FIRST:` → `LIKELY_FILES:` → `LIKELY_TESTS:` → `VERIFY:` → `DO_NOT_READ:` → `BOUNDARIES:` → `NOTES:`.
 
-Useful first commands: `npm run agent:preflight`, `npm run agent:map`, `npm run agent:impact -- --changed`, `npm run agent:tests-for -- --changed`, and `npm run agent:grep -- "<query>"`. Use `npm run agent:auto-check` near the end of a changed-file task and `npm run check:boundaries` before boundary-sensitive changes. Optional project hooks are documented in `docs/CODEX_HOOKS.md`.
+Required: `agent:preflight`, `agent:auto-check` (when changed), `check:boundaries` (boundary work). Optional: `agent:map`, `agent:impact`, `agent:tests-for`, `agent:grep`, `agent:review-packet`, `.agents/skills/`, `docs/CODEX_HOOKS.md`.
 
 ## Skills (Codex)
 
 `.agents/skills/`: `life-harness-ticket` → `core-board-product-logic`; `job-scout-adapter` → `career-job-scout`; `raw-lab-containment` → `raw-lab-containment`; `ask-harness-threading` → `ask-harness`; `agent-review` → `docs-planning`.
 
 ## Task: core-board-product-logic
+
+Use when:
+- Board/core/state/data product rules: actions, guards, parsing, briefing, warmth, recovery, seed state (default core ticket).
 
 READ_FIRST:
 - `AGENTS.md`
@@ -21,25 +24,12 @@ READ_FIRST:
 - `docs/05_product_rules.md`
 
 LIKELY_FILES:
-- `src/core/types.ts`
-- `src/core/actions.ts`
-- `src/core/guards.ts`
-- `src/core/parsing.ts`
-- `src/core/briefing.ts`
-- `src/core/proof.ts`
-- `src/core/warmth.ts`
-- `src/core/recovery.ts`
+- `src/core/` (actions, guards, parsing, briefing, proof, warmth, recovery, types)
 - `src/data/seed.ts`
 - `src/state/LifeHarnessState.tsx`
 
 LIKELY_TESTS:
-- `src/core/actions.test.ts`
-- `src/core/guards.test.ts`
-- `src/core/parsing.test.ts`
-- `src/core/briefing.test.ts`
-- `src/core/proof.test.ts`
-- `src/core/warmth.test.ts`
-- nearest `src/core/*.test.ts`
+- nearest `src/core/*.test.ts` for touched modules
 
 VERIFY:
 - `npm run agent:typecheck`
@@ -64,21 +54,18 @@ NOTES: Keep changes narrow, preserve local seed/state behavior, and test core lo
 
 ## Task: core-board-usability
 
+Use when:
+- Board/home/progress UX, labels, usability rules, Active/Main Quest presentation.
+
 READ_FIRST:
 - `AGENTS.md`
 - `docs/plans/board-usability-v0.1.md`
 - `docs/05_product_rules.md`
 
 LIKELY_FILES:
+- `src/core/boardUsability.ts`, `actions.ts`, `briefing.ts`, `guards.ts`, `labels.ts`
 - `src/data/createSeedState.ts`
-- `src/core/boardUsability.ts`
-- `src/core/actions.ts`
-- `src/core/briefing.ts`
-- `src/core/guards.ts`
-- `src/core/labels.ts`
-- `app/board.tsx`
-- `app/index.tsx`
-- `app/progress.tsx`
+- `app/board.tsx`, `app/index.tsx`, `app/progress.tsx`
 
 LIKELY_TESTS:
 - `src/core/boardUsability.test.ts`
@@ -89,7 +76,22 @@ VERIFY:
 - `npm run agent:typecheck`
 - `npm run agent:test -- -- src/core/boardUsability.test.ts src/core/actions.test.ts`
 
+DO_NOT_READ:
+- compiled context doc
+- unrelated large plans
+- fixtures unless the ticket names them
+
+BOUNDARIES:
+- product rules stay in `src/core/`
+- preserve Active cap and Inbox rules
+- no new product concepts
+
+NOTES: Narrow UX/usability diff; test `boardUsability` and nearest core tests.
+
 ## Task: core-career-hub
+
+Use when:
+- Career hub routes, pipeline, morning loop, today shortcuts, Job Board shell (not adapter/runner internals).
 
 READ_FIRST:
 - `AGENTS.md`
@@ -98,15 +100,9 @@ READ_FIRST:
 - `docs/career-hub-v0.1.md`
 
 LIKELY_FILES:
-- `src/core/careerHub.ts`
-- `src/core/careerPipeline.ts`
-- `src/core/todayCareerShortcuts.ts`
-- `src/core/careerMorningLoop.ts`
-- `src/core/primaryAction.ts`
-- `src/components/career/jobBoard/JobBoardScreen.tsx`
-- `src/components/career/jobBoard/JobBoardApplyTab.tsx`
-- `app/career.tsx`
-- `app/index.tsx`
+- `src/core/careerHub.ts`, `careerPipeline.ts`, `todayCareerShortcuts.ts`, `careerMorningLoop.ts`, `primaryAction.ts`
+- `src/components/career/jobBoard/JobBoardScreen.tsx`, `JobBoardApplyTab.tsx`
+- `app/career.tsx`, `app/index.tsx`
 
 LIKELY_TESTS:
 - `src/core/careerHub.test.ts`
@@ -119,7 +115,20 @@ VERIFY:
 - `npm run agent:typecheck`
 - `npm run agent:test -- -- src/core/careerHub.test.ts src/core/todayCareerShortcuts.test.ts src/core/careerMorningLoop.test.ts`
 
+DO_NOT_READ:
+- job-scout adapter/runner docs unless the ticket crosses into scout
+- large unrelated plans
+
+BOUNDARIES:
+- no GitHub, calendar, or sync integrations unless explicit
+- career hub UX stays separate from runner internals
+
+NOTES: Prefer core career tests; use `career-job-scout` for adapter/runner work.
+
 ## Task: career-job-scout
+
+Use when:
+- Job Scout adapters, sources, schedules, runner client, or `services/job-scout-runner/`.
 
 READ_FIRST:
 - `AGENTS.md`
@@ -129,25 +138,12 @@ READ_FIRST:
 - `services/job-scout-runner/README.md` for runner-only work
 
 LIKELY_FILES:
-- `src/core/jobScout.ts`
-- `src/core/jobSourceAdapters.ts`
-- `src/core/jobSourceRunner.ts`
-- `src/core/jobSourceSchedule.ts`
-- `src/core/jobScoutRunnerClient.ts`
-- `src/core/career.ts`
-- `src/core/careerHub.ts`
+- `src/core/jobScout.ts`, `jobSource*.ts`, `jobScoutRunnerClient.ts`, `career.ts`
 - `src/data/seedJobScout.ts`
-- `services/job-scout-runner/src/server.ts`
-- `services/job-scout-runner/src/fetchSource.ts`
+- `services/job-scout-runner/src/`
 
 LIKELY_TESTS:
-- `src/core/jobScout.test.ts`
-- `src/core/jobSourceAdapters.test.ts`
-- `src/core/jobSourceRunner.test.ts`
-- `src/core/jobSourceSchedule.test.ts`
-- `src/core/jobScoutRunnerClient.test.ts`
-- `src/core/career.test.ts`
-- `src/core/careerHub.test.ts`
+- nearest `src/core/job*.test.ts`, `src/core/career*.test.ts`
 - `services/job-scout-runner/tests/runner.test.ts`
 
 VERIFY:
@@ -171,6 +167,9 @@ NOTES: Prefer fixture-first adapter tests and keep candidate approval/manual rev
 
 ## Task: ask-harness
 
+Use when:
+- Ask/Chat Harness UI, harness context, thread state, synthesis, containment boundaries.
+
 READ_FIRST:
 - `AGENTS.md`
 - `docs/ai-workflows-current.md`
@@ -179,21 +178,12 @@ READ_FIRST:
 
 LIKELY_FILES:
 - `app/ask-harness.tsx`
-- `src/core/harnessContext.ts`
-- `src/core/chatThreadState.ts`
-- `src/core/chatHarnessClient.ts`
-- `src/core/chatHarnessSendBudget.ts`
-- `src/core/contextPacket*.ts`
-- `src/core/askHarnessSynthesis.ts`
+- `src/core/harnessContext.ts`, `chatThreadState.ts`, `chatHarness*.ts`, `contextPacket*.ts`, `askHarnessSynthesis.ts`
 - `src/components/askHarness/`
 
 LIKELY_TESTS:
 - `src/core/askHarness.containment.test.ts`
-- `src/core/chatThreadState.test.ts`
-- `src/core/chatHarnessClient.test.ts`
-- `src/core/chatHarnessSendBudget.test.ts`
-- `src/core/contextPacket*.test.ts`
-- `src/core/askHarnessSynthesis.test.ts`
+- nearest `src/core/*Harness*.test.ts`, `src/core/contextPacket*.test.ts`
 - nearest `src/components/askHarness/*.test.ts`
 
 VERIFY:
@@ -218,6 +208,9 @@ NOTES: Ask can suggest; the user approves mutations. Keep shared thread logic in
 
 ## Task: raw-lab-containment
 
+Use when:
+- Raw Lab sandbox UI/clients, thread/personality state, reflection clients, containment tests.
+
 READ_FIRST:
 - `AGENTS.md`
 - `docs/ai-workflows-current.md`
@@ -227,19 +220,12 @@ READ_FIRST:
 
 LIKELY_FILES:
 - `app/raw-lab.tsx`
-- `src/core/rawLabClient.ts`
-- `src/core/rawLabThreadState.ts`
-- `src/core/rawLabContextBudget.ts`
-- `src/core/rawLabSelfReflectionClient.ts`
-- `src/core/rawLabThreadReflectionClient.ts`
+- `src/core/rawLab*.ts`
 - `src/components/rawLab/`
 
 LIKELY_TESTS:
-- `src/core/rawLabClient.test.ts`
-- `src/core/rawLabThreadState.test.ts`
-- `src/core/rawLabContextBudget.test.ts`
 - `src/core/rawLabScreen.containment.test.ts`
-- `src/core/rawLabThreadReflectionClient.test.ts`
+- nearest `src/core/rawLab*.test.ts`
 - gateway Raw Lab contract tests when touching `services/ai-gateway/`
 
 VERIFY:
@@ -265,6 +251,9 @@ BOUNDARIES:
 NOTES: Keep containment tests close to boundary changes and do not export Raw Lab jailbreak/framing behavior to other modes.
 
 ## Task: ai-gateway
+
+Use when:
+- `services/ai-gateway/` endpoints, prompts, providers, verifiers, pytest evals.
 
 READ_FIRST:
 - `AGENTS.md`
@@ -308,6 +297,9 @@ NOTES: Keep schemas strict and mock-first. Do not expose provider/model details 
 
 ## Task: docs-planning
 
+Use when:
+- Agent docs, plans, prompts, tickets, ergonomics/process edits (docs-only).
+
 READ_FIRST:
 - `AGENTS.md`
 - `docs/AGENT_BUDGETS.md`
@@ -333,7 +325,6 @@ VERIFY:
 - `npm run agent:review-packet`
 - `npm run codex:hooks:smoke` for hook changes
 - scoped `git diff -- <docs touched>`
-- `git status --short`
 
 DO_NOT_READ:
 - compiled context doc
@@ -345,10 +336,12 @@ BOUNDARIES:
 - do not add product concepts while editing process docs
 - keep root `AGENTS.md` short and stable
 
-NOTES: Prefer links and task routers over copied context. Mark missing planned scripts as planned.
-For token-reduction dogfood, use `docs/plans/agent-token-reduction-dogfood-v0.1.md` and keep changes docs-only.
+NOTES: Prefer links and task routers over copied context. Token-reduction dogfood: `docs/plans/agent-token-reduction-dogfood-v0.1.md` (docs-only).
 
 ## Task: rtk-query-network-layer
+
+Use when:
+- `src/network/` RTK hooks/mutations and core `*Client.ts` wire-up (non-streaming).
 
 READ_FIRST:
 - `AGENTS.md`
@@ -357,22 +350,15 @@ READ_FIRST:
 - this task block
 
 LIKELY_FILES:
-- planned `src/network/`
+- `src/network/`
 - `app/_layout.tsx`
-- `src/core/jobScoutRunnerClient.ts`
-- `src/core/chatHarnessClient.ts`
-- `src/core/gatewayHealthClient.ts`
-- `src/core/deepSynthesisClient.ts`
-- `src/core/aiJobClient.ts`
-- `src/core/rawLabClient.ts`
-- `src/core/rawLabSelfReflectionClient.ts`
-- `src/core/rawLabThreadReflectionClient.ts`
 - `src/state/LifeHarnessState.tsx`
+- nearest `src/core/*Client.ts`
 
 LIKELY_TESTS:
-- nearest client tests in `src/core/*Client.test.ts`
+- nearest `src/core/*Client.test.ts`
 - `src/core/askHarness.containment.test.ts`
-- future `src/network/*.test.ts` once PR 4 adds the layer
+- `src/network/*.test.ts` when present
 
 VERIFY:
 - `npm run agent:typecheck`
@@ -394,4 +380,4 @@ BOUNDARIES:
 - existing pure request/parse clients stay available
 - app/src must not import from `services/`
 
-NOTES: RTK Query helps future agents find network calls; non-streaming app requests go through `src/network/` hooks/helpers while core `*Client.ts` files remain parse/fetch implementations.
+NOTES: Non-streaming app requests go through `src/network/` hooks/helpers; core `*Client.ts` files remain parse/fetch implementations.

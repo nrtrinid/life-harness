@@ -35,7 +35,7 @@ npm run agent:grep -- "<symbol or phrase>"
 ## Read via context map
 
 1. [`AGENTS.md`](../../../AGENTS.md) — hard rules and v0.1 constraints
-2. [`docs/AGENT_CONTEXT_MAP.md`](../../../docs/AGENT_CONTEXT_MAP.md) — task block READ_FIRST / LIKELY_FILES / LIKELY_TESTS / BOUNDARIES
+2. [`docs/AGENT_CONTEXT_MAP.md`](../../../docs/AGENT_CONTEXT_MAP.md) — match `Use when:` first, then READ_FIRST / LIKELY_FILES / LIKELY_TESTS / BOUNDARIES
 3. [`prompts/agent_task_prompt_template.md`](../../../prompts/agent_task_prompt_template.md) — default implementation wording when pasting a task prompt
 
 Do not broad-read `docs/plans/`, `docs/meta/`, fixtures, or compiled context unless the ticket names them.

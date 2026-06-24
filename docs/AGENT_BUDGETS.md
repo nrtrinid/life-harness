@@ -20,7 +20,7 @@ These are guardrails, not perfect laws. The checker enforces only the budgets it
 | Root `AGENTS.md` | <= 150 lines |
 | Each `.agents/skills/**/SKILL.md` | <= 120 lines (CI-enforced) |
 | `docs/AGENT_CONTEXT_MAP.md` | <= 400 lines |
-| Default `agent:preflight` output | <= 200 lines |
+| Default `agent:preflight` output | <= 200 lines (CI-enforced via `check:agent-commands`) |
 | Generated repo maps | <= 300 lines once implemented |
 | Default-read docs | Avoid or status-review files over 15 KB |
 

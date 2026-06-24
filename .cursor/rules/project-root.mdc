@@ -10,6 +10,7 @@ alwaysApply: true
 - Keep `npm run agent:bootstrap` as a backwards-compatible/internal helper.
 - If you need the old bootstrap-style repo orientation, use `npm run agent:preflight -- --bootstrap`.
 ## Guardrails / boundaries
+- Portable agent contract: `docs/STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md`; Life Harness `agent:*` extras are optional.
 - Keep `src/core` UI-independent.
 - `app/` and `src/` must not import from `services/`.
 - Raw Lab runtime must not import board state/actions/provider/persistence.

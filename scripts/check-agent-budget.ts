@@ -128,6 +128,61 @@ function checkSkillBudgets(): void {
   }
 }
 
+const REQUIRED_TASK_HEADINGS = [
+  "Use when:",
+  "READ_FIRST:",
+  "LIKELY_FILES:",
+  "LIKELY_TESTS:",
+  "VERIFY:",
+  "DO_NOT_READ:",
+  "BOUNDARIES:",
+  "NOTES:"
+] as const;
+
+function parseContextMapTaskBlocks(text: string): Array<{ name: string; body: string }> {
+  const lines = text.split(/\r\n|\n|\r/);
+  const blocks: Array<{ name: string; body: string }> = [];
+  let currentName: string | null = null;
+  let currentLines: string[] = [];
+  for (const line of lines) {
+    const match = /^## Task:\s+(.+?)\s*$/.exec(line);
+    if (match) {
+      if (currentName) {
+        blocks.push({ name: currentName, body: currentLines.join("\n") });
+      }
+      currentName = match[1];
+      currentLines = [];
+    } else if (currentName) {
+      currentLines.push(line);
+    }
+  }
+  if (currentName) {
+    blocks.push({ name: currentName, body: currentLines.join("\n") });
+  }
+  return blocks;
+}
+
+function checkContextMapTaskShape(): void {
+  const path = "docs/AGENT_CONTEXT_MAP.md";
+  const fullPath = absolute(path);
+  if (!existsSync(fullPath)) {
+    return;
+  }
+
+  const blocks = parseContextMapTaskBlocks(readFileSync(fullPath, "utf8"));
+  if (blocks.length === 0) {
+    fail(path, "No task blocks found in agent context map.");
+    return;
+  }
+
+  for (const block of blocks) {
+    const missing = REQUIRED_TASK_HEADINGS.filter((heading) => !block.body.includes(heading));
+    if (missing.length > 0) {
+      fail(path, `Task block "${block.name}" missing headings: ${missing.join(", ")}`);
+    }
+  }
+}
+
 function warnLargePlanningDocs(): void {
   const candidates = [
     ...walkFiles("docs/plans", (path) => path.endsWith(".md")),
@@ -166,6 +221,7 @@ function main(): void {
 
   if (existsSync(absolute("docs/AGENT_CONTEXT_MAP.md"))) {
     checkLineBudget("docs/AGENT_CONTEXT_MAP.md", 400, "Agent context map");
+    checkContextMapTaskShape();
   } else {
     warn("docs/AGENT_CONTEXT_MAP.md", "Missing required agent context map.");
   }

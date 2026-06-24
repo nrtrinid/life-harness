@@ -1,67 +1,114 @@
 # Feature Sprint v2: Living Spec Loop / Web Architect Mode
 
-> **Status:** Repo-aware design doc. **Not implemented.** v0.1 Feature Sprint remains the shipped path.
-> **Purpose:** Define the next evolution of card-anchored feature work — GPT maintains spec and judgment, Cursor maintains repo truth, Life Harness maintains protocol and proof.
+> **Status:** **Mid-v2 — partially shipped.** v0.1 step-based loop remains supported. Living spec, handoffs, localization, prompt audit, proof normalizer, spec update, and next-slice adoption are landed or mostly landed. **Next architectural priority: `currentSlice` + phase machine.**
+> **Purpose:** Define the evolution of card-anchored feature work — frontier architect maintains spec and judgment, Cursor maintains repo truth, Life Harness maintains protocol and proof. **Codex is optional**, not required.
 > **Authority:** Product boundaries still follow [`../01_final_design_doc.md`](../01_final_design_doc.md), [`../02_v0_1_scope.md`](../02_v0_1_scope.md), and root [`AGENTS.md`](../../AGENTS.md).
 
 ## Core product sentence
 
-> **GPT maintains the spec and judgment. Cursor maintains repo truth. Life Harness maintains the protocol and proof.**
+> **GPT/frontier architect maintains the spec and judgment. Cursor maintains repo truth. Life Harness maintains the protocol and proof.**
 
-Life Harness should **not** replace ChatGPT web or Cursor. It should become the conductor that makes the ChatGPT + Cursor workflow structured, repeatable, and hard to lose.
+Life Harness should **not** replace ChatGPT web, Codex, or Cursor. It should become the conductor that makes the architect + implementation workflow structured, repeatable, and hard to lose — regardless of which provider fills each worker lane.
+
+```text
+Agents may propose.
+Runners may execute.
+Life Harness records.
+Only gates advance trust.
+```
 
 ---
 
-## Current repo anchors (v0.1 shipped)
+## Current repo anchors
 
 | Area | Anchor | Notes |
 |------|--------|-------|
-| Orchestrator core | [`../../src/core/featureSprintOrchestrator.ts`](../../src/core/featureSprintOrchestrator.ts) | Plan CRUD, packet builders, fence import, step advance, completion proof |
-| Types | [`../../src/core/types.ts`](../../src/core/types.ts) — `HarnessFeatureSprintPlan`, `HarnessFeatureSprintStep` | Fixed multi-step plan; no living spec or slice phases |
+| Orchestrator core | [`../../src/core/featureSprintOrchestrator.ts`](../../src/core/featureSprintOrchestrator.ts) | Plan CRUD, packet builders, fence import, step advance, adopt next slice, completion proof |
+| Types | [`../../src/core/types.ts`](../../src/core/types.ts) — `HarnessFeatureSprintPlan`, `HarnessFeatureSprintStep` | Fixed multi-step plan + `featureSpec`, `nextSliceProposal`; **`currentSlice` + phase machine not yet shipped** |
 | Untrusted wrapping | [`../../src/core/untrustedContextBlock.ts`](../../src/core/untrustedContextBlock.ts) | Scoping rough spec + review runner output wrapped as evidence-only |
-| Runner bridge | [`../../src/core/featureSprintRunner.ts`](../../src/core/featureSprintRunner.ts), [`../feature-sprint-local-runner-v0.1.md`](../feature-sprint-local-runner-v0.1.md) | Optional localhost Codex/Cursor CLI; draft output only |
-| Verification capture | [`../feature-sprint-verification-capture-v0.2.md`](../feature-sprint-verification-capture-v0.2.md) | Project Registry commands → runner history; not yet a normalized proof model |
-| Agent task packets | [`../../src/core/agentTaskPacket.ts`](../../src/core/agentTaskPacket.ts) | Card-scoped copy/paste for Codex/Cursor outside Feature Sprint |
-| Primary UI | [`../../app/card/[id].tsx`](../../app/card/[id].tsx) Backroom → Feature Sprint | Plan import, implementation, review, advance |
-| Start flow | [`../../src/components/featureSprint/FeatureSprintStartFlow.tsx`](../../src/components/featureSprint/FeatureSprintStartFlow.tsx) | Rough spec intake (local only) → scoping |
+| Runner bridge | [`../../src/core/featureSprintRunner.ts`](../../src/core/featureSprintRunner.ts), [`../feature-sprint-local-runner-v0.1.md`](../feature-sprint-local-runner-v0.1.md) | Optional localhost runner (Cursor CLI; Codex CLI optional); draft output only |
+| Verification capture | [`../feature-sprint-verification-capture-v0.2.md`](../feature-sprint-verification-capture-v0.2.md) | Project Registry commands → runner history |
+| Proof normalizer | [`../../src/core/featureSprintImplementationProof.ts`](../../src/core/featureSprintImplementationProof.ts) | `normalizeImplementationProofForStep` — shipped |
+| Agent task packets | [`../../src/core/agentTaskPacket.ts`](../../src/core/agentTaskPacket.ts) | Card-scoped copy/paste outside Feature Sprint |
+| Primary UI | [`../../app/card/[id].tsx`](../../app/card/[id].tsx) Backroom → Feature Sprint | Plan import, implementation, review, spec update, advance, adopt |
+| Start flow | [`../../src/components/featureSprint/FeatureSprintStartFlow.tsx`](../../src/components/featureSprint/FeatureSprintStartFlow.tsx) | Spec intake → scoping; approve revised spec |
 | Flow guide | [`../../src/components/featureSprint/FeatureSprintFlowGuide.tsx`](../../src/components/featureSprint/FeatureSprintFlowGuide.tsx), [`../feature-sprint-flow-guide-v0.3.md`](../feature-sprint-flow-guide-v0.3.md) | Trust loop: run → inspect → save → review |
 | Workbench | [`../feature-sprint-workbench-v0.1.md`](../feature-sprint-workbench-v0.1.md) | Dashboard; card Backroom remains control surface |
 | Orchestrator doc | [`../feature-sprint-orchestrator-v0.1.md`](../feature-sprint-orchestrator-v0.1.md) | Shipped workflow reference |
 
 ### Shipped fence labels (parse today)
 
-| Fence | Builder / importer | Module |
-|-------|-------------------|--------|
-| `feature-sprint-plan` | `buildFeatureScopingPacket`, `importFeatureSprintPlan` | `featureSprintOrchestrator.ts` |
-| `feature-review-verdict` | `buildFeatureStepReviewPacket`, review import | `featureSprintOrchestrator.ts` |
+| Fence | Builder / importer | Module | Status |
+|-------|-------------------|--------|--------|
+| `feature-sprint-plan` | `buildFeatureScopingPacket`, `importFeatureSprintPlan` | `featureSprintOrchestrator.ts` | Shipped |
+| `feature-review-verdict` | `buildFeatureStepReviewPacket`, review import | `featureSprintOrchestrator.ts` | Shipped |
+| `feature-prompt-localization` | localization import | `featureSprintOrchestrator.ts` | Shipped |
+| `feature-prompt-critique` | `buildFeaturePromptAuditPacket`, prompt audit import | `featureSprintOrchestrator.ts` | Shipped |
+| `feature-spec-update` | spec update import | `featureSprintOrchestrator.ts` | Shipped |
 
 ### Shipped packet builders
 
-| Builder | Audience today | Function |
-|---------|----------------|----------|
-| `buildFeatureScopingPacket` | ChatGPT / Codex architect | Scope feature → `feature-sprint-plan` |
-| `buildFeatureStepImplementationPacket` | Cursor / Codex builder | Bounded slice implementation |
-| `buildFeatureStepReviewPacket` | ChatGPT / Codex reviewer | Verdict + optional next prompt |
+| Builder | Recipient label (typical) | Function |
+|---------|---------------------------|----------|
+| `buildFeatureScopingPacket` | Architect worker | Scope feature → `feature-sprint-plan` |
+| `buildFeatureStepImplementationPacket` | Implementation worker (Cursor) | Bounded slice implementation |
+| `buildFeatureStepReviewPacket` | Reviewer worker | Verdict + optional next prompt |
 
-Rough spec intake is **local UI state only** — see [`../feature-spec-intake-v0.1.md`](../feature-spec-intake-v0.1.md). It is not persisted on the plan.
+Persisted `featureSpec` on plan is **shipped** — see [`../feature-sprint-web-architect-phase-a-v0.1.md`](../feature-sprint-web-architect-phase-a-v0.1.md). Rough spec textarea in Start feature may still seed scoping before spec is saved.
 
 ---
 
-## Gap: v0.1 vs v2 target
+## Gap: shipped today vs v2 target
 
-| Capability | v0.1 today | v2 target |
-|------------|------------|-----------|
-| Living feature spec | Rough spec textarea (ephemeral); plan fields on import | Persisted `featureSpec` with changelog, milestones, deferred ideas |
-| Executable unit | Fixed `steps[]` from imported plan | `currentSlice` with phase machine + optional next-slice proposal |
-| Repo localization | None — implementation packet goes straight to Cursor | Read-only Cursor localization step before Auto implement |
-| Prompt audit | None | GPT `feature-prompt-critique` after localization |
-| Proof for review | Raw agent output + runner verification excerpts | `NormalizedImplementationProof` owned by LH |
-| Spec evolution | Re-import plan replaces steps; no spec-update fence | `feature-spec-update` after review closes outer loop |
-| Risk tiers | Implicit (user judgment) | Tiny / Normal / Risky with skip rules for tiny |
-| Handoff UX | Generic copy buttons | Recipient-labeled: Copy for ChatGPT / Copy for Cursor |
+| Capability | Shipped today | v2 target |
+|------------|---------------|-----------|
+| Living feature spec | **Persisted `featureSpec` + approval gate** | Changelog, milestones, deferred ideas, spec progress UI |
+| Executable unit | Fixed `steps[]` + `currentStepId`; adopt next slice | **`currentSlice` active workflow lens + phase machine** |
+| Repo localization | **Localization packet + import** | Wired to `currentSlice.phase` |
+| Prompt audit | **`feature-prompt-critique` import** | Wired to phase + risk-tier skip rules |
+| Proof for review | **`normalizeImplementationProofForStep`** + runner excerpts | Phase `proof_pending` → review; richer review packets (partial) |
+| Spec evolution | **`feature-spec-update` + `nextSliceProposal` + adopt** | Phase `spec_updating` → `awaiting_spec_approval` → advance |
+| Risk tiers | Optional `riskTier` on steps; user judgment | Deterministic recommendation + tiny fast path |
+| Handoff UX | **Recipient-labeled copy buttons** | **Next Handoff** — one primary next action panel |
 | Architect thread | Not modeled | `ArchitectThread` metadata (URL, name, notes) |
 
-v2 **extends** v0.1; it does not delete the step-based plan path immediately. Legacy `HarnessFeatureSprintPlan.steps[]` remains supported during migration.
+v2 **extends** v0.1; it does not delete the step-based plan path immediately. Legacy `HarnessFeatureSprintPlan.steps[]` remains **plan/history** during migration; **`currentSlice` becomes the active workflow lens**.
+
+---
+
+## Next architectural priority: `currentSlice` + phase machine
+
+**Slice B is the unlock** for everything else still missing in v2:
+
+| Unblocks | Why |
+|----------|-----|
+| **Next Handoff UI** | One deterministic "copy this packet next" from phase state |
+| **Risk-tier routing** | Skip localization/audit on tiny slices; stricter path on risky |
+| **Instrumentation** | Trust metrics keyed to phase transitions, not step status alone |
+| **Local-runner integration** | Runner fills textareas; phase records which gate is pending import |
+
+Until `currentSlice` ships, dogfood logic infers next action from step status, imports, and `nextSliceProposal` — workable but harder to reason about.
+
+### Proposed `currentSlice` phase model
+
+Design target — maps to a dedicated `currentSlice` record (or enriched active step) with explicit `phase`:
+
+```text
+ready                  — slice scoped; ready for localization or implement (tiny path)
+localizing             — localization packet sent; awaiting import
+prompt_auditing        — localization imported; awaiting prompt critique import
+implementing           — final implementation prompt active; runner/output in flight
+proof_pending          — output saved; normalize proof before review
+reviewing              — review packet sent; awaiting verdict import
+spec_updating          — review accepted; awaiting feature-spec-update import
+awaiting_spec_approval — spec update imported; user must approve revised spec
+ready_to_advance       — spec approved; user may advance or adopt next slice
+done                   — slice closed; feature complete or next slice pending
+```
+
+**Migration rule:** `steps[]` keeps imported plan structure, per-step output, review artifacts, and history. `currentSlice` is the **active workflow lens** — title, goal, AC, risk tier, and `phase`. Advancing or adopting updates both where linked; legacy cards without `currentSlice` continue on step status until migrated.
+
+Legacy step `status` (`planned | ready | sent | reviewing | done | …`) remains during migration; phase machine supersedes it for next-action and UI once Slice B lands.
 
 ---
 
@@ -72,8 +119,8 @@ Two loops.
 ### Outer loop — feature-level spec loop
 
 ```text
-GPT writes/updates the living feature spec
-→ GPT proposes the next slice
+Architect worker writes/updates the living feature spec
+→ Architect worker proposes the next slice
 → Life Harness stores spec, slice, phase, and proof
 → repeat until completion criteria are satisfied
 ```
@@ -81,13 +128,13 @@ GPT writes/updates the living feature spec
 ### Inner loop — slice-level execution loop
 
 ```text
-1. GPT scopes current slice from the living spec
+1. Architect worker scopes current slice from the living spec
 2. Cursor localizes the slice to the repo (read-only)
-3. GPT audits the localized implementation prompt
-4. Cursor Auto implements
+3. Architect worker audits the localized implementation prompt
+4. Cursor implements
 5. Life Harness normalizes proof/output
-6. GPT reviews the implementation
-7. GPT updates the spec and proposes the next slice
+6. Reviewer worker reviews the implementation
+7. Architect worker updates the spec and proposes the next slice
 ```
 
 Product feel:
@@ -96,7 +143,7 @@ Product feel:
 Spec → Current Slice → Build → Review → Next Slice
 ```
 
-Not a giant nine-step ritual on screen.
+Not a giant nine-step ritual on screen. **Next Handoff** surfaces one primary next action.
 
 ---
 
@@ -110,26 +157,25 @@ Not a giant nine-step ritual on screen.
 
 Deterministic recommendation signals (Slice I): likely file count, data model touched, tests unclear, AC vague, architecture touched, previous verdict, manual override.
 
-Implementation home (proposed): new module e.g. [`../../src/core/featureSprintRiskTier.ts`](../../src/core/featureSprintRiskTier.ts) — rules-only, no provider calls.
+Implementation home (proposed): new module e.g. [`../../src/core/featureSprintRiskTier.ts`](../../src/core/featureSprintRiskTier.ts) — rules-only, no provider calls. **Depends on `currentSlice` + phase machine.**
 
 ---
 
 ## What Life Harness should own
 
-Persist (proposed fields on plan or sibling record):
+Persist (on plan or sibling record):
 
 ```text
-featureSpec
-currentSlice
+featureSpec              — shipped
+currentSlice             — next priority (phase machine)
 riskTier
-phase
 architectThread
 localizedRepoNotes
 auditedImplementationPrompt
-normalizedProof
+normalizedProof          — shipped (per-step)
 reviewVerdict
 specUpdateHistory
-nextSliceProposal
+nextSliceProposal        — shipped
 ```
 
 Plain English:
@@ -138,8 +184,8 @@ Plain English:
 - what feature we are building
 - what the current slice is
 - where we are in the workflow
-- what packet should be copied next
-- what came back from ChatGPT or Cursor
+- what packet should be copied next (Next Handoff)
+- what came back from workers
 - what passed, failed, or needs changes
 - what the next slice is
 ```
@@ -147,21 +193,21 @@ Plain English:
 Life Harness does **not** own:
 
 ```text
-- the ChatGPT thread itself
+- the ChatGPT/Codex thread itself
 - autonomous spec decisions
 - autonomous advancement
 - browser automation
-- replacing Cursor
+- replacing Cursor or any provider
 - replacing user judgment
 ```
 
-All v0.1 manual gates remain: import, save, advance, mark complete require explicit user action.
+All manual gates remain: import, save, approve, advance, adopt, mark complete require explicit user action.
 
 ---
 
 ## Proposed data model
 
-Types below are **design targets**. Map to extensions of `HarnessFeatureSprintPlan` or a new `HarnessFeatureSprintV2State` collection — decision deferred per slice.
+Types below are **design targets**. Map to extensions of `HarnessFeatureSprintPlan` — decision deferred per slice.
 
 ### Feature spec
 
@@ -180,7 +226,7 @@ type FeatureSpec = {
 };
 ```
 
-**v0.1 partial overlap:** `HarnessFeatureSprintPlan` already has `goal`, `acceptanceCriteria`, `nonGoals`, `constraints` — but no living body, changelog, milestones, or spec-update history.
+**Shipped partial:** `HarnessFeatureSpec` on plan with approval gate. Full changelog/milestones UI remains planned.
 
 ### Current slice
 
@@ -193,13 +239,16 @@ type FeatureSlice = {
   nonGoals: string[];
   riskTier: "tiny" | "normal" | "risky";
   phase:
-    | "scoped"
-    | "localized"
-    | "audited"
-    | "implemented"
-    | "proof_normalized"
-    | "reviewed"
-    | "spec_updated";
+    | "ready"
+    | "localizing"
+    | "prompt_auditing"
+    | "implementing"
+    | "proof_pending"
+    | "reviewing"
+    | "spec_updating"
+    | "awaiting_spec_approval"
+    | "ready_to_advance"
+    | "done";
   suggestedPrompt?: string;
   localizedPrompt?: string;
   finalImplementationPrompt?: string;
@@ -207,7 +256,7 @@ type FeatureSlice = {
 };
 ```
 
-**v0.1 partial overlap:** `HarnessFeatureSprintStep` has `title`, `goal`, `acceptanceCriteria`, `suggestedPrompt`, `status` — but status is `planned | ready | sent | reviewing | done | …`, not the v2 phase machine.
+**Today:** `HarnessFeatureSprintStep` + `currentStepId` approximate slice identity; step `status` is not the v2 phase machine.
 
 ### Architect thread
 
@@ -220,7 +269,7 @@ type ArchitectThread = {
 };
 ```
 
-New — makes persistent ChatGPT web thread first-class in Backroom UI.
+New — makes persistent architect thread first-class in Backroom UI.
 
 ### Normalized proof
 
@@ -237,30 +286,32 @@ type NormalizedImplementationProof = {
 };
 ```
 
-**v0.1 partial overlap:** `HarnessFeatureSprintRunnerRun` already captures `changedFiles`, `diffStat`, `verificationResults` — normalization would compose these + manual notes into a fixed review-facing shape (Slice F).
+**Shipped:** `normalizeImplementationProofForStep` composes runner run + manual notes. Phase transition to `proof_pending` → `reviewing` awaits Slice B.
 
 ---
 
 ## Fence / import contracts
 
-### Shipped (v0.1)
+### Shipped
 
 | Fence | Purpose |
 |-------|---------|
 | `feature-sprint-plan` | Initial or replacement multi-step plan |
 | `feature-review-verdict` | Review status + optional next prompt |
+| `feature-prompt-localization` | Repo localization output |
+| `feature-prompt-critique` | Prompt audit after localization |
+| `feature-spec-update` | Revised spec + changelog + next slice proposal |
 
-### New (v2)
+### Planned (not yet parsed)
 
 | Fence | Producer | Consumer | Purpose |
 |-------|----------|----------|---------|
-| `feature-spec` | GPT | LH import | Initial living spec + first slice proposal |
-| `feature-slice-scope` | GPT | LH import | One executable slice from living spec |
-| `feature-prompt-critique` | GPT | LH import | Prompt audit after Cursor localization |
-| `normalized-implementation-proof` | LH (usually) | Review packet input | Fixed proof sections — may be LH-generated markdown, not always a GPT fence |
-| `feature-spec-update` | GPT | LH import | Revised spec + changelog + next slice proposal |
+| `feature-spec` | Architect worker | LH import | Initial living spec + first slice proposal |
+| `feature-slice-scope` | Architect worker | LH import | One executable slice from living spec |
 
-Parse/import logic should live alongside existing fences in [`featureSprintOrchestrator.ts`](../../src/core/featureSprintOrchestrator.ts) or a dedicated `featureSprintV2Import.ts` if the file grows too large.
+Normalized implementation proof is composed by Life Harness (not always a separate import fence).
+
+Parse/import logic lives in [`featureSprintOrchestrator.ts`](../../src/core/featureSprintOrchestrator.ts).
 
 ### `feature-spec-update` (key outer-loop fence)
 
@@ -281,7 +332,7 @@ Parse/import logic should live alongside existing fences in [`featureSprintOrche
 }
 ```
 
-Replaces blind advance through a fixed step list when the living spec loop is active.
+User **Adopt next slice** or marks feature complete — **no auto-advance** on import.
 
 ---
 
@@ -304,7 +355,7 @@ Copy next handoff
 Import result
 Normalize proof
 Mark slice reviewed
-Accept next slice
+Adopt next slice / Accept next slice
 Mark feature complete
 ```
 
@@ -318,97 +369,70 @@ View spec changelog
 View packet history
 ```
 
-**UX rule:** LH always tells the user what to paste next and where.
+**UX rule:** LH always tells the user what to paste next and where — **Next Handoff** is the single primary next action.
 
 Examples:
 
 ```text
-Next: Paste this into Cursor for read-only repo localization.
-Next: Paste Cursor's localization result into ChatGPT for prompt audit.
-Next: Paste this final prompt into Cursor Auto.
+Next: Copy localization packet for Cursor (read-only repo inspect).
+Next: Paste localization result for architect worker prompt audit.
+Next: Copy final implementation packet for Cursor.
+Next: Copy review packet for reviewer worker.
 ```
 
-**v0.1 UI today:** Card Detail Backroom mixes Start feature panel, plan steps, runner rows, import textareas, and action guide — see [`FeatureSprintActionGuide.tsx`](../../src/components/featureSprint/FeatureSprintActionGuide.tsx). v2 consolidates around **Next handoff** without removing inspect-before-save trust boundaries from [`feature-sprint-flow-guide-v0.3.md`](../feature-sprint-flow-guide-v0.3.md).
+**UI today:** Card Detail Backroom mixes Start feature panel, plan steps, runner rows, import textareas, and action guide — see [`FeatureSprintActionGuide.tsx`](../../src/components/featureSprint/FeatureSprintActionGuide.tsx). v2 consolidates around **Next Handoff** without removing inspect-before-save trust boundaries from [`feature-sprint-flow-guide-v0.3.md`](../feature-sprint-flow-guide-v0.3.md).
 
 ---
 
 ## Implementation roadmap
 
-Each slice is independently shippable. Suggested module/UI touchpoints included.
+Each slice is independently shippable. Status as of mid-v2:
 
-### Slice A — Living feature spec
+### Slice A — Living feature spec — **shipped**
 
-- **Add:** persisted `featureSpec` on plan (or parallel record)
-- **Touch:** `types.ts`, persistence/hydration, `featureSprintOrchestrator.ts`, `app/card/[id].tsx`, Backroom spec panel
-- **Accept:** spec survives reload; included in scoping/review packets; existing sprint works without spec
+- Persisted `featureSpec` on plan with approval gate
 
-### Slice B — Current slice model
+### Slice B — Current slice model — **next priority**
 
 - **Add:** `currentSlice` + phase field separate from legacy `steps[]`
-- **Touch:** `types.ts`, orchestrator step advance logic, Backroom “Current Slice” panel
-- **Accept:** slice has title, goal, AC, non-goals, risk tier, phase; legacy plans still work
+- **Touch:** `types.ts`, orchestrator advance/adopt logic, dogfood next-action, Backroom Current Slice + Next Handoff panels
+- **Accept:** slice has title, goal, AC, non-goals, risk tier, phase; legacy plans still work; `steps[]` remains plan/history
 
-### Slice C — Recipient-labeled handoff buttons
+### Slice C — Recipient-labeled handoff buttons — **shipped**
 
-- **Add:** button copy “Copy for ChatGPT” / “Copy for Cursor”
-- **Touch:** `app/card/[id].tsx`, packet builder headers in orchestrator
-- **Accept:** low code, high clarity; no inference about tool destination
+### Slice D — Cursor localization packet — **shipped**
 
-### Slice D — Cursor localization packet
+### Slice E — Prompt audit packet/import — **shipped**
 
-- **Add:** `buildFeatureSliceLocalizationPacket` (read-only repo inspect)
-- **Touch:** new builder in orchestrator; save output as `localizedRepoNotes`; phase `scoped → localized`
-- **Accept:** likely files, helpers, tests, risks, revised implementation prompt; no implementation in packet
+### Slice F — Proof normalizer — **shipped**
 
-### Slice E — GPT prompt audit packet/import
+### Slice G — Review packet enrichment — **partial**
 
-- **Add:** `feature-prompt-critique` fence + `buildFeaturePromptAuditPacket`
-- **Touch:** orchestrator import; sets `finalImplementationPrompt`; phase `localized → audited`
-- **Accept:** audit capped to risk-reducing changes, not wording polish
+- Richer review input from spec, slice, final prompt, normalized proof — ongoing
 
-### Slice F — Proof normalizer
+### Slice H — Spec update import + adopt next slice — **shipped**
 
-- **Add:** `normalizeImplementationProof()` composing runner run + manual notes
-- **Touch:** new core helper; review packet consumes normalized proof; phase `implemented → proof_normalized`
-- **Accept:** highlights tests not run and known risks; runner path auto-normalizes where possible
+### Slice I — Risk tier recommendation — **planned** (after Slice B)
 
-### Slice G — Review packet enrichment
+- Deterministic `recommendFeatureSprintRiskTier()`; tiny skips localization/audit
 
-- **Extend:** `buildFeatureStepReviewPacket` with spec, slice, final prompt, normalized proof
-- **Accept:** richer GPT review input; `needs_changes` can set next implementation prompt
+### Slice J — Dogfood polish — **in progress**
 
-### Slice H — Spec update import
-
-- **Add:** `feature-spec-update` fence + import handler
-- **Touch:** orchestrator; user accepts next slice or marks feature complete — **no auto-advance**
-- **Accept:** changelog + completed slice summary persisted
-
-### Slice I — Risk tier recommendation
-
-- **Add:** deterministic `recommendFeatureSprintRiskTier()` 
-- **Touch:** slice scope import + UI badge; tiny skips localization/audit
-- **Accept:** reasons visible; normal defaults to guarded path
-
-### Slice J — Dogfood polish
-
-- **Add:** Next handoff always populated; thread metadata; packet history; spec progress; no dead-end phases
-- **Touch:** `FeatureSprintActionGuide`, flow guide, workbench cross-links
+- Next handoff always populated; thread metadata; packet history; spec progress; no dead-end phases; mock-loop E2E
 
 ---
 
-## Smallest coherent v1 (build first)
+## Remaining build order
 
 ```text
-1. Living feature spec          (Slice A)
-2. Current slice model          (Slice B)
-3. Recipient-labeled buttons    (Slice C)
-4. Cursor localization packet   (Slice D)
-5. GPT prompt audit import      (Slice E)
-6. Proof normalizer             (Slice F)
-7. Spec update import           (Slice H)
+1. Current slice + phase machine     (Slice B)  ← next
+2. Risk tier recommendation          (Slice I)
+3. Next Handoff UI consolidation     (Slice J)
+4. Review packet enrichment finish   (Slice G)
+5. Architect thread metadata         (Slice J)
 ```
 
-Risk tiering (I) and polish (J) follow once the loop closes.
+Slices A, C, D, E, F, H are landed. Instrumentation and parallel lanes wait on Slice B — see [`feature-sprint-roadmap-v0.1.md`](feature-sprint-roadmap-v0.1.md).
 
 ---
 
@@ -419,19 +443,25 @@ User opens Feature Sprint card.
 
 LH: Current feature: Web Architect Mode
     Current slice: Add architect thread metadata
-    Next: Copy for Cursor localization
+    Phase: localizing
+    Next Handoff: Copy localization packet for Cursor
 
 User copies packet → Cursor returns likely files, risks, revised prompt
-User imports → LH: Next: Copy for ChatGPT prompt audit
+User imports → LH: Phase: prompt_auditing
+    Next Handoff: Copy prompt audit packet for architect worker
 
-GPT returns final implementation prompt → User imports
-LH: Next: Copy final prompt for Cursor Auto
+Architect worker returns final implementation prompt → User imports
+LH: Phase: implementing
+    Next Handoff: Copy implementation packet for Cursor
 
 Cursor implements → User saves output → LH normalizes proof
-LH: Next: Copy review packet for ChatGPT
+LH: Phase: reviewing
+    Next Handoff: Copy review packet for reviewer worker
 
-GPT: pass + feature-spec-update with next slice
-User imports → LH: Slice complete. Accept next slice?
+Reviewer: pass + feature-spec-update with next slice
+User imports → LH: Phase: awaiting_spec_approval
+User approves spec → LH: Phase: ready_to_advance
+User advances or adopts next slice
 ```
 
 ---
@@ -441,14 +471,16 @@ User imports → LH: Slice complete. Accept next slice?
 Do **not** build in this track:
 
 ```text
-- browser automation for ChatGPT
+- browser automation for ChatGPT or any architect surface
 - autonomous Cursor execution without review
-- replacing ChatGPT web with local Codex xhigh as default architect
+- requiring Codex or any specific provider
+- replacing frontier architect with local model for scoping
 - deleting v0.1 step-based Feature Sprint immediately
 - overbuilding a huge spec editor
 - forcing every task through the full guarded loop
 - ai-gateway / Raw Lab changes
 - new assistant action types without explicit ticket
+- auto-import / auto-save / auto-advance
 ```
 
 Priority is **protocol and proof**, not autonomy — consistent with [`AGENTS.md`](../../AGENTS.md) manual-before-automation rule.
@@ -468,9 +500,11 @@ Add slice-specific tests beside existing [`featureSprintOrchestrator.test.ts`](.
 
 ## Related docs
 
+- Authority: [`../feature-sprint-architecture-v0.1.md`](../feature-sprint-architecture-v0.1.md)
 - Shipped orchestrator: [`../feature-sprint-orchestrator-v0.1.md`](../feature-sprint-orchestrator-v0.1.md)
+- Roadmap: [`feature-sprint-roadmap-v0.1.md`](feature-sprint-roadmap-v0.1.md)
 - Trust loop UI: [`../feature-sprint-flow-guide-v0.3.md`](../feature-sprint-flow-guide-v0.3.md)
-- Rough spec intake (ephemeral today): [`../feature-spec-intake-v0.1.md`](../feature-spec-intake-v0.1.md)
+- Rough spec intake: [`../feature-spec-intake-v0.1.md`](../feature-spec-intake-v0.1.md)
 - Runner + verification: [`../feature-sprint-local-runner-v0.1.md`](../feature-sprint-local-runner-v0.1.md), [`../feature-sprint-verification-capture-v0.2.md`](../feature-sprint-verification-capture-v0.2.md)
 - Untrusted context in packets: [`../feature-sprint-untrusted-context-v0.1.md`](../feature-sprint-untrusted-context-v0.1.md)
 - Pattern inspiration map: [`./odysseus-patterns-repo-map-v0.1.md`](./odysseus-patterns-repo-map-v0.1.md)

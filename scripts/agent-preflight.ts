@@ -1,8 +1,8 @@
 import {
   changedFilePaths,
+  collectLikelyTestsForFiles,
   currentBranch,
   gitStatusLines,
-  likelyTestsFor,
   packageScripts,
   parseArgs,
   parseTaskBlocks,
@@ -51,13 +51,7 @@ function taskBlocksForAreas(areas: string[]): string[] {
 }
 
 function likelyTests(files: string[]): string[] {
-  const tests = new Set<string>();
-  for (const file of files) {
-    for (const test of likelyTestsFor(file).existing) {
-      tests.add(test);
-    }
-  }
-  return Array.from(tests).sort();
+  return collectLikelyTestsForFiles(files);
 }
 
 function recommendedFirstCommands(areas: string[], tests: string[]): string[] {

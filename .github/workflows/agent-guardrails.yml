@@ -32,5 +32,8 @@ jobs:
       - name: Boundary check
         run: npm run check:boundaries
 
-      - name: Agent auto-check (dry run)
-        run: npm run agent:auto-check -- --dry-run
+      - name: Agent script claims
+        run: npm run check:agent-commands
+
+      - name: Agent ergonomics self-audit
+        run: npm run audit:agent-ergonomics

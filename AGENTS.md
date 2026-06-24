@@ -89,7 +89,7 @@ For every task:
 Prompt templates: [`prompts/agent_task_prompt_template.md`](prompts/agent_task_prompt_template.md) (default implementation + context scout). Optional Codex workflow skills: `.agents/skills/`.
 
 1. Read `docs/01_final_design_doc.md`, `docs/02_v0_1_scope.md`, and this `AGENTS.md`.
-2. Run or consult `npm run agent:preflight`, then use `docs/AGENT_CONTEXT_MAP.md` for task-specific docs/files/tests.
+2. Run or consult `npm run agent:preflight`, then use `docs/AGENT_CONTEXT_MAP.md` for task-specific docs/files/tests. Portable vs project-specific ergonomics: `docs/STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md`.
 3. Obey `.agentignore`; do not broad-read archived, planning, historical, fixture, sample-output, or compiled context files by default.
 4. Make the smallest change that satisfies the ticket.
 5. Do not introduce new product concepts.
@@ -97,7 +97,7 @@ Prompt templates: [`prompts/agent_task_prompt_template.md`](prompts/agent_task_p
 7. Put product rules in core logic, not scattered in UI.
 8. Add or update tests when core logic changes.
 9. Run `npm run agent:auto-check` before finishing when files changed, or run the narrower checks named by the ticket.
-10. Summarize what changed, commands run, and remaining gaps.
+10. Summarize handoff: Changed / Tests / Docs / Risks / Did not touch / Next safe step.
 
 ## Product Quality Bar
 A feature is valid only if it helps the user start sooner, recover faster, capture faster, resume easier, see progress, reduce overwhelm, prevent over-optimization, or create useful pressure. If not, park it.

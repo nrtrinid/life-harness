@@ -1,45 +1,65 @@
 # Feature Sprint Orchestrator v0.1
 
-For vision, agent roles, gate model, and doc map, see **[`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md)** (authority doc).
+For vision, agent roles, gate model, and doc map, see **[`feature-sprint-architecture-v0.1.md`](feature-sprint-architecture-v0.1.md)** (authority doc). For v2 living-spec evolution (partially landed), see [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md).
 
 ## What this adds
 
-Feature Sprint Orchestrator is a card-anchored manual loop for solo-builder feature work. Life Harness acts as **conductor**: it stores the plan, generates copy/paste packets, tracks step gates, and logs proof on feature completion.
+Feature Sprint Orchestrator is a card-anchored **manual, gated** loop for solo-builder feature work. Life Harness acts as **conductor**: it stores the plan, generates copy/paste packets, validates typed imports, tracks step gates, and logs proof on feature completion.
 
-It does **not** run Codex, Cursor, ChatGPT, or tests automatically.
+It does **not** run external agents, mutate the repo, or advance trust automatically. **Codex is optional** — one worker lane among Cursor, ChatGPT, local runner, and manual paste.
+
+```text
+Agents may propose.
+Runners may execute.
+Life Harness records.
+Only gates advance trust.
+```
+
+There is **no auto-import, no auto-save, no auto-advance, and no backend orchestration** in v0.1/v2-shipped behavior.
 
 ## Why it exists
 
 Life Harness already supports agent task packets and session logs. Feature Sprint adds a structured multi-step workflow:
 
 ```text
-ChatGPT/Codex high/xhigh → scope + review
-Cursor/Codex implementation agent → bounded build slices
+Frontier architect worker → scope + review (ChatGPT, Codex, manual, etc.)
+Implementation worker → bounded build slices (Cursor primary; optional runner)
 Life Harness → memory, packets, gates, proof
-User → approval gate
+User → approval gate at every trust boundary
 ```
 
 ## Manual workflow
 
 1. Open a build/feature card → **Backroom** → **Feature Sprint**.
 2. Optionally paste a **Rough feature spec** (see [feature-spec-intake-v0.1.md](./feature-spec-intake-v0.1.md)).
-3. **Copy scoping packet** or **Run scoping with Codex** → paste into ChatGPT or Codex (high/xhigh) if copying manually.
-4. Architect returns prose + `feature-sprint-plan` fenced JSON.
-5. **Import plan** — parses fenced block only; no NL parsing.
-6. **Copy implementation prompt** or **Run implementation in worktree** (local runner, isolated git worktree) → send to Cursor/Codex implementation agent.
+3. **Copy scoping packet** (recipient-labeled) or **Run scoping** via optional local runner → paste into architect worker if copying manually.
+4. Architect worker returns prose + `feature-sprint-plan` fenced JSON.
+5. **Import plan** — parses fenced block only; no NL parsing; no auto-import.
+6. Per slice — optional **localization** and **prompt audit** (v2 inner loop); then **Copy implementation packet** or **Run implementation in worktree** (optional local runner, isolated git worktree) → send to implementation worker (typically Cursor).
 7. Paste or receive agent output → **Save agent output** on the current step (never auto-saved).
-8. **Copy review packet** → paste into ChatGPT/Codex reviewer.
-9. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
-10. **Import review verdict** — does not auto-advance.
-11. **Advance step** when ready (manual gate).
-12. Repeat steps 6–11 for each slice.
-13. **Mark feature complete** — creates one win log + proof (idempotent).
+8. Optional: **Normalize proof** for review packet input.
+9. **Copy review packet** → paste into reviewer worker (separate from implementer).
+10. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
+11. **Import review verdict** — does not auto-advance.
+12. Optional (living-spec path): **Import spec update** (`feature-spec-update`) → **Approve revised feature spec** → spec becomes unapproved until approved again.
+13. **Advance step** when ready (manual gate), or **Adopt next slice** when no ready predefined step exists but `nextSliceProposal` is present.
+14. Repeat steps 6–13 for each slice.
+15. **Mark feature complete** — creates one win log + proof (idempotent).
 
 Re-importing a plan on an active sprint **preserves plan ID** and replaces steps after explicit **Import plan** — no silent merge.
 
-### Local runner (v0.1)
+### Advance paths (fixed-step vs living-spec)
 
-[Feature Sprint Local Runner](feature-sprint-local-runner-v0.1.md) can execute scoping/review packets via an optional localhost bridge and fill the import textareas. **Import plan**, **Import review verdict**, advance, and complete gates are unchanged — runner output is draft text until you import.
+| Path | When | What happens |
+|------|------|--------------|
+| **Fixed-step advance** | Imported plan has a next predefined step | Current step → `done`; next planned step → `ready`; `currentStepId` moves |
+| **Living-spec adopt** | No ready predefined step; `nextSliceProposal` from spec update | User **Adopt next slice** — creates or activates matching step; clears proposal |
+
+Both paths require explicit user action. Neither auto-advances on import.
+
+### Local runner (optional)
+
+[Feature Sprint Local Runner](feature-sprint-local-runner-v0.1.md) can execute scoping/review/implementation packets via an optional localhost bridge and **fill import textareas**. **Import plan**, **Import review verdict**, save, advance, adopt, and complete gates are unchanged — runner output is draft text until you import, save, and approve manually.
 
 ## Data model
 
@@ -47,30 +67,37 @@ Collection: `featureSprintPlans: HarnessFeatureSprintPlan[]`
 
 - Anchored to `LifeCard.id` via `cardId`
 - Optional `projectId` from Project Registry
-- `steps[]` with per-step status, output, review fields
-- `currentStepId` highlights active slice
+- `steps[]` with per-step status, output, review fields (legacy plan/history lens during v2 migration)
+- `currentStepId` highlights active slice (today; `currentSlice` + phase machine is the next architectural jump)
+- `featureSpec` — persisted living spec with approval gate (v2, shipped)
+- `nextSliceProposal` — preview-only next slice from spec update until adopted (v2, shipped)
 - `evidenceLogId` / `evidenceProofItemId` for idempotent completion proof
 
 `LifeCard` status is unchanged — plans are parallel metadata.
 
 ## Packet builders
 
-| Builder | Audience | Purpose |
-|---------|----------|---------|
-| `buildFeatureScopingPacket` | ChatGPT/Codex architect | Scope feature, return plan JSON |
-| `buildFeatureStepImplementationPacket` | Cursor/Codex builder | Bounded slice implementation |
-| `buildFeatureStepReviewPacket` | ChatGPT/Codex reviewer | Verdict + optional next prompt |
+| Builder | Recipient label (typical) | Purpose |
+|---------|---------------------------|---------|
+| `buildFeatureScopingPacket` | Architect worker | Scope feature, return plan JSON |
+| `buildFeatureStepImplementationPacket` | Implementation worker (Cursor) | Bounded slice implementation |
+| `buildFeatureStepReviewPacket` | Reviewer worker | Verdict + optional next prompt |
 
 Scoping rough specs and review implementation output are wrapped as untrusted context blocks — see [feature-sprint-untrusted-context-v0.1.md](./feature-sprint-untrusted-context-v0.1.md).
 
 ## Fence labels
 
-Only these exact fence labels are parsed:
+Parsed fence labels (exact match):
 
 ```text
 feature-sprint-plan
 feature-review-verdict
+feature-prompt-localization
+feature-prompt-critique
+feature-spec-update
 ```
+
+Normalized implementation proof is composed by Life Harness (not always a separate import fence) — see `normalizeImplementationProofForStep` in orchestrator core.
 
 ### `feature-sprint-plan` (required fields)
 
@@ -138,13 +165,16 @@ Feature Sprint UI is **Backroom-only** — not shown in Act mode.
 - Agent Workbench feature-step display (deferred)
 - Next Move feature-sprint collector (deferred)
 
-Local runner profiles (Codex and Cursor CLI) ship separately — see [feature-sprint-local-runner-v0.1.md](./feature-sprint-local-runner-v0.1.md) and [feature-sprint-cursor-runner-v0.1.md](./feature-sprint-cursor-runner-v0.1.md).
+Local runner profiles (Cursor CLI; optional Codex CLI) ship separately — see [feature-sprint-local-runner-v0.1.md](./feature-sprint-local-runner-v0.1.md) and [feature-sprint-cursor-runner-v0.1.md](./feature-sprint-cursor-runner-v0.1.md). **Neither runner profile is required** for Feature Sprint.
 
 ## Future path
 
-See [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md) for trust dashboard, parallel lanes, expanded contracts, risk routing, and replay evals.
+See [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md) for trust dashboard, parallel lanes, expanded contracts, risk routing, replay evals, and provider-agnostic runner abstraction.
 
-- **Feature Sprint v2 — Living Spec Loop:** [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md) — persisted living spec, slice phases, Cursor localization, prompt audit, proof normalizer, spec-update import
+**Next architectural jump (v2):** [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md) — **`currentSlice` + phase machine** unlocks Next Handoff UI, risk-tier routing, instrumentation, and future local-runner integration. Partially landed: living spec, handoffs, localization, prompt audit, proof normalizer, spec update, next-slice adoption.
+
+Later items:
+
 - Streaming partial runner output to UI
 - Worktree/branch isolation per slice
 - `Copy implementation prompt + log sent` if trivial atop agent session helpers

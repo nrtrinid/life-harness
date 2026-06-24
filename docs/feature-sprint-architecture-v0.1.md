@@ -2,7 +2,9 @@
 
 **Authority doc** for the Feature Sprint builder loop — vision, agent roles, gate model, and doc map.
 
-For shipped behavior and data model, see [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md). For future upgrades (trust dashboard, parallel lanes, evals), see [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
+For shipped behavior and data model, see [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md). For v2 living-spec evolution (partially landed), see [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md). For future upgrades (trust dashboard, parallel lanes, evals), see [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
+
+**Status (mid-v2):** Living spec, typed handoffs, proof normalization, spec updates, and next-slice adoption are partially or mostly landed. The next architectural jump is **`currentSlice` + phase machine**, then risk-tier routing and UI consolidation around **Next Handoff**.
 
 ## What this is
 
@@ -18,7 +20,7 @@ capture proof and runner artifacts
 surface next safe action
 ```
 
-It does **not** run Codex, Cursor, ChatGPT, or tests without explicit user action at each gate.
+It does **not** run external agents or tests without explicit user action at each gate. **Codex is optional** — one interchangeable worker/reviewer lane among Cursor, ChatGPT, local runner, and manual paste. Codex access or expiration does not change this architecture.
 
 ## Generic pattern alignment
 
@@ -30,13 +32,15 @@ orchestrator → workers → evaluator → human checkpoint
 
 Feature Sprint maps almost directly:
 
-| Generic role | Feature Sprint role | Typical agent / surface |
-|--------------|---------------------|-------------------------|
-| Human + conversational architect | Spec intake, plan approval | ChatGPT web, rough spec textarea |
-| Orchestrator / planner | Scope feature, slice plan | Codex xhigh scoping packet |
-| Worker with repo tools | Bounded slice implementation | Cursor / Codex in isolated worktree |
-| Evaluator | Review slice output, verdict | Codex xhigh review packet |
+| Generic role | Feature Sprint role | Typical worker (interchangeable) |
+|--------------|---------------------|-------------------------------------|
+| Human + conversational architect | Spec intake, plan approval | GPT/frontier architect (ChatGPT web, etc.), rough spec textarea |
+| Orchestrator / planner | Scope feature, slice plan | Copy scoping packet → any architect worker |
+| Worker with repo tools | Bounded slice implementation | Cursor (repo truth), optional Codex/local runner in worktree |
+| Evaluator | Review slice output, verdict | Copy review packet → separate reviewer worker |
 | Workflow state + human checkpoint | Gates, proof, advance | Life Harness Backroom |
+
+Life Harness depends on **typed packets, gates, proof, and phase state** — not on any single provider.
 
 External references that describe the same primitives:
 
@@ -75,13 +79,24 @@ Approval is **not** required on every tiny tool call forever. It **is** required
 ### 3. Separate planner, worker, and reviewer
 
 ```text
-Cursor implements.
-Codex/xhigh reviews.
-Life Harness enforces proof.
-You approve.
+Frontier architect maintains spec + judgment.
+Cursor maintains repo truth (implementation worker).
+Life Harness maintains protocol + proof.
+You approve at trust boundaries.
 ```
 
-The implementer must **not** grade itself. Scoping and review packets go to a separate evaluator profile from the implementation runner — see packet builders in [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md).
+The implementer must **not** grade itself. Scoping and review packets go to a **separate worker role** from the implementation runner — see packet builders in [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md). UI labels say **Copy scoping/review/implementation packet** with recipient hints (e.g. "Copy for ChatGPT", "Copy for Cursor"); no provider is structurally required.
+
+### 3b. Agents propose; gates advance trust
+
+```text
+Agents may propose.
+Runners may execute.
+Life Harness records.
+Only gates advance trust.
+```
+
+External workers may fill import textareas or return fenced JSON. Life Harness validates imports and stores proof. **Import, save, approve, advance, and complete stay manual** until instrumentation earns a gate change.
 
 ### 4. Sandboxes, audit logs, replayable artifacts
 
@@ -102,7 +117,15 @@ Implemented today via runner history, diff viewer, verification capture, and wor
 
 ### 5. Provider neutrality
 
-Feature Sprint generates markdown packets and accepts fenced JSON imports. It does not bind the app to a specific LLM provider. Local runner bridges (Codex CLI, Cursor CLI) are optional localhost helpers — see [`feature-sprint-local-runner-v0.1.md`](feature-sprint-local-runner-v0.1.md).
+Feature Sprint generates markdown packets and accepts fenced JSON imports. It does **not** bind the app to a specific LLM provider. **Codex is not required** — Cursor, ChatGPT, Codex, local runner, and manual paste are interchangeable worker lanes.
+
+| Layer | What LH owns | What providers do |
+|-------|--------------|-------------------|
+| Protocol | Typed fences, gate sequence, phase/next-action surfacing | — |
+| Proof | Runner history, normalized proof, verification excerpts | Return inspectable output |
+| Workers | Copy/paste packet builders only | Scope, localize, implement, review |
+
+Local runner bridges (Cursor CLI, optional Codex CLI) are **optional localhost helpers** — see [`feature-sprint-local-runner-v0.1.md`](feature-sprint-local-runner-v0.1.md). Local models may **later** assist cheap structured tasks (prompt critique, proof normalization, review pre-check, packet linting, friction summaries, risk-tier recommendation) without replacing frontier architect scoping or auto-advance gates — see [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
 
 ## End-to-end loop
 
@@ -113,7 +136,7 @@ Card Detail → **Backroom** → **Feature Sprint** → **Start feature** panel 
 ```text
 Describe the feature (rough spec, local only)
   → Check setup (project metadata, repo path, runner)
-  → Scope it (copy packet or run scoping with Codex/Cursor)
+  → Scope it (copy scoping packet or optional runner — paste into architect worker)
   → Import plan (manual; parses feature-sprint-plan fence only)
 ```
 
@@ -128,9 +151,11 @@ Run implementation in worktree
   → View details (Recent runner runs)
   → Inspect output, changed files, diff, verification
   → Save agent output (manual)
+  → Optional: localize → prompt audit (v2 inner loop)
   → Run review / copy review packet
   → Import review verdict (manual)
-  → Advance step
+  → Optional: import spec update → approve revised spec
+  → Advance step or adopt next slice (living-spec path)
   → … repeat …
   → Mark feature complete
   → Clean worktree
@@ -150,22 +175,25 @@ Feature Sprint UI is **Backroom-only** — not shown in Act mode.
 
 Agent outputs that mutate LH state must be **importable and validatable** — no "long paragraph, good luck parsing."
 
-| Fence label | Role | Parsed by |
-|-------------|------|-----------|
-| `feature-sprint-plan` | Architect scope output | Import plan |
-| `feature-review-verdict` | Reviewer verdict | Import review verdict |
+| Fence label | Role | Parsed by | Status |
+|-------------|------|-----------|--------|
+| `feature-sprint-plan` | Architect scope output | Import plan | Shipped |
+| `feature-review-verdict` | Reviewer verdict | Import review verdict | Shipped |
+| `feature-prompt-localization` | Repo localization output | Import localization | Shipped |
+| `feature-prompt-critique` | Prompt audit output | Import prompt audit | Shipped |
+| `feature-spec-update` | Living spec revision + next slice | Import spec update | Shipped |
 
 Packet builders (markdown out, fences in):
 
-| Builder | Audience | Purpose |
-|---------|----------|---------|
-| `buildFeatureScopingPacket` | Architect | Scope feature → plan JSON |
-| `buildFeatureStepImplementationPacket` | Worker | Bounded slice implementation |
-| `buildFeatureStepReviewPacket` | Evaluator | Verdict + optional next prompt |
+| Builder | Recipient label (typical) | Purpose |
+|---------|---------------------------|---------|
+| `buildFeatureScopingPacket` | Architect worker | Scope feature → plan JSON |
+| `buildFeatureStepImplementationPacket` | Implementation worker (Cursor) | Bounded slice implementation |
+| `buildFeatureStepReviewPacket` | Reviewer worker | Verdict + optional next prompt |
 
 Core module: [`src/core/featureSprintOrchestrator.ts`](../src/core/featureSprintOrchestrator.ts).
 
-Expanded contract types (prompt critique, normalized proof, spec update) are planned — [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
+Additional contracts (`feature-slice-scope`, `feature-spec`, replay fixtures) remain on the roadmap — [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
 
 ## Relationship to other LH systems
 
@@ -215,6 +243,7 @@ Full list: [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v
 | [`feature-sprint-web-architect-phase-a-v0.1.md`](feature-sprint-web-architect-phase-a-v0.1.md) | Persisted spec + approval gate |
 | [`feature-sprint-cursor-localization-b1-v0.1.md`](feature-sprint-cursor-localization-b1-v0.1.md) | Cursor localization phase |
 | [`feature-sprint-prompt-audit-b2-v0.1.md`](feature-sprint-prompt-audit-b2-v0.1.md) | Prompt audit phase |
+| [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md) | v2 living spec loop (mid-v2; partially shipped) |
 
 ## Core files
 
