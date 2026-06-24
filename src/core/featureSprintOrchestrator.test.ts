@@ -2182,6 +2182,82 @@ Changed files
       expect(step?.implementationProof).toBeUndefined();
     });
 
+    it("parses worker output evidence on save and embeds after normalize", () => {
+      const imported = importPlanWithStep();
+      expect(imported.ok).toBe(true);
+      if (!imported.ok) {
+        return;
+      }
+
+      const plan = getActiveFeatureSprintPlanForCard(imported.state, "card-build-test");
+      const stepId = plan?.currentStepId;
+      if (!stepId) {
+        return;
+      }
+
+      const outputSummary = [
+        "Summary:",
+        "- Bounded slice shipped",
+        "",
+        "Files changed:",
+        "- src/core/featureSprintWorkerOutput.ts",
+        "",
+        "Tests:",
+        "- npm test -- src/core/featureSprintWorkerOutput.test.ts"
+      ].join("\n");
+
+      const saved = updateFeatureSprintStep(
+        imported.state,
+        imported.planId!,
+        stepId,
+        { outputSummary, status: "sent" },
+        FIXED_NOW
+      );
+      expect(saved.ok).toBe(true);
+      if (!saved.ok) {
+        return;
+      }
+
+      const savedStep = getActiveFeatureSprintPlanForCard(saved.state, "card-build-test")?.steps.find(
+        (item) => item.id === stepId
+      );
+      const savedPlan = getActiveFeatureSprintPlanForCard(saved.state, "card-build-test");
+      expect(savedStep?.workerOutputEvidence?.changedFiles).toContain(
+        "src/core/featureSprintWorkerOutput.ts"
+      );
+      expect(savedPlan?.currentSlice?.phase).toBe("proof_pending");
+
+      const normalized = normalizeImplementationProofForStep(
+        saved.state,
+        imported.planId!,
+        stepId,
+        FIXED_NOW
+      );
+      expect(normalized.ok).toBe(true);
+      if (!normalized.ok) {
+        return;
+      }
+
+      const normalizedStep = getActiveFeatureSprintPlanForCard(
+        normalized.state,
+        "card-build-test"
+      )?.steps.find((item) => item.id === stepId);
+      expect(normalizedStep?.implementationProof?.workerOutputEvidence?.changedFiles).toContain(
+        "src/core/featureSprintWorkerOutput.ts"
+      );
+      expect(normalizedStep?.implementationProof?.filesChanged).toContain(
+        "src/core/featureSprintWorkerOutput.ts"
+      );
+
+      const packet = buildFeatureStepReviewPacket(normalized.state, imported.planId!, stepId);
+      expect(packet.ok).toBe(true);
+      if (!packet.ok) {
+        return;
+      }
+      expect(packet.markdown).toContain("## Structured worker output evidence");
+      expect(packet.markdown).toContain("src/core/featureSprintWorkerOutput.ts");
+    });
+
     it("enriches review packet with normalized proof and prompt source", () => {
       const imported = importPlanWithStep();
       expect(imported.ok).toBe(true);

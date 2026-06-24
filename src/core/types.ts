@@ -488,6 +488,30 @@ export type HarnessFeatureSprintVerificationProofResult =
   | "fail"
   | "not_run";
 
+export type HarnessFeatureSprintWorkerOutputSource =
+  | "cursor_auto"
+  | "cursor_agent"
+  | "manual"
+  | "runner"
+  | "mock";
+
+export type HarnessFeatureSprintWorkerOutputEvidence = {
+  source: HarnessFeatureSprintWorkerOutputSource;
+  rawOutput: string;
+  summary?: string;
+  changedFiles?: string[];
+  testsRun?: string[];
+  testOutput?: string;
+  verificationCommands?: string[];
+  warnings?: string[];
+  knownLimitations?: string[];
+  risks?: string[];
+  diffStat?: string;
+  withinScope?: boolean;
+  scopeNotes?: string[];
+  capturedAt: string;
+};
+
 export type HarnessFeatureSprintStepImplementationProofRunnerEvidence = {
   diffStat?: string;
   gitStatus?: string;
@@ -505,6 +529,7 @@ export type HarnessFeatureSprintStepImplementationProof = {
   suggestedReviewFocus: string[];
   sourceRunnerRunId?: string;
   runnerEvidence?: HarnessFeatureSprintStepImplementationProofRunnerEvidence;
+  workerOutputEvidence?: HarnessFeatureSprintWorkerOutputEvidence;
   createdAt: string;
   updatedAt: string;
 };
@@ -519,6 +544,7 @@ export type HarnessFeatureSprintStep = {
   promptLocalization?: HarnessFeatureSprintStepLocalization;
   promptAudit?: HarnessFeatureSprintStepPromptAudit;
   implementationProof?: HarnessFeatureSprintStepImplementationProof;
+  workerOutputEvidence?: HarnessFeatureSprintWorkerOutputEvidence;
   agentSessionId?: string;
   outputSummary?: string;
   reviewVerdict?: string;

@@ -11,6 +11,11 @@ import {
   detectFeatureSprintAutomatedReviewStopSignals,
   type FeatureSprintAutomatedStopInput
 } from "./featureSprintAutomatedStopSignals";
+import {
+  buildWorkerEvidenceScanText,
+  redactWorkerOutputForReviewPacket,
+  resolveWorkerEvidenceForStep
+} from "./featureSprintWorkerOutput";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type { HarnessFeatureSprintReviewStatus } from "./types";
 
@@ -140,14 +145,18 @@ export function buildFeatureSprintAutomatedReviewPacket(
 
   const slice = resolveFeatureSprintCurrentSlice(plan, step);
   const implRun = resolveLatestImplementationRunForStep(data, plan.id, step.id);
+  const workerEvidence = resolveWorkerEvidenceForStep(step);
+  const proofTextRaw = step.implementationProof?.rawOutput ?? step.outputSummary ?? "";
+  const agentOutputRaw = options.agentOutput ?? step.outputSummary ?? "";
   const stopSignals = detectFeatureSprintAutomatedReviewStopSignals({
     changedFiles: implRun?.changedFiles,
     diffText: implRun?.diffText,
-    proofText: step.implementationProof?.rawOutput ?? step.outputSummary,
-    agentOutput: options.agentOutput ?? step.outputSummary,
+    proofText: redactWorkerOutputForReviewPacket(proofTextRaw).text,
+    agentOutput: redactWorkerOutputForReviewPacket(agentOutputRaw).text,
     verificationOutput: implRun?.verificationResults
       ?.map((row) => `${row.command}:${row.status}`)
-      .join("\n")
+      .join("\n"),
+    workerEvidenceText: buildWorkerEvidenceScanText(workerEvidence)
   });
 
   const lines: string[] = [

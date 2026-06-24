@@ -51,7 +51,8 @@ import {
 } from "../../src/core/featureSprintOrchestrator";
 import {
   formatFeatureSprintSlicePhaseLabel,
-  resolveFeatureSprintCurrentSlice
+  resolveFeatureSprintCurrentSlice,
+  type FeatureSprintNextJob
 } from "../../src/core/featureSprintCurrentSlice";
 import {
   getFeatureSprintRunnerJobStagingTarget,
@@ -76,7 +77,8 @@ import {
   buildFeatureSprintAutomatedPromptAuditPacket,
   formatAutomatedPromptCritiqueForImportStaging
 } from "../../src/core/featureSprintPromptAuditAdapter";
-import type { FeatureSprintNextJob } from "../../src/core/featureSprintCurrentSlice";
+import { parseFeatureSprintWorkerOutputEvidence } from "../../src/core/featureSprintWorkerOutput";
+import type { HarnessFeatureSprintWorkerOutputEvidence } from "../../src/core/types";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
   buildFeatureSprintDogfoodSummary,
@@ -355,6 +357,8 @@ export default function CardDetailScreen() {
   const [isRunningAutomatedPromptAudit, setIsRunningAutomatedPromptAudit] = useState(false);
   const [specUpdateImportText, setSpecUpdateImportText] = useState("");
   const [agentOutputText, setAgentOutputText] = useState("");
+  const [workerOutputPreview, setWorkerOutputPreview] =
+    useState<HarnessFeatureSprintWorkerOutputEvidence | null>(null);
   const [runnerHealth, setRunnerHealth] = useState<"unknown" | "available" | "unavailable">(
     "unknown"
   );
@@ -692,6 +696,8 @@ export default function CardDetailScreen() {
       : !stepImplementationProofSaved
         ? "None"
         : `Normalized (${currentFeatureStep?.implementationProof?.verificationResult ?? "unknown"})`;
+  const displayedWorkerEvidence =
+    workerOutputPreview ?? currentFeatureStep?.workerOutputEvidence ?? null;
   const localizationStatusLabel = stepLocalizationSaved
     ? `Saved for current step (${currentFeatureStep?.promptLocalization?.likelyFiles.length ?? 0} files mapped)`
     : "None";
@@ -1017,19 +1023,38 @@ export default function CardDetailScreen() {
     showNotice("success", result.message ?? "Prompt audit imported.");
   }
 
+  function handleParseOutputPreview() {
+    setWorkerOutputPreview(
+      parseFeatureSprintWorkerOutputEvidence(agentOutputText, {
+        source: latestImplementationRunForStep ? "runner" : "manual",
+        fallbackChangedFiles: latestImplementationRunForStep?.changedFiles
+      })
+    );
+  }
+
   function handleSaveAgentOutput() {
     if (!activeFeatureSprintPlan?.currentStepId) {
       showNotice("warning", "No current step to save output on.");
       return;
     }
+    const fromRunner = Boolean(latestImplementationRunForStep);
     const result = updateFeatureSprintStep(
       activeFeatureSprintPlan.id,
       activeFeatureSprintPlan.currentStepId,
       {
         outputSummary: agentOutputText.trim() || undefined,
-        status: "sent"
+        status: "sent",
+        ...(fromRunner
+          ? {
+              workerOutputSource: "runner" as const,
+              fallbackChangedFiles: latestImplementationRunForStep?.changedFiles
+            }
+          : {})
       }
     );
+    if (result.ok) {
+      setWorkerOutputPreview(null);
+    }
     showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save agent output.");
   }
 
@@ -2876,6 +2901,48 @@ export default function CardDetailScreen() {
             >
               <Text style={styles.secondaryActionText}>Save agent output</Text>
             </Pressable>
+            <Pressable
+              testID="feature-sprint-parse-output-preview"
+              style={[styles.secondaryAction, { marginTop: 12 }]}
+              onPress={handleParseOutputPreview}
+            >
+              <Text style={styles.secondaryActionText}>Parse output preview</Text>
+            </Pressable>
+            {displayedWorkerEvidence ? (
+              <View testID="feature-sprint-worker-output-evidence-preview" style={{ marginTop: 12 }}>
+                <Text style={styles.label}>Parsed evidence preview</Text>
+                <Text style={styles.helpText}>
+                  Best-effort parse only — Save agent output persists evidence. Review packets redact
+                  secrets and cap excerpts.
+                </Text>
+                <Text style={styles.helpText}>
+                  Changed files: {displayedWorkerEvidence.changedFiles?.length ?? 0}
+                  {displayedWorkerEvidence.changedFiles?.length
+                    ? ` — ${displayedWorkerEvidence.changedFiles.slice(0, 5).join(", ")}${
+                        displayedWorkerEvidence.changedFiles.length > 5 ? "…" : ""
+                      }`
+                    : ""}
+                </Text>
+                <Text style={styles.helpText}>
+                  Tests detected: {displayedWorkerEvidence.testsRun?.length ?? 0}
+                  {displayedWorkerEvidence.testsRun?.length
+                    ? ` — ${displayedWorkerEvidence.testsRun.slice(0, 3).join(", ")}${
+                        displayedWorkerEvidence.testsRun.length > 3 ? "…" : ""
+                      }`
+                    : ""}
+                </Text>
+                {displayedWorkerEvidence.warnings?.length ? (
+                  <Text style={styles.helpText}>
+                    Warnings: {displayedWorkerEvidence.warnings.join(" | ")}
+                  </Text>
+                ) : null}
+                {displayedWorkerEvidence.knownLimitations?.length ? (
+                  <Text style={styles.helpText}>
+                    Limitations: {displayedWorkerEvidence.knownLimitations.join(" | ")}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             <Pressable
               style={[
                 styles.secondaryAction,

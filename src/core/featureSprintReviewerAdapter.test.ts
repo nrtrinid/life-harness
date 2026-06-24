@@ -121,6 +121,44 @@ function baseData(): LifeHarnessData {
   };
 }
 
+function fixtureDataWithSavedOutput(outputSummary: string): LifeHarnessData {
+  const step = fixtureStep({
+    outputSummary,
+    workerOutputEvidence: {
+      source: "manual",
+      rawOutput: outputSummary,
+      changedFiles: ["src/core/foo.ts"],
+      testsRun: ["npm test"],
+      warnings: ["Contains DEEPSEEK_API_KEY=super-secret-value-here"],
+      capturedAt: FIXED_NOW
+    }
+  });
+  return {
+    ...createSeedState(FIXED_NOW),
+    cards: [fixtureCard()],
+    projects: [
+      {
+        id: "project-1",
+        cardId: CARD_ID,
+        name: "life-harness",
+        repoPath: "C:/Users/me/Projects/life-harness",
+        branch: "main",
+        docs: [],
+        likelyFiles: [],
+        verificationCommands: ["npm test"],
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW
+      }
+    ],
+    featureSprintPlans: [
+      fixturePlan({
+        steps: [step],
+        currentStepId: step.id
+      })
+    ]
+  };
+}
+
 describe("featureSprintReviewerAdapter", () => {
   it("builds automated review packet with spec, slice, and proof context", () => {
     const packet = buildFeatureSprintAutomatedReviewPacket(baseData(), CARD_ID);
@@ -142,6 +180,21 @@ describe("featureSprintReviewerAdapter", () => {
     });
     expect(signals.length).toBeGreaterThan(0);
     expect(signals.some((item) => item.includes("database") || item.includes("docker"))).toBe(true);
+  });
+
+  it("includes structured worker evidence and redacts secrets in automated packet", () => {
+    const data = fixtureDataWithSavedOutput(
+      `Summary:\nUsed DEEPSEEK_API_KEY=super-secret-value-here\n\nFiles changed:\n- src/core/foo.ts\n\nTests:\n- npm test`
+    );
+    const packet = buildFeatureSprintAutomatedReviewPacket(data, CARD_ID);
+    expect(packet.ok).toBe(true);
+    if (!packet.ok) {
+      return;
+    }
+    expect(packet.markdown).toContain("## Structured worker output evidence");
+    expect(packet.markdown).toContain("src/core/foo.ts");
+    expect(packet.markdown).not.toContain("super-secret-value-here");
+    expect(packet.markdown).toContain("Potential secret-like text was redacted from worker output.");
   });
 
   it("mock review returns needs_changes when proof missing", () => {

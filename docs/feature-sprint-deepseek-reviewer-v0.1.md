@@ -73,6 +73,8 @@ Automated critique maps `approved` → import `ready`, `needs_changes`/`blocked`
 1. `buildFeatureSprintAutomatedReviewPacket` → `runFeatureSprintDeepSeekReview` → validate → `formatAutomatedReviewForImportStaging`
 2. Fill **Import review verdict** textarea; optional read-only **Staged next Cursor prompt**
 
+Automated review packets include structured worker output evidence (best-effort parse of saved agent output) and **redact potential secret-like text** before sending the packet to DeepSeek/mock.
+
 ### Prompt audit
 
 1. `buildFeatureSprintAutomatedPromptAuditPacket` → `runFeatureSprintDeepSeekPromptAudit` → validate → `formatAutomatedPromptCritiqueForImportStaging`

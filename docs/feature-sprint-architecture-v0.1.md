@@ -16,7 +16,7 @@ Life Harness acts as **conductor**:
 store plan and step state
 generate copy/paste packets for specialized agents
 track manual gates
-capture proof and runner artifacts
+capture proof and runner artifacts (including parsed worker output evidence)
 surface next safe action
 ```
 
@@ -82,6 +82,14 @@ Approval is **not** required on every tiny tool call forever. It **is** required
 Frontier architect maintains spec + judgment.
 Cursor maintains repo truth (implementation worker).
 Life Harness maintains protocol + proof.
+
+In v0.1, proof includes:
+
+- raw worker output (saved manually)
+- best-effort parsed worker evidence (files/tests/warnings) used to enrich review packets
+- optional normalization into a structured `implementationProof` record
+
+Review packets redact potential secret-like text and cap excerpts before sending to evaluator models.
 You approve at trust boundaries.
 ```
 

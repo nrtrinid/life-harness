@@ -3,13 +3,15 @@ import {
   FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX,
   isImplementationProfile
 } from "./featureSprintRunner";
+import { parseWorkerOutputFreeTextSections, normalizeWorkerOutputEvidenceRecord } from "./featureSprintWorkerOutput";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type {
   HarnessFeatureSprintRunnerRun,
   HarnessFeatureSprintStep,
   HarnessFeatureSprintStepImplementationProof,
   HarnessFeatureSprintStepImplementationProofRunnerEvidence,
-  HarnessFeatureSprintVerificationProofResult
+  HarnessFeatureSprintVerificationProofResult,
+  HarnessFeatureSprintWorkerOutputEvidence
 } from "./types";
 
 export const FEATURE_SPRINT_REVIEW_PACKET_MAX_FILES = 20;
@@ -59,48 +61,11 @@ export type ManualImplementationOutputSections = {
 export function parseManualImplementationOutputSections(
   rawOutput: string
 ): ManualImplementationOutputSections {
-  const filesChanged: string[] = [];
-  const testsRun: string[] = [];
-  let parseIncomplete = false;
-
-  const lines = rawOutput.split(/\r?\n/);
-  let inChangedFiles = false;
-  let inVerification = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^changed files/i.test(trimmed)) {
-      inChangedFiles = true;
-      inVerification = false;
-      continue;
-    }
-    if (/^## verification/i.test(trimmed) || trimmed === "Verification:") {
-      inVerification = true;
-      inChangedFiles = false;
-      continue;
-    }
-    if (/^(worktree:|branch:|git status:|diff stat:)/i.test(trimmed)) {
-      inChangedFiles = false;
-      inVerification = false;
-      continue;
-    }
-
-    if (inChangedFiles && trimmed.startsWith("- ")) {
-      filesChanged.push(trimmed.slice(2).trim());
-      continue;
-    }
-
-    if (inVerification) {
-      const commandMatch = trimmed.match(/^- command:\s*(.+)$/i);
-      if (commandMatch?.[1]) {
-        testsRun.push(commandMatch[1].trim());
-      }
-    }
-  }
-
-  if (filesChanged.length === 0 && testsRun.length === 0 && rawOutput.trim().length > 0) {
-    parseIncomplete = true;
-  }
+  const sections = parseWorkerOutputFreeTextSections(rawOutput);
+  const filesChanged = sections.changedFiles;
+  const testsRun = [...new Set([...sections.testsRun, ...sections.verificationCommands])];
+  const parseIncomplete =
+    filesChanged.length === 0 && testsRun.length === 0 && rawOutput.trim().length > 0;
 
   return { filesChanged, testsRun, parseIncomplete };
 }
@@ -178,6 +143,7 @@ export type BuildImplementationProofInput = {
   matchingRun?: HarnessFeatureSprintRunnerRun;
   timestamp: string;
   existingProof?: HarnessFeatureSprintStepImplementationProof;
+  workerOutputEvidence?: HarnessFeatureSprintWorkerOutputEvidence;
 };
 
 export function buildImplementationProofFromSources(
@@ -185,9 +151,16 @@ export function buildImplementationProofFromSources(
 ): HarnessFeatureSprintStepImplementationProof {
   const rawOutput = input.rawOutput.trim();
   const manual = parseManualImplementationOutputSections(rawOutput);
+  const worker = input.workerOutputEvidence ?? input.step.workerOutputEvidence;
   const run = input.matchingRun;
 
   let filesChanged = cleanStringList(run?.changedFiles);
+  if (filesChanged.length === 0 && input.existingProof?.filesChanged?.length) {
+    filesChanged = cleanStringList(input.existingProof.filesChanged);
+  }
+  if (filesChanged.length === 0) {
+    filesChanged = cleanStringList(worker?.changedFiles);
+  }
   if (filesChanged.length === 0) {
     filesChanged = manual.filesChanged;
   }
@@ -197,6 +170,15 @@ export function buildImplementationProofFromSources(
       .filter((item) => item.status === "passed")
       .map((item) => item.command)
   );
+  if (testsRun.length === 0 && input.existingProof?.testsRun?.length) {
+    testsRun = cleanStringList(input.existingProof.testsRun);
+  }
+  if (testsRun.length === 0) {
+    testsRun = cleanStringList([
+      ...(worker?.testsRun ?? []),
+      ...(worker?.verificationCommands ?? [])
+    ]);
+  }
   if (testsRun.length === 0) {
     testsRun = manual.testsRun;
   }
@@ -222,6 +204,22 @@ export function buildImplementationProofFromSources(
   if (verificationResult === "not_run" && projectCommands.length > 0) {
     knownRisks.push("Verification was not run or not captured.");
   }
+  knownRisks.push(
+    ...(worker?.warnings ?? []),
+    ...(worker?.risks ?? []),
+    ...(worker?.knownLimitations ?? []),
+    ...(worker?.scopeNotes ?? [])
+  );
+
+  const behaviorChanged =
+    input.existingProof?.behaviorChanged?.length &&
+    input.existingProof.behaviorChanged.some(
+      (item) => item.trim() && item !== DEFAULT_BEHAVIOR_CHANGED[0]
+    )
+      ? cleanStringList(input.existingProof.behaviorChanged)
+      : worker?.summary?.trim()
+        ? [worker.summary.trim()]
+        : DEFAULT_BEHAVIOR_CHANGED;
 
   const suggestedReviewFocus = [...input.step.acceptanceCriteria];
   if (input.step.promptAudit?.verdict === "tighten_first") {
@@ -230,23 +228,43 @@ export function buildImplementationProofFromSources(
   if (filesChanged.length > 0) {
     suggestedReviewFocus.push(`Review ${filesChanged.length} changed file(s) for scope creep.`);
   }
+  if (worker?.withinScope === false) {
+    suggestedReviewFocus.push("Worker reported possible scope drift or incomplete work.");
+  }
   if (suggestedReviewFocus.length === 0) {
     suggestedReviewFocus.push("Confirm behavior matches step acceptance criteria.");
   }
 
   const createdAt = input.existingProof?.createdAt ?? input.timestamp;
+  const runnerEvidence = buildRunnerEvidenceSnapshot(run);
+  const workerDiffStat = worker?.diffStat?.trim();
+  const mergedRunnerEvidence =
+    runnerEvidence || workerDiffStat
+      ? {
+          ...runnerEvidence,
+          diffStat: runnerEvidence?.diffStat ?? workerDiffStat
+        }
+      : undefined;
+
+  const workerOutputEvidence = worker
+    ? {
+        ...worker,
+        rawOutput: worker.rawOutput.trim() || rawOutput
+      }
+    : undefined;
 
   return {
     rawOutput,
     filesChanged,
-    behaviorChanged: DEFAULT_BEHAVIOR_CHANGED,
+    behaviorChanged,
     testsRun,
     testsNotRun: testsNotRun.length > 0 ? testsNotRun : projectCommands,
     verificationResult,
-    knownRisks: [...new Set(knownRisks)],
+    knownRisks: [...new Set(knownRisks.map((item) => item.trim()).filter(Boolean))],
     suggestedReviewFocus: [...new Set(suggestedReviewFocus)],
     sourceRunnerRunId: run?.id,
-    runnerEvidence: buildRunnerEvidenceSnapshot(run),
+    runnerEvidence: mergedRunnerEvidence,
+    workerOutputEvidence,
     createdAt,
     updatedAt: input.timestamp
   };
@@ -299,6 +317,9 @@ export function normalizeImplementationProofRecord(
             FEATURE_SPRINT_PROOF_VERIFICATION_SUMMARY_MAX
           )
         }
+      : undefined,
+    workerOutputEvidence: proof.workerOutputEvidence
+      ? normalizeWorkerOutputEvidenceRecord(proof.workerOutputEvidence)
       : undefined
   };
 }

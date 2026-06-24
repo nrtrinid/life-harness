@@ -4,6 +4,7 @@ export type FeatureSprintAutomatedStopInput = {
   proofText?: string;
   agentOutput?: string;
   verificationOutput?: string;
+  workerEvidenceText?: string;
   proposedPrompt?: string;
   cursorPlanText?: string;
 };
@@ -40,6 +41,7 @@ function scanStopSignals(
     input.agentOutput,
     input.diffText,
     input.verificationOutput,
+    input.workerEvidenceText,
     input.proposedPrompt,
     input.cursorPlanText,
     ...(input.changedFiles ?? [])
