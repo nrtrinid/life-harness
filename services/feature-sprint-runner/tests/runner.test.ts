@@ -452,6 +452,17 @@ describe("feature-sprint-runner", () => {
     }
   });
 
+  it("returns mock localization fence for cursor_localization", async () => {
+    const result = await postRun(port, {
+      profile: "cursor_localization",
+      promptMarkdown: "Localize this step."
+    });
+    expect(result.statusCode).toBe(200);
+    if ("outputText" in result.body && result.body.outputText) {
+      expect(result.body.outputText).toContain("feature-prompt-localization");
+    }
+  });
+
   it("returns mock implementation output for cursor_implementation", async () => {
     const result = await postRun(port, {
       profile: "cursor_implementation",

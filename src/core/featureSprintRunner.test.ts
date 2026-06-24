@@ -11,6 +11,7 @@ import {
   FEATURE_SPRINT_VERIFY_MAX_COMMANDS,
   isDiffTextTruncated,
   isImplementationProfile,
+  isLocalizationProfile,
   isPromptAuditProfile,
   resolveProfileProvider,
   summarizeVerificationResults,
@@ -294,6 +295,21 @@ describe("featureSprintRunner validation", () => {
     expect(buildRunnerProfile("cursor", "scoping")).toBe("cursor_scoping");
     expect(buildRunnerProfile("codex", "implementation")).toBe("codex_implementation");
     expect(buildRunnerProfile("codex", "prompt_audit")).toBe("codex_prompt_audit");
+    expect(buildRunnerProfile("cursor", "localization")).toBe("cursor_localization");
+    expect(buildRunnerProfile("codex", "localization")).toBe("codex_localization");
+  });
+
+  it("classifies localization profiles and rejects worktree", () => {
+    expect(isLocalizationProfile("cursor_localization")).toBe(true);
+    expect(isLocalizationProfile("codex_localization")).toBe(true);
+    expect(isImplementationProfile("cursor_localization")).toBe(false);
+    const result = validateFeatureSprintRunnerRequest({
+      profile: "cursor_localization",
+      promptMarkdown: "Localize this step.",
+      repoPath: "C:/repo",
+      worktree: { enabled: true }
+    });
+    expect(result.ok).toBe(false);
   });
 
   it("classifies codex_prompt_audit as prompt audit and non-implementation", () => {

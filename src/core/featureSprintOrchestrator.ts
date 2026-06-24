@@ -15,7 +15,9 @@ import {
 import {
   buildCurrentSliceForStep,
   planPatchForCurrentSlicePhase,
-  resolveFeatureSprintCurrentSlice
+  resolveFeatureSprintCurrentSlice,
+  resolveRunnerJobStartPhase,
+  type FeatureSprintNextJobAction
 } from "./featureSprintCurrentSlice";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
@@ -641,6 +643,26 @@ export function approveFeatureSpecForPlan(
     },
     now
   );
+}
+
+export function syncFeatureSprintPhaseOnRunnerJobStarted(
+  data: LifeHarnessData,
+  planId: string,
+  action: FeatureSprintNextJobAction,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const phase = resolveRunnerJobStartPhase(action);
+  if (!phase) {
+    return { ok: true, state: data, planId };
+  }
+
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const slicePatch = planPatchForCurrentSlicePhase(plan, phase, resolveNow(now));
+  return updateFeatureSprintPlan(data, planId, slicePatch, now);
 }
 
 export function createFeatureSprintPlanForCard(

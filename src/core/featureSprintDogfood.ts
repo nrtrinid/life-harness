@@ -106,6 +106,7 @@ type BuildContext = {
   latestScopingRun?: HarnessFeatureSprintRunnerRun;
   latestImplementationRun?: HarnessFeatureSprintRunnerRun;
   latestReviewRun?: HarnessFeatureSprintRunnerRun;
+  stagedLocalizationImportText?: string;
 };
 
 function cleanOptional(value: string | undefined): string | undefined {
@@ -474,7 +475,8 @@ function blockedBySetup(context: BuildContext): boolean {
 function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction {
   const job = buildNextFeatureSprintJob(context.data, context.cardId, {
     runnerHealth: context.runnerHealth,
-    runnerAgent: context.runnerAgent
+    runnerAgent: context.runnerAgent,
+    stagedLocalizationImportText: context.stagedLocalizationImportText
   });
   if (job) {
     return mapFeatureSprintNextJobToDogfoodAction(job);
@@ -650,6 +652,7 @@ export function buildFeatureSprintDogfoodSummary(
     runnerHealth?: RunnerHealth;
     runnerHealthProbe?: FeatureSprintRunnerHealthProbe;
     runnerAgent?: FeatureSprintRunnerAgent;
+    stagedLocalizationImportText?: string;
     now?: Date;
   } = {}
 ): FeatureSprintDogfoodSummary {
@@ -681,7 +684,8 @@ export function buildFeatureSprintDogfoodSummary(
     runnerAgent: options.runnerAgent ?? "codex",
     latestScopingRun: latestRunForPhase(recentRuns, "scoping"),
     latestImplementationRun: latestRunForPhase(recentRuns, "implementation", runScope),
-    latestReviewRun: latestRunForPhase(recentRuns, "review", runScope)
+    latestReviewRun: latestRunForPhase(recentRuns, "review", runScope),
+    stagedLocalizationImportText: options.stagedLocalizationImportText
   };
 
   const checks = buildChecks(context);
@@ -702,7 +706,8 @@ export function buildFeatureSprintDogfoodSummary(
 
   const nextJob = buildNextFeatureSprintJob(context.data, cardId, {
     runnerHealth: context.runnerHealth,
-    runnerAgent: context.runnerAgent
+    runnerAgent: context.runnerAgent,
+    stagedLocalizationImportText: options.stagedLocalizationImportText
   });
   const resolvedSlice = resolveFeatureSprintCurrentSlice(plan, step);
 

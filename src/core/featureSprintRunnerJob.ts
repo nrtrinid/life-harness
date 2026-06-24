@@ -8,6 +8,8 @@ import {
   getActiveFeatureSprintPlanForCard,
   type FeaturePacketBuildResult
 } from "./featureSprintOrchestrator";
+import { buildFeatureSprintAutomatedReviewPacket } from "./featureSprintReviewerAdapter";
+import type { FeatureSprintDeepSeekConfig } from "./featureSprintDeepSeekConfig";
 import {
   buildNextFeatureSprintJob,
   resolveFeatureSprintCurrentSlice,
@@ -16,6 +18,7 @@ import {
   type FeatureSprintNextJobExpectedFence,
   type FeatureSprintNextJobRole
 } from "./featureSprintCurrentSlice";
+export { resolveRunnerJobStartPhase } from "./featureSprintCurrentSlice";
 import {
   buildRunnerProfile,
   type FeatureSprintRunnerAgent,
@@ -32,7 +35,23 @@ export type FeatureSprintRunnerJobProvider =
   | "cursor"
   | "chatgpt"
   | "codex"
-  | "local";
+  | "local"
+  | "deepseek";
+
+export type FeatureSprintRunnerJobLifecycleStatus =
+  | "prepared"
+  | "started"
+  | "completed"
+  | "failed"
+  | "staged"
+  | "human_required";
+
+export type FeatureSprintRunnerJobEphemeralLifecycle = {
+  status: FeatureSprintRunnerJobLifecycleStatus;
+  action: FeatureSprintNextJobAction;
+  provider?: FeatureSprintRunnerJobProvider;
+  expectedOutputFence?: FeatureSprintNextJobExpectedFence;
+};
 
 export type FeatureSprintRunnerJobStagingTarget =
   | "plan"
@@ -43,7 +62,13 @@ export type FeatureSprintRunnerJobStagingTarget =
   | "spec_update"
   | "none";
 
-export type FeatureSprintNextJobButtonMode = "runner" | "manual" | "human_gate";
+export type FeatureSprintNextJobButtonMode =
+  | "runner"
+  | "manual"
+  | "human_gate"
+  | "automated_review";
+
+const DEEPSEEK_ELIGIBLE_ACTIONS = new Set<FeatureSprintNextJobAction>(["copy_review"]);
 
 export type FeatureSprintRunnerJobRequest = {
   cardId: string;
@@ -82,6 +107,8 @@ export type FeatureSprintRunnerJobResult = {
   outputFence?: FeatureSprintNextJobExpectedFence;
   summary?: string;
   error?: string;
+  lifecycleStatus?: FeatureSprintRunnerJobLifecycleStatus;
+  stagedForImport?: boolean;
 };
 
 const HUMAN_ONLY_ACTIONS = new Set<FeatureSprintNextJobAction>([
@@ -147,12 +174,24 @@ export function getFeatureSprintRunnerJobStagingTarget(
   }
 }
 
+function isDeepSeekEligibleForJob(
+  job: FeatureSprintNextJob,
+  deepseekConfig?: FeatureSprintDeepSeekConfig
+): boolean {
+  return (
+    deepseekConfig?.available === true &&
+    DEEPSEEK_ELIGIBLE_ACTIONS.has(job.action) &&
+    job.providerOptions.includes("deepseek")
+  );
+}
+
 export function resolveFeatureSprintRunnerProvider(
   job: FeatureSprintNextJob,
   options: {
     preferredAgent?: FeatureSprintRunnerAgent;
     preferredProvider?: FeatureSprintRunnerJobProvider;
     runnerHealth?: "unknown" | "available" | "unavailable";
+    deepseekConfig?: FeatureSprintDeepSeekConfig;
   } = {}
 ): FeatureSprintRunnerJobProvider {
   const runnerHealth = options.runnerHealth ?? "unknown";
@@ -163,6 +202,13 @@ export function resolveFeatureSprintRunnerProvider(
       : options.preferredAgent === "codex"
         ? "codex"
         : undefined);
+
+  if (preferred === "deepseek") {
+    if (isDeepSeekEligibleForJob(job, options.deepseekConfig)) {
+      return "deepseek";
+    }
+    return "manual";
+  }
 
   if (preferred === "chatgpt" || preferred === "manual") {
     return preferred;
@@ -198,7 +244,7 @@ export function resolveRunnerProfileForJob(
   action: FeatureSprintNextJobAction,
   agent: FeatureSprintRunnerAgent = "codex"
 ): FeatureSprintRunnerProfile | undefined {
-  if (provider === "manual" || provider === "chatgpt") {
+  if (provider === "manual" || provider === "chatgpt" || provider === "deepseek") {
     return undefined;
   }
 
@@ -214,6 +260,14 @@ export function resolveRunnerProfileForJob(
       return buildRunnerProfile(runnerAgent, "review");
     case "copy_prompt_audit":
       return provider === "cursor" ? undefined : "codex_prompt_audit";
+    case "copy_localization":
+      if (provider === "cursor") {
+        return "cursor_localization";
+      }
+      if (provider === "codex" || provider === "local") {
+        return "codex_localization";
+      }
+      return undefined;
     default:
       return undefined;
   }
@@ -313,6 +367,7 @@ export function buildPacketForFeatureSprintRunnerJob(
     roughSpec?: string;
     agentOutput?: string;
     now?: Date;
+    provider?: FeatureSprintRunnerJobProvider;
   }
 ): FeaturePacketBuildResult {
   const plan = context.planId
@@ -321,14 +376,22 @@ export function buildPacketForFeatureSprintRunnerJob(
   const step = plan?.steps.find((item) => item.id === context.stepId);
   const slice = resolveFeatureSprintCurrentSlice(plan, step);
 
-  const packet = buildPacketForAction(
-    data,
-    job.action,
-    context.cardId,
-    context.planId,
-    context.stepId,
-    context
-  );
+  const packet =
+    context.provider === "deepseek" && job.action === "copy_review"
+      ? buildFeatureSprintAutomatedReviewPacket(data, context.cardId, {
+          planId: context.planId,
+          stepId: context.stepId,
+          agentOutput: context.agentOutput,
+          now: context.now
+        })
+      : buildPacketForAction(
+          data,
+          job.action,
+          context.cardId,
+          context.planId,
+          context.stepId,
+          context
+        );
 
   if (!packet.ok) {
     return packet;
@@ -352,6 +415,7 @@ export function buildFeatureSprintRunnerJobRequest(
     preferredAgent?: FeatureSprintRunnerAgent;
     preferredProvider?: FeatureSprintRunnerJobProvider;
     runnerHealth?: "unknown" | "available" | "unavailable";
+    deepseekConfig?: FeatureSprintDeepSeekConfig;
     roughSpec?: string;
     agentOutput?: string;
     now?: Date;
@@ -373,7 +437,8 @@ export function buildFeatureSprintRunnerJobRequest(
     stepId,
     roughSpec: options.roughSpec,
     agentOutput: options.agentOutput,
-    now: options.now
+    now: options.now,
+    provider
   });
 
   if (!packet.ok) {
@@ -416,6 +481,7 @@ export function prepareFeatureSprintRunnerJob(
     preferredAgent?: FeatureSprintRunnerAgent;
     preferredProvider?: FeatureSprintRunnerJobProvider;
     runnerHealth?: "unknown" | "available" | "unavailable";
+    deepseekConfig?: FeatureSprintDeepSeekConfig;
     roughSpec?: string;
     agentOutput?: string;
     now?: Date;
@@ -450,7 +516,9 @@ export function resolveFeatureSprintNextJobButtonMode(
   job: FeatureSprintNextJob | undefined,
   options: {
     preferredAgent?: FeatureSprintRunnerAgent;
+    preferredProvider?: FeatureSprintRunnerJobProvider;
     runnerHealth?: "unknown" | "available" | "unavailable";
+    deepseekConfig?: FeatureSprintDeepSeekConfig;
   } = {}
 ): FeatureSprintNextJobButtonMode {
   if (!job) {
@@ -467,8 +535,15 @@ export function resolveFeatureSprintNextJobButtonMode(
 
   const provider = resolveFeatureSprintRunnerProvider(job, {
     preferredAgent: options.preferredAgent,
-    runnerHealth: options.runnerHealth
+    preferredProvider: options.preferredProvider,
+    runnerHealth: options.runnerHealth,
+    deepseekConfig: options.deepseekConfig
   });
+
+  if (provider === "deepseek" && options.deepseekConfig?.available) {
+    return "automated_review";
+  }
+
   const profile = resolveRunnerProfileForJob(
     provider,
     job.action,
@@ -483,13 +558,18 @@ export function resolveFeatureSprintNextJobButtonMode(
 }
 
 export function resolveFeatureSprintNextJobButtonLabel(
-  mode: FeatureSprintNextJobButtonMode
+  mode: FeatureSprintNextJobButtonMode,
+  options: { deepseekMode?: FeatureSprintDeepSeekConfig["mode"] } = {}
 ): string {
   switch (mode) {
     case "runner":
       return "Run next job";
     case "manual":
       return "Prepare next job";
+    case "automated_review":
+      return options.deepseekMode === "mock"
+        ? "Run automated review (mock)"
+        : "Run automated review";
     case "human_gate":
       return "Show next gate";
     default:
@@ -499,6 +579,9 @@ export function resolveFeatureSprintNextJobButtonLabel(
 
 export type FeatureSprintRunnerJobExecuteDeps = {
   runPacket: (request: FeatureSprintRunnerRequest) => Promise<FeatureSprintRunnerResponse>;
+  onStarted?: () => void | Promise<void>;
+  onCompleted?: (result: FeatureSprintRunnerJobResult) => void | Promise<void>;
+  onFailed?: (error: string) => void | Promise<void>;
 };
 
 /** Narrow executor: request in, output text out. Does not stage UI or mutate board state. */
@@ -507,45 +590,71 @@ export async function executeFeatureSprintRunnerJob(
   deps: FeatureSprintRunnerJobExecuteDeps
 ): Promise<FeatureSprintRunnerJobResult> {
   if (!request.runnerProfile) {
+    const error = "No runner profile for this provider/action.";
+    await deps.onFailed?.(error);
     return {
       ok: false,
       provider: request.provider,
       role: request.role,
       action: request.action,
-      error: "No runner profile for this provider/action.",
-      outputFence: request.expectedOutputFence
+      error,
+      outputFence: request.expectedOutputFence,
+      lifecycleStatus: "failed"
     };
   }
 
-  const result = await deps.runPacket({
-    profile: request.runnerProfile,
-    promptMarkdown: request.inputPacket,
-    cardId: request.cardId,
-    planId: request.planId,
-    stepId: request.stepId,
-    worktree: request.worktree,
-    verificationCommands: request.verificationCommands,
-    runVerification: request.canMutateRepo
-  });
+  await deps.onStarted?.();
+
+  let result: FeatureSprintRunnerResponse;
+  try {
+    result = await deps.runPacket({
+      profile: request.runnerProfile,
+      promptMarkdown: request.inputPacket,
+      cardId: request.cardId,
+      planId: request.planId,
+      stepId: request.stepId,
+      worktree: request.worktree,
+      verificationCommands: request.verificationCommands,
+      runVerification: request.canMutateRepo
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await deps.onFailed?.(message);
+    return {
+      ok: false,
+      provider: request.provider,
+      role: request.role,
+      action: request.action,
+      error: message,
+      outputFence: request.expectedOutputFence,
+      lifecycleStatus: "failed"
+    };
+  }
 
   if (!result.ok || !result.outputText?.trim()) {
+    const error = result.error ?? "Runner returned no output.";
+    await deps.onFailed?.(error);
     return {
       ok: false,
       provider: request.provider,
       role: request.role,
       action: request.action,
-      error: result.error ?? "Runner returned no output.",
-      outputFence: request.expectedOutputFence
+      error,
+      outputFence: request.expectedOutputFence,
+      lifecycleStatus: "failed"
     };
   }
 
-  return {
+  const success: FeatureSprintRunnerJobResult = {
     ok: true,
     provider: request.provider,
     role: request.role,
     action: request.action,
     outputText: result.outputText,
     outputFence: request.expectedOutputFence,
-    summary: "Runner completed. Stage output in UI; import/save remains manual."
+    summary: "Runner completed. Stage output in UI; import/save remains manual.",
+    lifecycleStatus: "completed"
   };
+  await deps.onCompleted?.(success);
+  return success;
 }

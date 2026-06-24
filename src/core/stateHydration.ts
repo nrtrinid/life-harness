@@ -1,12 +1,15 @@
 import { syncApplicationStatus } from "./career";
 import { coerceAutomationPhase, normalizeFeatureSprintStep } from "./featureSprintOrchestrator";
 import { normalizeFeatureSprintCurrentSlice } from "./featureSprintCurrentSlice";
+import { isFeatureSprintRunnerProfile } from "./featureSprintRunner";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { normalizeResumeModules } from "./resumeModuleBank";
 import type {
   CardState,
   DailyState,
   HarnessFeatureSprintPlan,
+  HarnessFeatureSprintRunnerRun,
+  HarnessFeatureSprintRunnerRunStatus,
   JobCandidate,
   JobSource,
   LifeCard
@@ -74,6 +77,63 @@ export function normalizeFeatureSprintPlans(
   return (plans ?? []).map(normalizeFeatureSprintPlan);
 }
 
+const VALID_RUNNER_RUN_STATUS = new Set<HarnessFeatureSprintRunnerRunStatus>([
+  "running",
+  "succeeded",
+  "failed"
+]);
+
+const VALID_NEXT_JOB_LIFECYCLE = new Set([
+  "prepared",
+  "started",
+  "completed",
+  "failed",
+  "staged",
+  "human_required"
+]);
+
+function coerceRunnerRunStatus(value: unknown): HarnessFeatureSprintRunnerRunStatus {
+  if (typeof value === "string" && VALID_RUNNER_RUN_STATUS.has(value as HarnessFeatureSprintRunnerRunStatus)) {
+    return value as HarnessFeatureSprintRunnerRunStatus;
+  }
+  return "failed";
+}
+
+function cleanOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function normalizeFeatureSprintRunnerRun(
+  run: HarnessFeatureSprintRunnerRun
+): HarnessFeatureSprintRunnerRun {
+  const profile = isFeatureSprintRunnerProfile(run.profile) ? run.profile : "codex_scoping";
+  const nextJobLifecycleStatus = cleanOptionalString(run.nextJobLifecycleStatus);
+  return {
+    ...run,
+    profile,
+    status: coerceRunnerRunStatus(run.status),
+    nextJobAction: cleanOptionalString(run.nextJobAction),
+    nextJobRole: cleanOptionalString(run.nextJobRole),
+    nextJobProvider: cleanOptionalString(run.nextJobProvider),
+    nextJobLifecycleStatus:
+      nextJobLifecycleStatus && VALID_NEXT_JOB_LIFECYCLE.has(nextJobLifecycleStatus)
+        ? nextJobLifecycleStatus
+        : undefined,
+    expectedOutputFence: cleanOptionalString(run.expectedOutputFence),
+    stagedAt: cleanOptionalString(run.stagedAt)
+  };
+}
+
+export function normalizeFeatureSprintRunnerRuns(
+  runs: HarnessFeatureSprintRunnerRun[] | undefined
+): HarnessFeatureSprintRunnerRun[] {
+  return (runs ?? []).map(normalizeFeatureSprintRunnerRun);
+}
+
 export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessData {
   const dailyPartial = (partial.dailyState ?? {}) as Partial<DailyState>;
   const dailyState: DailyState = {
@@ -115,7 +175,7 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     projects: partial.projects ?? [],
     agentSessions: partial.agentSessions ?? [],
     featureSprintPlans: normalizeFeatureSprintPlans(partial.featureSprintPlans),
-    featureSprintRunnerRuns: partial.featureSprintRunnerRuns ?? [],
+    featureSprintRunnerRuns: normalizeFeatureSprintRunnerRuns(partial.featureSprintRunnerRuns),
     careerSourcePack: partial.careerSourcePack ?? null,
     jobSourcePackMode: partial.jobSourcePackMode ?? "core"
   };

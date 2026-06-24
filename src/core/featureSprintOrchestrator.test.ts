@@ -38,6 +38,7 @@ import {
   resolveStepImplementationPrompt,
   saveFeatureSpecForCard,
   stripFeatureSprintBlocks,
+  syncFeatureSprintPhaseOnRunnerJobStarted,
   updateFeatureSprintPlan,
   updateFeatureSprintStep
 } from "./featureSprintOrchestrator";
@@ -2497,6 +2498,85 @@ Changed files
 
       expect(packet.markdown).toContain("Normalized proof: not generated");
       expect(packet.markdown).toContain("Saved without normalizing proof.");
+    });
+  });
+
+  describe("syncFeatureSprintPhaseOnRunnerJobStarted", () => {
+    it("sets currentSlice phase on runner job start without touching gates", () => {
+      const created = createFeatureSprintPlanForCard(
+        baseData(),
+        {
+          cardId: "card-build-test",
+          title: "Orchestrator",
+          goal: "Test phase sync",
+          acceptanceCriteria: ["Phase sync works"],
+          steps: [
+            {
+              title: "Step one",
+              goal: "Sync phase",
+              acceptanceCriteria: ["Phase is localizing"]
+            }
+          ]
+        },
+        FIXED_NOW
+      );
+      expect(created.ok).toBe(true);
+      if (!created.ok) {
+        return;
+      }
+
+      const synced = syncFeatureSprintPhaseOnRunnerJobStarted(
+        created.state,
+        created.planId,
+        "copy_localization",
+        FIXED_NOW
+      );
+      expect(synced.ok).toBe(true);
+      if (!synced.ok) {
+        return;
+      }
+
+      const plan = getActiveFeatureSprintPlanForCard(synced.state, "card-build-test");
+      expect(plan?.currentSlice?.phase).toBe("localizing");
+    });
+
+    it("no-ops for actions without runner-start phase mapping", () => {
+      const created = createFeatureSprintPlanForCard(
+        baseData(),
+        {
+          cardId: "card-build-test",
+          title: "Orchestrator",
+          goal: "Test phase sync",
+          acceptanceCriteria: ["No-op works"],
+          steps: [
+            {
+              title: "Step one",
+              goal: "No-op",
+              acceptanceCriteria: ["Unchanged phase"]
+            }
+          ]
+        },
+        FIXED_NOW
+      );
+      expect(created.ok).toBe(true);
+      if (!created.ok) {
+        return;
+      }
+
+      const before = getActiveFeatureSprintPlanForCard(created.state, "card-build-test");
+      const synced = syncFeatureSprintPhaseOnRunnerJobStarted(
+        created.state,
+        created.planId,
+        "import_localization",
+        FIXED_NOW
+      );
+      expect(synced.ok).toBe(true);
+      if (!synced.ok) {
+        return;
+      }
+
+      const after = getActiveFeatureSprintPlanForCard(synced.state, "card-build-test");
+      expect(after?.currentSlice?.phase).toBe(before?.currentSlice?.phase);
     });
   });
 });

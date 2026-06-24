@@ -117,7 +117,7 @@ Implemented today via runner history, diff viewer, verification capture, and wor
 
 ### 5. Provider neutrality
 
-Feature Sprint generates markdown packets and accepts fenced JSON imports. It does **not** bind the app to a specific LLM provider. **Codex is not required** — Cursor, ChatGPT, Codex, local runner, and manual paste are interchangeable worker lanes.
+Feature Sprint generates markdown packets and accepts fenced JSON imports. It does **not** bind the app to a specific LLM provider. **Codex is not required** — Cursor, ChatGPT, Codex, local runner, manual paste, and optional DeepSeek automated review are interchangeable worker/reviewer lanes.
 
 | Layer | What LH owns | What providers do |
 |-------|--------------|-------------------|
@@ -125,7 +125,7 @@ Feature Sprint generates markdown packets and accepts fenced JSON imports. It do
 | Proof | Runner history, normalized proof, verification excerpts | Return inspectable output |
 | Workers | Copy/paste packet builders only | Scope, localize, implement, review |
 
-Local runner bridges (Cursor CLI, optional Codex CLI) are **optional localhost helpers** — see [`feature-sprint-local-runner-v0.1.md`](feature-sprint-local-runner-v0.1.md). Local models may **later** assist cheap structured tasks (prompt critique, proof normalization, review pre-check, packet linting, friction summaries, risk-tier recommendation) without replacing frontier architect scoping or auto-advance gates — see [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
+Local runner bridges (Cursor CLI, optional Codex CLI) are **optional localhost helpers** — see [`feature-sprint-local-runner-v0.1.md`](feature-sprint-local-runner-v0.1.md). **DeepSeek** is a separate optional read-only evaluator lane (mock or server-side live) that stages review verdicts without repo mutation — see [`feature-sprint-deepseek-reviewer-v0.1.md`](feature-sprint-deepseek-reviewer-v0.1.md). Local models may **later** assist cheap structured tasks (prompt critique, proof normalization, review pre-check, packet linting, friction summaries, risk-tier recommendation) without replacing frontier architect scoping or auto-advance gates — see [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
 
 ## End-to-end loop
 

@@ -114,23 +114,27 @@ import {
   normalizeImplementationProofForStep,
   approveFeatureSpecForPlan,
   saveFeatureSpecForCard,
+  syncFeatureSprintPhaseOnRunnerJobStarted,
   updateFeatureSprintPlan,
   type FeatureSprintPlanCreateInput,
   type FeatureSprintPlanUpdateInput,
   type FeatureSprintStepUpdateInput,
   type FeatureSpecSaveInput
 } from "../core/featureSprintOrchestrator";
-import type { FeatureSprintRunnerResponse, FeatureSprintWorktreeCleanupResponse } from "../core/featureSprintRunner";
+import type { FeatureSprintNextJobAction } from "../core/featureSprintCurrentSlice";
 import {
   completeFeatureSprintRunnerRun,
   createFeatureSprintRunnerRun,
   markFeatureSprintRunnerRunWorktreeCleanup,
   markMostRecentFeatureSprintRunnerRunImported,
   markReviewRunnerRunImportedForVerdict,
+  patchFeatureSprintRunnerRunNextJobLifecycle,
   type FeatureSprintRunnerRunCreateInput,
   type FeatureSprintRunnerRunImportMarkFilter,
+  type FeatureSprintRunnerRunNextJobPatch,
   type ReviewRunnerRunImportMarkInput
 } from "../core/featureSprintRunnerHistory";
+import type { FeatureSprintRunnerResponse, FeatureSprintWorktreeCleanupResponse } from "../core/featureSprintRunner";
 import {
   applyDeleteProjectForCard,
   applyUpsertProjectForCard,
@@ -358,6 +362,14 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     runId: string,
     response: FeatureSprintRunnerResponse
   ) => { ok: boolean; message?: string };
+  patchFeatureSprintRunnerRunNextJobLifecycle: (
+    runId: string,
+    patch: FeatureSprintRunnerRunNextJobPatch
+  ) => { ok: boolean; message?: string };
+  syncFeatureSprintPhaseOnRunnerJobStarted: (
+    planId: string,
+    action: FeatureSprintNextJobAction
+  ) => { ok: boolean; message?: string; planId?: string };
   markMostRecentFeatureSprintRunnerRunImported: (
     filter: FeatureSprintRunnerRunImportMarkFilter
   ) => { ok: boolean; message?: string; runId?: string };
@@ -1177,6 +1189,34 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const patchFeatureSprintRunnerRunNextJobLifecycleAction = useCallback(
+    (runId: string, patch: FeatureSprintRunnerRunNextJobPatch) => {
+      const result = patchFeatureSprintRunnerRunNextJobLifecycle(stateRef.current, runId, patch);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Runner lifecycle updated." };
+    },
+    []
+  );
+
+  const syncFeatureSprintPhaseOnRunnerJobStartedAction = useCallback(
+    (planId: string, action: FeatureSprintNextJobAction) => {
+      const result = syncFeatureSprintPhaseOnRunnerJobStarted(
+        stateRef.current,
+        planId,
+        action
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, message: "Slice phase synced.", planId: result.planId };
+    },
+    []
+  );
+
   const markMostRecentFeatureSprintRunnerRunImportedAction = useCallback(
     (filter: FeatureSprintRunnerRunImportMarkFilter) => {
       const result = markMostRecentFeatureSprintRunnerRunImported(stateRef.current, filter);
@@ -1525,6 +1565,9 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       normalizeImplementationProofForPlan: normalizeImplementationProofForPlanAction,
       createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
+      patchFeatureSprintRunnerRunNextJobLifecycle:
+        patchFeatureSprintRunnerRunNextJobLifecycleAction,
+      syncFeatureSprintPhaseOnRunnerJobStarted: syncFeatureSprintPhaseOnRunnerJobStartedAction,
       markMostRecentFeatureSprintRunnerRunImported:
         markMostRecentFeatureSprintRunnerRunImportedAction,
       markReviewRunnerRunImportedForVerdict: markReviewRunnerRunImportedForVerdictAction,
@@ -1601,6 +1644,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       normalizeImplementationProofForPlanAction,
       createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRunAction,
+      patchFeatureSprintRunnerRunNextJobLifecycleAction,
+      syncFeatureSprintPhaseOnRunnerJobStartedAction,
       markMostRecentFeatureSprintRunnerRunImportedAction,
       markReviewRunnerRunImportedForVerdictAction,
       markFeatureSprintRunnerRunWorktreeCleanupAction,

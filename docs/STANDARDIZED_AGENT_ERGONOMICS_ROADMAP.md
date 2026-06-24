@@ -146,7 +146,7 @@ Acceptance:
 
 1. Keep `docs/AGENT_CONTEXT_MAP.md` as the most complete task-router example.
 2. Avoid expanding the required standard every time Life Harness gains a useful extra script.
-3. Run `npm run audit:agent-ergonomics -- --all` quarterly; update [`agent-cross-repo-audit-log.md`](agent-cross-repo-audit-log.md).
+3. **Maintenance only:** run `npm run audit:agent-ergonomics -- --all` quarterly; append results to [`agent-cross-repo-audit-log.md`](agent-cross-repo-audit-log.md). Cross-repo Phases 1–4 are complete as of 2026-06-23.
 
 ## Definition Of Done
 

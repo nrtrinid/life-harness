@@ -395,6 +395,99 @@ describe("featureSprintCurrentSlice", () => {
     expect(plan?.currentSlice?.phase).toBe("ready");
     expect(resolveFeatureSprintCurrentSlice(plan)?.phase).toBe("ready");
   });
+
+  it("localizing with failed localization run retries copy_localization", () => {
+    const plan = fixturePlan({
+      featureSpec: {
+        body: "Spec body",
+        source: "chatgpt_web",
+        updatedAt: FIXED_NOW_ISO,
+        approvedAt: FIXED_NOW_ISO,
+        approvedBy: "user"
+      },
+      currentSlice: {
+        id: "slice-1",
+        title: "Core module",
+        status: "active",
+        phase: "localizing",
+        source: "planned_step",
+        linkedStepId: "step-1",
+        createdAt: FIXED_NOW_ISO,
+        updatedAt: FIXED_NOW_ISO
+      }
+    });
+    const job = buildNextFeatureSprintJob(
+      baseData({
+        featureSprintPlans: [plan],
+        featureSprintRunnerRuns: [
+          {
+            id: "run-loc-failed",
+            profile: "cursor_localization",
+            status: "failed",
+            cardId: CARD_ID,
+            planId: plan.id,
+            stepId: "step-1",
+            nextJobAction: "copy_localization",
+            nextJobLifecycleStatus: "failed",
+            startedAt: FIXED_NOW_ISO,
+            createdAt: FIXED_NOW_ISO,
+            updatedAt: FIXED_NOW_ISO
+          }
+        ]
+      }),
+      CARD_ID,
+      { runnerHealth: "available", runnerAgent: "cursor" }
+    );
+    expect(job?.action).toBe("copy_localization");
+    expect(job?.phase).toBe("localizing");
+  });
+
+  it("localizing with staged localization output suggests import_localization", () => {
+    const plan = fixturePlan({
+      featureSpec: {
+        body: "Spec body",
+        source: "chatgpt_web",
+        updatedAt: FIXED_NOW_ISO,
+        approvedAt: FIXED_NOW_ISO,
+        approvedBy: "user"
+      },
+      currentSlice: {
+        id: "slice-1",
+        title: "Core module",
+        status: "active",
+        phase: "localizing",
+        source: "planned_step",
+        linkedStepId: "step-1",
+        createdAt: FIXED_NOW_ISO,
+        updatedAt: FIXED_NOW_ISO
+      }
+    });
+    const job = buildNextFeatureSprintJob(
+      baseData({
+        featureSprintPlans: [plan],
+        featureSprintRunnerRuns: [
+          {
+            id: "run-loc-staged",
+            profile: "cursor_localization",
+            status: "succeeded",
+            cardId: CARD_ID,
+            planId: plan.id,
+            stepId: "step-1",
+            outputText: SAMPLE_LOCALIZATION_BLOCK,
+            nextJobAction: "copy_localization",
+            nextJobLifecycleStatus: "staged",
+            stagedAt: FIXED_NOW_ISO,
+            startedAt: FIXED_NOW_ISO,
+            createdAt: FIXED_NOW_ISO,
+            updatedAt: FIXED_NOW_ISO
+          }
+        ]
+      }),
+      CARD_ID,
+      { runnerHealth: "available", runnerAgent: "cursor" }
+    );
+    expect(job?.action).toBe("import_localization");
+  });
 });
 
 function getActivePlan(data: LifeHarnessData): HarnessFeatureSprintPlan | undefined {

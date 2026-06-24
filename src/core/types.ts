@@ -574,6 +574,12 @@ export type HarnessFeatureSprintRunnerRun = {
   startedAt: string;
   completedAt?: string;
   importedAt?: string;
+  nextJobAction?: string;
+  nextJobRole?: string;
+  nextJobProvider?: string;
+  nextJobLifecycleStatus?: string;
+  expectedOutputFence?: string;
+  stagedAt?: string;
   createdAt: string;
   updatedAt: string;
 };

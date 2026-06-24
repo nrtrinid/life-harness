@@ -1,4 +1,5 @@
 import {
+  isLocalizationProfile,
   isPromptAuditProfile,
   isScopingProfile,
   type FeatureSprintRunnerProfile
@@ -56,6 +57,19 @@ const MOCK_PROMPT_AUDIT_OUTPUT = `Prompt audit complete. The implementation prom
 \`\`\`
 `;
 
+const MOCK_LOCALIZATION_OUTPUT = `Localization complete. Bounded repo context for this step.
+
+\`\`\`feature-prompt-localization
+{
+  "likelyFiles": ["src/core/featureSprintOrchestrator.ts"],
+  "existingHelpers": ["buildFeatureStepLocalizationPacket"],
+  "testsToRun": ["npm test -- --run src/core/featureSprintOrchestrator.test.ts"],
+  "risks": ["Scope creep beyond listed files"],
+  "revisedImplementationPrompt": "Implement the current slice using only the helpers and files named in this localization packet."
+}
+\`\`\`
+`;
+
 export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): string {
   if (isScopingProfile(profile)) {
     return MOCK_SCOPING_OUTPUT;
@@ -63,6 +77,10 @@ export function buildMockRunnerOutput(profile: FeatureSprintRunnerProfile): stri
 
   if (isPromptAuditProfile(profile)) {
     return MOCK_PROMPT_AUDIT_OUTPUT;
+  }
+
+  if (isLocalizationProfile(profile)) {
+    return MOCK_LOCALIZATION_OUTPUT;
   }
 
   return MOCK_REVIEW_OUTPUT;

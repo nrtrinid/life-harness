@@ -55,11 +55,24 @@ import {
 } from "../../src/core/featureSprintCurrentSlice";
 import {
   getFeatureSprintRunnerJobStagingTarget,
+  executeFeatureSprintRunnerJob,
   prepareFeatureSprintRunnerJob,
   resolveFeatureSprintNextJobButtonLabel,
   resolveFeatureSprintNextJobButtonMode,
+  type FeatureSprintRunnerJobEphemeralLifecycle,
+  type FeatureSprintRunnerJobRequest,
   type FeatureSprintRunnerJobStagingTarget
 } from "../../src/core/featureSprintRunnerJob";
+import {
+  resolveFeatureSprintDeepSeekConfig,
+  type FeatureSprintDeepSeekConfig
+} from "../../src/core/featureSprintDeepSeekConfig";
+import { runFeatureSprintDeepSeekReview } from "../../src/core/featureSprintDeepSeekReviewer";
+import {
+  buildFeatureSprintAutomatedReviewPacket,
+  formatAutomatedReviewForImportStaging
+} from "../../src/core/featureSprintReviewerAdapter";
+import type { FeatureSprintNextJob } from "../../src/core/featureSprintCurrentSlice";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
   buildFeatureSprintDogfoodSummary,
@@ -293,6 +306,8 @@ export default function CardDetailScreen() {
     normalizeImplementationProofForPlan,
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
+    patchFeatureSprintRunnerRunNextJobLifecycle,
+    syncFeatureSprintPhaseOnRunnerJobStarted,
     markMostRecentFeatureSprintRunnerRunImported,
     markReviewRunnerRunImportedForVerdict,
     markFeatureSprintRunnerRunWorktreeCleanup,
@@ -328,6 +343,8 @@ export default function CardDetailScreen() {
   const [featureSpecText, setFeatureSpecText] = useState("");
   const [featureSpecSource, setFeatureSpecSource] = useState<HarnessFeatureSpecSource>("chatgpt_web");
   const [reviewImportText, setReviewImportText] = useState("");
+  const [stagedNextCursorPrompt, setStagedNextCursorPrompt] = useState("");
+  const [isRunningAutomatedReview, setIsRunningAutomatedReview] = useState(false);
   const [localizationImportText, setLocalizationImportText] = useState("");
   const [promptAuditImportText, setPromptAuditImportText] = useState("");
   const [specUpdateImportText, setSpecUpdateImportText] = useState("");
@@ -348,6 +365,8 @@ export default function CardDetailScreen() {
   const [isNormalizingProof, setIsNormalizingProof] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [isRunningNextJob, setIsRunningNextJob] = useState(false);
+  const [nextJobLifecycle, setNextJobLifecycle] =
+    useState<FeatureSprintRunnerJobEphemeralLifecycle | null>(null);
   const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
   const [forceCleanEligibleRunId, setForceCleanEligibleRunId] = useState<string | null>(null);
   const [cleaningRunId, setCleaningRunId] = useState<string | null>(null);
@@ -476,26 +495,46 @@ export default function CardDetailScreen() {
   }
 
   const lifeHarnessData = lifeHarnessDataForCard();
+  const deepseekConfig = useMemo<FeatureSprintDeepSeekConfig>(
+    () =>
+      resolveFeatureSprintDeepSeekConfig(undefined, {
+        isBrowserClient: Platform.OS === "web"
+      }),
+    []
+  );
   const featureSprintDogfood = useMemo(
     () =>
       buildFeatureSprintDogfoodSummary(lifeHarnessData, card?.id ?? id ?? "", {
         runnerHealth,
         runnerHealthProbe,
-        runnerAgent
+        runnerAgent,
+        stagedLocalizationImportText: localizationImportText
       }),
-    [lifeHarnessData, card?.id, id, runnerHealth, runnerHealthProbe, runnerAgent]
+    [
+      lifeHarnessData,
+      card?.id,
+      id,
+      runnerHealth,
+      runnerHealthProbe,
+      runnerAgent,
+      localizationImportText
+    ]
   );
   const nextJobButtonMode = useMemo(
     () =>
       resolveFeatureSprintNextJobButtonMode(featureSprintDogfood.nextJob, {
         preferredAgent: runnerAgent,
-        runnerHealth
+        runnerHealth,
+        deepseekConfig
       }),
-    [featureSprintDogfood.nextJob, runnerAgent, runnerHealth]
+    [featureSprintDogfood.nextJob, runnerAgent, runnerHealth, deepseekConfig]
   );
   const nextJobButtonLabel = useMemo(
-    () => resolveFeatureSprintNextJobButtonLabel(nextJobButtonMode),
-    [nextJobButtonMode]
+    () =>
+      resolveFeatureSprintNextJobButtonLabel(nextJobButtonMode, {
+        deepseekMode: deepseekConfig.mode
+      }),
+    [nextJobButtonMode, deepseekConfig.mode]
   );
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
@@ -749,6 +788,26 @@ export default function CardDetailScreen() {
       run.planId === activeFeatureSprintPlan?.id &&
       run.stepId === activeFeatureSprintPlan?.currentStepId
   );
+  const nextJobLifecycleLine = useMemo(() => {
+    const persisted = recentRunnerRuns.find(
+      (run) => run.nextJobLifecycleStatus && (run.nextJobAction || run.expectedOutputFence)
+    );
+    const status = nextJobLifecycle?.status ?? persisted?.nextJobLifecycleStatus;
+    if (!status) {
+      return null;
+    }
+    const action = nextJobLifecycle?.action ?? persisted?.nextJobAction ?? "unknown";
+    const fence = nextJobLifecycle?.expectedOutputFence ?? persisted?.expectedOutputFence;
+    const tail =
+      status === "failed"
+        ? "Retry localization or check runner output."
+        : status === "staged" || status === "completed"
+          ? "Import still required."
+          : status === "started"
+            ? "Runner in flight."
+            : "";
+    return `Lifecycle: ${status} · action: ${action}${fence ? ` · fence: ${fence}` : ""}${tail ? ` ${tail}` : ""}`;
+  }, [nextJobLifecycle, recentRunnerRuns]);
   const implementationRunViewed =
     latestImplementationRunForStep !== undefined &&
     selectedRunnerRunId === latestImplementationRunForStep.id;
@@ -1146,6 +1205,10 @@ export default function CardDetailScreen() {
 
     setIsRunningPromptAudit(true);
     try {
+      syncFeatureSprintPhaseOnRunnerJobStarted(
+        activeFeatureSprintPlan.id,
+        "copy_prompt_audit"
+      );
       const result = await runFeatureSprintPacket({
         profile,
         promptMarkdown: packet.markdown,
@@ -1327,6 +1390,7 @@ export default function CardDetailScreen() {
 
     setIsRunningReview(true);
     try {
+      syncFeatureSprintPhaseOnRunnerJobStarted(activeFeatureSprintPlan.id, "copy_review");
       const result = await runFeatureSprintPacket({
         profile,
         promptMarkdown: packet.markdown,
@@ -1402,6 +1466,10 @@ export default function CardDetailScreen() {
 
     setIsRunningImplementation(true);
     try {
+      syncFeatureSprintPhaseOnRunnerJobStarted(
+        activeFeatureSprintPlan.id,
+        "copy_implementation"
+      );
       const result = await runFeatureSprintPacket({
         profile,
         promptMarkdown: packet.markdown,
@@ -1466,6 +1534,175 @@ export default function CardDetailScreen() {
     }
   }
 
+  async function runAutomatedDeepSeekReview(
+    request?: FeatureSprintRunnerJobRequest,
+    job?: FeatureSprintNextJob
+  ) {
+    if (!deepseekConfig.available || isRunningAutomatedReview) {
+      return;
+    }
+
+    setIsRunningAutomatedReview(true);
+    try {
+      let promptMarkdown = request?.inputPacket?.trim();
+      let planId = request?.planId;
+      let stepId = request?.stepId;
+
+      if (!promptMarkdown) {
+        const packet = buildFeatureSprintAutomatedReviewPacket(lifeHarnessData, cardId, {
+          planId,
+          stepId,
+          agentOutput: agentOutputText
+        });
+        if (!packet.ok) {
+          showNotice("warning", packet.error);
+          return;
+        }
+        promptMarkdown = packet.markdown;
+        planId = packet.planId;
+        stepId = packet.stepId;
+      }
+
+      const result = await runFeatureSprintDeepSeekReview(
+        {
+          cardId,
+          planId,
+          stepId,
+          promptMarkdown
+        },
+        {
+          config: deepseekConfig,
+          runtimeContext: { isBrowserClient: Platform.OS === "web" }
+        }
+      );
+
+      if (!result.ok) {
+        showNotice("warning", result.error ?? "Automated review failed.");
+        return;
+      }
+
+      const staged = formatAutomatedReviewForImportStaging(result.verdict);
+      if (!staged.ok) {
+        showNotice("warning", staged.error);
+        return;
+      }
+
+      setReviewImportText(staged.markdown);
+      setStagedNextCursorPrompt(
+        result.verdict.verdict === "accepted" && result.verdict.nextCursorPrompt?.trim()
+          ? result.verdict.nextCursorPrompt.trim()
+          : ""
+      );
+      setNextJobLifecycle({
+        status: "staged",
+        action: job?.action ?? "copy_review",
+        provider: "deepseek",
+        expectedOutputFence: job?.expectedOutputFence ?? "feature-review-verdict"
+      });
+      showNotice("success", "Automated review staged — inspect and import manually.");
+    } finally {
+      setIsRunningAutomatedReview(false);
+    }
+  }
+
+  async function runPreparedRunnerJob(request: FeatureSprintRunnerJobRequest, job: FeatureSprintNextJob) {
+    if (!request.runnerProfile) {
+      showNotice("warning", "No runner profile for this job.");
+      return;
+    }
+
+    const project = getProjectForCard(lifeHarnessData, cardId);
+    const startedAt = new Date().toISOString();
+    const historyCreate = createFeatureSprintRunnerRun({
+      profile: request.runnerProfile,
+      cardId,
+      planId: request.planId,
+      stepId: request.stepId,
+      repoPath: project?.repoPath,
+      startedAt,
+      nextJobAction: job.action,
+      nextJobRole: job.role,
+      nextJobProvider: request.provider,
+      nextJobLifecycleStatus: "started",
+      expectedOutputFence: job.expectedOutputFence
+    });
+    if (!historyCreate.ok) {
+      showNotice("warning", historyCreate.message ?? "Could not start runner history.");
+      if (historyCreate.safetyBlocked) {
+        return;
+      }
+    }
+
+    setNextJobLifecycle({
+      status: "started",
+      action: job.action,
+      provider: request.provider,
+      expectedOutputFence: job.expectedOutputFence
+    });
+
+    const result = await executeFeatureSprintRunnerJob(request, {
+      runPacket: (runnerRequest) =>
+        runFeatureSprintPacket({
+          ...runnerRequest,
+          repoPath: project?.repoPath
+        }),
+      onStarted: async () => {
+        if (request.planId) {
+          syncFeatureSprintPhaseOnRunnerJobStarted(request.planId, job.action);
+        }
+      }
+    });
+
+    const completedAt = new Date().toISOString();
+    if (historyCreate.ok && historyCreate.runId) {
+      completeFeatureSprintRunnerRun(historyCreate.runId, {
+        ok: result.ok,
+        profile: request.runnerProfile,
+        outputText: result.outputText,
+        error: result.error,
+        startedAt,
+        completedAt
+      });
+    }
+
+    if (!result.ok || !result.outputText?.trim()) {
+      setNextJobLifecycle({
+        status: "failed",
+        action: job.action,
+        provider: request.provider,
+        expectedOutputFence: job.expectedOutputFence
+      });
+      showNotice(
+        "warning",
+        result.error ??
+          `${job.label} failed. Retry when ready or use Prepare next job for manual copy.`
+      );
+      return;
+    }
+
+    const target = getFeatureSprintRunnerJobStagingTarget(job.action);
+    stagePreparedRunnerPacket(target, result.outputText);
+    if (historyCreate.ok && historyCreate.runId) {
+      patchFeatureSprintRunnerRunNextJobLifecycle(historyCreate.runId, {
+        nextJobLifecycleStatus: "staged",
+        stagedAt: completedAt
+      });
+      setSelectedRunnerRunId(historyCreate.runId);
+    }
+    setNextJobLifecycle({
+      status: "staged",
+      action: job.action,
+      provider: request.provider,
+      expectedOutputFence: job.expectedOutputFence
+    });
+
+    const stagingLabel =
+      target === "localization"
+        ? "Localization output staged — review and import when ready."
+        : `${job.label} output staged. Import/save still requires your click.`;
+    showNotice("success", stagingLabel);
+  }
+
   async function handleRunNextJob() {
     if (isRunningNextJob) {
       return;
@@ -1474,6 +1711,7 @@ export default function CardDetailScreen() {
     const prepared = prepareFeatureSprintRunnerJob(lifeHarnessData, cardId, {
       preferredAgent: runnerAgent,
       runnerHealth,
+      deepseekConfig,
       roughSpec: featureSpecText,
       agentOutput: agentOutputText
     });
@@ -1493,33 +1731,47 @@ export default function CardDetailScreen() {
     const { job, request } = prepared;
     const mode = resolveFeatureSprintNextJobButtonMode(job, {
       preferredAgent: runnerAgent,
-      runnerHealth
+      runnerHealth,
+      deepseekConfig
     });
 
+    if (mode === "automated_review") {
+      setIsRunningNextJob(true);
+      try {
+        await runAutomatedDeepSeekReview(request, job);
+      } finally {
+        setIsRunningNextJob(false);
+      }
+      return;
+    }
+
     if (mode === "human_gate") {
+      setNextJobLifecycle({
+        status: "human_required",
+        action: job.action,
+        provider: request.provider,
+        expectedOutputFence: job.expectedOutputFence
+      });
       showNotice("warning", job.checklist.join(" ") || featureSprintDogfood.nextAction.detail);
       return;
     }
 
     if (mode === "runner") {
-      switch (job.action) {
-        case "run_scoping":
-          await handleRunScoping();
-          return;
-        case "copy_implementation":
-          await handleRunImplementationInWorktree();
-          return;
-        case "copy_review":
-          await handleRunReview();
-          return;
-        case "copy_prompt_audit":
-          await handleRunPromptAudit();
-          return;
-        default:
-          break;
+      setIsRunningNextJob(true);
+      try {
+        await runPreparedRunnerJob(request, job);
+      } finally {
+        setIsRunningNextJob(false);
       }
+      return;
     }
 
+    setNextJobLifecycle({
+      status: "prepared",
+      action: job.action,
+      provider: request.provider,
+      expectedOutputFence: job.expectedOutputFence
+    });
     setIsRunningNextJob(true);
     try {
       const target = getFeatureSprintRunnerJobStagingTarget(job.action);
@@ -1933,6 +2185,11 @@ export default function CardDetailScreen() {
           >
             <Text style={styles.secondaryActionText}>{nextJobButtonLabel}</Text>
           </Pressable>
+          {nextJobLifecycleLine ? (
+            <Text style={[styles.helpText, { marginTop: 6 }]} testID="feature-sprint-next-job-lifecycle">
+              {nextJobLifecycleLine}
+            </Text>
+          ) : null}
           <View style={{ gap: 6, marginTop: 8 }}>
             {featureSprintDogfood.checks.map((check) => (
               <View key={check.id} style={{ gap: 2 }}>
@@ -2394,6 +2651,27 @@ export default function CardDetailScreen() {
                   {isRunningReview ? "Running…" : `Run review with ${runnerAgentLabel(runnerAgent)}`}
                 </Text>
               </Pressable>
+              {deepseekConfig.available ? (
+                <Pressable
+                  testID="feature-sprint-run-automated-review"
+                  style={[
+                    styles.secondaryAction,
+                    (isRunningAutomatedReview || isRunningNextJob) && { opacity: 0.5 }
+                  ]}
+                  disabled={isRunningAutomatedReview || isRunningNextJob}
+                  onPress={() => {
+                    void runAutomatedDeepSeekReview();
+                  }}
+                >
+                  <Text style={styles.secondaryActionText}>
+                    {isRunningAutomatedReview
+                      ? "Running automated review…"
+                      : deepseekConfig.mode === "mock"
+                        ? "Run automated review (mock)"
+                        : "Run automated review"}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
             <Text style={[styles.helpText, { marginTop: 8 }]}>
               Uses the enriched review packet (normalized proof when saved). Output fills Import review
@@ -2504,6 +2782,21 @@ export default function CardDetailScreen() {
               placeholderTextColor={colors.inputPlaceholder}
               multiline
             />
+            {stagedNextCursorPrompt ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Staged next Cursor prompt</Text>
+                <Text style={styles.helpText}>
+                  Read-only staging from accepted automated review. Copy manually when ready — no auto-run.
+                </Text>
+                <TextInput
+                  testID="feature-sprint-staged-next-cursor-prompt"
+                  style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+                  value={stagedNextCursorPrompt}
+                  editable={false}
+                  multiline
+                />
+              </>
+            ) : null}
             <Pressable
               testID="feature-sprint-import-review-verdict"
               style={[styles.secondaryAction, { marginTop: 12 }]}

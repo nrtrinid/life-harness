@@ -16,9 +16,10 @@ v0.1 runner fills import textareas but leaves no durable trail. v0.2 stores atte
 
 Key fields:
 
-- `profile` — `codex_scoping` | `codex_review` | `codex_implementation`
+- `profile` — `codex_scoping` | `codex_review` | `codex_implementation` | `codex_prompt_audit` | `codex_localization` | `cursor_*` including `cursor_localization`
 - `status` — `running` | `succeeded` | `failed`
 - `cardId`, optional `planId` / `stepId`, optional `repoPath`
+- optional next-job bridge fields (shallow): `nextJobAction`, `nextJobRole`, `nextJobProvider`, `nextJobLifecycleStatus`, `expectedOutputFence`, `stagedAt`
 - `commandPreview`, `error`, `exitCode`
 - implementation runs may also store `worktreePath`, `branchName`, `gitStatus`, `diffStat`, `diffText` (50k cap), `changedFiles`, `verificationResults`
 - `outputExcerpt` — short list UI field (~280 chars)

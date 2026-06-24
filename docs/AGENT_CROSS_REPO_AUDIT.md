@@ -30,7 +30,7 @@ Log: [`agent-cross-repo-audit-log.md`](agent-cross-repo-audit-log.md)
 | Repo | Root path (local default) | Entrypoint | Preflight | Doctor | Test select |
 |------|-------------------------|------------|-----------|--------|-------------|
 | life-harness | `.` | `AGENTS.md` | `npm run agent:preflight` | `check:agent-budget`, `check:agent-commands` | `agent:tests-for`, `agent:auto-check` |
-| text-adventure | `../text-adventure/dungeon-party-game` | `AGENTS.md` | `.\rtk.ps1 preflight` | folded into preflight + `.\rtk.ps1 boundaries` | `.\rtk.ps1` test paths |
+| text-adventure | `../text-adventure/dungeon-party-game` | `AGENTS.md` | `.\rtk.ps1 preflight` | `.\rtk.ps1 doctor` (+ `.\rtk.ps1 boundaries` for engine edges) | `.\rtk.ps1 test` / scout paths |
 | ev-tracker | `../ev-tracker` | `README.md`, `docs/CODEX_HANDOFF.md` | `python scripts/agent_preflight.py` | `python scripts/agent_doctor.py` | `python scripts/agent_test_select.py` |
 
 Sibling roadmaps: text-adventure `docs/STANDARDIZED_AGENT_ERGONOMICS_ROADMAP.md`; ev-tracker `docs/AGENT_ERGONOMICS_PLAN.md`.
@@ -50,7 +50,7 @@ Life Harness extras (skills, review-packet, full `agent:*` suite) are **optional
 - Spot-read one task block: does READ_FIRST stay narrow?
 - Confirm VERIFY commands match the repo's real runner (`npm`, `rtk.ps1`, `pytest`).
 - Confirm boundary-sensitive areas name the right check (`check:boundaries`, `rtk.ps1 boundaries`, doctor dangers).
-- Note sibling gaps in the audit log (e.g. text-adventure Phase 4 freshness).
+- Record PASS/WARN/FAIL in the audit log; WARN on optional surfaces (e.g. no separate test-select script) is acceptable when VERIFY routes tests clearly.
 
 ## Scorecard template
 

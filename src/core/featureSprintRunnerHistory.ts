@@ -31,6 +31,16 @@ export type FeatureSprintRunnerRunCreateInput = {
   repoPath?: string;
   commandPreview?: string;
   startedAt?: string;
+  nextJobAction?: string;
+  nextJobRole?: string;
+  nextJobProvider?: string;
+  nextJobLifecycleStatus?: string;
+  expectedOutputFence?: string;
+};
+
+export type FeatureSprintRunnerRunNextJobPatch = {
+  nextJobLifecycleStatus?: string;
+  stagedAt?: string;
 };
 
 export type FeatureSprintRunnerRunImportMarkFilter = {
@@ -191,6 +201,11 @@ export function createFeatureSprintRunnerRun(
     stepId: input.stepId,
     repoPath: cleanOptional(input.repoPath),
     commandPreview: cleanOptional(input.commandPreview),
+    nextJobAction: cleanOptional(input.nextJobAction),
+    nextJobRole: cleanOptional(input.nextJobRole),
+    nextJobProvider: cleanOptional(input.nextJobProvider),
+    nextJobLifecycleStatus: cleanOptional(input.nextJobLifecycleStatus),
+    expectedOutputFence: cleanOptional(input.expectedOutputFence),
     startedAt,
     createdAt: now,
     updatedAt: now
@@ -220,6 +235,12 @@ export function completeFeatureSprintRunnerRun(
   const status: HarnessFeatureSprintRunnerRunStatus = response.ok ? "succeeded" : "failed";
   const outputFields = response.ok ? buildStoredOutputFields(response.outputText) : {};
   const metadata = capGitMetadataFields(response);
+  const nextJobLifecycleStatus =
+    existing.nextJobAction !== undefined
+      ? status === "succeeded"
+        ? "completed"
+        : "failed"
+      : existing.nextJobLifecycleStatus;
 
   const updated: HarnessFeatureSprintRunnerRun = {
     ...existing,
@@ -236,6 +257,37 @@ export function completeFeatureSprintRunnerRun(
     diffText: cleanOptional(metadata.diffText),
     verificationResults: capVerificationResults(metadata.verificationResults),
     completedAt: response.completedAt,
+    nextJobLifecycleStatus,
+    updatedAt: now
+  };
+
+  return {
+    ok: true,
+    state: {
+      ...data,
+      featureSprintRunnerRuns: data.featureSprintRunnerRuns.map((run) =>
+        run.id === runId ? updated : run
+      )
+    }
+  };
+}
+
+export function patchFeatureSprintRunnerRunNextJobLifecycle(
+  data: LifeHarnessData,
+  runId: string,
+  patch: FeatureSprintRunnerRunNextJobPatch,
+  now: string = nowIso()
+): { ok: true; state: LifeHarnessData } | { ok: false; error: string } {
+  const existing = data.featureSprintRunnerRuns.find((run) => run.id === runId);
+  if (!existing) {
+    return { ok: false, error: `Runner run not found: ${runId}` };
+  }
+
+  const updated: HarnessFeatureSprintRunnerRun = {
+    ...existing,
+    nextJobLifecycleStatus:
+      cleanOptional(patch.nextJobLifecycleStatus) ?? existing.nextJobLifecycleStatus,
+    stagedAt: cleanOptional(patch.stagedAt) ?? existing.stagedAt,
     updatedAt: now
   };
 

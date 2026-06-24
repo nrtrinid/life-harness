@@ -3,9 +3,11 @@ export type FeatureSprintRunnerProfile =
   | "codex_review"
   | "codex_implementation"
   | "codex_prompt_audit"
+  | "codex_localization"
   | "cursor_scoping"
   | "cursor_review"
-  | "cursor_implementation";
+  | "cursor_implementation"
+  | "cursor_localization";
 
 export type FeatureSprintRunnerAgent = "codex" | "cursor";
 
@@ -13,7 +15,12 @@ export function isFeatureSprintRunnerAgent(value: unknown): value is FeatureSpri
   return value === "codex" || value === "cursor";
 }
 
-export type FeatureSprintRunnerPhase = "scoping" | "review" | "implementation" | "prompt_audit";
+export type FeatureSprintRunnerPhase =
+  | "scoping"
+  | "review"
+  | "implementation"
+  | "prompt_audit"
+  | "localization";
 
 export type FeatureSprintRunnerStatus = "idle" | "running" | "succeeded" | "failed";
 
@@ -99,9 +106,11 @@ export const FEATURE_SPRINT_RUNNER_PROFILES: FeatureSprintRunnerProfile[] = [
   "codex_review",
   "codex_implementation",
   "codex_prompt_audit",
+  "codex_localization",
   "cursor_scoping",
   "cursor_review",
-  "cursor_implementation"
+  "cursor_implementation",
+  "cursor_localization"
 ];
 
 export const FEATURE_SPRINT_RUNNER_DEFAULT_PORT = 8127;
@@ -147,6 +156,10 @@ export function isPromptAuditProfile(profile: FeatureSprintRunnerProfile): boole
   return profile === "codex_prompt_audit";
 }
 
+export function isLocalizationProfile(profile: FeatureSprintRunnerProfile): boolean {
+  return profile === "codex_localization" || profile === "cursor_localization";
+}
+
 export function buildRunnerProfile(
   agent: FeatureSprintRunnerAgent,
   phase: FeatureSprintRunnerPhase
@@ -159,9 +172,11 @@ export const FEATURE_SPRINT_RUNNER_PROFILE_LABELS: Record<FeatureSprintRunnerPro
   codex_review: "Codex review",
   codex_implementation: "Codex implementation",
   codex_prompt_audit: "Codex prompt audit",
+  codex_localization: "Agent localization",
   cursor_scoping: "Cursor scoping",
   cursor_review: "Cursor review",
-  cursor_implementation: "Cursor implementation"
+  cursor_implementation: "Cursor implementation",
+  cursor_localization: "Cursor localization"
 };
 
 export function formatRunnerProfileLabel(profile: FeatureSprintRunnerProfile): string {
@@ -443,6 +458,8 @@ export function validateFeatureSprintRunnerRequest(
       ok: false,
       error: "verificationCommands and runVerification are only allowed for implementation profiles."
     };
+  } else if (isLocalizationProfile(record.profile) && worktree?.enabled === true) {
+    return { ok: false, error: `${record.profile} does not support worktree.` };
   }
 
   const request: FeatureSprintRunnerRequest = {

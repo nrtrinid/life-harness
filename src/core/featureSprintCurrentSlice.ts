@@ -13,6 +13,7 @@ import {
 import { getFeatureSprintRunnerRunsForCard } from "./featureSprintRunnerHistory";
 import {
   isImplementationProfile,
+  isLocalizationProfile,
   isReviewProfile,
   isScopingProfile,
   runnerAgentLabel,
@@ -74,7 +75,7 @@ export type FeatureSprintNextJob = {
   phase?: HarnessFeatureSprintSlicePhase;
   label: string;
   role: FeatureSprintNextJobRole;
-  providerOptions: Array<"manual" | "cursor" | "chatgpt" | "codex" | "local">;
+  providerOptions: Array<"manual" | "cursor" | "chatgpt" | "codex" | "local" | "deepseek">;
   action: FeatureSprintNextJobAction;
   expectedOutputFence?: FeatureSprintNextJobExpectedFence;
   blockedReason?: string;
@@ -402,6 +403,71 @@ function baseJob(
   };
 }
 
+export function resolveRunnerJobStartPhase(
+  action: FeatureSprintNextJobAction
+): HarnessFeatureSprintSlicePhase | undefined {
+  switch (action) {
+    case "copy_localization":
+      return "localizing";
+    case "copy_prompt_audit":
+      return "prompt_auditing";
+    case "copy_implementation":
+      return "implementing";
+    case "copy_review":
+      return "reviewing";
+    default:
+      return undefined;
+  }
+}
+
+export function findLatestLocalizationRunForStep(
+  runs: HarnessFeatureSprintRunnerRun[],
+  planId: string,
+  stepId: string
+): HarnessFeatureSprintRunnerRun | undefined {
+  return runs.find(
+    (run) =>
+      isLocalizationProfile(run.profile) &&
+      run.planId === planId &&
+      run.stepId === stepId
+  );
+}
+
+export function hasStagedLocalizationAwaitingImport(
+  run: HarnessFeatureSprintRunnerRun | undefined,
+  stagedImportText?: string
+): boolean {
+  if (stagedImportText?.trim()) {
+    return true;
+  }
+  if (!run) {
+    return false;
+  }
+  if (run.nextJobLifecycleStatus === "staged" && run.outputText?.trim()) {
+    return true;
+  }
+  return run.status === "succeeded" && Boolean(run.outputText?.trim()) && !run.importedAt;
+}
+
+export function shouldRetryLocalizationJob(
+  run: HarnessFeatureSprintRunnerRun | undefined,
+  stagedImportText?: string
+): boolean {
+  if (hasStagedLocalizationAwaitingImport(run, stagedImportText)) {
+    return false;
+  }
+  if (!run) {
+    return true;
+  }
+  if (run.status === "failed" || run.nextJobLifecycleStatus === "failed") {
+    return true;
+  }
+  if (run.status === "running" || run.nextJobLifecycleStatus === "started") {
+    return true;
+  }
+  return true;
+}
+
 function jobForPhase(
   plan: HarnessFeatureSprintPlan,
   step: HarnessFeatureSprintStep,
@@ -430,8 +496,9 @@ function jobForPhase(
           phase: slice.phase,
           label: "Copy for Cursor localization",
           role: "localizer",
-          providerOptions: ["cursor", "manual"],
+          providerOptions: ["cursor", "manual", "local"],
           action: "copy_localization",
+          expectedOutputFence: "feature-prompt-localization",
           checklist: ["Optional read-only repo localization before implementation."]
         });
       }
@@ -445,7 +512,24 @@ function jobForPhase(
         checklist: ["Copy the implementation packet or run in worktree."]
       });
     }
-    case "localizing":
+    case "localizing": {
+      if (
+        shouldRetryLocalizationJob(
+          context.latestLocalizationRun,
+          context.stagedLocalizationImportText
+        )
+      ) {
+        return baseJob({
+          sliceId: slice.id,
+          phase: slice.phase,
+          label: "Retry Cursor localization",
+          role: "localizer",
+          providerOptions: ["cursor", "manual", "local"],
+          action: "copy_localization",
+          expectedOutputFence: "feature-prompt-localization",
+          checklist: ["Runner localization failed or has no staged output. Retry or copy manually."]
+        });
+      }
       return baseJob({
         sliceId: slice.id,
         phase: slice.phase,
@@ -457,6 +541,7 @@ function jobForPhase(
         requiresHumanImport: true,
         checklist: ["Paste localization output, then import."]
       });
+    }
     case "prompt_auditing":
       return baseJob({
         sliceId: slice.id,
@@ -527,7 +612,7 @@ function jobForPhase(
         phase: slice.phase,
         label: `Run review with ${agentLabel}`,
         role: "reviewer",
-        providerOptions: ["chatgpt", "codex", "manual", "local"],
+        providerOptions: ["chatgpt", "codex", "manual", "local", "deepseek"],
         action: "copy_review",
         checklist: ["Copy review packet to a separate reviewer worker."]
       });
@@ -598,6 +683,8 @@ type BuildNextJobContext = {
   latestScopingRun?: HarnessFeatureSprintRunnerRun;
   latestImplementationRun?: HarnessFeatureSprintRunnerRun;
   latestReviewRun?: HarnessFeatureSprintRunnerRun;
+  latestLocalizationRun?: HarnessFeatureSprintRunnerRun;
+  stagedLocalizationImportText?: string;
 };
 
 export function buildNextFeatureSprintJob(
@@ -606,6 +693,7 @@ export function buildNextFeatureSprintJob(
   options: {
     runnerHealth?: "unknown" | "available" | "unavailable";
     runnerAgent?: FeatureSprintRunnerAgent;
+    stagedLocalizationImportText?: string;
   } = {}
 ): FeatureSprintNextJob | undefined {
   const runnerHealth = options.runnerHealth ?? "unknown";
@@ -640,7 +728,12 @@ export function buildNextFeatureSprintJob(
         isReviewProfile(run.profile) &&
         (!runScope.planId || run.planId === runScope.planId) &&
         (!runScope.stepId || run.stepId === runScope.stepId)
-    )
+    ),
+    latestLocalizationRun:
+      plan && step
+        ? findLatestLocalizationRunForStep(recentRuns, plan.id, step.id)
+        : undefined,
+    stagedLocalizationImportText: options.stagedLocalizationImportText
   };
 
   if (plan?.status === "done" && hasCompletionProof(plan)) {

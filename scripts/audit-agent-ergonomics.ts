@@ -60,6 +60,7 @@ const PROFILES: RepoProfile[] = [
     contextMap: "docs/AGENT_CONTEXT_MAP.md",
     preflightCommand: "rtk.ps1 preflight",
     preflightShell: true,
+    doctorCommands: ["rtk.ps1 doctor"],
     testSelectCommand: undefined,
     noTouchFiles: [".agentignore"],
     noTouchMarkers: ["DO_NOT_READ", "no-touch", "DO_NOT_READ:"],

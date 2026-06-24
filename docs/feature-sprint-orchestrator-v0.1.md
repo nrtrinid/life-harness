@@ -41,6 +41,9 @@ User → approval gate at every trust boundary
 9. **Copy review packet** → paste into reviewer worker (separate from implementer).
 10. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
 11. **Import review verdict** — does not auto-advance.
+
+Optional **DeepSeek automated review** (when configured): **Run automated review** builds a rich automated review packet, calls DeepSeek mock/live (or mock-only in CI), validates `feature-automated-review-verdict`, and **stages** compatible `feature-review-verdict` text in the import textarea — still manual import. See [feature-sprint-deepseek-reviewer-v0.1.md](feature-sprint-deepseek-reviewer-v0.1.md).
+
 12. Optional (living-spec path): **Import spec update** (`feature-spec-update`) → **Approve revised feature spec** → spec becomes unapproved until approved again.
 13. **Advance step** when ready (manual gate), or **Adopt next slice** when no ready predefined step exists but `nextSliceProposal` is present.
 14. Repeat steps 6–13 for each slice.
@@ -184,7 +187,8 @@ ready → localizing → prompt_auditing → implementing → proof_pending → 
   → spec_updating → awaiting_spec_approval → ready_to_advance → done
 ```
 
-- **`localizing`** means a localization runner job is in flight — not manual copy. `copy_localization` does not mutate phase; manual copy mode often stays `ready` until `import_localization` → `prompt_auditing`.
+- **`localizing`** means a localization **runner** job started (`syncFeatureSprintPhaseOnRunnerJobStarted` on `copy_localization` runner path). Manual **Prepare next job** / copy does **not** mutate phase.
+- **Failed localization:** phase stays `localizing`; `buildNextFeatureSprintJob` retries `copy_localization` until staged output exists — never `import_localization` with nothing to import.
 - **`ready`** job order (headless `buildNextFeatureSprintJob` in `featureSprintCurrentSlice.ts`): approve initial spec first, then optional localization copy, then implementation handoff.
 - Orchestrator mutations sync `currentSlice.phase`; `automationPhase` stays for backward compat. Advance/adopt remain manual gates.
 - Dogfood `buildNextAction` delegates to the job selector with legacy fallback.
@@ -194,7 +198,9 @@ ready → localizing → prompt_auditing → implementing → proof_pending → 
 [`src/core/featureSprintRunnerJob.ts`](../src/core/featureSprintRunnerJob.ts) connects `buildNextFeatureSprintJob` to optional localhost runner execution and packet preparation:
 
 - `prepareFeatureSprintRunnerJob` — resolves next job, builds provider-ready `inputPacket`, maps role/fence/gates
-- `executeFeatureSprintRunnerJob` — narrow executor (request in, output text out); **no UI staging or state mutations**
+- `executeFeatureSprintRunnerJob` — narrow executor with `onStarted` / `onCompleted` / `onFailed` hooks; **no UI staging or state mutations** inside core
+- Shallow next-job lifecycle on runner runs: `nextJobAction`, `nextJobRole`, `nextJobProvider`, `nextJobLifecycleStatus`, `expectedOutputFence`, `stagedAt` (no separate job-history dashboard)
+- UI debug line `testID`: `feature-sprint-next-job-lifecycle` — shows `prepared` / `started` / `completed` / `failed` / `staged` / `human_required`
 - UI **Builder readiness** button (mode-aware): **Run next job** / **Prepare next job** / **Show next gate**
 - Provider-agnostic (`manual`, `cursor`, `chatgpt`, `codex`, `local`); **Codex is optional**
 - `import_spec_update` prepares a `feature-spec-update` architect packet only — the action name reflects the downstream human import gate, not runner import behavior

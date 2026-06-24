@@ -13,7 +13,8 @@ One button in Card Detail → Backroom → Feature Sprint (label depends on mode
 | Label | When |
 |-------|------|
 | **Run next job** | Runner-eligible job and localhost runner available |
-| **Prepare next job** | Manual/chatgpt fallback or packet-only actions (e.g. localization, spec-update prepare) |
+| **Prepare next job** | Manual/chatgpt fallback or packet-only actions (e.g. spec-update prepare). Manual localization copy does **not** mark lifecycle `started`. |
+| **Run automated review** | `copy_review` with DeepSeek configured (optional reviewer lane — not the localhost runner) |
 | **Show next gate** | Human-only gates (approve, import existing output, advance, adopt, complete) |
 
 `testID`: `feature-sprint-next-job`. Existing per-step Run/Copy buttons remain.
@@ -25,6 +26,8 @@ Implementation automation touches the repo. v0.1 automates packet movement only:
 - Codex high/xhigh = planner / reviewer (scoping + review packets)
 - Cursor/Codex implementation agent = future bounded builder (not this PR)
 - Life Harness = conductor / memory / runner client
+
+**DeepSeek is not the localhost runner.** It is an optional read-only automated reviewer that stages import-compatible verdict text. Codex/Cursor review via `feature-runner` is unchanged. See [feature-sprint-deepseek-reviewer-v0.1.md](feature-sprint-deepseek-reviewer-v0.1.md).
 - User = approval gate
 
 ## Setup
@@ -35,7 +38,16 @@ Implementation automation touches the repo. v0.1 automates packet movement only:
 npm run feature-runner
 ```
 
-No Codex binary required. Runner returns valid `feature-sprint-plan` and `feature-review-verdict` fenced blocks.
+No Codex binary required. Runner returns valid `feature-sprint-plan`, `feature-review-verdict`, `feature-prompt-localization`, and `feature-prompt-critique` fenced blocks in mock mode.
+
+### Localization profiles (optional Codex wire name)
+
+| Profile | Provider | Notes |
+|---------|----------|-------|
+| `cursor_localization` | Cursor | Primary localization runner path |
+| `codex_localization` | local/mock wire | Optional compatible profile name — **not** a required Codex install |
+
+Staged localization output ≠ imported. On runner failure, phase stays `localizing` and next job retries `copy_localization` (not `import_localization`).
 
 ### Token pairing (optional for mock; required for real Codex)
 
