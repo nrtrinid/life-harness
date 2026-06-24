@@ -12,6 +12,13 @@ import {
   normalizeImplementationProofRecord,
   resolveLatestImplementationRunForStep
 } from "./featureSprintImplementationProof";
+import {
+  formatWorkerOutputEvidencePacketSections,
+  parseFeatureSprintWorkerOutputEvidence,
+  redactWorkerOutputForReviewPacket,
+  resolveWorkerEvidenceForStep,
+  normalizeWorkerOutputEvidenceRecord
+} from "./featureSprintWorkerOutput";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
 import { buildNextMoveSummary } from "./nextMoveContract";
@@ -37,6 +44,7 @@ import type {
   HarnessFeatureSprintStepPromptAudit,
   HarnessFeatureSprintPromptAuditVerdict,
   HarnessFeatureSprintStepStatus,
+  HarnessFeatureSprintWorkerOutputSource,
   LifeCard,
   LifeLogEntry
 } from "./types";
@@ -213,6 +221,8 @@ export type FeatureSprintStepUpdateInput = Partial<
   promptAudit?: HarnessFeatureSprintStepPromptAudit | null;
   /** Pass null to clear implementationProof on the step. */
   implementationProof?: HarnessFeatureSprintStepImplementationProof | null;
+  workerOutputSource?: HarnessFeatureSprintWorkerOutputSource;
+  fallbackChangedFiles?: string[];
 };
 
 export type FeatureSpecSaveInput = {
@@ -786,6 +796,22 @@ export function updateFeatureSprintStep(
     patch.outputSummary !== undefined &&
     nextOutputSummary !== (current.outputSummary?.trim() || undefined);
 
+  const project = buildProjectContextForCard(data, existing.cardId);
+  const projectVerificationCommands =
+    project?.verificationCommands?.length ? project.verificationCommands : DEFAULT_VERIFY_COMMANDS;
+
+  let nextWorkerOutputEvidence = current.workerOutputEvidence;
+  if (outputSummaryChanged || patch.outputSummary !== undefined) {
+    nextWorkerOutputEvidence = nextOutputSummary
+      ? parseFeatureSprintWorkerOutputEvidence(nextOutputSummary, {
+          source: patch.workerOutputSource ?? "manual",
+          fallbackChangedFiles: patch.fallbackChangedFiles,
+          fallbackVerificationCommands: projectVerificationCommands,
+          now
+        })
+      : undefined;
+  }
+
   const updatedStep: HarnessFeatureSprintStep = {
     ...current,
     title: patch.title !== undefined ? patch.title.trim() : current.title,
@@ -823,6 +849,7 @@ export function updateFeatureSprintStep(
         : patch.implementationProof !== undefined
           ? patch.implementationProof
           : current.implementationProof,
+    workerOutputEvidence: nextWorkerOutputEvidence,
     completedAt: patch.completedAt ?? current.completedAt,
     updatedAt: timestamp
   };
@@ -1621,6 +1648,12 @@ export function normalizeFeatureSprintStep(
     delete next.implementationProof;
   }
 
+  if (step.workerOutputEvidence?.rawOutput?.trim()) {
+    next.workerOutputEvidence = normalizeWorkerOutputEvidenceRecord(step.workerOutputEvidence);
+  } else {
+    delete next.workerOutputEvidence;
+  }
+
   return next;
 }
 
@@ -1662,7 +1695,8 @@ export function normalizeImplementationProofForStep(
     projectVerificationCommands,
     matchingRun,
     timestamp,
-    existingProof: step.implementationProof
+    existingProof: step.implementationProof,
+    workerOutputEvidence: step.workerOutputEvidence
   });
 
   const stepResult = updateFeatureSprintStep(
@@ -2487,7 +2521,10 @@ export function buildFeatureStepReviewPacket(
     agentOutput?.trim() ||
     step.outputSummary?.trim() ||
     "(not provided)";
-  const untrustedOutput = renderUntrustedContextBlockMarkdown(buildRunnerOutputBlock(rawOutput));
+  const redactedRawOutput = redactWorkerOutputForReviewPacket(rawOutput).text;
+  const untrustedOutput = renderUntrustedContextBlockMarkdown(
+    buildRunnerOutputBlock(redactedRawOutput)
+  );
   const session = step.agentSessionId
     ? data.agentSessions.find((item) => item.id === step.agentSessionId)
     : undefined;
@@ -2516,6 +2553,7 @@ export function buildFeatureStepReviewPacket(
     ...formatBulletSection("## Step acceptance criteria", step.acceptanceCriteria),
     ...formatBulletSection("## Feature non-goals", plan.nonGoals),
     ...formatImplementationPromptPacketSection(step),
+    ...formatWorkerOutputEvidencePacketSections(resolveWorkerEvidenceForStep(step)),
     ...formatImplementationProofPacketSections(step),
     ...formatRunnerEvidencePacketSections(data, step),
     untrustedOutput,

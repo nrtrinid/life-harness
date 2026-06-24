@@ -13,6 +13,7 @@ import {
   resolveLatestImplementationRunForStep,
   summarizeVerificationProofResult
 } from "./featureSprintImplementationProof";
+import { parseFeatureSprintWorkerOutputEvidence } from "./featureSprintWorkerOutput";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type { FeatureSprintVerificationResult } from "./featureSprintRunner";
 import type { HarnessFeatureSprintRunnerRun, HarnessFeatureSprintStep } from "./types";
@@ -237,6 +238,24 @@ Changed files
       expect(proof.knownRisks).toContain("No matching implementation runner run for this step.");
       expect(proof.knownRisks).toContain("Manual output parsing may be incomplete.");
       expect(proof.knownRisks).toContain("Verification was not run or not captured.");
+    });
+
+    it("uses worker output evidence when runner metadata is missing", () => {
+      const workerOutputEvidence = parseFeatureSprintWorkerOutputEvidence(
+        `Files changed:\n- src/from-worker.ts\n\nTests:\n- npm test`,
+        { now: new Date(FIXED_NOW), source: "manual" }
+      );
+      const proof = buildImplementationProofFromSources({
+        rawOutput: workerOutputEvidence.rawOutput,
+        step: fixtureStep(),
+        projectVerificationCommands: ["npm run typecheck"],
+        timestamp: FIXED_NOW,
+        workerOutputEvidence
+      });
+
+      expect(proof.filesChanged).toEqual(["src/from-worker.ts"]);
+      expect(proof.testsRun).toEqual(["npm test"]);
+      expect(proof.workerOutputEvidence?.source).toBe("manual");
     });
   });
 

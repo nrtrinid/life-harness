@@ -6,10 +6,12 @@ Phase B4 adds a rules-only **Implementation Proof Normalizer** after saved agent
 
 - **Normalize for review** — Card Backroom button; requires saved `outputSummary` on the current step.
 - **Storage** — `implementationProof` on the **current step**, including a `runnerEvidence` snapshot (diff stat, git status, verification summary).
+- **Worker output evidence** — on **Save agent output**, Life Harness parses best-effort structured fields into `step.workerOutputEvidence` (raw preserved locally). On **Normalize for review**, this evidence is copied onto `step.implementationProof.workerOutputEvidence` and used to enrich proof defaults when runner metadata is missing.
 - **Review packet** — `buildFeatureStepReviewPacket` adds:
   - Implementation prompt source
   - Normalized proof sections (capped)
   - Runner evidence (snapshot with history lookup fallback)
+  - Structured worker output evidence (capped + secret-redacted)
   - Raw output excerpt (capped)
 - **Phase** — `automationPhase: proof_normalizing` set **only after successful normalize**.
 
@@ -24,12 +26,14 @@ Proof normalization is optional. Review is **not** gated on proof — dogfood sh
 ## Normalizer behavior (rules-only)
 
 - **Raw source** — `step.outputSummary` (saved agent output).
+- **Optional typed fence** — you may paste a `feature-worker-output` fenced JSON block inside agent output. It is **not** an import gate. If malformed, Life Harness falls back to free-text parse and shows: `Malformed feature-worker-output fence detected; used free-text fallback.`
 - **Runner metadata** — latest matching implementation run for `planId` + `stepId` (succeeded **or** failed).
 - **Manual parse** — best-effort only:
   - `Changed files` bullet list
   - `## Verification` / `Verification:` section with `- command:` lines
 - **Safe defaults** — `behaviorChanged` is always `["See raw implementation output."]` in v0.1.
 - **Failed runs** — included as evidence; add known risk when latest matching run failed.
+ - **Secrets** — review packets redact potential secret-like text from worker output and include: `Potential secret-like text was redacted from worker output.`
 
 ## Stale proof guardrail
 

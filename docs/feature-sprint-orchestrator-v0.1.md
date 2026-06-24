@@ -36,8 +36,8 @@ User → approval gate at every trust boundary
 4. Architect worker returns prose + `feature-sprint-plan` fenced JSON.
 5. **Import plan** — parses fenced block only; no NL parsing; no auto-import.
 6. Per slice — optional **localization** and **prompt audit** (v2 inner loop); then **Copy implementation packet** or **Run implementation in worktree** (optional local runner, isolated git worktree) → send to implementation worker (typically Cursor).
-7. Paste or receive agent output → **Save agent output** on the current step (never auto-saved).
-8. Optional: **Normalize proof** for review packet input.
+7. Paste or receive agent output → **Save agent output** on the current step (never auto-saved). Saving parses best-effort **worker output evidence** (files/tests/warnings), preserving raw output locally.
+8. Optional: **Normalize proof** for review packet input. Normalization copies worker evidence into `implementationProof` and enriches the review packet.
 9. **Copy review packet** → paste into reviewer worker (separate from implementer).
 10. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
 11. **Import review verdict** — does not auto-advance.
