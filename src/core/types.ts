@@ -424,6 +424,39 @@ export type HarnessFeatureSprintAutomationPhase =
   | "spec_updating"
   | "awaiting_user_approval";
 
+export type HarnessFeatureSprintSlicePhase =
+  | "ready"
+  | "localizing"
+  | "prompt_auditing"
+  | "implementing"
+  | "proof_pending"
+  | "reviewing"
+  | "spec_updating"
+  | "awaiting_spec_approval"
+  | "ready_to_advance"
+  | "done";
+
+export type HarnessFeatureSprintCurrentSliceStatus = "ready" | "active" | "blocked" | "done";
+
+export type HarnessFeatureSprintCurrentSliceSource =
+  | "planned_step"
+  | "adopted_next_slice"
+  | "manual";
+
+export type HarnessFeatureSprintCurrentSlice = {
+  id: string;
+  title: string;
+  summary?: string;
+  status: HarnessFeatureSprintCurrentSliceStatus;
+  phase: HarnessFeatureSprintSlicePhase;
+  source: HarnessFeatureSprintCurrentSliceSource;
+  linkedStepId?: string;
+  riskTier?: "tiny" | "normal" | "risky";
+  expectedFiles?: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type HarnessFeatureSprintStepLocalization = {
   rawOutput: string;
   likelyFiles: string[];
@@ -569,6 +602,7 @@ export type HarnessFeatureSprintPlan = {
   latestSpecUpdate?: HarnessFeatureSprintSpecUpdate;
   nextSliceProposal?: HarnessFeatureSprintNextSliceProposal;
   automationPhase?: HarnessFeatureSprintAutomationPhase;
+  currentSlice?: HarnessFeatureSprintCurrentSlice;
 };
 
 export type PrimaryActionKind =

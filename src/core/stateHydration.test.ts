@@ -130,6 +130,77 @@ describe("normalizeData", () => {
     expect(normalized.featureSprintPlans[0]?.automationPhase).toBe("spec_approved");
   });
 
+  it("round-trips currentSlice and drops invalid slice objects on load", () => {
+    const normalized = normalizeData({
+      featureSprintPlans: [
+        {
+          id: "plan-1",
+          cardId: "card-1",
+          title: "Slice hydrate",
+          goal: "Persist slice",
+          status: "in_progress",
+          acceptanceCriteria: ["Slice saved"],
+          nonGoals: [],
+          constraints: [],
+          steps: [
+            {
+              id: "step-1",
+              title: "Core",
+              goal: "Add slice",
+              status: "ready",
+              acceptanceCriteria: ["Saved"],
+              createdAt: "2026-06-09T12:00:00.000Z",
+              updatedAt: "2026-06-09T12:00:00.000Z"
+            }
+          ],
+          currentStepId: "step-1",
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z",
+          currentSlice: {
+            id: "slice-1",
+            title: "Core",
+            status: "active",
+            phase: "ready",
+            source: "planned_step",
+            linkedStepId: "step-1",
+            createdAt: "2026-06-09T12:00:00.000Z",
+            updatedAt: "2026-06-09T12:00:00.000Z"
+          }
+        },
+        {
+          id: "plan-2",
+          cardId: "card-2",
+          title: "Bad slice",
+          goal: "Drop invalid",
+          status: "in_progress",
+          acceptanceCriteria: ["Drop"],
+          nonGoals: [],
+          constraints: [],
+          steps: [],
+          createdAt: "2026-06-09T12:00:00.000Z",
+          updatedAt: "2026-06-09T12:00:00.000Z",
+          currentSlice: {
+            id: "",
+            title: "",
+            status: "not_valid" as never,
+            phase: "not_valid" as never,
+            source: "not_valid" as never,
+            createdAt: "2026-06-09T12:00:00.000Z",
+            updatedAt: "2026-06-09T12:00:00.000Z"
+          }
+        }
+      ]
+    });
+
+    expect(normalized.featureSprintPlans[0]?.currentSlice).toMatchObject({
+      id: "slice-1",
+      phase: "ready",
+      status: "active",
+      source: "planned_step"
+    });
+    expect(normalized.featureSprintPlans[1]?.currentSlice).toBeUndefined();
+  });
+
   it("strips empty featureSpec body and invalid automationPhase on load", () => {
     const normalized = normalizeData({
       featureSprintPlans: [

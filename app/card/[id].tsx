@@ -49,6 +49,10 @@ import {
   resolveStepImplementationPrompt,
   resolveStepImplementationPromptSource
 } from "../../src/core/featureSprintOrchestrator";
+import {
+  formatFeatureSprintSlicePhaseLabel,
+  resolveFeatureSprintCurrentSlice
+} from "../../src/core/featureSprintCurrentSlice";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
   buildFeatureSprintDogfoodSummary,
@@ -644,6 +648,12 @@ export default function CardDetailScreen() {
   const automationPhaseDisplay = activeFeatureSprintPlan
     ? resolveAutomationPhaseDisplay(activeFeatureSprintPlan, currentFeatureStep)
     : undefined;
+  const resolvedCurrentSlice = activeFeatureSprintPlan
+    ? resolveFeatureSprintCurrentSlice(activeFeatureSprintPlan, currentFeatureStep)
+    : undefined;
+  const slicePhaseDisplay = resolvedCurrentSlice
+    ? formatFeatureSprintSlicePhaseLabel(resolvedCurrentSlice.phase)
+    : automationPhaseDisplay?.replaceAll("_", " ");
   const stepRequiresSpecUpdate = doesFeatureSprintStepRequireSpecUpdate(
     activeFeatureSprintPlan,
     currentFeatureStep
@@ -1951,7 +1961,16 @@ export default function CardDetailScreen() {
             <Text style={styles.titleText}>
               {activeFeatureSprintPlan.title} · {activeFeatureSprintPlan.status}
             </Text>
-            {automationPhaseDisplay ? (
+            {resolvedCurrentSlice ? (
+              <>
+                <Text style={[styles.helpText, { marginTop: 4 }]} testID="feature-sprint-current-slice-title">
+                  Current slice: {resolvedCurrentSlice.title}
+                </Text>
+                <Text style={[styles.helpText, { marginTop: 4 }]} testID="feature-sprint-current-slice-phase">
+                  Phase: {slicePhaseDisplay}
+                </Text>
+              </>
+            ) : automationPhaseDisplay ? (
               <Text style={[styles.helpText, { marginTop: 4 }]}>
                 Automation phase: {automationPhaseDisplay.replaceAll("_", " ")}
               </Text>

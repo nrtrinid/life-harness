@@ -4,7 +4,7 @@
 
 For shipped behavior and data model, see [`feature-sprint-orchestrator-v0.1.md`](feature-sprint-orchestrator-v0.1.md). For v2 living-spec evolution (partially landed), see [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md). For future upgrades (trust dashboard, parallel lanes, evals), see [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md).
 
-**Status (mid-v2):** Living spec, typed handoffs, proof normalization, spec updates, and next-slice adoption are partially or mostly landed. The next architectural jump is **`currentSlice` + phase machine**, then risk-tier routing and UI consolidation around **Next Handoff**.
+**Status (mid-v2):** Living spec, typed handoffs, proof normalization, spec updates, next-slice adoption, and **headless `currentSlice` + phase machine** are landed. Next: risk-tier routing and UI consolidation around **Next Handoff**.
 
 ## What this is
 

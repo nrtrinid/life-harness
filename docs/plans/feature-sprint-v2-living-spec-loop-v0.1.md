@@ -1,6 +1,6 @@
 # Feature Sprint v2: Living Spec Loop / Web Architect Mode
 
-> **Status:** **Mid-v2 — partially shipped.** v0.1 step-based loop remains supported. Living spec, handoffs, localization, prompt audit, proof normalizer, spec update, and next-slice adoption are landed or mostly landed. **Next architectural priority: `currentSlice` + phase machine.**
+> **Status:** **Mid-v2 — partially shipped.** v0.1 step-based loop remains supported. Living spec, handoffs, localization, prompt audit, proof normalizer, spec update, and next-slice adoption are landed or mostly landed. **Slice B (`currentSlice` + phase machine) shipped headless.** Next Handoff UI still planned.
 > **Purpose:** Define the evolution of card-anchored feature work — frontier architect maintains spec and judgment, Cursor maintains repo truth, Life Harness maintains protocol and proof. **Codex is optional**, not required.
 > **Authority:** Product boundaries still follow [`../01_final_design_doc.md`](../01_final_design_doc.md), [`../02_v0_1_scope.md`](../02_v0_1_scope.md), and root [`AGENTS.md`](../../AGENTS.md).
 
@@ -24,7 +24,7 @@ Only gates advance trust.
 | Area | Anchor | Notes |
 |------|--------|-------|
 | Orchestrator core | [`../../src/core/featureSprintOrchestrator.ts`](../../src/core/featureSprintOrchestrator.ts) | Plan CRUD, packet builders, fence import, step advance, adopt next slice, completion proof |
-| Types | [`../../src/core/types.ts`](../../src/core/types.ts) — `HarnessFeatureSprintPlan`, `HarnessFeatureSprintStep` | Fixed multi-step plan + `featureSpec`, `nextSliceProposal`; **`currentSlice` + phase machine not yet shipped** |
+| Types | [`../../src/core/types.ts`](../../src/core/types.ts) — `HarnessFeatureSprintPlan`, `HarnessFeatureSprintStep` | Fixed multi-step plan + `featureSpec`, `nextSliceProposal`; **`currentSlice` + phase machine shipped (headless)** |
 | Untrusted wrapping | [`../../src/core/untrustedContextBlock.ts`](../../src/core/untrustedContextBlock.ts) | Scoping rough spec + review runner output wrapped as evidence-only |
 | Runner bridge | [`../../src/core/featureSprintRunner.ts`](../../src/core/featureSprintRunner.ts), [`../feature-sprint-local-runner-v0.1.md`](../feature-sprint-local-runner-v0.1.md) | Optional localhost runner (Cursor CLI; Codex CLI optional); draft output only |
 | Verification capture | [`../feature-sprint-verification-capture-v0.2.md`](../feature-sprint-verification-capture-v0.2.md) | Project Registry commands → runner history |
@@ -87,7 +87,7 @@ v2 **extends** v0.1; it does not delete the step-based plan path immediately. Le
 | **Instrumentation** | Trust metrics keyed to phase transitions, not step status alone |
 | **Local-runner integration** | Runner fills textareas; phase records which gate is pending import |
 
-Until `currentSlice` ships, dogfood logic infers next action from step status, imports, and `nextSliceProposal` — workable but harder to reason about.
+Before Slice B, dogfood inferred next action; now `buildNextFeatureSprintJob` is primary with legacy fallback. Legacy plans without persisted slice still infer from step status, imports, and `nextSliceProposal` — workable but harder to reason about.
 
 ### Proposed `currentSlice` phase model
 

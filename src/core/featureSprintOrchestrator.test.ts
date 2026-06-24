@@ -170,6 +170,9 @@ describe("featureSprintOrchestrator", () => {
     expect(plan?.status).toBe("in_progress");
     expect(plan?.steps).toHaveLength(1);
     expect(plan?.projectId).toBe("project-1");
+    expect(plan?.currentSlice?.phase).toBe("ready");
+    expect(plan?.currentSlice?.linkedStepId).toBe(plan?.steps[0]?.id);
+    expect(plan?.currentSlice?.source).toBe("planned_step");
   });
 
   it("rejects missing card", () => {
@@ -1459,6 +1462,7 @@ Here is localization.
       expect(hasStepPromptLocalization(step)).toBe(true);
       expect(step?.promptLocalization?.likelyFiles).toContain("src/core/featureSprintOrchestrator.ts");
       expect(plan?.automationPhase).toBe("localizing");
+      expect(plan?.currentSlice?.phase).toBe("prompt_auditing");
       expect(step?.suggestedPrompt).toBe(plan?.steps[0]?.suggestedPrompt);
     });
 

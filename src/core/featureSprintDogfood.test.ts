@@ -206,6 +206,17 @@ describe("buildFeatureSprintDogfoodSummary", () => {
             {
               ...fixtureStep(),
               outputSummary: "Implemented slice.",
+              implementationProof: {
+                rawOutput: "Implemented slice.",
+                normalizedAt: FIXED_NOW,
+                verificationResult: {
+                  command: "npm test",
+                  status: "passed",
+                  startedAt: FIXED_NOW,
+                  completedAt: FIXED_NOW
+                },
+                filesChanged: ["src/core/featureSprintDogfood.ts"]
+              },
               reviewStatus: undefined
             }
           ]
@@ -217,7 +228,7 @@ describe("buildFeatureSprintDogfoodSummary", () => {
       runnerAgent: "cursor"
     });
     expect(summary.nextAction.kind).toBe("run_review");
-    expect(summary.nextAction.detail).toContain("Cursor");
+    expect(summary.nextAction.label).toContain("Cursor");
   });
 
   it("points project-backed cards with available runner and no plan to run_scoping", () => {
@@ -231,11 +242,52 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     expect(nextKind(data)).toBe("import_plan");
   });
 
-  it("points ready plan step with no output to run_implementation", () => {
-    const data = baseData({
-      featureSprintPlans: [fixturePlan()]
-    });
-    expect(nextKind(data)).toBe("run_implementation");
+  it("points ready plan step with no localization to copy_localization job", () => {
+    const summary = buildFeatureSprintDogfoodSummary(
+      baseData({
+        featureSprintPlans: [fixturePlan()]
+      }),
+      CARD_ID,
+      { runnerHealth: "available" }
+    );
+    expect(summary.nextJob?.action).toBe("copy_localization");
+    expect(summary.nextAction.kind).toBe("manual");
+  });
+
+  it("matches nextJob action for phased plan with persisted currentSlice", () => {
+    const summary = buildFeatureSprintDogfoodSummary(
+      baseData({
+        featureSprintPlans: [
+          fixturePlan({
+            currentSlice: {
+              id: "slice-1",
+              title: "Core checklist",
+              status: "active",
+              phase: "implementing",
+              source: "planned_step",
+              linkedStepId: STEP_ID,
+              createdAt: FIXED_NOW,
+              updatedAt: FIXED_NOW
+            }
+          })
+        ]
+      }),
+      CARD_ID,
+      { runnerHealth: "available" }
+    );
+    expect(summary.nextJob?.action).toBe("copy_implementation");
+    expect(summary.nextAction.kind).toBe("run_implementation");
+    expect(summary.currentSlicePhase).toBe("implementing");
+  });
+
+  it("legacy seed without persisted slice still returns valid next action", () => {
+    const summary = buildFeatureSprintDogfoodSummary(
+      baseData({ featureSprintPlans: [fixturePlan()] }),
+      CARD_ID,
+      { runnerHealth: "available" }
+    );
+    expect(summary.nextAction.label.length).toBeGreaterThan(0);
+    expect(summary.nextJob?.phase).toBe("ready");
   });
 
   it("points unapproved persisted spec to approve_feature_spec before run_implementation", () => {
@@ -254,7 +306,7 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     expect(nextKind(data)).toBe("approve_feature_spec");
   });
 
-  it("allows run_implementation when persisted spec is approved", () => {
+  it("allows copy_implementation after approved spec when localization exists", () => {
     const data = baseData({
       featureSprintPlans: [
         fixturePlan({
@@ -265,7 +317,27 @@ describe("buildFeatureSprintDogfoodSummary", () => {
             approvedAt: FIXED_NOW,
             approvedBy: "user"
           },
-          automationPhase: "spec_approved"
+          automationPhase: "spec_approved",
+          currentSlice: {
+            id: "slice-1",
+            title: "Core checklist",
+            status: "active",
+            phase: "ready",
+            source: "planned_step",
+            linkedStepId: STEP_ID,
+            createdAt: FIXED_NOW,
+            updatedAt: FIXED_NOW
+          },
+          steps: [
+            fixtureStep({
+              promptLocalization: {
+                revisedImplementationPrompt: "Localized prompt",
+                likelyFiles: ["src/core/featureSprintDogfood.ts"],
+                rawOutput: "localization",
+                updatedAt: FIXED_NOW
+              }
+            })
+          ]
         })
       ]
     });
@@ -274,7 +346,20 @@ describe("buildFeatureSprintDogfoodSummary", () => {
 
   it("points implementation output awaiting save to save_agent_output", () => {
     const data = baseData({
-      featureSprintPlans: [fixturePlan()],
+      featureSprintPlans: [
+        fixturePlan({
+          currentSlice: {
+            id: "slice-1",
+            title: "Core checklist",
+            status: "active",
+            phase: "implementing",
+            source: "planned_step",
+            linkedStepId: STEP_ID,
+            createdAt: FIXED_NOW,
+            updatedAt: FIXED_NOW
+          }
+        })
+      ],
       featureSprintRunnerRuns: [
         fixtureRun("codex_implementation", {
           worktreePath: "C:/tmp/worktree",
@@ -286,7 +371,7 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     expect(nextKind(data)).toBe("save_agent_output");
   });
 
-  it("points saved output without review to run_review", () => {
+  it("points saved output without review to normalize proof first", () => {
     const data = baseData({
       featureSprintPlans: [
         fixturePlan({
@@ -294,7 +379,7 @@ describe("buildFeatureSprintDogfoodSummary", () => {
         })
       ]
     });
-    expect(nextKind(data)).toBe("run_review");
+    expect(nextKind(data)).toBe("save_agent_output");
   });
 
   it("warns when proof is not normalized but does not block review", () => {
@@ -310,7 +395,7 @@ describe("buildFeatureSprintDogfoodSummary", () => {
       status: "warning"
     });
     expect(summary.checks.find((check) => check.id === "advance_gate")?.status).toBe("missing");
-    expect(nextKind(data)).toBe("run_review");
+    expect(nextKind(data)).toBe("save_agent_output");
   });
 
   it("marks implementation proof ready when normalized", () => {
@@ -348,7 +433,34 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     const data = baseData({
       featureSprintPlans: [
         fixturePlan({
-          steps: [fixtureStep({ status: "sent", outputSummary: "Implemented core." })]
+          currentSlice: {
+            id: "slice-1",
+            title: "Core checklist",
+            status: "active",
+            phase: "reviewing",
+            source: "planned_step",
+            linkedStepId: STEP_ID,
+            createdAt: FIXED_NOW,
+            updatedAt: FIXED_NOW
+          },
+          steps: [
+            fixtureStep({
+              status: "sent",
+              outputSummary: "Implemented core.",
+              implementationProof: {
+                rawOutput: "Implemented core.",
+                filesChanged: ["src/core/foo.ts"],
+                behaviorChanged: ["See raw implementation output."],
+                testsRun: ["npm test"],
+                testsNotRun: [],
+                verificationResult: "pass",
+                knownRisks: [],
+                suggestedReviewFocus: ["Confirm behavior matches step acceptance criteria."],
+                createdAt: FIXED_NOW,
+                updatedAt: FIXED_NOW
+              }
+            })
+          ]
         })
       ],
       featureSprintRunnerRuns: [fixtureRun("codex_review")]
@@ -418,7 +530,7 @@ describe("buildFeatureSprintDogfoodSummary", () => {
       kind: "approve_feature_spec",
       label: "Approve revised feature spec"
     });
-    expect(summary.nextAction.detail).toContain("Approve the revised feature spec");
+    expect(summary.nextAction.detail).toContain("Approve revised spec");
     expect(summary.checks.find((check) => check.id === "advance_gate")?.status).toBe("warning");
   });
 

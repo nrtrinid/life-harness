@@ -10,6 +10,12 @@ import {
   isFeatureSpecApproved,
   canAdoptNextSliceProposal
 } from "./featureSprintOrchestrator";
+import {
+  buildNextFeatureSprintJob,
+  mapFeatureSprintNextJobToDogfoodAction,
+  resolveFeatureSprintCurrentSlice,
+  type FeatureSprintNextJob
+} from "./featureSprintCurrentSlice";
 import { getFeatureSprintRunnerRunsForCard } from "./featureSprintRunnerHistory";
 import type { FeatureSprintRunnerHealthProbe } from "./featureSprintRunnerHealth";
 import { formatRunnerHealthCapabilityLine } from "./featureSprintRunnerHealth";
@@ -82,6 +88,8 @@ export type FeatureSprintDogfoodSummary = {
   overallStatus: FeatureSprintDogfoodOverallStatus;
   checks: FeatureSprintDogfoodCheck[];
   nextAction: FeatureSprintDogfoodNextAction;
+  nextJob?: FeatureSprintNextJob;
+  currentSlicePhase?: string;
 };
 
 type RunnerHealth = "unknown" | "available" | "unavailable";
@@ -464,6 +472,14 @@ function blockedBySetup(context: BuildContext): boolean {
 }
 
 function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction {
+  const job = buildNextFeatureSprintJob(context.data, context.cardId, {
+    runnerHealth: context.runnerHealth,
+    runnerAgent: context.runnerAgent
+  });
+  if (job) {
+    return mapFeatureSprintNextJobToDogfoodAction(job);
+  }
+
   const { data, cardId, plan, step, runnerHealth } = context;
   const agentLabel = runnerAgentLabel(context.runnerAgent);
   const project = getProjectForCard(data, cardId);
@@ -684,11 +700,19 @@ export function buildFeatureSprintDogfoodSummary(
     };
   }
 
+  const nextJob = buildNextFeatureSprintJob(context.data, cardId, {
+    runnerHealth: context.runnerHealth,
+    runnerAgent: context.runnerAgent
+  });
+  const resolvedSlice = resolveFeatureSprintCurrentSlice(plan, step);
+
   return {
     cardId,
     cardTitle: card.title,
     overallStatus: buildOverallStatus(context),
     checks,
-    nextAction: buildNextAction(context)
+    nextAction: nextJob ? mapFeatureSprintNextJobToDogfoodAction(nextJob) : buildNextAction(context),
+    nextJob,
+    currentSlicePhase: resolvedSlice?.phase
   };
 }

@@ -68,7 +68,9 @@ Collection: `featureSprintPlans: HarnessFeatureSprintPlan[]`
 - Anchored to `LifeCard.id` via `cardId`
 - Optional `projectId` from Project Registry
 - `steps[]` with per-step status, output, review fields (legacy plan/history lens during v2 migration)
-- `currentStepId` highlights active slice (today; `currentSlice` + phase machine is the next architectural jump)
+- `currentStepId` highlights active step (legacy lens; kept for migration)
+- `currentSlice` — persisted slice-scoped workflow lens with `phase` enum (v2 Slice B, shipped headless)
+- `automationPhase` — parallel legacy hint field; display prefers `currentSlice.phase` when present
 - `featureSpec` — persisted living spec with approval gate (v2, shipped)
 - `nextSliceProposal` — preview-only next slice from spec update until adopted (v2, shipped)
 - `evidenceLogId` / `evidenceProofItemId` for idempotent completion proof
@@ -171,7 +173,21 @@ Local runner profiles (Cursor CLI; optional Codex CLI) ship separately — see [
 
 See [`plans/feature-sprint-roadmap-v0.1.md`](plans/feature-sprint-roadmap-v0.1.md) for trust dashboard, parallel lanes, expanded contracts, risk routing, replay evals, and provider-agnostic runner abstraction.
 
-**Next architectural jump (v2):** [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md) — **`currentSlice` + phase machine** unlocks Next Handoff UI, risk-tier routing, instrumentation, and future local-runner integration. Partially landed: living spec, handoffs, localization, prompt audit, proof normalizer, spec update, next-slice adoption.
+**Next architectural jump (v2):** [`plans/feature-sprint-v2-living-spec-loop-v0.1.md`](plans/feature-sprint-v2-living-spec-loop-v0.1.md) — **`currentSlice` + phase machine** (Slice B shipped headless) unlocks Next Handoff UI, risk-tier routing, instrumentation, and future local-runner integration. Also landed: living spec, handoffs, localization, prompt audit, proof normalizer, spec update, next-slice adoption.
+
+### `currentSlice` phase machine (Slice B)
+
+Persisted on `HarnessFeatureSprintPlan.currentSlice` with slice-scoped phases:
+
+```text
+ready → localizing → prompt_auditing → implementing → proof_pending → reviewing
+  → spec_updating → awaiting_spec_approval → ready_to_advance → done
+```
+
+- **`localizing`** means a localization runner job is in flight — not manual copy. `copy_localization` does not mutate phase; manual copy mode often stays `ready` until `import_localization` → `prompt_auditing`.
+- **`ready`** job order (headless `buildNextFeatureSprintJob` in `featureSprintCurrentSlice.ts`): approve initial spec first, then optional localization copy, then implementation handoff.
+- Orchestrator mutations sync `currentSlice.phase`; `automationPhase` stays for backward compat. Advance/adopt remain manual gates.
+- Dogfood `buildNextAction` delegates to the job selector with legacy fallback.
 
 Later items:
 
@@ -184,6 +200,6 @@ Later items:
 
 ## Core module
 
-Logic lives in [`src/core/featureSprintOrchestrator.ts`](../src/core/featureSprintOrchestrator.ts).
+Logic lives in [`src/core/featureSprintOrchestrator.ts`](../src/core/featureSprintOrchestrator.ts) and [`src/core/featureSprintCurrentSlice.ts`](../src/core/featureSprintCurrentSlice.ts).
 
-Tests: [`src/core/featureSprintOrchestrator.test.ts`](../src/core/featureSprintOrchestrator.test.ts).
+Tests: [`src/core/featureSprintOrchestrator.test.ts`](../src/core/featureSprintOrchestrator.test.ts), [`src/core/featureSprintCurrentSlice.test.ts`](../src/core/featureSprintCurrentSlice.test.ts).

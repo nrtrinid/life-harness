@@ -1,5 +1,6 @@
 import { syncApplicationStatus } from "./career";
 import { coerceAutomationPhase, normalizeFeatureSprintStep } from "./featureSprintOrchestrator";
+import { normalizeFeatureSprintCurrentSlice } from "./featureSprintCurrentSlice";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { normalizeResumeModules } from "./resumeModuleBank";
 import type {
@@ -56,11 +57,13 @@ export function normalizeFeatureSprintPlan(plan: HarnessFeatureSprintPlan): Harn
         }
       : undefined;
   const automationPhase = coerceAutomationPhase(plan.automationPhase);
+  const currentSlice = normalizeFeatureSprintCurrentSlice(plan.currentSlice);
 
   return {
     ...plan,
     featureSpec,
     automationPhase,
+    currentSlice,
     steps: plan.steps.map(normalizeFeatureSprintStep)
   };
 }

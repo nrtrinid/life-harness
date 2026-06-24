@@ -12,6 +12,11 @@ import {
   normalizeImplementationProofRecord,
   resolveLatestImplementationRunForStep
 } from "./featureSprintImplementationProof";
+import {
+  buildCurrentSliceForStep,
+  planPatchForCurrentSlicePhase,
+  resolveFeatureSprintCurrentSlice
+} from "./featureSprintCurrentSlice";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
 import { buildNextMoveSummary } from "./nextMoveContract";
@@ -27,8 +32,10 @@ import type {
   HarnessFeatureSpec,
   HarnessFeatureSpecSource,
   HarnessFeatureSprintAutomationPhase,
+  HarnessFeatureSprintCurrentSlice,
   HarnessFeatureSprintPlan,
   HarnessFeatureSprintReviewStatus,
+  HarnessFeatureSprintSlicePhase,
   HarnessFeatureSprintStatus,
   HarnessFeatureSprintNextSliceProposal,
   HarnessFeatureSprintStep,
@@ -192,6 +199,7 @@ export type FeatureSprintPlanUpdateInput = Partial<
     | "automationPhase"
     | "nextSliceProposal"
     | "currentStepId"
+    | "currentSlice"
   >
 > & {
   steps?: HarnessFeatureSprintStep[];
@@ -201,6 +209,8 @@ export type FeatureSprintPlanUpdateInput = Partial<
   nextSliceProposal?: HarnessFeatureSprintNextSliceProposal | null;
   /** Pass null to clear currentStepId on the plan. */
   currentStepId?: string | null;
+  /** Pass null to clear currentSlice on the plan. */
+  currentSlice?: HarnessFeatureSprintCurrentSlice | null;
 };
 
 export type FeatureSprintStepUpdateInput = Partial<
@@ -500,6 +510,21 @@ export function resolveAutomationPhaseDisplay(
   plan: HarnessFeatureSprintPlan,
   step?: HarnessFeatureSprintStep
 ): HarnessFeatureSprintAutomationPhase | undefined {
+  const slice = resolveFeatureSprintCurrentSlice(plan, step);
+  if (slice?.phase) {
+    const slicePhaseMap: Partial<Record<HarnessFeatureSprintSlicePhase, HarnessFeatureSprintAutomationPhase>> = {
+      ready: plan.featureSpec?.approvedAt ? "spec_approved" : "spec_unapproved",
+      localizing: "localizing",
+      prompt_auditing: "prompt_auditing",
+      implementing: "implementing",
+      proof_pending: "proof_normalizing",
+      reviewing: "reviewing",
+      spec_updating: "spec_updating",
+      awaiting_spec_approval: "spec_unapproved",
+      ready_to_advance: "spec_approved"
+    };
+    return slicePhaseMap[slice.phase] ?? plan.automationPhase;
+  }
   if (plan.automationPhase) {
     return plan.automationPhase;
   }
@@ -599,6 +624,9 @@ export function approveFeatureSpecForPlan(
   }
 
   const timestamp = resolveNow(now);
+  const slicePhase =
+    plan.currentSlice?.phase === "awaiting_spec_approval" ? "ready_to_advance" : "ready";
+  const slicePatch = planPatchForCurrentSlicePhase(plan, slicePhase, timestamp);
   return updateFeatureSprintPlan(
     data,
     planId,
@@ -608,7 +636,8 @@ export function approveFeatureSpecForPlan(
         approvedAt: timestamp,
         approvedBy: "user"
       },
-      automationPhase: "spec_approved"
+      automationPhase: "spec_approved",
+      ...slicePatch
     },
     now
   );
@@ -661,6 +690,13 @@ export function createFeatureSprintPlanForCard(
     constraints: cleanStringList(input.constraints),
     steps,
     currentStepId: steps[0]?.id,
+    currentSlice: steps[0]
+      ? buildCurrentSliceForStep(
+          steps[0],
+          { phase: "ready", source: "planned_step", status: "active" },
+          timestamp
+        )
+      : undefined,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -739,6 +775,12 @@ export function updateFeatureSprintPlan(
         : patch.automationPhase !== undefined
           ? patch.automationPhase
           : existing.automationPhase,
+    currentSlice:
+      patch.currentSlice === null
+        ? undefined
+        : patch.currentSlice !== undefined
+          ? patch.currentSlice
+          : existing.currentSlice,
     updatedAt: timestamp
   };
 
@@ -830,7 +872,16 @@ export function updateFeatureSprintStep(
   const steps = [...existing.steps];
   steps[stepIndex] = updatedStep;
 
-  return updateFeatureSprintPlan(data, planId, { steps }, now);
+  const planPatch: FeatureSprintPlanUpdateInput = { steps };
+  if (outputSummaryChanged && nextOutputSummary) {
+    const interimPlan = { ...existing, steps };
+    Object.assign(
+      planPatch,
+      planPatchForCurrentSlicePhase(interimPlan, "proof_pending", timestamp)
+    );
+  }
+
+  return updateFeatureSprintPlan(data, planId, planPatch, now);
 }
 
 export function advanceFeatureSprintStep(
@@ -900,6 +951,15 @@ export function advanceFeatureSprintStep(
     status: planStatus,
     currentStepId
   };
+  if (nextIndex >= 0) {
+    planPatch.currentSlice = buildCurrentSliceForStep(
+      steps[nextIndex],
+      { phase: "ready", source: "planned_step", status: "active" },
+      timestamp
+    );
+  } else {
+    planPatch.currentSlice = null;
+  }
   if (
     existing.automationPhase === "localizing" ||
     existing.automationPhase === "prompt_auditing" ||
@@ -1024,7 +1084,17 @@ export function adoptNextSliceProposalForPlan(
     steps,
     currentStepId: adoptedStepId,
     status: "in_progress",
-    nextSliceProposal: null
+    nextSliceProposal: null,
+    currentSlice: buildCurrentSliceForStep(
+      steps.find((item) => item.id === adoptedStepId)!,
+      {
+        phase: "ready",
+        source: "adopted_next_slice",
+        status: "active",
+        riskTier: proposal.riskTier
+      },
+      timestamp
+    )
   };
   if (
     existing.automationPhase === "localizing" ||
@@ -1168,6 +1238,7 @@ export function replaceActiveFeatureSprintPlanFromImport(
   const steps = buildStepsFromImport(imported.steps, timestamp);
 
   if (active) {
+    const firstStep = steps[0];
     return updateFeatureSprintPlan(data, active.id, {
       title: imported.title.trim(),
       goal: imported.goal.trim(),
@@ -1176,10 +1247,17 @@ export function replaceActiveFeatureSprintPlanFromImport(
       nonGoals: cleanStringList(imported.nonGoals),
       constraints: cleanStringList(imported.constraints),
       steps,
-      currentStepId: steps[0]?.id,
+      currentStepId: firstStep?.id,
       status: "in_progress",
       featureSpec: active.featureSpec,
-      automationPhase: active.automationPhase
+      automationPhase: active.automationPhase,
+      currentSlice: firstStep
+        ? buildCurrentSliceForStep(
+            firstStep,
+            { phase: "ready", source: "planned_step", status: "active" },
+            timestamp
+          )
+        : null
     }, now);
   }
 
@@ -1261,10 +1339,27 @@ export function importFeatureReviewVerdictFromText(
     return stepResult;
   }
 
+  const afterStepPlan = findPlan(stepResult.state, planId);
+  const reviewedStep = afterStepPlan?.steps.find((item) => item.id === resolvedStepId);
+  const reviewPhase: HarnessFeatureSprintSlicePhase =
+    verdictImport.status === "accepted" &&
+    afterStepPlan &&
+    reviewedStep &&
+    doesFeatureSprintStepRequireSpecUpdate(afterStepPlan, reviewedStep)
+      ? "spec_updating"
+      : verdictImport.status === "accepted"
+        ? "ready_to_advance"
+        : "reviewing";
+  const slicePatch =
+    afterStepPlan && reviewedStep
+      ? planPatchForCurrentSlicePhase(afterStepPlan, reviewPhase, resolveNow(now))
+      : {};
+
   return updateFeatureSprintPlan(stepResult.state, planId, {
     latestReviewStatus: verdictImport.status,
     latestReviewVerdict: reviewVerdict,
-    automationPhase: null
+    automationPhase: null,
+    ...slicePatch
   }, now);
 }
 
@@ -1294,6 +1389,12 @@ export function importFeatureSpecUpdateFromText(
   }
 
   const timestamp = resolveNow(now);
+  const interimPlan = findPlan(data, planId);
+  const slicePatch =
+    interimPlan && interimPlan.steps.some((step) => step.id === resolvedStepId)
+      ? planPatchForCurrentSlicePhase(interimPlan, "awaiting_spec_approval", timestamp)
+      : {};
+
   return updateFeatureSprintPlan(
     data,
     planId,
@@ -1313,7 +1414,8 @@ export function importFeatureSpecUpdateFromText(
         importedAt: timestamp
       },
       nextSliceProposal: specUpdate.nextSlice,
-      automationPhase: "spec_unapproved"
+      automationPhase: "spec_unapproved",
+      ...slicePatch
     },
     now
   );
@@ -1676,7 +1778,15 @@ export function normalizeImplementationProofForStep(
     return stepResult;
   }
 
-  return updateFeatureSprintPlan(stepResult.state, planId, { automationPhase: "proof_normalizing" }, now);
+  const afterPlan = findPlan(stepResult.state, planId);
+  const slicePatch = afterPlan
+    ? planPatchForCurrentSlicePhase(afterPlan, "reviewing", resolveNow(now))
+    : {};
+
+  return updateFeatureSprintPlan(stepResult.state, planId, {
+    automationPhase: "proof_normalizing",
+    ...slicePatch
+  }, now);
 }
 
 function formatImplementationProofPacketSections(step: HarnessFeatureSprintStep): string[] {
@@ -1831,7 +1941,15 @@ export function importFeaturePromptLocalizationFromText(
     return stepResult;
   }
 
-  return updateFeatureSprintPlan(stepResult.state, planId, { automationPhase: "localizing" }, now);
+  const afterPlan = findPlan(stepResult.state, planId);
+  const slicePatch = afterPlan
+    ? planPatchForCurrentSlicePhase(afterPlan, "prompt_auditing", resolveNow(now))
+    : {};
+
+  return updateFeatureSprintPlan(stepResult.state, planId, {
+    automationPhase: "localizing",
+    ...slicePatch
+  }, now);
 }
 
 export function parseFeaturePromptCritiqueBlock(
@@ -1919,7 +2037,15 @@ export function importFeaturePromptAuditFromText(
     return stepResult;
   }
 
-  return updateFeatureSprintPlan(stepResult.state, planId, { automationPhase: "prompt_auditing" }, now);
+  const afterPlan = findPlan(stepResult.state, planId);
+  const slicePatch = afterPlan
+    ? planPatchForCurrentSlicePhase(afterPlan, "implementing", resolveNow(now))
+    : {};
+
+  return updateFeatureSprintPlan(stepResult.state, planId, {
+    automationPhase: "prompt_auditing",
+    ...slicePatch
+  }, now);
 }
 
 export function stripFeatureSprintBlocks(text: string): string {
