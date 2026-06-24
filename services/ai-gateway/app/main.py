@@ -204,6 +204,19 @@ def deep_synthesis_endpoint(
         len(request.user_prompt),
         len(request.context.cards),
     )
+    settings = get_settings()
+    if settings.debug_thinking_trace:
+        from app.orchestrator.depth_routing import GatewayRouteEndpoint, resolve_depth_route
+
+        route = resolve_depth_route(
+            endpoint=GatewayRouteEndpoint.deep_synthesis,
+            settings=settings,
+            pipeline_profile=request.pipeline_profile,
+        )
+        logger.info(
+            "deep_synthesis_depth_route %s",
+            json.dumps(route.to_dict(), sort_keys=True),
+        )
     return run_deep_synthesis(request, provider=get_provider())
 
 
@@ -228,6 +241,19 @@ def deep_synthesis_jobs_endpoint(
         len(request.context.cards),
         request.pipeline_profile.value,
     )
+    settings = get_settings()
+    if settings.debug_thinking_trace:
+        from app.orchestrator.depth_routing import GatewayRouteEndpoint, resolve_depth_route
+
+        route = resolve_depth_route(
+            endpoint=GatewayRouteEndpoint.deep_synthesis_job,
+            settings=settings,
+            pipeline_profile=request.pipeline_profile,
+        )
+        logger.info(
+            "deep_synthesis_job_depth_route %s",
+            json.dumps(route.to_dict(), sort_keys=True),
+        )
     return create_deep_synthesis_job(request)
 
 

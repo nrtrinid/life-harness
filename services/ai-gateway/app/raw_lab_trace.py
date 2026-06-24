@@ -19,10 +19,11 @@ class RawLabDeepTrace:
     used_companion_self_memories: bool = False
     review_applied: bool = False
     fallback_used: bool = False
+    depth_route: dict[str, object] | None = None
     latency_ms: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "reasoning_depth": self.reasoning_depth,
             "passes": list(self.passes),
             "used_thread_mind": self.used_thread_mind,
@@ -31,6 +32,9 @@ class RawLabDeepTrace:
             "fallback_used": self.fallback_used,
             "latency_ms": dict(self.latency_ms),
         }
+        if self.depth_route is not None:
+            payload["depth_route"] = self.depth_route
+        return payload
 
 
 def _has_thread_mind(request: RawLabRequest) -> bool:
@@ -59,6 +63,24 @@ def new_raw_lab_deep_trace(request: RawLabRequest) -> RawLabDeepTrace:
     )
 
 
+def attach_raw_lab_depth_route(
+    settings: Settings,
+    request: RawLabRequest,
+    trace: RawLabDeepTrace | None = None,
+) -> None:
+    from app.orchestrator.depth_routing import GatewayRouteEndpoint, resolve_depth_route
+
+    route = resolve_depth_route(
+        endpoint=GatewayRouteEndpoint.raw_lab,
+        settings=settings,
+        reasoning_depth=request.reasoning_depth,
+    )
+    route_dict = route.to_dict()
+    emit_raw_lab_route_trace(settings, depth_route=route_dict)
+    if trace is not None:
+        trace.depth_route = route_dict
+
+
 def emit_raw_lab_deep_trace(
     settings: Settings, trace: RawLabDeepTrace | None
 ) -> None:
@@ -67,6 +89,19 @@ def emit_raw_lab_deep_trace(
     logger.info(
         "raw_lab_deep_trace %s",
         json.dumps(trace.to_dict(), sort_keys=True),
+    )
+
+
+def emit_raw_lab_route_trace(
+    settings: Settings,
+    *,
+    depth_route: dict[str, object],
+) -> None:
+    if not settings.debug_thinking_trace:
+        return
+    logger.info(
+        "raw_lab_depth_route %s",
+        json.dumps(depth_route, sort_keys=True),
     )
 
 

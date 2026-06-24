@@ -136,7 +136,7 @@ export const AGENT_WORKFLOWS: readonly AgentWorkflowDefinition[] = [
       "src/core/askHarness.containment.test.ts",
       "src/core/contextPacketBuilder.test.ts"
     ],
-    notes: "Primary grounded scout chat. Deep reasoning may invoke critic_small when SCOUT_DEEP_ENABLED."
+    notes: "Primary grounded scout chat. Deep reasoning may invoke critic_small when SCOUT_DEEP_ENABLED. Gateway routing authority: services/ai-gateway/app/orchestrator/depth_routing.py"
   },
   {
     id: "ask_harness_legacy",
@@ -190,7 +190,7 @@ export const AGENT_WORKFLOWS: readonly AgentWorkflowDefinition[] = [
       "src/core/deepSynthesisClient.test.ts",
       "services/ai-gateway/tests/test_deep_synthesis_mock.py"
     ],
-    notes: "Fast path completes inline. Memory/personality proposals require user approval."
+    notes: "Fast path completes inline. Memory/personality proposals require user approval. Gateway routing authority: services/ai-gateway/app/orchestrator/depth_routing.py"
   },
   {
     id: "deep_synthesis_job",

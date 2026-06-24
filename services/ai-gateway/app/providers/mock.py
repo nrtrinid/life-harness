@@ -930,6 +930,7 @@ class MockProvider:
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
         from app.config import get_settings
         from app.raw_lab_budget import prepare_raw_lab_request
+        from app.raw_lab_trace import attach_raw_lab_depth_route
         from app.raw_lab_utils import (
             CODEX_PROMPT_ARTIFACT,
             HAUNTED_MANSION_CODE_SKELETON,
@@ -940,6 +941,7 @@ class MockProvider:
 
         budget = prepare_raw_lab_request(request, get_settings())
         request = budget.request
+        attach_raw_lab_depth_route(get_settings(), request)
 
         message_lower = request.message.lower()
         if request.reasoning_depth.value == "deep_plus":

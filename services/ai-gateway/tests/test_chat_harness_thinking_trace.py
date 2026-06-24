@@ -278,3 +278,44 @@ def test_mock_deep_draft_repair_trace_via_client(client, harness_context, caplog
     assert payload["draft_repair_succeeded"] is True
     assert "draft_repair" in payload["passes"]
     assert "critic" in payload["passes"]
+
+
+def test_thinking_trace_includes_critic_context_chars(harness_context, caplog):
+    request = ChatHarnessRequest(
+        message="What should I do next?",
+        mode="general",
+        sensitivity="S1",
+        context=harness_context,
+        reasoning_depth="deep",
+    )
+    request.thread_state.pinned_facts = ["Pinned for critic trace."]
+    trace = new_thinking_trace(request)
+    draft = ChatHarnessResponse(
+        answer="Draft.",
+        used_context=True,
+        confidence_notes=[],
+        safety_notes=[],
+    )
+    critique_draft_with_trace(
+        SameBackendCritic(generate=lambda _prompt: '{"needs_revision": false, "checks": [{"id": "no_issue", "severity": "info", "message": "ok"}], "revision_instruction": ""}'),
+        trace=trace,
+        request=request,
+        draft=draft,
+        draft_raw=draft.model_dump_json(),
+    )
+
+    with caplog.at_level(logging.INFO):
+        emit_thinking_trace(
+            replace(get_settings(), debug_thinking_trace=True),
+            trace,
+        )
+
+    payload = json.loads(
+        next(
+            record.message.split(" ", 1)[1]
+            for record in caplog.records
+            if "chat_harness_thinking_trace" in record.message
+        )
+    )
+    assert payload["critic_context_chars"] > 0
+    assert payload["critic_context_max_chars"] == 1800

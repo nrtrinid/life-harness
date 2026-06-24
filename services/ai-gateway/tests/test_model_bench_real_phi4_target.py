@@ -205,6 +205,7 @@ def test_check_real_phi4_critic_available_requires_bench_flag():
         critic_timeout_seconds=30.0,
         critic_heavy=False,
         debug_thinking_trace=False,
+        critic_context_max_chars=1800,
         real_model_bench_enabled=False,
     )
     ok, reason = check_real_phi4_critic_available(settings)

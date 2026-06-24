@@ -277,6 +277,25 @@ def test_critic_prompt_includes_ranked_packet_sections(harness_context):
     assert "Career / Networking" in prompt
 
 
+def test_critic_prompt_includes_critic_evidence_when_present(harness_context):
+    packet_data = json.loads(PACKET_FIXTURE_PATH.read_text(encoding="utf-8"))
+    packet_data["open_thread"]["pinned_facts"] = ["Pinned fact: career thread is cooling."]
+    packet_data["open_thread"]["wire"]["pinned_facts"] = packet_data["open_thread"]["pinned_facts"]
+    packet = AiContextPacketWire.model_validate(packet_data)
+    request = ChatHarnessRequest(
+        message="What am I avoiding right now?",
+        mode="operator",
+        sensitivity="S1",
+        context=harness_context,
+        context_packet=packet,
+        reasoning_depth="deep",
+    )
+    prompt = build_chat_harness_critic_prompt(request=request, draft_json="{}")
+
+    assert "### Critic evidence" in prompt
+    assert "Pinned fact: career thread is cooling." in prompt
+
+
 def test_critic_prompt_falls_back_without_packet(harness_context):
     request = ChatHarnessRequest(
         message="What should I do next?",

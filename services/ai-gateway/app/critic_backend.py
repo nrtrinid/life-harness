@@ -12,6 +12,7 @@ class CriticRoutingObserver(Protocol):
 from app.backends.llamacpp_backend import LlamaCppBackend, LlamaCppError
 from app.chat_harness_critic import parse_critic_verdict, pass_verdict
 from app.config import Settings, get_slot_registry
+from app.critic_contract import build_critic_evidence_packet
 from app.slots.manager import SlotDisabledError, get_slot_manager
 from app.models import (
     ChatHarnessCriticVerdict,
@@ -62,9 +63,11 @@ class SameBackendCritic:
         draft: ChatHarnessResponse,
         draft_raw: str,
     ) -> ChatHarnessCriticVerdict:
+        evidence = build_critic_evidence_packet(request)
         prompt = build_chat_harness_critic_prompt(
             request=request,
             draft_json=draft_raw,
+            context_bundle=evidence.rendered_bundle,
         )
         raw = self._generate(prompt)
         verdict = parse_critic_verdict(raw)
@@ -88,9 +91,11 @@ class LlamaCppCriticBackend:
         draft_raw: str,
     ) -> ChatHarnessCriticVerdict:
         del draft
+        evidence = build_critic_evidence_packet(request)
         prompt = build_chat_harness_critic_prompt(
             request=request,
             draft_json=draft_raw,
+            context_bundle=evidence.rendered_bundle,
         )
         try:
             raw = self._backend.generate(prompt)
