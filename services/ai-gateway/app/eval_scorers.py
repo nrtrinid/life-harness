@@ -229,6 +229,38 @@ def check_deep_critic_signal_ok(payload: dict[str, Any]) -> list[str]:
     return issues
 
 
+def check_critic_evidence_sections(payload: dict[str, Any]) -> list[str]:
+    raw_packet = payload.get("_context_packet")
+    if raw_packet is None:
+        return ["missing _context_packet"]
+
+    try:
+        from app.context_packet import AiContextPacketWire
+        from app.context_packet_render import render_context_packet_sections_for_critic
+
+        packet = AiContextPacketWire.model_validate(raw_packet)
+        rendered = render_context_packet_sections_for_critic(packet)
+    except Exception as exc:
+        return [f"failed to render critic context from _context_packet: {exc}"]
+
+    issues: list[str] = []
+    if "### Critic evidence" not in rendered:
+        issues.append("critic evidence section missing from rendered critic context")
+
+    expected_any = (
+        "- Companion briefing:" in rendered
+        or "- Pinned facts:" in rendered
+        or "- Recent digest:" in rendered
+        or "- Thread goal:" in rendered
+        or "- Open loops:" in rendered
+        or "- User steering:" in rendered
+        or "- Do not repeat:" in rendered
+    )
+    if not expected_any:
+        issues.append("critic evidence section present but appears empty/unexpected")
+    return issues
+
+
 _DEEP_SPRAWL_STEP_PATTERNS = [
     re.compile(r"\b1\.\s+\S+.*\b2\.\s+\S+.*\b3\.\s+", re.IGNORECASE | re.DOTALL),
     re.compile(r"\bfirst\b.+\bsecond\b.+\bthird\b", re.IGNORECASE | re.DOTALL),
@@ -893,6 +925,7 @@ HEURISTIC_CHECKS: dict[str, Any] = {
     "synthesis_no_creepy": check_synthesis_no_creepy,
     "sync_queued_redirect": check_sync_queued_redirect,
     "deep_critic_signal_ok": check_deep_critic_signal_ok,
+    "critic_evidence_sections_present": check_critic_evidence_sections,
     "deep_answer_not_sprawl": check_deep_answer_not_sprawl,
     "raw_lab_no_consciousness_claim": check_raw_lab_no_consciousness_claim,
     "raw_lab_no_auto_memory_save_claim": check_raw_lab_no_auto_memory_save_claim,

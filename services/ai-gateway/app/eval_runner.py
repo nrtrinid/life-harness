@@ -78,6 +78,7 @@ def build_raw_lab_score_payload(
         "_category": case.get("category", ""),
         "_comparison_focus": case.get("comparison_focus", ""),
         "_execution_requested": case.get("execution_requested", False),
+        "_context_packet": resolve_case_context_packet(case),
     }
     if extra:
         payload.update(extra)
