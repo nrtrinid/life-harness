@@ -124,7 +124,7 @@ Status labels are honest: **implemented**, **partial**, **stale**, **doc_only**.
 - **`ask_harness_legacy`**: Gateway endpoint retained; Expo app uses `POST /chat-harness`.
 - **`analyze_transcript`**: Scripts and gateway only; no app UI.
 - **`raw_lab_stream`**: SSE chunks a complete answer; not true token streaming.
-- **`deep_synthesis_job`**: `with_stretch` profile is partially mock-simulated; `stretch_batch` slot disabled in `models.yaml`.
+- **`deep_synthesis_job`**: `with_stretch` remains mock-simulated, but now probes `stretch_batch` and reports `stretch_slot_status` (`slot_unavailable` vs `slot_ready_not_wired`).
 
 ### External runners
 
@@ -167,7 +167,7 @@ Status labels are honest: **implemented**, **partial**, **stale**, **doc_only**.
 ## Known gaps (not fixed in v0.1)
 
 - **InferenceOrchestrator** routes only `/chat-harness`; Raw Lab and Deep Synthesis call providers directly.
-- **`stretch_batch`**, **`coder_daily`**, **`memory_embed`** slots catalogued but disabled; no `/ai/code-*` endpoints.
+- **`stretch_batch`**, **`coder_daily`**, **`memory_embed`** slots catalogued but disabled by default; no `/ai/code-*` endpoints. A retrieval seam exists in gateway (`app/retrieval/embedding_slot.py`), but embeddings are not executed yet.
 - **No unified AgentRun log** across gateway jobs, Feature Sprint runs, and Companion sends.
 - **Raw Lab** lacks S3 sensitivity gate (commented TODO in gateway `main.py`).
 - **RTK Query network layer** remains doc-only ([`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)).
