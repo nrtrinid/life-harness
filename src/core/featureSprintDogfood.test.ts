@@ -208,14 +208,15 @@ describe("buildFeatureSprintDogfoodSummary", () => {
               outputSummary: "Implemented slice.",
               implementationProof: {
                 rawOutput: "Implemented slice.",
-                normalizedAt: FIXED_NOW,
-                verificationResult: {
-                  command: "npm test",
-                  status: "passed",
-                  startedAt: FIXED_NOW,
-                  completedAt: FIXED_NOW
-                },
-                filesChanged: ["src/core/featureSprintDogfood.ts"]
+                filesChanged: ["src/core/featureSprintDogfood.ts"],
+                behaviorChanged: ["See raw implementation output."],
+                testsRun: ["npm test"],
+                testsNotRun: [],
+                verificationResult: "pass",
+                knownRisks: [],
+                suggestedReviewFocus: ["Confirm behavior matches step acceptance criteria."],
+                createdAt: FIXED_NOW,
+                updatedAt: FIXED_NOW
               },
               reviewStatus: undefined
             }
@@ -333,7 +334,11 @@ describe("buildFeatureSprintDogfoodSummary", () => {
               promptLocalization: {
                 revisedImplementationPrompt: "Localized prompt",
                 likelyFiles: ["src/core/featureSprintDogfood.ts"],
+                existingHelpers: [],
+                testsToRun: ["npm test"],
+                risks: [],
                 rawOutput: "localization",
+                createdAt: FIXED_NOW,
                 updatedAt: FIXED_NOW
               }
             })

@@ -15,6 +15,7 @@ One button in Card Detail → Backroom → Feature Sprint (label depends on mode
 | **Run next job** | Runner-eligible job and localhost runner available |
 | **Prepare next job** | Manual/chatgpt fallback or packet-only actions (e.g. spec-update prepare). Manual localization copy does **not** mark lifecycle `started`. |
 | **Run automated review** | `copy_review` with DeepSeek configured (optional reviewer lane — not the localhost runner) |
+| **Run automated prompt audit** | `copy_prompt_audit` with DeepSeek configured (pre-implementation gate — not the localhost runner) |
 | **Show next gate** | Human-only gates (approve, import existing output, advance, adopt, complete) |
 
 `testID`: `feature-sprint-next-job`. Existing per-step Run/Copy buttons remain.
@@ -27,7 +28,7 @@ Implementation automation touches the repo. v0.1 automates packet movement only:
 - Cursor/Codex implementation agent = future bounded builder (not this PR)
 - Life Harness = conductor / memory / runner client
 
-**DeepSeek is not the localhost runner.** It is an optional read-only automated reviewer that stages import-compatible verdict text. Codex/Cursor review via `feature-runner` is unchanged. See [feature-sprint-deepseek-reviewer-v0.1.md](feature-sprint-deepseek-reviewer-v0.1.md).
+**DeepSeek is not the localhost runner.** It is an optional read-only automated evaluator for prompt audit (pre-implementation) and post-diff review. Codex/Cursor manual paths are unchanged. See [feature-sprint-deepseek-reviewer-v0.1.md](feature-sprint-deepseek-reviewer-v0.1.md).
 - User = approval gate
 
 ## Setup

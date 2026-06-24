@@ -47,11 +47,12 @@ describe("featureSprintDeepSeekReviewer", () => {
   });
 
   it("live adapter uses injected fetch and never exposes api key in errors", async () => {
-    const fetch = vi.fn(async () => ({
+    const fetchMock = vi.fn(async () => ({
       ok: false,
       status: 401,
       json: async () => ({ error: { message: "Invalid key super-secret-key" } })
     }));
+    const injectFetchMock = () => fetchMock as unknown as typeof fetch;
 
     const result = await runFeatureSprintDeepSeekReview(REQUEST, {
       config: {
@@ -62,10 +63,10 @@ describe("featureSprintDeepSeekReviewer", () => {
         baseUrl: "https://api.deepseek.com",
         liveSafe: true
       },
-      fetch: fetch as unknown as typeof fetch
+      fetch: injectFetchMock()
     });
 
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledOnce();
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -75,14 +76,16 @@ describe("featureSprintDeepSeekReviewer", () => {
   });
 
   it("browser live context returns unavailable without network", async () => {
-    const fetch = vi.fn();
+    const fetchMock = vi.fn();
+    const injectFetchMock = () => fetchMock as unknown as typeof fetch;
+
     const result = await runFeatureSprintDeepSeekReview(REQUEST, {
       env: { DEEPSEEK_API_KEY: "secret-key" },
       runtimeContext: { isBrowserClient: true },
-      fetch: fetch as unknown as typeof fetch
+      fetch: injectFetchMock()
     });
     expect(result.ok).toBe(false);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("live adapter parses successful injected response", async () => {
@@ -98,7 +101,7 @@ describe("featureSprintDeepSeekReviewer", () => {
       remainingSpecItems: ["Next slice"],
       nextCursorPrompt: "Continue next slice."
     };
-    const fetch = vi.fn(async () => ({
+    const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
       json: async () => ({
@@ -111,6 +114,15 @@ describe("featureSprintDeepSeekReviewer", () => {
         ]
       })
     }));
+    const injectFetchMock = () => fetchMock as unknown as typeof fetch;
+    const readFetchRequestBody = () => {
+      const call = fetchMock.mock.calls.at(-1);
+      if (!call) {
+        throw new Error("Expected fetch to be called");
+      }
+      const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    };
 
     const result = await runFeatureSprintDeepSeekReview(REQUEST, {
       config: {
@@ -121,7 +133,7 @@ describe("featureSprintDeepSeekReviewer", () => {
         baseUrl: "https://api.deepseek.com",
         liveSafe: true
       },
-      fetch: fetch as unknown as typeof fetch
+      fetch: injectFetchMock()
     });
 
     expect(result.ok).toBe(true);
@@ -129,7 +141,96 @@ describe("featureSprintDeepSeekReviewer", () => {
       return;
     }
     expect(result.verdict.verdict).toBe("accepted");
-    const body = JSON.parse((fetch.mock.calls[0] as [string, RequestInit])[1].body as string);
-    expect(body.model).toBe("deepseek-v4-pro");
+    expect(readFetchRequestBody().model).toBe("deepseek-v4-pro");
+  });
+});
+
+describe("featureSprintDeepSeekPromptAudit", () => {
+  const REQUEST = {
+    cardId: "card-build-test",
+    promptMarkdown:
+      "Implement bounded slice only within listed files. Run npm test verification before save.",
+    proposedCursorPrompt:
+      "Implement bounded slice only within listed files. Run npm test verification before save."
+  };
+
+  it("mock prompt audit returns approved for valid bounded prompt", async () => {
+    const { runMockFeatureSprintDeepSeekPromptAudit } = await import("./featureSprintDeepSeekReviewer");
+    const result = await runMockFeatureSprintDeepSeekPromptAudit(REQUEST);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.critique.verdict).toBe("approved");
+  });
+
+  it("mock prompt audit returns needs_changes when prompt missing", async () => {
+    const { runMockFeatureSprintDeepSeekPromptAudit } = await import("./featureSprintDeepSeekReviewer");
+    const result = await runMockFeatureSprintDeepSeekPromptAudit({
+      cardId: "card-build-test",
+      promptMarkdown: "Awaiting worker input."
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.critique.verdict).toBe("needs_changes");
+  });
+
+  it("live prompt audit uses promptAuditModel and injected fetch", async () => {
+    const { runFeatureSprintDeepSeekPromptAudit } = await import("./featureSprintDeepSeekReviewer");
+    const critique = {
+      verdict: "approved",
+      confidence: "medium",
+      summary: "Bounded prompt.",
+      scopeDrift: false,
+      promptRisks: [],
+      missingContext: [],
+      missingVerification: [],
+      riskyFiles: [],
+      requiredPromptEdits: [],
+      revisedCursorPrompt: "Implement slice only."
+    };
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content:
+                "```feature-automated-prompt-critique\n" + JSON.stringify(critique) + "\n```"
+            }
+          }
+        ]
+      })
+    }));
+    const injectFetchMock = () => fetchMock as unknown as typeof fetch;
+    const readFetchRequestBody = () => {
+      const call = fetchMock.mock.calls.at(-1);
+      if (!call) {
+        throw new Error("Expected fetch to be called");
+      }
+      const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    };
+
+    const result = await runFeatureSprintDeepSeekPromptAudit(REQUEST, {
+      config: {
+        available: true,
+        mode: "live",
+        apiKey: "test-key",
+        promptAuditModel: "deepseek-v4-pro",
+        baseUrl: "https://api.deepseek.com",
+        liveSafe: true
+      },
+      fetch: injectFetchMock()
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(readFetchRequestBody().model).toBe("deepseek-v4-pro");
   });
 });

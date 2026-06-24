@@ -107,6 +107,7 @@ type BuildContext = {
   latestImplementationRun?: HarnessFeatureSprintRunnerRun;
   latestReviewRun?: HarnessFeatureSprintRunnerRun;
   stagedLocalizationImportText?: string;
+  stagedPromptAuditImportText?: string;
 };
 
 function cleanOptional(value: string | undefined): string | undefined {
@@ -476,7 +477,8 @@ function buildNextAction(context: BuildContext): FeatureSprintDogfoodNextAction 
   const job = buildNextFeatureSprintJob(context.data, context.cardId, {
     runnerHealth: context.runnerHealth,
     runnerAgent: context.runnerAgent,
-    stagedLocalizationImportText: context.stagedLocalizationImportText
+    stagedLocalizationImportText: context.stagedLocalizationImportText,
+    stagedPromptAuditImportText: context.stagedPromptAuditImportText
   });
   if (job) {
     return mapFeatureSprintNextJobToDogfoodAction(job);
@@ -653,6 +655,7 @@ export function buildFeatureSprintDogfoodSummary(
     runnerHealthProbe?: FeatureSprintRunnerHealthProbe;
     runnerAgent?: FeatureSprintRunnerAgent;
     stagedLocalizationImportText?: string;
+    stagedPromptAuditImportText?: string;
     now?: Date;
   } = {}
 ): FeatureSprintDogfoodSummary {
@@ -685,7 +688,8 @@ export function buildFeatureSprintDogfoodSummary(
     latestScopingRun: latestRunForPhase(recentRuns, "scoping"),
     latestImplementationRun: latestRunForPhase(recentRuns, "implementation", runScope),
     latestReviewRun: latestRunForPhase(recentRuns, "review", runScope),
-    stagedLocalizationImportText: options.stagedLocalizationImportText
+    stagedLocalizationImportText: options.stagedLocalizationImportText,
+    stagedPromptAuditImportText: options.stagedPromptAuditImportText
   };
 
   const checks = buildChecks(context);
@@ -707,7 +711,8 @@ export function buildFeatureSprintDogfoodSummary(
   const nextJob = buildNextFeatureSprintJob(context.data, cardId, {
     runnerHealth: context.runnerHealth,
     runnerAgent: context.runnerAgent,
-    stagedLocalizationImportText: options.stagedLocalizationImportText
+    stagedLocalizationImportText: options.stagedLocalizationImportText,
+    stagedPromptAuditImportText: options.stagedPromptAuditImportText
   });
   const resolvedSlice = resolveFeatureSprintCurrentSlice(plan, step);
 

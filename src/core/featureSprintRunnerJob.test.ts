@@ -346,6 +346,9 @@ describe("featureSprintRunnerJob", () => {
     expect(resolveFeatureSprintNextJobButtonLabel("automated_review", { deepseekMode: "mock" })).toBe(
       "Run automated review (mock)"
     );
+    expect(resolveFeatureSprintNextJobButtonLabel("automated_prompt_audit")).toBe(
+      "Run automated prompt audit"
+    );
   });
 
   it("resolves button mode for review job when runner is available", () => {
@@ -545,5 +548,105 @@ describe("featureSprintRunnerJob", () => {
       }
     );
     expect(mode).toBe("automated_review");
+  });
+
+  it("resolves deepseek for copy_prompt_audit only when explicitly preferred", () => {
+    const mockConfig = { available: true, mode: "mock" as const, liveSafe: false };
+    const auditJob: FeatureSprintNextJob = {
+      label: "Run prompt audit",
+      role: "prompt_auditor",
+      providerOptions: ["chatgpt", "codex", "manual", "deepseek"],
+      action: "copy_prompt_audit",
+      requiresHumanApproval: false,
+      requiresHumanImport: false,
+      canMutateRepo: false,
+      checklist: []
+    };
+
+    expect(
+      resolveFeatureSprintRunnerProvider(auditJob, {
+        preferredProvider: "deepseek",
+        deepseekConfig: mockConfig
+      })
+    ).toBe("deepseek");
+
+    expect(
+      resolveFeatureSprintRunnerProvider(auditJob, {
+        preferredAgent: "codex",
+        runnerHealth: "available",
+        deepseekConfig: mockConfig
+      })
+    ).toBe("codex");
+  });
+
+  it("builds automated prompt audit packet when provider is deepseek", () => {
+    const data = baseData({
+      featureSprintPlans: [
+        fixturePlan({
+          currentSlice: {
+            id: "slice-1",
+            title: "Core module",
+            status: "active",
+            phase: "prompt_auditing",
+            source: "planned_step",
+            linkedStepId: STEP_ID,
+            createdAt: FIXED_NOW,
+            updatedAt: FIXED_NOW
+          },
+          featureSpec: {
+            body: "Approved spec",
+            source: "chatgpt_web",
+            updatedAt: FIXED_NOW,
+            approvedAt: FIXED_NOW,
+            approvedBy: "user"
+          }
+        })
+      ]
+    });
+    const job: FeatureSprintNextJob = {
+      label: "Run prompt audit",
+      role: "prompt_auditor",
+      providerOptions: ["chatgpt", "codex", "manual", "deepseek"],
+      action: "copy_prompt_audit",
+      requiresHumanApproval: false,
+      requiresHumanImport: false,
+      canMutateRepo: false,
+      checklist: []
+    };
+    const built = buildFeatureSprintRunnerJobRequest(data, CARD_ID, job, {
+      preferredProvider: "deepseek",
+      deepseekConfig: { available: true, mode: "mock" },
+      proposedCursorPrompt: "Implement bounded slice. Run npm test."
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) {
+      return;
+    }
+    expect(built.request.provider).toBe("deepseek");
+    expect(built.request.inputPacket).toContain("feature-automated-prompt-critique");
+    expect(built.request.runnerProfile).toBeUndefined();
+  });
+
+  it("resolves automated_prompt_audit button mode for deepseek copy_prompt_audit", () => {
+    const mode = resolveFeatureSprintNextJobButtonMode(
+      {
+        label: "Run prompt audit",
+        role: "prompt_auditor",
+        providerOptions: ["chatgpt", "codex", "manual", "deepseek"],
+        action: "copy_prompt_audit",
+        requiresHumanApproval: false,
+        requiresHumanImport: false,
+        canMutateRepo: false,
+        checklist: []
+      },
+      {
+        preferredProvider: "deepseek",
+        deepseekConfig: { available: true, mode: "mock" }
+      }
+    );
+    expect(mode).toBe("automated_prompt_audit");
+    expect(resolveFeatureSprintNextJobButtonLabel("automated_prompt_audit", { deepseekMode: "mock" })).toBe(
+      "Run automated prompt audit (mock)"
+    );
   });
 });

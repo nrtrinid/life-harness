@@ -9,6 +9,7 @@ import {
   type FeaturePacketBuildResult
 } from "./featureSprintOrchestrator";
 import { buildFeatureSprintAutomatedReviewPacket } from "./featureSprintReviewerAdapter";
+import { buildFeatureSprintAutomatedPromptAuditPacket } from "./featureSprintPromptAuditAdapter";
 import type { FeatureSprintDeepSeekConfig } from "./featureSprintDeepSeekConfig";
 import {
   buildNextFeatureSprintJob,
@@ -66,9 +67,13 @@ export type FeatureSprintNextJobButtonMode =
   | "runner"
   | "manual"
   | "human_gate"
-  | "automated_review";
+  | "automated_review"
+  | "automated_prompt_audit";
 
-const DEEPSEEK_ELIGIBLE_ACTIONS = new Set<FeatureSprintNextJobAction>(["copy_review"]);
+const DEEPSEEK_ELIGIBLE_ACTIONS = new Set<FeatureSprintNextJobAction>([
+  "copy_review",
+  "copy_prompt_audit"
+]);
 
 export type FeatureSprintRunnerJobRequest = {
   cardId: string;
@@ -366,6 +371,7 @@ export function buildPacketForFeatureSprintRunnerJob(
     stepId?: string;
     roughSpec?: string;
     agentOutput?: string;
+    proposedCursorPrompt?: string;
     now?: Date;
     provider?: FeatureSprintRunnerJobProvider;
   }
@@ -384,7 +390,14 @@ export function buildPacketForFeatureSprintRunnerJob(
           agentOutput: context.agentOutput,
           now: context.now
         })
-      : buildPacketForAction(
+      : context.provider === "deepseek" && job.action === "copy_prompt_audit"
+        ? buildFeatureSprintAutomatedPromptAuditPacket(data, context.cardId, {
+            planId: context.planId,
+            stepId: context.stepId,
+            proposedCursorPrompt: context.proposedCursorPrompt ?? context.agentOutput,
+            now: context.now
+          })
+        : buildPacketForAction(
           data,
           job.action,
           context.cardId,
@@ -418,6 +431,7 @@ export function buildFeatureSprintRunnerJobRequest(
     deepseekConfig?: FeatureSprintDeepSeekConfig;
     roughSpec?: string;
     agentOutput?: string;
+    proposedCursorPrompt?: string;
     now?: Date;
   } = {}
 ): FeatureSprintRunnerJobPrepareResult | { ok: true; request: FeatureSprintRunnerJobRequest } {
@@ -437,6 +451,7 @@ export function buildFeatureSprintRunnerJobRequest(
     stepId,
     roughSpec: options.roughSpec,
     agentOutput: options.agentOutput,
+    proposedCursorPrompt: options.proposedCursorPrompt,
     now: options.now,
     provider
   });
@@ -484,6 +499,7 @@ export function prepareFeatureSprintRunnerJob(
     deepseekConfig?: FeatureSprintDeepSeekConfig;
     roughSpec?: string;
     agentOutput?: string;
+    proposedCursorPrompt?: string;
     now?: Date;
   } = {}
 ): FeatureSprintRunnerJobPrepareResult {
@@ -541,7 +557,12 @@ export function resolveFeatureSprintNextJobButtonMode(
   });
 
   if (provider === "deepseek" && options.deepseekConfig?.available) {
-    return "automated_review";
+    if (job.action === "copy_prompt_audit") {
+      return "automated_prompt_audit";
+    }
+    if (job.action === "copy_review") {
+      return "automated_review";
+    }
   }
 
   const profile = resolveRunnerProfileForJob(
@@ -570,6 +591,10 @@ export function resolveFeatureSprintNextJobButtonLabel(
       return options.deepseekMode === "mock"
         ? "Run automated review (mock)"
         : "Run automated review";
+    case "automated_prompt_audit":
+      return options.deepseekMode === "mock"
+        ? "Run automated prompt audit (mock)"
+        : "Run automated prompt audit";
     case "human_gate":
       return "Show next gate";
     default:

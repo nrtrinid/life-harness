@@ -14,6 +14,8 @@ export type FeatureSprintDeepSeekConfig = {
   available: boolean;
   apiKey?: string;
   model?: string;
+  reviewModel?: string;
+  promptAuditModel?: string;
   baseUrl?: string;
   mode: FeatureSprintDeepSeekMode;
   devOnlyPublicKey?: boolean;
@@ -33,7 +35,19 @@ function isTruthyEnv(value: string | undefined): boolean {
 export function resolveFeatureSprintDeepSeekReviewModel(
   env: FeatureSprintDeepSeekEnv = process.env as FeatureSprintDeepSeekEnv
 ): string {
-  return cleanOptional(env.DEEPSEEK_MODEL) ?? FEATURE_SPRINT_DEEPSEEK_DEFAULT_REVIEW_MODEL;
+  return (
+    cleanOptional(env.DEEPSEEK_REVIEW_MODEL) ??
+    cleanOptional(env.DEEPSEEK_MODEL) ??
+    FEATURE_SPRINT_DEEPSEEK_DEFAULT_REVIEW_MODEL
+  );
+}
+
+export function resolveFeatureSprintDeepSeekPromptAuditModel(
+  env: FeatureSprintDeepSeekEnv = process.env as FeatureSprintDeepSeekEnv
+): string {
+  return (
+    cleanOptional(env.DEEPSEEK_PROMPT_AUDIT_MODEL) ?? resolveFeatureSprintDeepSeekReviewModel(env)
+  );
 }
 
 export function resolveFeatureSprintDeepSeekConfig(
@@ -41,7 +55,8 @@ export function resolveFeatureSprintDeepSeekConfig(
   context: FeatureSprintDeepSeekRuntimeContext = {}
 ): FeatureSprintDeepSeekConfig {
   const baseUrl = cleanOptional(env.DEEPSEEK_BASE_URL) ?? FEATURE_SPRINT_DEEPSEEK_DEFAULT_BASE_URL;
-  const model = resolveFeatureSprintDeepSeekReviewModel(env);
+  const reviewModel = resolveFeatureSprintDeepSeekReviewModel(env);
+  const promptAuditModel = resolveFeatureSprintDeepSeekPromptAuditModel(env);
 
   if (
     isTruthyEnv(env.DEEPSEEK_MOCK) ||
@@ -51,7 +66,9 @@ export function resolveFeatureSprintDeepSeekConfig(
       available: true,
       mode: "mock",
       baseUrl,
-      model,
+      model: reviewModel,
+      reviewModel,
+      promptAuditModel,
       liveSafe: false
     };
   }
@@ -65,7 +82,9 @@ export function resolveFeatureSprintDeepSeekConfig(
     return {
       available: true,
       apiKey: nodeApiKey,
-      model,
+      model: reviewModel,
+      reviewModel,
+      promptAuditModel,
       baseUrl,
       mode: "live",
       liveSafe: true
@@ -76,7 +95,9 @@ export function resolveFeatureSprintDeepSeekConfig(
     return {
       available: true,
       apiKey: publicApiKey,
-      model,
+      model: reviewModel,
+      reviewModel,
+      promptAuditModel,
       baseUrl,
       mode: "live",
       devOnlyPublicKey: true,
@@ -88,7 +109,9 @@ export function resolveFeatureSprintDeepSeekConfig(
     available: false,
     mode: "unconfigured",
     baseUrl,
-    model,
+    model: reviewModel,
+    reviewModel,
+    promptAuditModel,
     liveSafe: false
   };
 }

@@ -67,11 +67,15 @@ import {
   resolveFeatureSprintDeepSeekConfig,
   type FeatureSprintDeepSeekConfig
 } from "../../src/core/featureSprintDeepSeekConfig";
-import { runFeatureSprintDeepSeekReview } from "../../src/core/featureSprintDeepSeekReviewer";
+import { runFeatureSprintDeepSeekReview, runFeatureSprintDeepSeekPromptAudit } from "../../src/core/featureSprintDeepSeekReviewer";
 import {
   buildFeatureSprintAutomatedReviewPacket,
   formatAutomatedReviewForImportStaging
 } from "../../src/core/featureSprintReviewerAdapter";
+import {
+  buildFeatureSprintAutomatedPromptAuditPacket,
+  formatAutomatedPromptCritiqueForImportStaging
+} from "../../src/core/featureSprintPromptAuditAdapter";
 import type { FeatureSprintNextJob } from "../../src/core/featureSprintCurrentSlice";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
@@ -347,6 +351,8 @@ export default function CardDetailScreen() {
   const [isRunningAutomatedReview, setIsRunningAutomatedReview] = useState(false);
   const [localizationImportText, setLocalizationImportText] = useState("");
   const [promptAuditImportText, setPromptAuditImportText] = useState("");
+  const [stagedRevisedCursorPrompt, setStagedRevisedCursorPrompt] = useState("");
+  const [isRunningAutomatedPromptAudit, setIsRunningAutomatedPromptAudit] = useState(false);
   const [specUpdateImportText, setSpecUpdateImportText] = useState("");
   const [agentOutputText, setAgentOutputText] = useState("");
   const [runnerHealth, setRunnerHealth] = useState<"unknown" | "available" | "unavailable">(
@@ -508,7 +514,8 @@ export default function CardDetailScreen() {
         runnerHealth,
         runnerHealthProbe,
         runnerAgent,
-        stagedLocalizationImportText: localizationImportText
+        stagedLocalizationImportText: localizationImportText,
+        stagedPromptAuditImportText: promptAuditImportText
       }),
     [
       lifeHarnessData,
@@ -517,7 +524,8 @@ export default function CardDetailScreen() {
       runnerHealth,
       runnerHealthProbe,
       runnerAgent,
-      localizationImportText
+      localizationImportText,
+      promptAuditImportText
     ]
   );
   const nextJobButtonMode = useMemo(
@@ -1605,6 +1613,85 @@ export default function CardDetailScreen() {
     }
   }
 
+  async function runAutomatedDeepSeekPromptAudit(
+    request?: FeatureSprintRunnerJobRequest,
+    job?: FeatureSprintNextJob
+  ) {
+    if (!deepseekConfig.available || isRunningAutomatedPromptAudit) {
+      return;
+    }
+
+    const proposedCursorPrompt = currentFeatureStep
+      ? resolveStepImplementationPrompt(currentFeatureStep)
+      : "";
+
+    setIsRunningAutomatedPromptAudit(true);
+    try {
+      let promptMarkdown = request?.inputPacket?.trim();
+      let planId = request?.planId;
+      let stepId = request?.stepId;
+
+      if (!promptMarkdown) {
+        const packet = buildFeatureSprintAutomatedPromptAuditPacket(lifeHarnessData, cardId, {
+          planId,
+          stepId,
+          proposedCursorPrompt
+        });
+        if (!packet.ok) {
+          showNotice("warning", packet.error);
+          return;
+        }
+        promptMarkdown = packet.markdown;
+        planId = packet.planId;
+        stepId = packet.stepId;
+      }
+
+      const result = await runFeatureSprintDeepSeekPromptAudit(
+        {
+          cardId,
+          planId,
+          stepId,
+          promptMarkdown,
+          proposedCursorPrompt
+        },
+        {
+          config: deepseekConfig,
+          runtimeContext: { isBrowserClient: Platform.OS === "web" }
+        }
+      );
+
+      if (!result.ok) {
+        showNotice("warning", result.error ?? "Automated prompt audit failed.");
+        return;
+      }
+
+      const staged = formatAutomatedPromptCritiqueForImportStaging(result.critique, {
+        fallbackPrompt: proposedCursorPrompt
+      });
+      if (!staged.ok) {
+        showNotice("warning", staged.error);
+        return;
+      }
+
+      setPromptAuditImportText(staged.markdown);
+      setStagedRevisedCursorPrompt(
+        result.critique.revisedCursorPrompt?.trim() ? result.critique.revisedCursorPrompt.trim() : ""
+      );
+      setNextJobLifecycle({
+        status: "staged",
+        action: job?.action ?? "copy_prompt_audit",
+        provider: "deepseek",
+        expectedOutputFence: job?.expectedOutputFence ?? "feature-prompt-critique"
+      });
+      showNotice(
+        "success",
+        "Automated prompt audit staged — inspect and import manually via Import prompt audit."
+      );
+    } finally {
+      setIsRunningAutomatedPromptAudit(false);
+    }
+  }
+
   async function runPreparedRunnerJob(request: FeatureSprintRunnerJobRequest, job: FeatureSprintNextJob) {
     if (!request.runnerProfile) {
       showNotice("warning", "No runner profile for this job.");
@@ -1739,6 +1826,16 @@ export default function CardDetailScreen() {
       setIsRunningNextJob(true);
       try {
         await runAutomatedDeepSeekReview(request, job);
+      } finally {
+        setIsRunningNextJob(false);
+      }
+      return;
+    }
+
+    if (mode === "automated_prompt_audit") {
+      setIsRunningNextJob(true);
+      try {
+        await runAutomatedDeepSeekPromptAudit(request, job);
       } finally {
         setIsRunningNextJob(false);
       }
@@ -2553,6 +2650,27 @@ export default function CardDetailScreen() {
                   {isRunningPromptAudit ? "Running…" : "Run prompt audit with Codex"}
                 </Text>
               </Pressable>
+              {deepseekConfig.available ? (
+                <Pressable
+                  testID="feature-sprint-run-automated-prompt-audit"
+                  style={[
+                    styles.secondaryAction,
+                    (isRunningAutomatedPromptAudit || isRunningNextJob) && { opacity: 0.5 }
+                  ]}
+                  disabled={isRunningAutomatedPromptAudit || isRunningNextJob}
+                  onPress={() => {
+                    void runAutomatedDeepSeekPromptAudit();
+                  }}
+                >
+                  <Text style={styles.secondaryActionText}>
+                    {isRunningAutomatedPromptAudit
+                      ? "Running automated prompt audit…"
+                      : deepseekConfig.mode === "mock"
+                        ? "Run automated prompt audit (mock)"
+                        : "Run automated prompt audit"}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
             <Text style={[styles.label, { marginTop: 12 }]}>
               Import prompt audit (GPT/Codex output)
@@ -2571,6 +2689,22 @@ export default function CardDetailScreen() {
               placeholderTextColor={colors.inputPlaceholder}
               multiline
             />
+            {stagedRevisedCursorPrompt ? (
+              <>
+                <Text style={[styles.label, { marginTop: 12 }]}>Staged revised Cursor prompt</Text>
+                <Text style={styles.helpText}>
+                  Advisory/copyable only — does not replace the active implementation packet until you
+                  import the prompt critique above.
+                </Text>
+                <TextInput
+                  testID="feature-sprint-staged-revised-cursor-prompt"
+                  style={[styles.captureInput, { minHeight: 80, textAlignVertical: "top" }]}
+                  value={stagedRevisedCursorPrompt}
+                  editable={false}
+                  multiline
+                />
+              </>
+            ) : null}
             <Pressable
               style={[styles.secondaryAction, { marginTop: 12 }]}
               onPress={handleImportPromptAudit}

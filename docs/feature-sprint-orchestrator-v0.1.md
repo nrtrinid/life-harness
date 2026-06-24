@@ -35,15 +35,12 @@ User → approval gate at every trust boundary
 3. **Copy scoping packet** (recipient-labeled) or **Run scoping** via optional local runner → paste into architect worker if copying manually.
 4. Architect worker returns prose + `feature-sprint-plan` fenced JSON.
 5. **Import plan** — parses fenced block only; no NL parsing; no auto-import.
-6. Per slice — optional **localization** and **prompt audit** (v2 inner loop); then **Copy implementation packet** or **Run implementation in worktree** (optional local runner, isolated git worktree) → send to implementation worker (typically Cursor).
+6. Per slice — optional **localization** and **prompt audit** (v2 inner loop); optional **Run automated prompt audit** (DeepSeek/mock) stages `feature-prompt-critique` for manual import — see [feature-sprint-deepseek-reviewer-v0.1.md](feature-sprint-deepseek-reviewer-v0.1.md). Then **Copy implementation packet** or **Run implementation in worktree** (optional local runner, isolated git worktree) → send to implementation worker (typically Cursor).
 7. Paste or receive agent output → **Save agent output** on the current step (never auto-saved).
 8. Optional: **Normalize proof** for review packet input.
-9. **Copy review packet** → paste into reviewer worker (separate from implementer).
+9. **Copy review packet** → paste into reviewer worker (separate from implementer). Optional **Run automated review** (DeepSeek/mock) stages `feature-review-verdict` for manual import.
 10. Reviewer returns prose + optional `feature-review-verdict` fenced JSON.
 11. **Import review verdict** — does not auto-advance.
-
-Optional **DeepSeek automated review** (when configured): **Run automated review** builds a rich automated review packet, calls DeepSeek mock/live (or mock-only in CI), validates `feature-automated-review-verdict`, and **stages** compatible `feature-review-verdict` text in the import textarea — still manual import. See [feature-sprint-deepseek-reviewer-v0.1.md](feature-sprint-deepseek-reviewer-v0.1.md).
-
 12. Optional (living-spec path): **Import spec update** (`feature-spec-update`) → **Approve revised feature spec** → spec becomes unapproved until approved again.
 13. **Advance step** when ready (manual gate), or **Adopt next slice** when no ready predefined step exists but `nextSliceProposal` is present.
 14. Repeat steps 6–13 for each slice.

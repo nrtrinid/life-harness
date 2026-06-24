@@ -14,6 +14,7 @@ import { getFeatureSprintRunnerRunsForCard } from "./featureSprintRunnerHistory"
 import {
   isImplementationProfile,
   isLocalizationProfile,
+  isPromptAuditProfile,
   isReviewProfile,
   isScopingProfile,
   runnerAgentLabel,
@@ -272,7 +273,7 @@ export function inferSlicePhaseFromLegacyState(
     return "spec_updating";
   }
 
-  if (step.reviewStatus === "accepted" && step.status !== "done") {
+  if (step.reviewStatus === "accepted") {
     return "ready_to_advance";
   }
 
@@ -398,7 +399,6 @@ function baseJob(
     requiresHumanApproval: false,
     requiresHumanImport: false,
     canMutateRepo: false,
-    checklist: [],
     ...partial
   };
 }
@@ -434,6 +434,22 @@ export function findLatestLocalizationRunForStep(
 }
 
 export function hasStagedLocalizationAwaitingImport(
+  run: HarnessFeatureSprintRunnerRun | undefined,
+  stagedImportText?: string
+): boolean {
+  if (stagedImportText?.trim()) {
+    return true;
+  }
+  if (!run) {
+    return false;
+  }
+  if (run.nextJobLifecycleStatus === "staged" && run.outputText?.trim()) {
+    return true;
+  }
+  return run.status === "succeeded" && Boolean(run.outputText?.trim()) && !run.importedAt;
+}
+
+export function hasStagedPromptAuditAwaitingImport(
   run: HarnessFeatureSprintRunnerRun | undefined,
   stagedImportText?: string
 ): boolean {
@@ -543,16 +559,34 @@ function jobForPhase(
       });
     }
     case "prompt_auditing":
+      if (
+        !hasStepPromptAudit(step) &&
+        hasStagedPromptAuditAwaitingImport(
+          context.latestPromptAuditRun,
+          context.stagedPromptAuditImportText
+        )
+      ) {
+        return baseJob({
+          sliceId: slice.id,
+          phase: slice.phase,
+          label: "Import prompt audit",
+          role: "prompt_auditor",
+          providerOptions: ["chatgpt", "codex", "manual", "local"],
+          action: "import_prompt_critique",
+          expectedOutputFence: "feature-prompt-critique",
+          requiresHumanImport: true,
+          checklist: ["Inspect staged prompt critique, then import manually."]
+        });
+      }
       return baseJob({
         sliceId: slice.id,
         phase: slice.phase,
-        label: "Import prompt audit",
+        label: `Run prompt audit with ${agentLabel}`,
         role: "prompt_auditor",
-        providerOptions: ["chatgpt", "codex", "manual", "local"],
-        action: "import_prompt_critique",
+        providerOptions: ["chatgpt", "codex", "manual", "local", "deepseek"],
+        action: "copy_prompt_audit",
         expectedOutputFence: "feature-prompt-critique",
-        requiresHumanImport: true,
-        checklist: ["Paste prompt critique output, then import."]
+        checklist: ["Audit prompt before implementation. Import remains manual."]
       });
     case "implementing":
       if (!cleanOptional(step.outputSummary) && hasOutput(context.latestImplementationRun)) {
@@ -684,7 +718,9 @@ type BuildNextJobContext = {
   latestImplementationRun?: HarnessFeatureSprintRunnerRun;
   latestReviewRun?: HarnessFeatureSprintRunnerRun;
   latestLocalizationRun?: HarnessFeatureSprintRunnerRun;
+  latestPromptAuditRun?: HarnessFeatureSprintRunnerRun;
   stagedLocalizationImportText?: string;
+  stagedPromptAuditImportText?: string;
 };
 
 export function buildNextFeatureSprintJob(
@@ -694,6 +730,7 @@ export function buildNextFeatureSprintJob(
     runnerHealth?: "unknown" | "available" | "unavailable";
     runnerAgent?: FeatureSprintRunnerAgent;
     stagedLocalizationImportText?: string;
+    stagedPromptAuditImportText?: string;
   } = {}
 ): FeatureSprintNextJob | undefined {
   const runnerHealth = options.runnerHealth ?? "unknown";
@@ -733,7 +770,14 @@ export function buildNextFeatureSprintJob(
       plan && step
         ? findLatestLocalizationRunForStep(recentRuns, plan.id, step.id)
         : undefined,
-    stagedLocalizationImportText: options.stagedLocalizationImportText
+    latestPromptAuditRun: recentRuns.find(
+      (run) =>
+        isPromptAuditProfile(run.profile) &&
+        (!runScope.planId || run.planId === runScope.planId) &&
+        (!runScope.stepId || run.stepId === runScope.stepId)
+    ),
+    stagedLocalizationImportText: options.stagedLocalizationImportText,
+    stagedPromptAuditImportText: options.stagedPromptAuditImportText
   };
 
   if (plan?.status === "done" && hasCompletionProof(plan)) {

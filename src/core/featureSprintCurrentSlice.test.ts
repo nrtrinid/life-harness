@@ -214,7 +214,7 @@ describe("featureSprintCurrentSlice", () => {
     expect(plan?.currentSlice?.phase).not.toBe("localizing");
   });
 
-  it("sets typed expectedOutputFence on import jobs", () => {
+  it("defaults prompt_auditing to copy_prompt_audit with deepseek option", () => {
     const plan = fixturePlan({
       currentSlice: {
         id: "slice-1",
@@ -232,9 +232,35 @@ describe("featureSprintCurrentSlice", () => {
       CARD_ID,
       { runnerHealth: "available" }
     );
+    expect(job?.action).toBe("copy_prompt_audit");
+    expect(job?.providerOptions).toContain("deepseek");
     expect(job?.expectedOutputFence).toBe("feature-prompt-critique");
-    expect(job?.requiresHumanImport).toBe(true);
     expect(job?.canMutateRepo).toBe(false);
+  });
+
+  it("surfaces import_prompt_critique when staged prompt audit text exists", () => {
+    const plan = fixturePlan({
+      currentSlice: {
+        id: "slice-1",
+        title: "Core module",
+        status: "active",
+        phase: "prompt_auditing",
+        source: "planned_step",
+        linkedStepId: "step-1",
+        createdAt: FIXED_NOW_ISO,
+        updatedAt: FIXED_NOW_ISO
+      }
+    });
+    const job = buildNextFeatureSprintJob(
+      baseData({ featureSprintPlans: [plan] }),
+      CARD_ID,
+      {
+        runnerHealth: "available",
+        stagedPromptAuditImportText: "```feature-prompt-critique\n{}\n```"
+      }
+    );
+    expect(job?.action).toBe("import_prompt_critique");
+    expect(job?.requiresHumanImport).toBe(true);
   });
 
   it("adopt creates source adopted_next_slice", () => {
@@ -246,7 +272,7 @@ describe("featureSprintCurrentSlice", () => {
         title: "Next slice",
         goal: "Continue",
         acceptanceCriteria: ["Done"],
-        proposedAt: FIXED_NOW_ISO
+        nonGoals: []
       }
     });
     const adopted = adoptNextSliceProposalForPlan(baseData({ featureSprintPlans: [plan] }), plan.id, FIXED_NOW);
@@ -302,7 +328,7 @@ describe("featureSprintCurrentSlice", () => {
         title: "Next slice",
         goal: "Continue",
         acceptanceCriteria: ["Done"],
-        proposedAt: FIXED_NOW_ISO
+        nonGoals: []
       }
     });
     const job = buildNextFeatureSprintJob(

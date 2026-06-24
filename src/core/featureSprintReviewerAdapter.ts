@@ -7,6 +7,10 @@ import {
 } from "./featureSprintOrchestrator";
 import { resolveLatestImplementationRunForStep } from "./featureSprintImplementationProof";
 import { resolveFeatureSprintCurrentSlice } from "./featureSprintCurrentSlice";
+import {
+  detectFeatureSprintAutomatedReviewStopSignals,
+  type FeatureSprintAutomatedStopInput
+} from "./featureSprintAutomatedStopSignals";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type { HarnessFeatureSprintReviewStatus } from "./types";
 
@@ -54,26 +58,8 @@ export type FeatureSprintAutomatedReviewResult =
     }
   | { ok: false; error: string; mode?: "mock" | "live" | "unconfigured" };
 
-export type FeatureSprintAutomatedReviewStopInput = {
-  changedFiles?: string[];
-  diffText?: string;
-  proofText?: string;
-  agentOutput?: string;
-  verificationOutput?: string;
-};
-
-const STOP_SIGNAL_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
-  { label: "database writes", pattern: /\b(migration|schema change|alter table|create table)\b/i },
-  { label: "production job behavior", pattern: /\b(cron|scheduler|cadence|background job)\b/i },
-  { label: "matching logic", pattern: /\bmatching logic\b/i },
-  { label: "fair-value logic", pattern: /\bfair[- ]value\b/i },
-  { label: "settlement boundaries", pattern: /\b(settlement|paper trading|live promotion)\b/i },
-  { label: "secrets/env/auth", pattern: /\b(api[_ -]?key|secret|password|auth token|\.env)\b/i },
-  { label: "docker/deployment", pattern: /\b(docker|deploy|kubernetes|helm)\b/i },
-  { label: "shared orchestration types", pattern: /\borchestration type\b/i },
-  { label: "destructive cleanup", pattern: /\b(drop table|force push|hard reset|rm -rf)\b/i },
-  { label: "broad refactor", pattern: /\b(broad refactor|repo-wide refactor)\b/i }
-];
+export { detectFeatureSprintAutomatedReviewStopSignals };
+export type { FeatureSprintAutomatedStopInput as FeatureSprintAutomatedReviewStopInput };
 
 const VALID_IMPORT_STATUSES = new Set<HarnessFeatureSprintReviewStatus>([
   "accepted",
@@ -112,28 +98,6 @@ function exampleAutomatedVerdictJson(): string {
     },
     null,
     2
-  );
-}
-
-export function detectFeatureSprintAutomatedReviewStopSignals(
-  input: FeatureSprintAutomatedReviewStopInput
-): string[] {
-  const haystack = [
-    input.proofText,
-    input.agentOutput,
-    input.diffText,
-    input.verificationOutput,
-    ...(input.changedFiles ?? [])
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  if (!haystack.trim()) {
-    return [];
-  }
-
-  return STOP_SIGNAL_PATTERNS.filter(({ pattern }) => pattern.test(haystack)).map(
-    ({ label }) => label
   );
 }
 
