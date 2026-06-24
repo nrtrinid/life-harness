@@ -179,6 +179,9 @@ class DeepSynthesisResultBody(StrictModel):
     pipeline_profile_used: SynthesisPipelineProfile
     degraded_notes: list[str] = Field(default_factory=list)
     phases_completed: list[str] = Field(default_factory=list)
+    stretch_slot_status: (
+        Literal["mock_simulated", "slot_unavailable", "slot_ready_not_wired"] | None
+    ) = None
     circling: str = Field(..., min_length=1)
     strongest_idea: str = Field(..., min_length=1)
     hidden_risk: str = Field(..., min_length=1)

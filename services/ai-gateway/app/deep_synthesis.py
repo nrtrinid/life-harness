@@ -578,6 +578,38 @@ def build_mock_deep_synthesis_result(request: DeepSynthesisRequest) -> DeepSynth
     return DeepSynthesisResultBody.model_validate(completed.model_dump(exclude={"status"}))
 
 
+def run_with_stretch_pipeline(request: DeepSynthesisRequest) -> DeepSynthesisResultBody:
+    """CI-safe stretch seam: probe stretch_batch slot, but still mock-simulate result."""
+    from app.slots.manager import (
+        SlotDisabledError,
+        SlotNotAvailableError,
+        get_slot_manager,
+    )
+
+    base = build_mock_deep_synthesis_result(request)
+    degraded_notes = list(base.degraded_notes)
+
+    try:
+        get_slot_manager().acquire("stretch_batch")
+        degraded_notes.append(
+            "Stretch slot present but not wired; mock-simulated stretch result used."
+        )
+        return base.model_copy(
+            update={
+                "stretch_slot_status": "slot_ready_not_wired",
+                "degraded_notes": degraded_notes,
+            }
+        )
+    except (SlotDisabledError, SlotNotAvailableError) as exc:
+        degraded_notes.append(f"Stretch slot unavailable; mock-simulated stretch result used. ({exc})")
+        return base.model_copy(
+            update={
+                "stretch_slot_status": "slot_unavailable",
+                "degraded_notes": degraded_notes,
+            }
+        )
+
+
 def run_mock_deep_synthesis(
     request: DeepSynthesisRequest,
 ) -> DeepSynthesisCompletedBody | DeepSynthesisQueuedBody:

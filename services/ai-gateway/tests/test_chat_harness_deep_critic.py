@@ -203,6 +203,22 @@ def test_deep_critic_pass_skips_final(client, chat_payload):
     assert not any("revised after structured critic" in note for note in notes)
 
 
+def test_native_chat_flag_does_not_break_deep_flow(client, chat_payload, monkeypatch):
+    monkeypatch.setenv("SCOUT_CHAT_HARNESS_NATIVE_CHAT", "true")
+    get_provider.cache_clear()
+    from app.slots.manager import get_slot_manager
+    from app.orchestrator.inference_orchestrator import get_inference_orchestrator
+
+    get_slot_manager.cache_clear()
+    get_inference_orchestrator.cache_clear()
+    response = client.post("/chat-harness", json=chat_payload)
+    assert response.status_code == 200
+    body = response.json()
+    ChatHarnessResponse.model_validate(body)
+    notes = " ".join(body["confidence_notes"]).lower()
+    assert "structured critic" in notes
+
+
 @pytest.mark.parametrize("depth", ["fast", "deliberate"])
 def test_fast_and_deliberate_skip_critic(client, chat_payload, depth: str):
     payload = {**chat_payload, "reasoning_depth": depth}

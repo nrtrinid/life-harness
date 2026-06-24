@@ -265,6 +265,8 @@ Structured deep synthesis over caller-provided board context. See [docs/plans/de
 - `pipeline_profile=fast_only` (or `auto`): sync completion — mock when `SCOUT_PROVIDER=mock`, OpenVINO companion_fast when `SCOUT_PROVIDER=openvino`.
 - `pipeline_profile=with_critic` or `with_stretch`: returns `status: queued` with `job_id` + `poll_url` (poll via `GET /ai/jobs/{job_id}`).
 
+**Stretch seam (prototype):** `with_stretch` is still mock-simulated in this gateway version. The job result includes optional `stretch_slot_status` (`slot_unavailable` vs `slot_ready_not_wired`) to indicate whether `stretch_batch` was available, without making real stretch inference calls yet.
+
 **Sensitivity:** `S3` rejected with HTTP 422 before provider or job creation.
 
 **OpenVINO fast path:** Single structured JSON prompt (`app/prompts/deep_synthesis_fast_only.md`). Parse failure, timeout, or verifier rejection returns HTTP 200 with a valid degraded deterministic fallback (`degraded_notes` explains why) — not HTTP 502.
@@ -450,7 +452,7 @@ Requirements: gateway and llama-server must already be running; model files are 
 | `SCOUT_LLAMA_BASE_URL` | `http://127.0.0.1:8120` | llama.cpp OpenAI API base when env set; else `critic_small.llamacpp` host/port from `models.yaml` |
 | `SCOUT_LLAMA_TIMEOUT_SECONDS` | `60` | HTTP timeout for llama.cpp critic calls |
 | `SCOUT_LLAMA_API_KEY` | *(unset)* | Optional Bearer token for llama-server |
-| `SCOUT_CHAT_HARNESS_NATIVE_CHAT` | `false` | Experimental native chat template for Chat Harness (OpenVINO). **Known gap:** bypasses deep orchestrator when `true` |
+| `SCOUT_CHAT_HARNESS_NATIVE_CHAT` | `false` | Experimental native chat template for Chat Harness (OpenVINO). When enabled, fast/deliberate uses native chat; deep mode uses native chat for the **initial draft only** (critic + optional revision remain single-prompt). |
 
 ## Privacy
 

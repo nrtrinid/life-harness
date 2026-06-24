@@ -79,6 +79,8 @@ def _resolve_chat_harness_route(
 
     if depth == ReasoningDepth.deep and settings.deep_enabled:
         notes.append("draft → critic → optional revision")
+        if settings.chat_harness_native_chat:
+            notes.append("native chat used for deep draft when flag enabled")
         return DepthRoutePlan(
             endpoint=GatewayRouteEndpoint.chat_harness,
             reasoning_depth=depth.value,
