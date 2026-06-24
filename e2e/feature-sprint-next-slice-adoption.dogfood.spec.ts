@@ -48,7 +48,9 @@ test.describe("Feature Sprint next slice adoption dogfood", () => {
       "feature-sprint-spec-update-input",
       FEATURE_SPRINT_NEXT_SLICE_ADOPTION_SPEC_UPDATE_OUTPUT
     );
-    await page.getByTestId("feature-sprint-spec-update-import").click();
+    const specUpdateImport = page.getByTestId("feature-sprint-spec-update-import");
+    await specUpdateImport.scrollIntoViewIfNeeded();
+    await specUpdateImport.click();
     await expect(page.getByText("Spec update imported.")).toBeVisible();
 
     await page.getByTestId("feature-sprint-approve-feature-spec").scrollIntoViewIfNeeded();
