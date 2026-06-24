@@ -63,6 +63,9 @@ def _settings(**overrides) -> Settings:
         real_model_bench_enabled=overrides.pop(
             "real_model_bench_enabled", base.real_model_bench_enabled
         ),
+        critic_context_max_chars=overrides.pop(
+            "critic_context_max_chars", base.critic_context_max_chars
+        ),
         **overrides,
     )
 

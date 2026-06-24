@@ -96,9 +96,11 @@ def build_chat_harness_critic_prompt(
     request: ChatHarnessRequest,
     draft_json: str,
     max_draft_chars: int = 2000,
+    context_bundle: str | None = None,
 ) -> str:
     template = load_chat_harness_critic_template()
-    context_bundle = resolve_critic_context_bundle_for_prompt(request)
+    if context_bundle is None:
+        context_bundle = resolve_critic_context_bundle_for_prompt(request)
     return (
         template.replace("{message}", request.message)
         .replace("{mode}", request.mode.value)

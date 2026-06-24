@@ -369,6 +369,7 @@ class OpenVinoProvider:
         self._ensure_pipeline()
         from app.raw_lab_budget import prepare_raw_lab_request
         from app.raw_lab_trace import (
+            attach_raw_lab_depth_route,
             emit_raw_lab_deep_trace,
             new_raw_lab_deep_trace,
         )
@@ -382,6 +383,7 @@ class OpenVinoProvider:
             if request.reasoning_depth.value == "deep"
             else None
         )
+        attach_raw_lab_depth_route(self._settings, request, trace)
         system = budget.system_prompt
         raw_lab_limit = raw_lab_input_char_limit(self._settings)
         input_chars = estimate_raw_lab_input_chars(system=system, request=request)

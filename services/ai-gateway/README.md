@@ -243,10 +243,14 @@ Conversational scout chat with simpler response shape. See Phase 1.8b above.
 
 **Request:** `{ message, mode?, sensitivity?, context, context_packet?, conversation_history?, thread_state?, reasoning_depth? }`
 
-- `context_packet` (optional): ranked `AiContextPacket` wire (`packet_version: "0.1"`). When present, the **draft** prompt uses `resolve_context_bundle_for_prompt` (full ranked markdown sections). The **deep critic** uses `resolve_critic_context_bundle_for_prompt` — a tighter subset (top-ranked slices, ≤1800 chars): S3 slices and `excluded_card_ids` omitted; no redaction notes or raw packet JSON. Invalid optional packets are stripped at validation; legacy `context` remains the fallback for both paths.
+- `context_packet` (optional): ranked `AiContextPacket` wire (`packet_version: "0.1"`). When present, the **draft** prompt uses `resolve_context_bundle_for_prompt` (full ranked markdown sections). The **deep critic** uses `resolve_critic_context_bundle_for_prompt` — a tighter subset (top-ranked slices plus a structured `### Critic evidence` block when thread/packet fields exist), capped by `SCOUT_CRITIC_CONTEXT_MAX_CHARS` (default **1800**): S3 slices and `excluded_card_ids` omitted; no redaction notes or raw packet JSON. Invalid optional packets are stripped at validation; legacy `context` remains the fallback for both paths.
 - `conversation_history`: prior user/assistant turns (answer text only for assistant).
 - `thread_state`: temporary in-request working memory (`recent_digest`, `active_goal`, `current_topic`, `task_mode`, `open_loops`, `decisions`, `pinned_facts`, `user_steering`, `do_not_repeat`, `references`, `updated_at`). No personality.
 - `reasoning_depth`: `fast` (default), `deliberate`, or `deep`. When `SCOUT_DEEP_ENABLED=true`, deep mode runs **draft → structured critic verdict → conditional final** inside the gateway (`InferenceOrchestrator` → `run_chat_harness_deep`). The app still receives the same `ChatHarnessResponse` shape — no critic text or model names in the response.
+
+**Depth routing registry:** Authoritative mapping of `reasoning_depth` / `pipeline_profile` → slots and orchestrator paths lives in `app/orchestrator/depth_routing.py` (`resolve_depth_route`). Today `reasoning_depth` changes orchestration only — `slot_plan` always acquires `companion_fast`. With `SCOUT_DEBUG_THINKING_TRACE=true`, the gateway logs structured route metadata (`chat_harness_depth_route`, `raw_lab_depth_route`, `deep_synthesis_depth_route`, `deep_synthesis_job_depth_route`). Default **off**; no HTTP response change.
+
+**Critic contract seam:** `app/critic_contract.py` provides internal normalization types and adapters so Chat Harness (`ChatHarnessCriticVerdict`), Deep Synthesis (`SynthesisCritique`), and Raw Lab Deep+ (`RawLabDeepPlusJudgeVerdict`) can be mapped into a shared verdict vocabulary for logging/evals. This is **not** a public API and does not change any request/response schemas.
 
 **Sensitivity:** `S3` rejected with HTTP 422 before provider.
 
@@ -299,7 +303,7 @@ Success: job `completed`, `critique` present, verifier-valid body, no mock-fallb
 
 Chat Harness critic routing (`SCOUT_CRITIC_SLOT=secondary`) is separate from synthesis `SCOUT_CRITIC_RUNTIME`.
 
-**Deep mode debug trace** (dev only): `SCOUT_DEBUG_THINKING_TRACE=true` logs structured pass metadata (`draft` / `draft_repair` / `critic` / `revision` latencies, critic backend, check ids, `parse_failures`, `draft_repair_attempted`, `draft_repair_succeeded`, `fail_soft_reason`) to gateway logs. Default **off**. Does not change `ChatHarnessResponse` or expose chain-of-thought. When deep draft JSON fails parse and repair does not recover it, critic is skipped and `confidence_notes` report `structured critic skipped (draft parse failed)` — not critic approval.
+**Deep mode debug trace** (dev only): `SCOUT_DEBUG_THINKING_TRACE=true` logs structured pass metadata (`draft` / `draft_repair` / `critic` / `revision` latencies, critic backend, check ids, `critic_context_chars`, `critic_context_max_chars`, depth route keys above, `parse_failures`, `draft_repair_attempted`, `draft_repair_succeeded`, `fail_soft_reason`) to gateway logs. Default **off**. Does not change `ChatHarnessResponse` or expose chain-of-thought. When deep draft JSON fails parse and repair does not recover it, critic is skipped and `confidence_notes` report `structured critic skipped (draft parse failed)` — not critic approval.
 
 **Manual Chat Harness deep + secondary critic smoke:** [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) and [`scripts/smoke_deep_critic.py`](scripts/smoke_deep_critic.py). Record results in [docs/phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md). OpenVINO smoke requires `.\.venv\Scripts\python.exe` for the gateway. `critic_small.enabled` via local `.tmp.models.smoke.yaml` (not committed default); llama-server is started externally. CPU `llama-server` works but is slow; `SCOUT_CRITIC_SLOT=same` remains default. No CI GPU requirement.
 
@@ -432,6 +436,7 @@ Requirements: gateway and llama-server must already be running; model files are 
 | `SCOUT_RAW_LAB_REPETITION_PENALTY` | `1.12` | Repetition penalty for Raw Lab (when supported by OpenVINO) |
 | `SCOUT_RAW_LAB_DEEP_PLUS_TIMEOUT_MS` | `120000` | Overall experimental Raw Lab Deep+ budget before deterministic finish or Deep fallback |
 | `SCOUT_DEEP_ENABLED` | `true` | Enable structured deep critic pass for Chat Harness |
+| `SCOUT_CRITIC_CONTEXT_MAX_CHARS` | `1800` | Max chars for Chat Harness **deep critic** evidence packet (not the draft prompt). Raise locally (e.g. `3600`) to give the critic more board/thread evidence; may increase critic latency on OpenVINO or llama.cpp. |
 | `SCOUT_DEEP_MAX_EXTRA_PASSES` | `2` | Max extra provider passes after draft (1 = critic only, 2 = critic + final revision) |
 | `SCOUT_DEBUG_THINKING_TRACE` | `false` | Log structured deep-mode pass metadata to gateway logs (`chat_harness_thinking_trace`); does not change HTTP response |
 | `SCOUT_CRITIC_SLOT` | `same` | Critic backend: `same` (shared `companion_fast` / mock rules). `secondary` → `critic_small` via llama.cpp HTTP when slot enabled — see [docs/llamacpp-critic-slot.md](docs/llamacpp-critic-slot.md) (manual A770 smoke: [phi4-critic-smoke-results.md](docs/phi4-critic-smoke-results.md)) |

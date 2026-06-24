@@ -82,6 +82,7 @@ def test_openvino_rejects_overlong_input(openvino_settings):
         critic_timeout_seconds=openvino_settings.critic_timeout_seconds,
         critic_heavy=openvino_settings.critic_heavy,
         debug_thinking_trace=openvino_settings.debug_thinking_trace,
+        critic_context_max_chars=openvino_settings.critic_context_max_chars,
         real_model_bench_enabled=openvino_settings.real_model_bench_enabled,
     )
     provider = OpenVinoProvider(openvino_settings)

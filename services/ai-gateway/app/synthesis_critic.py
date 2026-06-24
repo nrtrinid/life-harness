@@ -11,6 +11,7 @@ from app.backends.llamacpp_backend import (
     build_llamacpp_backend_for_critic,
 )
 from app.config import Settings, get_settings
+from app.critic_contract import normalize_synthesis_critique
 from app.models import CardState, LifeArea, WarmthLevel
 from app.prompt_loader import build_synthesis_critic_prompt
 from app.providers.base import ProviderParseError, parse_strict_json, sanitize_raw_lab_text
@@ -220,33 +221,29 @@ class MockSynthesisCriticBackend:
 
         needs_revision = bool(shallow_flags or missing or avoidance or contradictions)
         if not needs_revision:
-            return (
-                SynthesisCritique(
-                    shallow_flags=[],
-                    missing=[],
-                    avoidance=[],
-                    contradictions=[],
-                    overall="pass",
-                ),
-                [],
+            critique = SynthesisCritique(
+                shallow_flags=[],
+                missing=[],
+                avoidance=[],
+                contradictions=[],
+                overall="pass",
             )
+            return normalize_synthesis_critique(critique), []
 
-        return (
-            SynthesisCritique(
+        critique = SynthesisCritique(
+            shallow_flags=shallow_flags,
+            missing=missing,
+            avoidance=avoidance,
+            contradictions=contradictions,
+            overall="revise",
+            revision_brief=_build_revision_brief(
                 shallow_flags=shallow_flags,
                 missing=missing,
                 avoidance=avoidance,
                 contradictions=contradictions,
-                overall="revise",
-                revision_brief=_build_revision_brief(
-                    shallow_flags=shallow_flags,
-                    missing=missing,
-                    avoidance=avoidance,
-                    contradictions=contradictions,
-                ),
             ),
-            [],
         )
+        return normalize_synthesis_critique(critique), []
 
 
 class LlamaCppSynthesisCriticBackend:
@@ -290,8 +287,11 @@ class LlamaCppSynthesisCriticBackend:
                     context_block=context_block,
                     draft=draft,
                 )
-                return critique, ["Critic JSON parse failed; mock rules critic used."]
-            return critique, []
+                return (
+                    normalize_synthesis_critique(critique),
+                    ["Critic JSON parse failed; mock rules critic used."],
+                )
+            return normalize_synthesis_critique(critique), []
         except LlamaCppError as exc:
             logger.warning("synthesis critic llamacpp failed: %s", exc)
             critique, _ = self._fallback.critique_draft(
@@ -299,7 +299,10 @@ class LlamaCppSynthesisCriticBackend:
                 context_block=context_block,
                 draft=draft,
             )
-            return critique, ["Critic runtime llamacpp unavailable; mock rules critic used."]
+            return (
+                normalize_synthesis_critique(critique),
+                ["Critic runtime llamacpp unavailable; mock rules critic used."],
+            )
         except Exception as exc:
             logger.warning("synthesis critic unexpected failure: %s", exc)
             critique, _ = self._fallback.critique_draft(
@@ -307,7 +310,10 @@ class LlamaCppSynthesisCriticBackend:
                 context_block=context_block,
                 draft=draft,
             )
-            return critique, ["Critic runtime failed unexpectedly; mock rules critic used."]
+            return (
+                normalize_synthesis_critique(critique),
+                ["Critic runtime failed unexpectedly; mock rules critic used."],
+            )
 
     def critique_draft(
         self,
@@ -339,8 +345,9 @@ def run_synthesis_critique(
     draft: DeepSynthesisCompletedBody,
     settings: Settings | None = None,
 ) -> tuple[SynthesisCritique, list[str]]:
-    return get_synthesis_critic_backend(settings).critique_draft(
+    critique, notes = get_synthesis_critic_backend(settings).critique_draft(
         request=request,
         context_block=context_block,
         draft=draft,
     )
+    return normalize_synthesis_critique(critique), notes
