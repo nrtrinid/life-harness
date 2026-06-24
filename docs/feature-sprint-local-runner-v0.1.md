@@ -2,9 +2,21 @@
 
 ## What this adds
 
-An optional localhost runner bridge that executes Feature Sprint **scoping** and **review** packets, then fills the existing Card Detail import textareas. The user still clicks **Import plan** / **Import review verdict** manually.
+An optional localhost runner bridge that executes Feature Sprint packets from the **next-job selector** (`buildNextFeatureSprintJob` → `prepareFeatureSprintRunnerJob`), then fills import textareas or copies packets for manual providers. The user still clicks **Import**, **Save**, **Approve**, and **Advance** manually.
 
-Goal in one sentence: **run scoping/review packets locally, fill the import textareas, and require the user to import manually.**
+Goal in one sentence: **consume the headless next job, run or prepare the matching provider packet, stage output, and keep every trust gate manual.**
+
+### Builder readiness next-job button
+
+One button in Card Detail → Backroom → Feature Sprint (label depends on mode):
+
+| Label | When |
+|-------|------|
+| **Run next job** | Runner-eligible job and localhost runner available |
+| **Prepare next job** | Manual/chatgpt fallback or packet-only actions (e.g. localization, spec-update prepare) |
+| **Show next gate** | Human-only gates (approve, import existing output, advance, adopt, complete) |
+
+`testID`: `feature-sprint-next-job`. Existing per-step Run/Copy buttons remain.
 
 ## Why planner/reviewer automation comes first
 

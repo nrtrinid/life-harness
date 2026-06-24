@@ -189,6 +189,17 @@ ready → localizing → prompt_auditing → implementing → proof_pending → 
 - Orchestrator mutations sync `currentSlice.phase`; `automationPhase` stays for backward compat. Advance/adopt remain manual gates.
 - Dogfood `buildNextAction` delegates to the job selector with legacy fallback.
 
+### Provider-runner next-job bridge
+
+[`src/core/featureSprintRunnerJob.ts`](../src/core/featureSprintRunnerJob.ts) connects `buildNextFeatureSprintJob` to optional localhost runner execution and packet preparation:
+
+- `prepareFeatureSprintRunnerJob` — resolves next job, builds provider-ready `inputPacket`, maps role/fence/gates
+- `executeFeatureSprintRunnerJob` — narrow executor (request in, output text out); **no UI staging or state mutations**
+- UI **Builder readiness** button (mode-aware): **Run next job** / **Prepare next job** / **Show next gate**
+- Provider-agnostic (`manual`, `cursor`, `chatgpt`, `codex`, `local`); **Codex is optional**
+- `import_spec_update` prepares a `feature-spec-update` architect packet only — the action name reflects the downstream human import gate, not runner import behavior
+- Manual import, save, approve, and advance gates remain mandatory
+
 Later items:
 
 - Streaming partial runner output to UI
@@ -200,6 +211,6 @@ Later items:
 
 ## Core module
 
-Logic lives in [`src/core/featureSprintOrchestrator.ts`](../src/core/featureSprintOrchestrator.ts) and [`src/core/featureSprintCurrentSlice.ts`](../src/core/featureSprintCurrentSlice.ts).
+Logic lives in [`src/core/featureSprintOrchestrator.ts`](../src/core/featureSprintOrchestrator.ts), [`src/core/featureSprintCurrentSlice.ts`](../src/core/featureSprintCurrentSlice.ts), and [`src/core/featureSprintRunnerJob.ts`](../src/core/featureSprintRunnerJob.ts).
 
-Tests: [`src/core/featureSprintOrchestrator.test.ts`](../src/core/featureSprintOrchestrator.test.ts), [`src/core/featureSprintCurrentSlice.test.ts`](../src/core/featureSprintCurrentSlice.test.ts).
+Tests: [`src/core/featureSprintOrchestrator.test.ts`](../src/core/featureSprintOrchestrator.test.ts), [`src/core/featureSprintCurrentSlice.test.ts`](../src/core/featureSprintCurrentSlice.test.ts), [`src/core/featureSprintRunnerJob.test.ts`](../src/core/featureSprintRunnerJob.test.ts).

@@ -53,6 +53,13 @@ import {
   formatFeatureSprintSlicePhaseLabel,
   resolveFeatureSprintCurrentSlice
 } from "../../src/core/featureSprintCurrentSlice";
+import {
+  getFeatureSprintRunnerJobStagingTarget,
+  prepareFeatureSprintRunnerJob,
+  resolveFeatureSprintNextJobButtonLabel,
+  resolveFeatureSprintNextJobButtonMode,
+  type FeatureSprintRunnerJobStagingTarget
+} from "../../src/core/featureSprintRunnerJob";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
   buildFeatureSprintDogfoodSummary,
@@ -340,6 +347,7 @@ export default function CardDetailScreen() {
   const [isRunningPromptAudit, setIsRunningPromptAudit] = useState(false);
   const [isNormalizingProof, setIsNormalizingProof] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
+  const [isRunningNextJob, setIsRunningNextJob] = useState(false);
   const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
   const [forceCleanEligibleRunId, setForceCleanEligibleRunId] = useState<string | null>(null);
   const [cleaningRunId, setCleaningRunId] = useState<string | null>(null);
@@ -476,6 +484,18 @@ export default function CardDetailScreen() {
         runnerAgent
       }),
     [lifeHarnessData, card?.id, id, runnerHealth, runnerHealthProbe, runnerAgent]
+  );
+  const nextJobButtonMode = useMemo(
+    () =>
+      resolveFeatureSprintNextJobButtonMode(featureSprintDogfood.nextJob, {
+        preferredAgent: runnerAgent,
+        runnerHealth
+      }),
+    [featureSprintDogfood.nextJob, runnerAgent, runnerHealth]
+  );
+  const nextJobButtonLabel = useMemo(
+    () => resolveFeatureSprintNextJobButtonLabel(nextJobButtonMode),
+    [nextJobButtonMode]
   );
   const warmth = card ? computeCardWarmth(card, logs, new Date()) : undefined;
 
@@ -1419,6 +1439,126 @@ export default function CardDetailScreen() {
     }
   }
 
+  function stagePreparedRunnerPacket(
+    target: FeatureSprintRunnerJobStagingTarget,
+    text: string
+  ): boolean {
+    switch (target) {
+      case "plan":
+        setPlanImportText(text);
+        return true;
+      case "localization":
+        setLocalizationImportText(text);
+        return true;
+      case "prompt_audit":
+        setPromptAuditImportText(text);
+        return true;
+      case "review":
+        setReviewImportText(text);
+        return true;
+      case "spec_update":
+        setSpecUpdateImportText(text);
+        return true;
+      case "implementation":
+      case "none":
+      default:
+        return false;
+    }
+  }
+
+  async function handleRunNextJob() {
+    if (isRunningNextJob) {
+      return;
+    }
+
+    const prepared = prepareFeatureSprintRunnerJob(lifeHarnessData, cardId, {
+      preferredAgent: runnerAgent,
+      runnerHealth,
+      roughSpec: featureSpecText,
+      agentOutput: agentOutputText
+    });
+
+    if (!prepared.ok) {
+      if (prepared.reason === "human_required" && prepared.job) {
+        showNotice(
+          "warning",
+          prepared.job.checklist.join(" ") || featureSprintDogfood.nextAction.detail
+        );
+        return;
+      }
+      showNotice("warning", prepared.error ?? "No runnable next job for the runner bridge.");
+      return;
+    }
+
+    const { job, request } = prepared;
+    const mode = resolveFeatureSprintNextJobButtonMode(job, {
+      preferredAgent: runnerAgent,
+      runnerHealth
+    });
+
+    if (mode === "human_gate") {
+      showNotice("warning", job.checklist.join(" ") || featureSprintDogfood.nextAction.detail);
+      return;
+    }
+
+    if (mode === "runner") {
+      switch (job.action) {
+        case "run_scoping":
+          await handleRunScoping();
+          return;
+        case "copy_implementation":
+          await handleRunImplementationInWorktree();
+          return;
+        case "copy_review":
+          await handleRunReview();
+          return;
+        case "copy_prompt_audit":
+          await handleRunPromptAudit();
+          return;
+        default:
+          break;
+      }
+    }
+
+    setIsRunningNextJob(true);
+    try {
+      const target = getFeatureSprintRunnerJobStagingTarget(job.action);
+      const copyActions = new Set([
+        "copy_localization",
+        "copy_prompt_audit",
+        "copy_implementation",
+        "copy_review",
+        "import_spec_update"
+      ]);
+
+      if (copyActions.has(job.action) && canCopyTextToClipboard()) {
+        const copied = await copyTextToClipboard(request.inputPacket);
+        if (copied) {
+          showNotice(
+            "success",
+            `${job.label} packet copied. Paste into your provider, then import/save manually in Backroom.`
+          );
+          return;
+        }
+      }
+
+      if (stagePreparedRunnerPacket(target, request.inputPacket)) {
+        showNotice(
+          "success",
+          `${job.label} prepared and staged. Import/save/advance still require your click.`
+        );
+        return;
+      }
+
+      showNotice(
+        "warning",
+        `${job.label} prepared. Use the existing manual controls below to continue.`
+      );
+    } finally {
+      setIsRunningNextJob(false);
+    }
+  }
+
   async function handleCleanWorktree(run: HarnessFeatureSprintRunnerRun, force: boolean) {
     if (!run.worktreePath?.trim() || cleaningRunId) {
       return;
@@ -1775,6 +1915,24 @@ export default function CardDetailScreen() {
             Next: {featureSprintDogfood.nextAction.label}
           </Text>
           <Text style={styles.bodyText}>{featureSprintDogfood.nextAction.detail}</Text>
+          {featureSprintDogfood.nextJob ? (
+            <Text style={[styles.helpText, { marginTop: 6 }]}>
+              Job: {featureSprintDogfood.nextJob.action} · {featureSprintDogfood.nextJob.role} ·{" "}
+              {featureSprintDogfood.nextJob.expectedOutputFence ?? "no fence"}
+              {featureSprintDogfood.nextJob.requiresHumanImport ? " · import required" : ""}
+              {featureSprintDogfood.nextJob.requiresHumanApproval ? " · approval required" : ""}
+            </Text>
+          ) : null}
+          <Pressable
+            style={[styles.secondaryAction, { marginTop: 10, opacity: isRunningNextJob ? 0.6 : 1 }]}
+            disabled={isRunningNextJob}
+            onPress={() => {
+              void handleRunNextJob();
+            }}
+            testID="feature-sprint-next-job"
+          >
+            <Text style={styles.secondaryActionText}>{nextJobButtonLabel}</Text>
+          </Pressable>
           <View style={{ gap: 6, marginTop: 8 }}>
             {featureSprintDogfood.checks.map((check) => (
               <View key={check.id} style={{ gap: 2 }}>

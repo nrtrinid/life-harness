@@ -1,6 +1,6 @@
 # Feature Sprint v2: Living Spec Loop / Web Architect Mode
 
-> **Status:** **Mid-v2 — partially shipped.** v0.1 step-based loop remains supported. Living spec, handoffs, localization, prompt audit, proof normalizer, spec update, and next-slice adoption are landed or mostly landed. **Slice B (`currentSlice` + phase machine) shipped headless.** Next Handoff UI still planned.
+> **Status:** **Mid-v2 — partially shipped.** v0.1 step-based loop remains supported. Living spec, handoffs, localization, prompt audit, proof normalizer, spec update, and next-slice adoption are landed or mostly landed. **Slice B (`currentSlice` + phase machine) and first provider-runner next-job bridge shipped headless.** Next Handoff UI still planned.
 > **Purpose:** Define the evolution of card-anchored feature work — frontier architect maintains spec and judgment, Cursor maintains repo truth, Life Harness maintains protocol and proof. **Codex is optional**, not required.
 > **Authority:** Product boundaries still follow [`../01_final_design_doc.md`](../01_final_design_doc.md), [`../02_v0_1_scope.md`](../02_v0_1_scope.md), and root [`AGENTS.md`](../../AGENTS.md).
 

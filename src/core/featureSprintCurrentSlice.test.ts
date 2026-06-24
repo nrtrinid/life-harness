@@ -16,6 +16,7 @@ import {
   mapFeatureSprintNextJobToDogfoodAction,
   resolveFeatureSprintCurrentSlice
 } from "./featureSprintCurrentSlice";
+import { buildFeatureSprintRunnerJobRequest } from "./featureSprintRunnerJob";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type {
   HarnessFeatureSprintPlan,
@@ -325,6 +326,40 @@ describe("featureSprintCurrentSlice", () => {
       checklist: ["Paste localization output, then import."]
     });
     expect(mapped.kind).toBe("manual");
+  });
+
+  it("builds runner job request from phased next job", () => {
+    const plan = fixturePlan({
+      currentSlice: {
+        id: "slice-1",
+        title: "Core module",
+        status: "active",
+        phase: "implementing",
+        source: "planned_step",
+        linkedStepId: "step-1",
+        createdAt: FIXED_NOW_ISO,
+        updatedAt: FIXED_NOW_ISO
+      }
+    });
+    const job = buildNextFeatureSprintJob(
+      baseData({ featureSprintPlans: [plan] }),
+      CARD_ID,
+      { runnerHealth: "available" }
+    );
+    expect(job?.action).toBe("copy_implementation");
+
+    const built = buildFeatureSprintRunnerJobRequest(
+      baseData({ featureSprintPlans: [plan] }),
+      CARD_ID,
+      job!,
+      { runnerHealth: "available", preferredAgent: "codex" }
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) {
+      return;
+    }
+    expect(built.request.inputPacket.length).toBeGreaterThan(50);
+    expect(built.request.runnerProfile).toBe("codex_implementation");
   });
 
   it("persists currentSlice phase through approve spec on imported plan", () => {

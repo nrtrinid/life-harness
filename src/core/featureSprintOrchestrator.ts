@@ -2684,6 +2684,99 @@ export function buildFeatureStepReviewPacket(
   return { ok: true, markdown: lines.join("\n").trimEnd() };
 }
 
+/**
+ * Architect handoff for living-spec updates after an accepted review.
+ * The downstream job action may be `import_spec_update` — that names the human import gate, not runner import behavior.
+ */
+export function buildFeatureStepSpecUpdatePacket(
+  data: LifeHarnessData,
+  planId: string,
+  stepId?: string,
+  options: { now?: Date } = {}
+): FeaturePacketBuildResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+
+  const step = resolvePlanStep(plan, stepId);
+  if (!step) {
+    return { ok: false, error: "No current step resolved for spec update packet." };
+  }
+
+  const slice = resolveFeatureSprintCurrentSlice(plan, step);
+  const project = buildProjectContextForCard(data, plan.cardId);
+
+  const lines: string[] = [
+    `# Feature Spec Update Packet — ${step.title}`,
+    "",
+    "## Purpose",
+    "You are the architect/spec updater. Revise the living feature spec after the accepted slice.",
+    "Return prose plus a fenced `feature-spec-update` JSON block only.",
+    "Life Harness will import manually — do not assume auto-import.",
+    ""
+  ];
+
+  if (plan.featureSpec?.body?.trim()) {
+    lines.push(...formatApprovedFeatureSpecPacketSection(plan.featureSpec));
+  }
+
+  lines.push(
+    "## Completed slice",
+    `- Title: ${step.title}`,
+    `- Goal: ${step.goal}`,
+    `- Review: ${step.reviewStatus ?? step.reviewVerdict ?? "(accepted — see plan state)"}`,
+    ""
+  );
+
+  if (slice) {
+    lines.push(`- Slice phase: ${slice.phase}`, "");
+  }
+
+  if (step.outputSummary?.trim()) {
+    lines.push("## Implementation summary", step.outputSummary.trim(), "");
+  }
+
+  if (project?.verificationCommands?.length) {
+    lines.push(...formatBulletSection("## Verification commands", project.verificationCommands));
+  }
+
+  lines.push(
+    "## Required response",
+    "Return a single fenced block labeled `feature-spec-update` with:",
+    "- revisedSpec (full updated spec body)",
+    "- changelog",
+    "- completedSliceSummary",
+    "- remainingWork",
+    "- optional nextSlice proposal",
+    "- featureComplete boolean",
+    "",
+    "## Example fenced block",
+    "```feature-spec-update",
+    JSON.stringify(
+      {
+        revisedSpec: "Updated living spec body...",
+        changelog: ["Slice completed"],
+        completedSliceSummary: "What shipped in this slice.",
+        remainingWork: ["Next slice work"],
+        nextSlice: {
+          title: "Next slice",
+          goal: "Continue",
+          acceptanceCriteria: ["Done"],
+          nonGoals: [],
+          riskTier: "normal"
+        },
+        featureComplete: false
+      },
+      null,
+      2
+    ),
+    "```"
+  );
+
+  return { ok: true, markdown: lines.join("\n").trimEnd() };
+}
+
 export function applyCreateFeatureSprintPlanForCard(
   state: LifeHarnessData,
   input: FeatureSprintPlanCreateInput,
