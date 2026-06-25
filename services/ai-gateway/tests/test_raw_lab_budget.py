@@ -54,6 +54,7 @@ def _settings(
         debug_thinking_trace=False,
         critic_context_max_chars=1800,
         real_model_bench_enabled=False,
+        memory_rag_enabled=False,
     )
 
 

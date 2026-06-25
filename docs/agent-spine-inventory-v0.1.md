@@ -167,7 +167,7 @@ Status labels are honest: **implemented**, **partial**, **stale**, **doc_only**.
 ## Known gaps (not fixed in v0.1)
 
 - **InferenceOrchestrator** routes only `/chat-harness`; Raw Lab and Deep Synthesis call providers directly.
-- **`stretch_batch`**, **`coder_daily`**, **`memory_embed`** slots catalogued but disabled by default; no `/ai/code-*` endpoints. A retrieval seam exists in gateway (`app/retrieval/embedding_slot.py`), but embeddings are not executed yet.
+- **`stretch_batch`**, **`coder_daily`**, **`memory_embed`** slots catalogued but disabled by default; no `/ai/code-*` endpoints. A retrieval seam exists in gateway (`app/retrieval/embedding_slot.py`), but embeddings are not executed yet. Mock memory/RAG spine (`app/retrieval/`) is library/test-only; `SCOUT_MEMORY_RAG_ENABLED` enables **mock token-overlap ranking only** — not real retrieval or chat wiring — see [`local-memory-rag-spine-v0.1.md`](local-memory-rag-spine-v0.1.md).
 - **No unified AgentRun log** across gateway jobs, Feature Sprint runs, and Companion sends.
 - **Raw Lab** lacks S3 sensitivity gate (commented TODO in gateway `main.py`).
 - **RTK Query network layer** remains doc-only ([`plans/agent-ergonomics-rtk-query-upgrade-plan.md`](plans/agent-ergonomics-rtk-query-upgrade-plan.md)).

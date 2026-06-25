@@ -55,6 +55,7 @@ def _settings(**overrides) -> Settings:
         debug_thinking_trace=overrides.get("debug_thinking_trace", base.debug_thinking_trace),
         critic_context_max_chars=base.critic_context_max_chars,
         real_model_bench_enabled=base.real_model_bench_enabled,
+        memory_rag_enabled=base.memory_rag_enabled,
     )
 
 

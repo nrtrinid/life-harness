@@ -66,6 +66,9 @@ def _settings(**overrides) -> Settings:
         critic_context_max_chars=overrides.pop(
             "critic_context_max_chars", base.critic_context_max_chars
         ),
+        memory_rag_enabled=overrides.pop(
+            "memory_rag_enabled", base.memory_rag_enabled
+        ),
         **overrides,
     )
 

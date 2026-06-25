@@ -270,6 +270,8 @@ Structured deep synthesis over caller-provided board context. See [docs/plans/de
 
 **Retrieval stub (prototype):** `app/retrieval/embedding_slot.py` can probe `memory_embed` slot status (`disabled` / `unavailable_in_gateway` / `ready`). No embeddings are executed and no retrieval HTTP endpoint is exposed yet.
 
+**Memory/RAG spine (mock v0.1):** `app/retrieval/` provides typed documents, deterministic chunking, a **mock token-overlap test provider**, and bounded evidence packets. See [docs/local-memory-rag-spine-v0.1.md](../../docs/local-memory-rag-spine-v0.1.md). `SCOUT_MEMORY_RAG_ENABLED=false` by default; enabling it does **not** turn on real RAG and does **not** wire into Chat Harness.
+
 **Sensitivity:** `S3` rejected with HTTP 422 before provider or job creation.
 
 **OpenVINO fast path:** Single structured JSON prompt (`app/prompts/deep_synthesis_fast_only.md`). Parse failure, timeout, or verifier rejection returns HTTP 200 with a valid degraded deterministic fallback (`degraded_notes` explains why) — not HTTP 502.
@@ -456,6 +458,7 @@ Requirements: gateway and llama-server must already be running; model files are 
 | `SCOUT_LLAMA_TIMEOUT_SECONDS` | `60` | HTTP timeout for llama.cpp critic calls |
 | `SCOUT_LLAMA_API_KEY` | *(unset)* | Optional Bearer token for llama-server |
 | `SCOUT_CHAT_HARNESS_NATIVE_CHAT` | `false` | Experimental native chat template for Chat Harness (OpenVINO). When enabled, fast/deliberate uses native chat; deep mode uses native chat for the **initial draft only** (critic + optional revision remain single-prompt). |
+| `SCOUT_MEMORY_RAG_ENABLED` | `false` | **Mock-only** memory/RAG spine (`app/retrieval/`). Does **not** enable real retrieval or embeddings. When `true`, runs deterministic token-overlap test ranking via `retrieve_memory_evidence()` only — still **not wired into Chat Harness** or any HTTP route. |
 
 ## Privacy
 
