@@ -159,6 +159,7 @@ These are gateway-internal **structural seams** (no model swaps, no app dependen
 - **Stretch seam (PR-5)**: `with_stretch` jobs probe `stretch_batch` and expose optional `stretch_slot_status` as **operational metadata only** (slot availability/wiring state — not output quality). Still mock-simulated; no real stretch inference yet.
 - **Retrieval stub (PR-6)**: `services/ai-gateway/app/retrieval/embedding_slot.py` resolves `memory_embed` to `disabled`/`unavailable_in_gateway`/`ready` without running embeddings or exposing a retrieval HTTP endpoint.
 - **Eval hardening (PR-7)**: `services/ai-gateway/evals/thread/critic_evidence_coverage.json` + scorer `critic_evidence_sections_present` guard critic-evidence **section presence/structure** in CI (`pytest tests/test_thread_eval_fixtures.py -q`); they do not score real OpenVINO critic quality. OpenVINO thread eval (`scripts/run_thread_eval.py`) remains manual.
+- **Memory/RAG spine (mock v0.1)**: [`local-memory-rag-spine-v0.1.md`](./local-memory-rag-spine-v0.1.md) — typed chunk/retrieve/evidence pipeline in `services/ai-gateway/app/retrieval/`; `SCOUT_MEMORY_RAG_ENABLED=false` by default. Enabling the flag turns on **mock token-overlap ranking only** — not real retrieval, not embeddings, not Chat Harness wiring.
 
 ## Manual dev loop (Ask)
 

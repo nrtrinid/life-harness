@@ -84,6 +84,7 @@ def test_openvino_rejects_overlong_input(openvino_settings):
         debug_thinking_trace=openvino_settings.debug_thinking_trace,
         critic_context_max_chars=openvino_settings.critic_context_max_chars,
         real_model_bench_enabled=openvino_settings.real_model_bench_enabled,
+        memory_rag_enabled=openvino_settings.memory_rag_enabled,
     )
     provider = OpenVinoProvider(openvino_settings)
     request = AnalyzeTranscriptRequest(
@@ -137,6 +138,7 @@ def test_openvino_native_chat_used_for_deep_draft_only(openvino_settings, monkey
         debug_thinking_trace=openvino_settings.debug_thinking_trace,
         critic_context_max_chars=openvino_settings.critic_context_max_chars,
         real_model_bench_enabled=openvino_settings.real_model_bench_enabled,
+        memory_rag_enabled=openvino_settings.memory_rag_enabled,
     )
     provider = OpenVinoProvider(openvino_settings)
     monkeypatch.setattr(provider, "_ensure_pipeline", lambda: None)

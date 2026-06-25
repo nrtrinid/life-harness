@@ -149,6 +149,8 @@ class Settings:
 
     real_model_bench_enabled: bool
 
+    memory_rag_enabled: bool
+
     @classmethod
 
     def from_env(cls) -> "Settings":
@@ -269,6 +271,8 @@ class Settings:
             ),
 
             real_model_bench_enabled=_env_flag("SCOUT_REAL_MODEL_BENCH", False),
+
+            memory_rag_enabled=_env_flag("SCOUT_MEMORY_RAG_ENABLED", False),
 
         )
 
