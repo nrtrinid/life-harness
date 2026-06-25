@@ -161,6 +161,7 @@ Fixtures live in `evals/thread/`:
 - `raw_lab_no_board_access.json`
 - `personality_growth.json`
 - `style_steering.json`
+- `critic_evidence_coverage.json` — CI guard for `### Critic evidence` section presence/structure (not OpenVINO critic quality)
 
 Run against mock (no live server required):
 
@@ -265,7 +266,9 @@ Structured deep synthesis over caller-provided board context. See [docs/plans/de
 - `pipeline_profile=fast_only` (or `auto`): sync completion — mock when `SCOUT_PROVIDER=mock`, OpenVINO companion_fast when `SCOUT_PROVIDER=openvino`.
 - `pipeline_profile=with_critic` or `with_stretch`: returns `status: queued` with `job_id` + `poll_url` (poll via `GET /ai/jobs/{job_id}`).
 
-**Stretch seam (prototype):** `with_stretch` is still mock-simulated in this gateway version. The job result includes optional `stretch_slot_status` (`slot_unavailable` vs `slot_ready_not_wired`) to indicate whether `stretch_batch` was available, without making real stretch inference calls yet.
+**Stretch seam (prototype):** `with_stretch` is still mock-simulated in this gateway version. The job result includes optional `stretch_slot_status` (`slot_unavailable` vs `slot_ready_not_wired`) as **operational metadata only** — it reports slot availability/wiring state, not synthesis quality. No real `stretch_batch` inference calls yet.
+
+**Retrieval stub (prototype):** `app/retrieval/embedding_slot.py` can probe `memory_embed` slot status (`disabled` / `unavailable_in_gateway` / `ready`). No embeddings are executed and no retrieval HTTP endpoint is exposed yet.
 
 **Sensitivity:** `S3` rejected with HTTP 422 before provider or job creation.
 

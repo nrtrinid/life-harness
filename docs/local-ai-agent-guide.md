@@ -150,15 +150,15 @@ Typed boundaries: `services/ai-gateway/app/models.py` (gateway), `src/core/types
 
 ### Deep-lane foundations (PR-1 to PR-7)
 
-These are gateway-internal structural improvements (no model swaps, no app dependency changes):
+These are gateway-internal **structural seams** (no model swaps, no app dependency changes, default behavior unchanged):
 
 - **Critic evidence packet + budget (PR-1)**: deep critic sees `### Critic evidence` (thread/packet signals) and uses `SCOUT_CRITIC_CONTEXT_MAX_CHARS`.
 - **Depth routing registry (PR-2)**: authoritative mapping lives in `services/ai-gateway/app/orchestrator/depth_routing.py` (`resolve_depth_route`).
 - **Unified critic contract seam (PR-3)**: adapters/types in `services/ai-gateway/app/critic_contract.py` normalize Chat/Synthesis/RawLab verdicts.
 - **Native chat deep alignment (PR-4)**: when `SCOUT_CHAT_HARNESS_NATIVE_CHAT=true`, deep mode uses native chat for **initial draft only**; critic + revision remain single-prompt (`services/ai-gateway/app/chat_harness_draft_generate.py`).
-- **Stretch seam (PR-5)**: `with_stretch` jobs probe `stretch_batch` and expose optional `stretch_slot_status` (still mock-simulated; no real stretch inference yet).
-- **Retrieval stub (PR-6)**: `services/ai-gateway/app/retrieval/embedding_slot.py` resolves `memory_embed` to `disabled`/`unavailable_in_gateway`/`ready` without running embeddings.
-- **Eval hardening (PR-7)**: `services/ai-gateway/evals/thread/critic_evidence_coverage.json` + scorer `critic_evidence_sections_present` ensure critic-evidence rendering stays covered in CI (`pytest tests/test_thread_eval_fixtures.py -q`).
+- **Stretch seam (PR-5)**: `with_stretch` jobs probe `stretch_batch` and expose optional `stretch_slot_status` as **operational metadata only** (slot availability/wiring state — not output quality). Still mock-simulated; no real stretch inference yet.
+- **Retrieval stub (PR-6)**: `services/ai-gateway/app/retrieval/embedding_slot.py` resolves `memory_embed` to `disabled`/`unavailable_in_gateway`/`ready` without running embeddings or exposing a retrieval HTTP endpoint.
+- **Eval hardening (PR-7)**: `services/ai-gateway/evals/thread/critic_evidence_coverage.json` + scorer `critic_evidence_sections_present` guard critic-evidence **section presence/structure** in CI (`pytest tests/test_thread_eval_fixtures.py -q`); they do not score real OpenVINO critic quality. OpenVINO thread eval (`scripts/run_thread_eval.py`) remains manual.
 
 ## Manual dev loop (Ask)
 
