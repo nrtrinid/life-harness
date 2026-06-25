@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
 
+from app.config import DEFAULT_CRITIC_CONTEXT_MAX_CHARS, Settings
 from app.context_packet import AiContextPacketWire
 from app.context_packet_render import (
     CRITIC_CONTEXT_MAX_CHARS,
@@ -8,6 +10,7 @@ from app.context_packet_render import (
     render_context_packet_sections_for_critic,
     resolve_context_bundle_for_prompt,
     resolve_critic_context_bundle_for_prompt,
+    resolve_critic_context_max_chars,
 )
 from app.models import (
     AskHarnessMode,
@@ -194,3 +197,94 @@ def test_resolve_critic_context_prefers_packet_sections():
     bundle = resolve_critic_context_bundle_for_prompt(request)
     assert "### Active cards (ranked)" in bundle
     assert "Career / Networking" in bundle
+
+
+def test_critic_context_max_chars_defaults_to_1800():
+    prior = os.environ.pop("SCOUT_CRITIC_CONTEXT_MAX_CHARS", None)
+    try:
+        settings = Settings.from_env()
+        assert settings.critic_context_max_chars == DEFAULT_CRITIC_CONTEXT_MAX_CHARS
+        assert CRITIC_CONTEXT_MAX_CHARS == 1800
+        assert resolve_critic_context_max_chars() == 1800
+    finally:
+        if prior is not None:
+            os.environ["SCOUT_CRITIC_CONTEXT_MAX_CHARS"] = prior
+
+
+def test_critic_context_respects_configured_max_chars():
+    packet = AiContextPacketWire.model_validate(
+        json.loads(PACKET_FIXTURE.read_text(encoding="utf-8"))
+    )
+    rendered = render_context_packet_sections_for_critic(packet, max_chars=500)
+    assert len(rendered) <= 500
+    assert rendered.endswith("(truncated for critic budget)")
+
+
+def test_critic_evidence_section_when_fields_present():
+    data = json.loads(PACKET_FIXTURE.read_text(encoding="utf-8"))
+    data["open_thread"]["recent_digest"] = "User asked about career avoidance twice."
+    data["open_thread"]["active_goal"] = "Pick one career move today."
+    data["open_thread"]["open_loops"] = ["Qualcomm follow-up", "networking guilt"]
+    data["open_thread"]["pinned_facts"] = ["Main quest is Life Harness v0.1."]
+    data["open_thread"]["user_steering"] = ["No productivity lectures."]
+    data["open_thread"]["do_not_repeat"] = ["you should feel guilty"]
+    data["open_thread"]["wire"]["recent_digest"] = data["open_thread"]["recent_digest"]
+    data["open_thread"]["wire"]["active_goal"] = data["open_thread"]["active_goal"]
+    data["open_thread"]["wire"]["open_loops"] = data["open_thread"]["open_loops"]
+    data["open_thread"]["wire"]["pinned_facts"] = data["open_thread"]["pinned_facts"]
+    data["open_thread"]["wire"]["user_steering"] = data["open_thread"]["user_steering"]
+    data["open_thread"]["wire"]["do_not_repeat"] = data["open_thread"]["do_not_repeat"]
+    data["companion"]["briefing_prepared"] = ["Career thread is cooling while build stays hot."]
+    packet = AiContextPacketWire.model_validate(data)
+
+    rendered = render_context_packet_sections_for_critic(packet, max_chars=3600)
+
+    assert "### Critic evidence" in rendered
+    assert "Main quest is Life Harness v0.1." in rendered
+    assert "User asked about career avoidance twice." in rendered
+    assert "No productivity lectures." in rendered
+    assert "you should feel guilty" in rendered
+    assert "Career thread is cooling while build stays hot." in rendered
+
+
+def test_critic_evidence_omitted_when_empty():
+    data = json.loads(PACKET_FIXTURE.read_text(encoding="utf-8"))
+    data["open_thread"]["recent_digest"] = ""
+    data["open_thread"]["active_goal"] = ""
+    data["open_thread"]["open_loops"] = []
+    data["open_thread"]["pinned_facts"] = []
+    data["open_thread"]["user_steering"] = []
+    data["open_thread"]["do_not_repeat"] = []
+    data["open_thread"]["wire"]["recent_digest"] = ""
+    data["open_thread"]["wire"]["active_goal"] = ""
+    data["open_thread"]["wire"]["open_loops"] = []
+    data["open_thread"]["wire"]["pinned_facts"] = []
+    data["open_thread"]["wire"]["user_steering"] = []
+    data["open_thread"]["wire"]["do_not_repeat"] = []
+    data["companion"]["briefing_title"] = None
+    data["companion"]["briefing_prepared"] = []
+    data["companion"]["briefing_detected"] = []
+    packet = AiContextPacketWire.model_validate(data)
+
+    rendered = render_context_packet_sections_for_critic(packet)
+    assert "### Critic evidence" not in rendered
+
+
+def test_legacy_critic_context_includes_evidence_from_thread_state():
+    context = HarnessContext.model_validate(
+        json.loads(CONTEXT_FIXTURE.read_text(encoding="utf-8"))
+    )
+    request = ChatHarnessRequest(
+        message="hello",
+        mode=AskHarnessMode.general,
+        sensitivity=SensitivityLevel.S1,
+        context=context,
+    )
+    request.thread_state.pinned_facts = ["Pinned: finish Qualcomm follow-up."]
+    request.thread_state.user_steering = ["Stay concrete."]
+
+    bundle = resolve_critic_context_bundle_for_prompt(request)
+
+    assert "### Critic evidence" in bundle
+    assert "Pinned: finish Qualcomm follow-up." in bundle
+    assert "Stay concrete." in bundle

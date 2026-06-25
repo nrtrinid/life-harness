@@ -1,12 +1,13 @@
 import json
 import logging
 
-from app.context_packet import AiContextPacketWire, RankedBoardCardSlice
-from app.models import CardState, ChatHarnessRequest, HarnessContext, SensitivityLevel
+from app.config import DEFAULT_CRITIC_CONTEXT_MAX_CHARS
+from app.context_packet import AiContextPacketWire, CompanionContextWire, OpenThreadContextWire, RankedBoardCardSlice
+from app.models import CardState, ChatHarnessRequest, ChatHarnessThreadState, HarnessContext, SensitivityLevel
 
 logger = logging.getLogger(__name__)
 
-CRITIC_CONTEXT_MAX_CHARS = 1800
+CRITIC_CONTEXT_MAX_CHARS = DEFAULT_CRITIC_CONTEXT_MAX_CHARS
 
 
 def _format_card_slice(slice_item: RankedBoardCardSlice) -> str:
@@ -148,12 +149,127 @@ def _truncate_critic_bundle(text: str, max_chars: int) -> str:
     return text[:keep].rstrip() + suffix
 
 
+def _clip_critic_evidence_text(text: str, max_len: int = 200) -> str:
+    stripped = text.strip()
+    if len(stripped) <= max_len:
+        return stripped
+    return stripped[: max_len - 1].rstrip() + "…"
+
+
+def _companion_briefing_snippet(companion: CompanionContextWire) -> str | None:
+    if companion.briefing_prepared:
+        return _clip_critic_evidence_text(companion.briefing_prepared[0])
+    if companion.briefing_detected:
+        return _clip_critic_evidence_text(companion.briefing_detected[0])
+    if companion.briefing_title:
+        return _clip_critic_evidence_text(companion.briefing_title)
+    return None
+
+
+def _build_critic_evidence_lines(
+    *,
+    recent_digest: str = "",
+    active_goal: str = "",
+    open_loops: list[str] | None = None,
+    pinned_facts: list[str] | None = None,
+    user_steering: list[str] | None = None,
+    do_not_repeat: list[str] | None = None,
+    companion_briefing_snippet: str | None = None,
+) -> list[str]:
+    loops = [item.strip() for item in (open_loops or []) if item.strip()]
+    facts = [
+        _clip_critic_evidence_text(item, max_len=120)
+        for item in (pinned_facts or [])
+        if item.strip()
+    ][:3]
+    steering = [
+        _clip_critic_evidence_text(item)
+        for item in (user_steering or [])
+        if item.strip()
+    ][:2]
+    banned = [
+        _clip_critic_evidence_text(item)
+        for item in (do_not_repeat or [])
+        if item.strip()
+    ][:2]
+    digest = recent_digest.strip()
+    goal = active_goal.strip()
+    briefing = (companion_briefing_snippet or "").strip()
+
+    if not any([digest, goal, loops, facts, steering, banned, briefing]):
+        return []
+
+    lines = ["", "### Critic evidence"]
+    if digest:
+        lines.append(f"- Recent digest: {_clip_critic_evidence_text(digest, max_len=300)}")
+    if goal:
+        lines.append(f"- Thread goal: {_clip_critic_evidence_text(goal)}")
+    if loops:
+        joined = ", ".join(_clip_critic_evidence_text(item, max_len=80) for item in loops[:3])
+        lines.append(f"- Open loops: {joined}")
+    if facts:
+        lines.append("- Pinned facts:")
+        lines.extend(f"  - {fact}" for fact in facts)
+    if steering:
+        lines.append("- User steering:")
+        lines.extend(f"  - {item}" for item in steering)
+    if banned:
+        lines.append("- Do not repeat:")
+        lines.extend(f"  - {item}" for item in banned)
+    if briefing:
+        lines.append(f"- Companion briefing: {briefing}")
+    return lines
+
+
+def _critic_evidence_from_open_thread(
+    thread: OpenThreadContextWire,
+    *,
+    companion_briefing_snippet: str | None = None,
+) -> list[str]:
+    wire = thread.wire
+    return _build_critic_evidence_lines(
+        recent_digest=thread.recent_digest or wire.recent_digest,
+        active_goal=thread.active_goal or wire.active_goal,
+        open_loops=thread.open_loops or wire.open_loops,
+        pinned_facts=thread.pinned_facts or wire.pinned_facts,
+        user_steering=thread.user_steering or wire.user_steering,
+        do_not_repeat=thread.do_not_repeat or wire.do_not_repeat,
+        companion_briefing_snippet=companion_briefing_snippet,
+    )
+
+
+def _critic_evidence_from_thread_state(
+    thread_state: ChatHarnessThreadState,
+    *,
+    companion_briefing_snippet: str | None = None,
+) -> list[str]:
+    return _build_critic_evidence_lines(
+        recent_digest=thread_state.recent_digest,
+        active_goal=thread_state.active_goal,
+        open_loops=thread_state.open_loops,
+        pinned_facts=thread_state.pinned_facts,
+        user_steering=thread_state.user_steering,
+        do_not_repeat=thread_state.do_not_repeat,
+        companion_briefing_snippet=companion_briefing_snippet,
+    )
+
+
+def resolve_critic_context_max_chars(max_chars: int | None = None) -> int:
+    if max_chars is not None:
+        return max_chars
+    from app.config import get_settings
+
+    return get_settings().critic_context_max_chars
+
+
 def render_context_packet_sections_for_critic(
     packet: AiContextPacketWire,
     *,
-    max_chars: int = CRITIC_CONTEXT_MAX_CHARS,
+    max_chars: int | None = None,
 ) -> str:
+    budget = resolve_critic_context_max_chars(max_chars)
     excluded_card_ids = set(packet.redaction.excluded_card_ids)
+    thread = packet.open_thread
     lines: list[str] = [
         "### User intent",
         f"- Message context: {packet.user_intent.message}",
@@ -163,6 +279,13 @@ def render_context_packet_sections_for_critic(
     if packet.user_intent.primary_action:
         action = packet.user_intent.primary_action
         lines.append(f"- Primary action: {action.title} ({action.kind}) — {action.smallest_action}")
+
+    lines.extend(
+        _critic_evidence_from_open_thread(
+            thread,
+            companion_briefing_snippet=_companion_briefing_snippet(packet.companion),
+        )
+    )
 
     lines.extend(
         [
@@ -220,44 +343,46 @@ def render_context_packet_sections_for_critic(
         for slice_item in proof:
             lines.append(f"- {slice_item.payload.summary} ({slice_item.payload.timestamp})")
 
-    thread = packet.open_thread
-    if thread.active_goal or thread.open_loops:
-        lines.extend(["", "### Thread continuity"])
-        if thread.active_goal:
-            lines.append(f"- Thread goal: {thread.active_goal}")
-        if thread.open_loops:
-            open_loops = ", ".join(thread.open_loops[:3]) or "(none)"
-            lines.append(f"- Open loops: {open_loops}")
-
-    return _truncate_critic_bundle("\n".join(lines), max_chars)
+    return _truncate_critic_bundle("\n".join(lines), budget)
 
 
-def _render_legacy_critic_context(request: ChatHarnessRequest) -> str:
+def _render_legacy_critic_context(
+    request: ChatHarnessRequest,
+    *,
+    max_chars: int | None = None,
+) -> str:
+    budget = resolve_critic_context_max_chars(max_chars)
     active = [card for card in request.context.cards if card.state == CardState.active]
     active_titles = ", ".join(card.title for card in active[:3]) or "(none)"
     lines = [
         f"Active cards ({len(active)}): {active_titles}",
-        f"Thread goal: {request.thread_state.active_goal or '(none)'}",
-        f"Open loops: {', '.join(request.thread_state.open_loops[:3]) or '(none)'}",
     ]
+    lines.extend(_critic_evidence_from_thread_state(request.thread_state))
     if request.context.recent_analyses:
         lines.append("Board diagnoses:")
         for item in request.context.recent_analyses[:2]:
             lines.append(f"- {item.summary}")
-    return "\n".join(lines)
+    return _truncate_critic_bundle("\n".join(lines), budget)
 
 
-def resolve_critic_context_bundle_for_prompt(request: ChatHarnessRequest) -> str:
+def resolve_critic_context_bundle_for_prompt(
+    request: ChatHarnessRequest,
+    *,
+    max_chars: int | None = None,
+) -> str:
     if request.context_packet is not None:
         try:
-            return render_context_packet_sections_for_critic(request.context_packet)
+            return render_context_packet_sections_for_critic(
+                request.context_packet,
+                max_chars=max_chars,
+            )
         except Exception:
             logger.warning(
                 "context_packet critic render failed; falling back to legacy context",
                 exc_info=True,
             )
 
-    return _render_legacy_critic_context(request)
+    return _render_legacy_critic_context(request, max_chars=max_chars)
 
 
 def resolve_context_bundle_for_prompt(request: ChatHarnessRequest) -> str:

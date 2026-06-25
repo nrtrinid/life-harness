@@ -80,6 +80,7 @@ def test_with_stretch_sync_queues_pollable_job(client, synthesis_payload):
     job = poll.json()
     assert job["status"] == "completed"
     assert job["result"]["pipeline_profile_used"] == "with_stretch"
+    assert job["result"]["stretch_slot_status"] == "slot_unavailable"
 
 
 def test_deep_synthesis_jobs_enqueue_response(client, synthesis_payload):
@@ -112,6 +113,24 @@ def test_get_job_returns_completed_mock_result(client, synthesis_payload):
         assert proposal["requires_approval"] is True
     for proposal in result.get("personality_proposals", []):
         assert proposal["requires_approval"] is True
+
+
+def test_with_stretch_slot_ready_not_wired_sets_status(client, synthesis_payload, monkeypatch):
+    class _FakeManager:
+        def acquire(self, _slot_id: str):
+            return object()
+
+    monkeypatch.setattr("app.slots.manager.get_slot_manager", lambda: _FakeManager())
+
+    payload = {**synthesis_payload, "pipeline_profile": "with_stretch"}
+    response = client.post("/ai/deep-synthesis", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    poll = client.get(body["poll_url"])
+    job = poll.json()
+    assert job["status"] == "completed"
+    assert job["result"]["pipeline_profile_used"] == "with_stretch"
+    assert job["result"]["stretch_slot_status"] == "slot_ready_not_wired"
 
 
 def test_unknown_job_returns_404(client):

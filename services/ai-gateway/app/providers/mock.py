@@ -548,6 +548,7 @@ class MockProvider:
     def _run_chat_harness_deep(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
         from app.chat_harness_critic import append_deep_critic_note
         from app.chat_harness_deep import run_chat_harness_deep
+        from app.chat_harness_draft_generate import build_chat_harness_deep_draft_generate
         from app.config import get_settings
         from app.critic_backend import get_critic_backend
         from app.prompt_loader import build_chat_harness_prompt
@@ -591,7 +592,7 @@ class MockProvider:
 
         simulate_draft_repair = request.message.lower().startswith("deep-draft-repair")
 
-        def draft_generate(generation_prompt: str) -> str:
+        def _generate_non_native(generation_prompt: str) -> str:
             nonlocal stored_draft
             if "Critic verdict:" in generation_prompt:
                 assert stored_draft is not None and last_verdict
@@ -605,6 +606,20 @@ class MockProvider:
             if simulate_draft_repair:
                 return "not valid json"
             return stored_draft.model_dump_json()
+
+        def _generate_native(_request: ChatHarnessRequest, _fallback_prompt: str) -> str:
+            nonlocal stored_draft
+            stored_draft = self._build_chat_harness_mock_draft(request)
+            if simulate_draft_repair:
+                return "not valid json"
+            return stored_draft.model_dump_json()
+
+        draft_generate = build_chat_harness_deep_draft_generate(
+            settings=settings,
+            request=request,
+            generate=_generate_non_native,
+            generate_native=_generate_native,
+        )
 
         draft_repair_generate = None
         if simulate_draft_repair:
@@ -930,6 +945,7 @@ class MockProvider:
     def raw_lab(self, request: RawLabRequest) -> RawLabResponse:
         from app.config import get_settings
         from app.raw_lab_budget import prepare_raw_lab_request
+        from app.raw_lab_trace import attach_raw_lab_depth_route
         from app.raw_lab_utils import (
             CODEX_PROMPT_ARTIFACT,
             HAUNTED_MANSION_CODE_SKELETON,
@@ -940,6 +956,7 @@ class MockProvider:
 
         budget = prepare_raw_lab_request(request, get_settings())
         request = budget.request
+        attach_raw_lab_depth_route(get_settings(), request)
 
         message_lower = request.message.lower()
         if request.reasoning_depth.value == "deep_plus":

@@ -23,6 +23,7 @@ from app.models import (
     ChatHarnessResponse,
     CriticCheckId,
 )
+from app.critic_contract import build_critic_evidence_packet
 from app.prompt_loader import build_chat_harness_critic_prompt
 
 logger = logging.getLogger(__name__)
@@ -42,10 +43,12 @@ class ThinkingTrace:
     parse_failures: list[str] = field(default_factory=list)
     draft_repair_attempted: bool = False
     draft_repair_succeeded: bool = False
+    critic_context_chars: int | None = None
+    critic_context_max_chars: int | None = None
     latency_ms: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "reasoning_depth": self.reasoning_depth,
             "context_packet_used": self.context_packet_used,
             "passes": list(self.passes),
@@ -60,6 +63,11 @@ class ThinkingTrace:
             "draft_repair_succeeded": self.draft_repair_succeeded,
             "latency_ms": dict(self.latency_ms),
         }
+        if self.critic_context_chars is not None:
+            payload["critic_context_chars"] = self.critic_context_chars
+        if self.critic_context_max_chars is not None:
+            payload["critic_context_max_chars"] = self.critic_context_max_chars
+        return payload
 
 def new_thinking_trace(request: ChatHarnessRequest) -> ThinkingTrace:
     return ThinkingTrace(
@@ -98,6 +106,13 @@ def _resolve_critic_target(critic: CriticBackend) -> CriticBackend:
     return critic
 
 
+def _record_critic_context_trace(trace: ThinkingTrace, request: ChatHarnessRequest) -> str:
+    evidence = build_critic_evidence_packet(request)
+    trace.critic_context_chars = evidence.char_count
+    trace.critic_context_max_chars = evidence.max_chars
+    return evidence.rendered_bundle
+
+
 def critique_draft_with_trace(
     critic: CriticBackend,
     *,
@@ -120,9 +135,11 @@ def critique_draft_with_trace(
         return verdict
 
     if isinstance(target, SameBackendCritic):
+        context_bundle = _record_critic_context_trace(trace, request)
         prompt = build_chat_harness_critic_prompt(
             request=request,
             draft_json=draft_raw,
+            context_bundle=context_bundle,
         )
         raw = target._generate(prompt)
         verdict = parse_critic_verdict(raw)
@@ -135,9 +152,11 @@ def critique_draft_with_trace(
         return verdict
 
     if isinstance(target, LlamaCppCriticBackend):
+        context_bundle = _record_critic_context_trace(trace, request)
         prompt = build_chat_harness_critic_prompt(
             request=request,
             draft_json=draft_raw,
+            context_bundle=context_bundle,
         )
         try:
             raw = target._backend.generate(prompt)

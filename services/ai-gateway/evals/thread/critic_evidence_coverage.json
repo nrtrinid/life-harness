@@ -1,0 +1,16 @@
+[
+  {
+    "name": "deep_critic_evidence_section_present_from_context_packet",
+    "endpoint": "chat-harness",
+    "message": "What am I avoiding right now?",
+    "mode": "operator",
+    "sensitivity": "S1",
+    "reasoning_depth": "deep",
+    "context_packet": "__fixture__:synthetic_context_packet",
+    "expect_schema": "ChatHarnessResponse",
+    "heuristic_checks": [
+      "deep_critic_signal_ok",
+      "critic_evidence_sections_present"
+    ]
+  }
+]

@@ -52,6 +52,7 @@ def _settings(
         critic_timeout_seconds=30.0,
         critic_heavy=False,
         debug_thinking_trace=False,
+        critic_context_max_chars=1800,
         real_model_bench_enabled=False,
     )
 

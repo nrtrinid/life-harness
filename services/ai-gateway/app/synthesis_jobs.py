@@ -46,6 +46,7 @@ def create_deep_synthesis_job(
         _job_id_for_request,
         build_mock_deep_synthesis_result,
         run_with_critic_pipeline,
+        run_with_stretch_pipeline,
     )
     from app.synthesis_models import SynthesisPipelineProfile
 
@@ -53,6 +54,8 @@ def create_deep_synthesis_job(
     created_at = _utc_now_iso()
     if request.pipeline_profile == SynthesisPipelineProfile.with_critic:
         result = run_with_critic_pipeline(request)
+    elif request.pipeline_profile == SynthesisPipelineProfile.with_stretch:
+        result = run_with_stretch_pipeline(request)
     else:
         result = build_mock_deep_synthesis_result(request)
 

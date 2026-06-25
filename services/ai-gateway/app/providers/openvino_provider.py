@@ -240,6 +240,7 @@ class OpenVinoProvider:
     def _run_chat_harness_deep(self, request: ChatHarnessRequest) -> ChatHarnessResponse:
         from app.chat_harness_critic import append_deep_critic_note
         from app.chat_harness_deep import run_chat_harness_deep
+        from app.chat_harness_draft_generate import build_chat_harness_deep_draft_generate
         from app.chat_harness_repair import build_chat_harness_draft_repair_prompt
         from app.critic_backend import get_critic_backend
 
@@ -259,7 +260,12 @@ class OpenVinoProvider:
         deep_result = run_chat_harness_deep(
             request=request,
             prompt=prompt,
-            draft_generate=self._generate,
+            draft_generate=build_chat_harness_deep_draft_generate(
+                settings=self._settings,
+                request=request,
+                generate=self._generate,
+                generate_native=self._generate_chat_harness_native,
+            ),
             draft_repair_generate=lambda broken: self._generate(
                 build_chat_harness_draft_repair_prompt(broken)
             ),
@@ -369,6 +375,7 @@ class OpenVinoProvider:
         self._ensure_pipeline()
         from app.raw_lab_budget import prepare_raw_lab_request
         from app.raw_lab_trace import (
+            attach_raw_lab_depth_route,
             emit_raw_lab_deep_trace,
             new_raw_lab_deep_trace,
         )
@@ -382,6 +389,7 @@ class OpenVinoProvider:
             if request.reasoning_depth.value == "deep"
             else None
         )
+        attach_raw_lab_depth_route(self._settings, request, trace)
         system = budget.system_prompt
         raw_lab_limit = raw_lab_input_char_limit(self._settings)
         input_chars = estimate_raw_lab_input_chars(system=system, request=request)

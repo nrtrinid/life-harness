@@ -41,6 +41,8 @@ DEFAULT_RAW_LAB_MAX_INPUT_CHARS = 32_000
 
 DEFAULT_TIMEOUT_SECONDS = 180.0
 
+DEFAULT_CRITIC_CONTEXT_MAX_CHARS = 1800
+
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
@@ -142,6 +144,8 @@ class Settings:
     critic_heavy: bool
 
     debug_thinking_trace: bool
+
+    critic_context_max_chars: int
 
     real_model_bench_enabled: bool
 
@@ -256,6 +260,13 @@ class Settings:
             critic_heavy=_env_flag("SCOUT_CRITIC_HEAVY", False),
 
             debug_thinking_trace=_env_flag("SCOUT_DEBUG_THINKING_TRACE", False),
+
+            critic_context_max_chars=int(
+                os.getenv(
+                    "SCOUT_CRITIC_CONTEXT_MAX_CHARS",
+                    str(DEFAULT_CRITIC_CONTEXT_MAX_CHARS),
+                )
+            ),
 
             real_model_bench_enabled=_env_flag("SCOUT_REAL_MODEL_BENCH", False),
 
