@@ -90,8 +90,15 @@ describe("buildRunnerResult contradiction guard", () => {
     expect(result.resultUsability).toBe("usable");
   });
 
-  it("echoes opaque executionContext without interpreting it", () => {
-    const ctx = { mapNodeId: "story-1", opaque: true };
+  it("echoes typed executionContext without interpreting it", () => {
+    const ctx = {
+      planId: "plan-1",
+      executionModel: "sprint_map" as const,
+      sprintId: "sprint-1",
+      storyId: "story-1",
+      taskId: "task-1",
+      phase: "implement" as const
+    };
     const result = buildRunnerResult({
       ok: true,
       profile: "codex_scoping",
@@ -103,6 +110,44 @@ describe("buildRunnerResult contradiction guard", () => {
       executionContext: ctx
     });
     expect(result.executionContext).toEqual(ctx);
+  });
+
+  it("preserves runId and executionContext when rebuilding after usability assessment", () => {
+    const ctx = {
+      planId: "plan-reassess",
+      executionModel: "sprint_map" as const,
+      sprintId: "s1",
+      storyId: "st1",
+      taskId: "t1",
+      phase: "implement" as const
+    };
+    const original = buildRunnerResult({
+      ok: true,
+      profile: "cursor_implementation",
+      runnerMode: "cursor",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-01T00:00:02.000Z",
+      terminationReason: "completed",
+      outputText: "",
+      runId: "fixed-run-id",
+      executionContext: ctx
+    });
+    const rebuilt = buildRunnerResult({
+      ok: false,
+      profile: original.profile,
+      runnerMode: "cursor",
+      startedAt: original.startedAt,
+      completedAt: original.completedAt,
+      terminationReason: "completed",
+      failureClass: "empty_output",
+      resultUsability: "empty_output",
+      runId: original.runId,
+      executionContext: original.executionContext,
+      error: "empty"
+    });
+    expect(rebuilt.runId).toBe("fixed-run-id");
+    expect(rebuilt.executionContext).toEqual(ctx);
+    expect(rebuilt.ok).toBe(false);
   });
 });
 

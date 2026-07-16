@@ -639,4 +639,41 @@ describe("feature-sprint-runner", () => {
     expect(authorized.statusCode).toBe(200);
     expect(authorized.body).toMatchObject({ status: "not_found" });
   });
+
+  it("echoes typed executionContext on mock success and invalid-worktree failure", async () => {
+    const executionContext = {
+      planId: "plan-http-1",
+      executionModel: "sprint_map" as const,
+      sprintId: "sprint-1",
+      storyId: "story-1",
+      taskId: "task-1",
+      phase: "review" as const,
+      stepId: "step-1"
+    };
+
+    const success = await postRun(port, {
+      profile: "cursor_review",
+      promptMarkdown: "Review this fixture.",
+      executionContext
+    });
+    expect(success.statusCode).toBe(200);
+    expect(success.body).toMatchObject({
+      ok: true,
+      executionContext
+    });
+
+    const invalidWorktree = await postRun(port, {
+      profile: "cursor_implementation",
+      promptMarkdown: "Implement fixture.",
+      repoPath: path.join(tempRepoPath!, "does-not-exist"),
+      worktree: { enabled: true },
+      executionContext
+    });
+    expect(invalidWorktree.statusCode).toBe(500);
+    expect(invalidWorktree.body).toMatchObject({
+      ok: false,
+      terminationReason: "worktree_invalid",
+      executionContext
+    });
+  });
 });
