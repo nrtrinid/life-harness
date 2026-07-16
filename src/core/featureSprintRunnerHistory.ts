@@ -12,6 +12,7 @@ import {
 import { createId, nowIso } from "./ids";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type {
+  HarnessFeatureSprintMapPhase,
   HarnessFeatureSprintRunnerRun,
   HarnessFeatureSprintRunnerRunStatus
 } from "./types";
@@ -28,6 +29,10 @@ export type FeatureSprintRunnerRunCreateInput = {
   cardId?: string;
   planId?: string;
   stepId?: string;
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  mapPhase?: HarnessFeatureSprintMapPhase;
   repoPath?: string;
   commandPreview?: string;
   startedAt?: string;
@@ -189,6 +194,10 @@ export function createFeatureSprintRunnerRun(
     cardId: input.cardId,
     planId: input.planId,
     stepId: input.stepId,
+    sprintId: cleanOptional(input.sprintId),
+    storyId: cleanOptional(input.storyId),
+    taskId: cleanOptional(input.taskId),
+    mapPhase: input.mapPhase,
     repoPath: cleanOptional(input.repoPath),
     commandPreview: cleanOptional(input.commandPreview),
     startedAt,

@@ -1,4 +1,5 @@
 import { syncApplicationStatus } from "./career";
+import { normalizePlanSprintMapFields } from "./featureSprintMap";
 import { coerceAutomationPhase, normalizeFeatureSprintStep } from "./featureSprintOrchestrator";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { normalizeResumeModules } from "./resumeModuleBank";
@@ -56,13 +57,40 @@ export function normalizeFeatureSprintPlan(plan: HarnessFeatureSprintPlan): Harn
         }
       : undefined;
   const automationPhase = coerceAutomationPhase(plan.automationPhase);
+  const { sprintMap, executionTarget, executionModel, sprintMapNotices } =
+    normalizePlanSprintMapFields(plan);
 
-  return {
+  const next: HarnessFeatureSprintPlan = {
     ...plan,
     featureSpec,
     automationPhase,
+    executionModel,
     steps: plan.steps.map(normalizeFeatureSprintStep)
   };
+
+  if (executionModel === "legacy_steps") {
+    delete next.executionModel;
+  }
+
+  if (sprintMap) {
+    next.sprintMap = sprintMap;
+  } else {
+    delete next.sprintMap;
+  }
+
+  if (executionTarget) {
+    next.executionTarget = executionTarget;
+  } else {
+    delete next.executionTarget;
+  }
+
+  if (sprintMapNotices.length > 0) {
+    next.sprintMapNotices = sprintMapNotices;
+  } else {
+    delete next.sprintMapNotices;
+  }
+
+  return next;
 }
 
 export function normalizeFeatureSprintPlans(
