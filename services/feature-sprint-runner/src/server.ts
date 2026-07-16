@@ -104,7 +104,8 @@ function resolveHealthStatus(): {
 
 async function resolveHealthPayload() {
   const health = resolveHealthStatus();
-  const setup = await buildSetupDiagnostics();
+  // Keep /health fast: do not spawn CLI version probes (client timeout is ~3s).
+  const setup = await buildSetupDiagnostics(process.platform, { probeCli: false });
   return { ...health, setup, port: RUNNER_PORT };
 }
 

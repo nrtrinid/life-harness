@@ -20,10 +20,18 @@ Copy `services/feature-sprint-runner/.env.local.example` → `.env.local` for re
 npm run feature-runner:cursor
 ```
 
-Verify with runner running:
+Verify with runner running (or to diagnose env before start):
 
 ```bash
 npm run feature-runner:setup-check
+```
+
+Opt-in real smokes (Windows; not CI):
+
+```powershell
+npm run feature-runner:smoke:cursor
+npm run feature-runner:smoke:codex
+.\services\feature-sprint-runner\scripts\smoke_real_profiles.ps1 -Profile cursor_implementation
 ```
 
 In the app: open a card → **Backroom** → **Feature Sprint** → pick **Codex** or **Cursor** → **Check runner** → run scoping/review/implementation.
@@ -118,9 +126,49 @@ export CURSOR_API_KEY=your-cursor-api-key
 
 Profiles dispatch by prefix (`codex_*` vs `cursor_*`).
 
-Windows smoke script (manual, not CI): `services/feature-sprint-runner/scripts/smoke_cursor_real.ps1`
+Windows smoke scripts (manual, not CI):
 
-Real modes are adapter-only. Verify `codex --help` / `agent --help` on your machine before relying on flags. v0.1 CI and dogfood use mock mode only.
+- `services/feature-sprint-runner/scripts/smoke_cursor_real.ps1`
+- `services/feature-sprint-runner/scripts/smoke_codex_real.ps1`
+- `services/feature-sprint-runner/scripts/smoke_real_profiles.ps1 -Profile <name>`
+
+Real modes are adapter-only. Verify `codex exec --help` / `agent --help` on your machine before relying on flags. v0.1 CI and dogfood use mock mode only.
+
+### Phase flags (confirmed against installed CLIs)
+
+| Phase | Cursor | Codex |
+|-------|--------|-------|
+| Scoping / review | `-p --mode ask --trust --output-format text` | `exec -s read-only -` (stdin prompt) |
+| Implementation | `-p --force --trust --output-format text` | `exec -s workspace-write -` |
+
+`--mode ask` is used for read-only phases because installed CLI help marks both `ask` and `plan` as read-only, and real `plan` smokes exited 0 with empty stdout capture.
+
+Implementation workspaces must live under `FEATURE_SPRINT_WORKTREE_ROOT`. Root-checkout implementation is rejected.
+
+### Empty-output policy
+
+Process exit `0` is not the same as a usable Feature Sprint result:
+
+| Profile | Usable when |
+|---------|-------------|
+| Scoping / review / prompt_audit | Nonempty normalized stdout/stderr text |
+| Implementation | Nonempty text **or** worktree `changedFiles` |
+
+Empty/whitespace-only results keep `terminationReason=completed` but set `ok=false`, `failureClass=empty_output`, `resultUsability=empty_output`. Nothing is imported/saved/advanced.
+
+Changed-file capture uses `git diff … HEAD` (staged + unstaged) plus untracked files. Real implementation runs subtract a pre-run snapshot so preexisting dirty paths are not credited as new agent work. That is still not exact per-run authorship for content-only edits to already-dirty paths.
+
+### Opaque execution context seam (Sprint Map)
+
+Request may include optional `executionContext` (any JSON). The runner echoes it on the response and must not interpret sprint/story/task/phase relationships. Later Track A integration can stash this into runner history without changing runner semantics.
+
+### Opt-in smokes
+
+```powershell
+npm run feature-runner:smoke:cursor-content   # requires nonce in captured output
+npm run feature-runner:smoke:process-tree     # local fixture; no paid agents
+npm run feature-runner:smoke:codex            # exits 2 when blocked (not installed/enabled)
+```
 
 ## Safety
 

@@ -43,12 +43,22 @@ export function ensureCursorAgentOnPath() {
   }
 
   const agentDir = path.join(process.env.LOCALAPPDATA ?? "", "cursor-agent");
-  if (!agentDir || process.env.PATH?.includes(agentDir)) {
+  if (!agentDir) {
     return;
   }
 
-  process.env.PATH = `${process.env.PATH};${agentDir}`;
+  if (!process.env.PATH?.includes(agentDir)) {
+    process.env.PATH = `${process.env.PATH};${agentDir}`;
+  }
+
   if (!process.env.FEATURE_SPRINT_CURSOR_BIN) {
-    process.env.FEATURE_SPRINT_CURSOR_BIN = path.join(agentDir, "agent.cmd");
+    const cmdPath = path.join(agentDir, "agent.cmd");
+    const ps1Path = path.join(agentDir, "agent.ps1");
+    // Prefer .cmd — Node can spawn it via ComSpec without PowerShell.
+    if (existsSync(cmdPath)) {
+      process.env.FEATURE_SPRINT_CURSOR_BIN = cmdPath;
+    } else if (existsSync(ps1Path)) {
+      process.env.FEATURE_SPRINT_CURSOR_BIN = ps1Path;
+    }
   }
 }

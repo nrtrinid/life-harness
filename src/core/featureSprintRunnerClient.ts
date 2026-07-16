@@ -114,6 +114,101 @@ function buildFailureResponse(
   };
 }
 
+/** Minimum shape for a structured runner response (success or failure). */
+function isStructuredRunnerResponseBody(
+  body: unknown
+): body is Partial<FeatureSprintRunnerResponse> & {
+  ok: boolean;
+  profile: FeatureSprintRunnerProfile;
+  startedAt: string;
+  completedAt: string;
+} {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+  const record = body as Record<string, unknown>;
+  return (
+    typeof record.ok === "boolean" &&
+    isFeatureSprintRunnerProfile(record.profile) &&
+    typeof record.startedAt === "string" &&
+    typeof record.completedAt === "string"
+  );
+}
+
+function mapStructuredRunnerResponse(
+  body: Partial<FeatureSprintRunnerResponse> & {
+    ok: boolean;
+    profile: FeatureSprintRunnerProfile;
+    startedAt: string;
+    completedAt: string;
+  }
+): FeatureSprintRunnerResponse {
+  const changedFiles = Array.isArray(body.changedFiles)
+    ? body.changedFiles.filter((item): item is string => typeof item === "string")
+    : undefined;
+
+  const verificationResults = parseVerificationResults(body.verificationResults);
+
+  return capGitMetadataFields({
+    ok: body.ok,
+    profile: body.profile,
+    outputText: typeof body.outputText === "string" ? body.outputText : undefined,
+    error: typeof body.error === "string" ? body.error : undefined,
+    exitCode: typeof body.exitCode === "number" ? body.exitCode : undefined,
+    startedAt: body.startedAt,
+    completedAt: body.completedAt,
+    commandPreview: typeof body.commandPreview === "string" ? body.commandPreview : undefined,
+    stdoutPath: typeof body.stdoutPath === "string" ? body.stdoutPath : undefined,
+    worktreePath: typeof body.worktreePath === "string" ? body.worktreePath : undefined,
+    branchName: typeof body.branchName === "string" ? body.branchName : undefined,
+    gitStatus: typeof body.gitStatus === "string" ? body.gitStatus : undefined,
+    diffStat: typeof body.diffStat === "string" ? body.diffStat : undefined,
+    changedFiles,
+    diffText: typeof body.diffText === "string" ? body.diffText : undefined,
+    verificationResults,
+    runId: typeof body.runId === "string" ? body.runId : undefined,
+    provider:
+      body.provider === "cursor" || body.provider === "codex" ? body.provider : undefined,
+    runnerMode:
+      body.runnerMode === "mock" ||
+      body.runnerMode === "codex" ||
+      body.runnerMode === "cursor" ||
+      body.runnerMode === "real"
+        ? body.runnerMode
+        : undefined,
+    durationMs: typeof body.durationMs === "number" ? body.durationMs : undefined,
+    terminationReason:
+      typeof body.terminationReason === "string"
+        ? (body.terminationReason as FeatureSprintRunnerResponse["terminationReason"])
+        : undefined,
+    failureClass:
+      body.failureClass === "none" ||
+      body.failureClass === "agent" ||
+      body.failureClass === "runner" ||
+      body.failureClass === "environment" ||
+      body.failureClass === "empty_output"
+        ? body.failureClass
+        : undefined,
+    resultUsability:
+      body.resultUsability === "usable" ||
+      body.resultUsability === "empty_output" ||
+      body.resultUsability === "needs_human_review" ||
+      body.resultUsability === "unusable"
+        ? body.resultUsability
+        : undefined,
+    timedOut: body.timedOut === true,
+    cancelled: body.cancelled === true,
+    stdoutText: typeof body.stdoutText === "string" ? body.stdoutText : undefined,
+    stderrText: typeof body.stderrText === "string" ? body.stderrText : undefined,
+    parseWarnings: Array.isArray(body.parseWarnings)
+      ? body.parseWarnings.filter((item): item is string => typeof item === "string")
+      : undefined,
+    diagnosticMessage:
+      typeof body.diagnosticMessage === "string" ? body.diagnosticMessage : undefined,
+    executionContext: "executionContext" in body ? body.executionContext : undefined
+  });
+}
+
 export async function checkFeatureSprintRunnerHealth(
   baseUrl?: string
 ): Promise<FeatureSprintRunnerHealthProbe> {
@@ -190,53 +285,36 @@ export async function runFeatureSprintPacket(
       body: JSON.stringify(validated.request)
     });
 
-    const body = (await response.json()) as Partial<FeatureSprintRunnerResponse>;
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      return buildFailureResponse(
+        validated.request.profile,
+        "Runner returned an unreadable response body.",
+        startedAt
+      );
+    }
+
+    // Preserve structured ok:false envelopes even when HTTP status is 4xx/5xx.
+    if (isStructuredRunnerResponseBody(body)) {
+      return mapStructuredRunnerResponse(body);
+    }
 
     if (!response.ok) {
+      const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
       return buildFailureResponse(
         validated.request.profile,
-        typeof body.error === "string" ? body.error : FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
+        typeof record.error === "string" ? record.error : FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
         startedAt
       );
     }
 
-    if (
-      typeof body.ok !== "boolean" ||
-      !isFeatureSprintRunnerProfile(body.profile) ||
-      typeof body.startedAt !== "string" ||
-      typeof body.completedAt !== "string"
-    ) {
-      return buildFailureResponse(
-        validated.request.profile,
-        "Runner returned an invalid response.",
-        startedAt
-      );
-    }
-
-    const changedFiles = Array.isArray(body.changedFiles)
-      ? body.changedFiles.filter((item): item is string => typeof item === "string")
-      : undefined;
-
-    const verificationResults = parseVerificationResults(body.verificationResults);
-
-    return capGitMetadataFields({
-      ok: body.ok,
-      profile: body.profile,
-      outputText: typeof body.outputText === "string" ? body.outputText : undefined,
-      error: typeof body.error === "string" ? body.error : undefined,
-      exitCode: typeof body.exitCode === "number" ? body.exitCode : undefined,
-      startedAt: body.startedAt,
-      completedAt: body.completedAt,
-      commandPreview: typeof body.commandPreview === "string" ? body.commandPreview : undefined,
-      stdoutPath: typeof body.stdoutPath === "string" ? body.stdoutPath : undefined,
-      worktreePath: typeof body.worktreePath === "string" ? body.worktreePath : undefined,
-      branchName: typeof body.branchName === "string" ? body.branchName : undefined,
-      gitStatus: typeof body.gitStatus === "string" ? body.gitStatus : undefined,
-      diffStat: typeof body.diffStat === "string" ? body.diffStat : undefined,
-      changedFiles,
-      diffText: typeof body.diffText === "string" ? body.diffText : undefined,
-      verificationResults
-    });
+    return buildFailureResponse(
+      validated.request.profile,
+      "Runner returned an invalid response.",
+      startedAt
+    );
   } catch {
     return buildFailureResponse(
       validated.request.profile,

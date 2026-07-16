@@ -38,9 +38,11 @@ After `codex_implementation` runs, the local runner captures (read-only git, `sh
 | Field | Source |
 |-------|--------|
 | `gitStatus` | `git status --short` (8k cap) |
-| `diffStat` | `git diff --stat` (8k cap) |
-| `changedFiles` | `git diff --name-only` + untracked names (200 cap) |
-| `diffText` | `git diff --` (**50k cap — persisted in app state**) |
+| `diffStat` | `git diff --stat HEAD` (8k cap; includes staged) |
+| `changedFiles` | `git diff --name-only HEAD` + untracked names (200 cap) |
+| `diffText` | `git diff HEAD --` (**50k cap — persisted in app state**) |
+
+Implementation runs also snapshot changed files **before** the agent and subtract that baseline afterward, so preexisting dirty paths in a reused worktree are not treated as new implementation evidence. Content-only edits to paths that were already dirty before the run may still be under-attributed — this is workspace delta vs HEAD, not exact per-run authorship.
 
 **Persistence note:** Runner history lives in `LifeHarnessData.featureSprintRunnerRuns` and is stored locally. `diffText` is capped at 50,000 characters per run to limit storage growth. Future work may store full diffs as external artifact files instead of in-state blobs.
 
