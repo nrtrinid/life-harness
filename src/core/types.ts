@@ -1,6 +1,9 @@
 import type {
   FeatureSprintRunnerAgent,
+  FeatureSprintRunnerFailureClass,
   FeatureSprintRunnerProfile,
+  FeatureSprintRunnerResultUsability,
+  FeatureSprintRunnerTerminationReason,
   FeatureSprintVerificationResult,
   FeatureSprintWorktreeCleanupStatus
 } from "./featureSprintRunner";
@@ -483,6 +486,11 @@ export type HarnessFeatureSprintStepImplementationProofRunnerEvidence = {
   diffStat?: string;
   gitStatus?: string;
   verificationSummary?: string[];
+  /** Optional Sprint Map correlation copied from the source runner run. */
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  mapPhase?: HarnessFeatureSprintMapPhase;
 };
 
 export type HarnessFeatureSprintStepImplementationProof = {
@@ -677,6 +685,16 @@ export type HarnessFeatureSprintRunnerRun = {
   changedFiles?: string[];
   diffText?: string;
   verificationResults?: FeatureSprintVerificationResult[];
+  /** Optional runner usability classification (additive; older records omit). */
+  terminationReason?: FeatureSprintRunnerTerminationReason;
+  failureClass?: FeatureSprintRunnerFailureClass;
+  resultUsability?: FeatureSprintRunnerResultUsability;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  diagnosticMessage?: string;
+  parseWarnings?: string[];
+  stdoutText?: string;
+  stderrText?: string;
   worktreeCleanedAt?: string;
   worktreeCleanupStatus?: FeatureSprintWorktreeCleanupStatus;
   worktreeCleanupMessage?: string;

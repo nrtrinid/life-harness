@@ -2,6 +2,8 @@ import {
   capGitMetadataFields,
   FEATURE_SPRINT_RUNNER_DEFAULT_BASE_URL,
   FEATURE_SPRINT_RUNNER_HEALTH_TIMEOUT_MS,
+  parseFeatureSprintRunnerExecutionContext,
+  type FeatureSprintRunnerExecutionContext,
   type FeatureSprintRunnerProfile,
   type FeatureSprintVerificationResult,
   type FeatureSprintWorktreeCleanupRequest,
@@ -102,7 +104,8 @@ function parseVerificationResults(value: unknown): FeatureSprintVerificationResu
 function buildFailureResponse(
   profile: FeatureSprintRunnerProfile,
   error: string,
-  startedAt: string
+  startedAt: string,
+  executionContext?: FeatureSprintRunnerExecutionContext
 ): FeatureSprintRunnerResponse {
   const completedAt = nowIso();
   return {
@@ -110,7 +113,8 @@ function buildFailureResponse(
     profile,
     error,
     startedAt,
-    completedAt
+    completedAt,
+    executionContext
   };
 }
 
@@ -205,7 +209,7 @@ function mapStructuredRunnerResponse(
       : undefined,
     diagnosticMessage:
       typeof body.diagnosticMessage === "string" ? body.diagnosticMessage : undefined,
-    executionContext: "executionContext" in body ? body.executionContext : undefined
+    executionContext: parseFeatureSprintRunnerExecutionContext(body.executionContext)
   });
 }
 
@@ -271,9 +275,12 @@ export async function runFeatureSprintPacket(
     return buildFailureResponse(
       isFeatureSprintRunnerProfile(request.profile) ? request.profile : "codex_scoping",
       validated.error,
-      startedAt
+      startedAt,
+      parseFeatureSprintRunnerExecutionContext(request.executionContext)
     );
   }
+
+  const requestContext = validated.request.executionContext;
 
   try {
     const response = await fetch(`${resolveBaseUrl(options.baseUrl)}/feature-sprint/run`, {
@@ -292,7 +299,8 @@ export async function runFeatureSprintPacket(
       return buildFailureResponse(
         validated.request.profile,
         "Runner returned an unreadable response body.",
-        startedAt
+        startedAt,
+        requestContext
       );
     }
 
@@ -306,20 +314,23 @@ export async function runFeatureSprintPacket(
       return buildFailureResponse(
         validated.request.profile,
         typeof record.error === "string" ? record.error : FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
-        startedAt
+        startedAt,
+        requestContext
       );
     }
 
     return buildFailureResponse(
       validated.request.profile,
       "Runner returned an invalid response.",
-      startedAt
+      startedAt,
+      requestContext
     );
   } catch {
     return buildFailureResponse(
       validated.request.profile,
       FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE,
-      startedAt
+      startedAt,
+      requestContext
     );
   }
 }

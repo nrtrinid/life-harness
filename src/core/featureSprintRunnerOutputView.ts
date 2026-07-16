@@ -1,5 +1,6 @@
 import {
   FEATURE_SPRINT_RUNNER_DIFF_TEXT_MAX,
+  formatRunnerResultUsabilityLabel,
   isDiffTextTruncated,
   isImplementationProfile,
   summarizeVerificationResults,
@@ -21,6 +22,10 @@ export type FeatureSprintRunnerOutputView = {
   cardId?: string;
   planId?: string;
   stepId?: string;
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  mapPhase?: string;
   startedAt: string;
   completedAt?: string;
   importedAt?: string;
@@ -53,6 +58,14 @@ export type FeatureSprintRunnerOutputView = {
     stderrExcerpt?: string;
     stdoutExcerpt?: string;
   }[];
+
+  terminationReason?: string;
+  failureClass?: string;
+  resultUsability?: string;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  diagnosticMessage?: string;
+  usabilityLabel?: string;
 
   worktreeCleanedAt?: string;
   worktreeCleanupStatus?: string;
@@ -102,6 +115,10 @@ function mapRun(run: HarnessFeatureSprintRunnerRun): FeatureSprintRunnerOutputVi
     cardId: run.cardId,
     planId: run.planId,
     stepId: run.stepId,
+    sprintId: run.sprintId,
+    storyId: run.storyId,
+    taskId: run.taskId,
+    mapPhase: run.mapPhase,
     startedAt: run.startedAt,
     completedAt: run.completedAt,
     importedAt: run.importedAt,
@@ -132,6 +149,13 @@ function mapRun(run: HarnessFeatureSprintRunnerRun): FeatureSprintRunnerOutputVi
         stderrExcerpt: row.stderrExcerpt,
         stdoutExcerpt: row.stdoutExcerpt
       })),
+    terminationReason: run.terminationReason,
+    failureClass: run.failureClass,
+    resultUsability: run.resultUsability,
+    timedOut: run.timedOut,
+    cancelled: run.cancelled,
+    diagnosticMessage: run.diagnosticMessage,
+    usabilityLabel: formatRunnerResultUsabilityLabel(run),
     worktreeCleanedAt: run.worktreeCleanedAt,
     worktreeCleanupStatus: run.worktreeCleanupStatus,
     worktreeCleanupMessage: run.worktreeCleanupMessage,

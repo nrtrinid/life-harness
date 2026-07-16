@@ -65,6 +65,18 @@ export function resolveMaxOutputChars(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 500_000;
 }
 
+/** Echo request correlation metadata unchanged on every envelope path. */
+function withRequestContext(
+  request: FeatureSprintRunnerRequest,
+  input: Parameters<typeof buildRunnerResult>[0]
+): FeatureSprintRunnerResponse {
+  return buildRunnerResult({
+    ...input,
+    executionContext:
+      input.executionContext !== undefined ? input.executionContext : request.executionContext
+  });
+}
+
 function truncateOutput(text: string, maxChars: number): string {
   if (text.length <= maxChars) {
     return text;
@@ -254,7 +266,7 @@ async function spawnAgentInWorktree(
     await writeFile(promptPath, request.promptMarkdown, "utf8");
     const argsResult = buildAgentArgs(request.profile, promptPath, worktreePath);
     if (!argsResult.ok) {
-      return buildRunnerResult({
+      return withRequestContext(request, {
         ok: false,
         profile: request.profile,
         runnerMode: mode,
@@ -268,7 +280,7 @@ async function spawnAgentInWorktree(
     if (resolveProfileProvider(request.profile) === "cursor") {
       const cursorResolved = resolveCursorBin();
       if (!cursorResolved.exists && argsResult.bin === "agent") {
-        return buildRunnerResult({
+        return withRequestContext(request, {
           ok: false,
           profile: request.profile,
           runnerMode: mode,
@@ -285,7 +297,7 @@ async function spawnAgentInWorktree(
     if (resolveProfileProvider(request.profile) === "codex") {
       const codexResolved = resolveCodexBin();
       if (!codexResolved.exists && (argsResult.bin === "codex" || argsResult.bin.endsWith("codex"))) {
-        return buildRunnerResult({
+        return withRequestContext(request, {
           ok: false,
           profile: request.profile,
           runnerMode: mode,
@@ -331,7 +343,7 @@ async function spawnAgentInWorktree(
     };
 
     if (result.termination === "timeout") {
-      return buildRunnerResult({
+      return withRequestContext(request, {
         ok: false,
         profile: request.profile,
         runnerMode: mode,
@@ -352,7 +364,7 @@ async function spawnAgentInWorktree(
     }
 
     if (result.termination === "cancelled") {
-      return buildRunnerResult({
+      return withRequestContext(request, {
         ok: false,
         profile: request.profile,
         runnerMode: mode,
@@ -375,7 +387,7 @@ async function spawnAgentInWorktree(
     if (result.termination === "spawn_error" || (result.exitCode ?? 1) !== 0) {
       const terminationReason =
         result.termination === "spawn_error" ? "spawn_error" : "agent_nonzero_exit";
-      return buildRunnerResult({
+      return withRequestContext(request, {
         ok: false,
         profile: request.profile,
         runnerMode: mode,
@@ -404,7 +416,7 @@ async function spawnAgentInWorktree(
     let response: FeatureSprintRunnerResponse;
 
     if (isImplementationProfile(request.profile)) {
-      response = buildRunnerResult({
+      response = withRequestContext(request, {
         ok: true,
         profile: request.profile,
         runnerMode: mode,
@@ -426,7 +438,7 @@ async function spawnAgentInWorktree(
         agentLabel
       });
       parseWarnings.push(...usability.parseWarnings);
-      response = buildRunnerResult({
+      response = withRequestContext(request, {
         ok: usability.ok,
         profile: request.profile,
         runnerMode: mode,
@@ -450,7 +462,7 @@ async function spawnAgentInWorktree(
     if (readOnly) {
       const mutation = await detectReadonlyMutations(worktreePath, baselineStatus);
       if (!mutation.ok) {
-        response = buildRunnerResult({
+        response = withRequestContext(request, {
           ok: false,
           profile: request.profile,
           runnerMode: mode,
@@ -486,7 +498,7 @@ async function runRealScopingOrReview(
   const mode = resolveRunnerMode();
   const gateError = assertRealRunAllowed(request.profile);
   if (gateError) {
-    return buildRunnerResult({
+    return withRequestContext(request, {
       ok: false,
       profile: request.profile,
       runnerMode: mode,
@@ -516,7 +528,7 @@ async function runMockImplementation(
   });
 
   if (!worktree.ok) {
-    return buildRunnerResult({
+    return withRequestContext(request, {
       ok: false,
       profile: request.profile,
       runnerMode: mode,
@@ -533,7 +545,7 @@ async function runMockImplementation(
     worktree.repoTopLevel
   );
   if (!workspaceCheck.ok) {
-    return buildRunnerResult({
+    return withRequestContext(request, {
       ok: false,
       profile: request.profile,
       runnerMode: mode,
@@ -570,7 +582,7 @@ async function runMockImplementation(
     request,
     worktree.worktreePath,
     worktree.branchName,
-    buildRunnerResult({
+    withRequestContext(request, {
       ok: true,
       profile: request.profile,
       runnerMode: mode,
@@ -591,7 +603,7 @@ async function runRealImplementation(
   const mode = resolveRunnerMode();
   const gateError = assertRealImplementationAllowed(request.profile);
   if (gateError) {
-    return buildRunnerResult({
+    return withRequestContext(request, {
       ok: false,
       profile: request.profile,
       runnerMode: mode,
@@ -612,7 +624,7 @@ async function runRealImplementation(
   });
 
   if (!worktree.ok) {
-    return buildRunnerResult({
+    return withRequestContext(request, {
       ok: false,
       profile: request.profile,
       runnerMode: mode,
@@ -629,7 +641,7 @@ async function runRealImplementation(
     worktree.repoTopLevel
   );
   if (!workspaceCheck.ok) {
-    return buildRunnerResult({
+    return withRequestContext(request, {
       ok: false,
       profile: request.profile,
       runnerMode: mode,
@@ -688,7 +700,7 @@ async function runRealImplementation(
   }
 
   // Preserve the subprocess runId — do not mint a second identity on reassessment.
-  return buildRunnerResult({
+  return withRequestContext(request, {
     ok: false,
     profile: request.profile,
     runnerMode: mode,
@@ -734,7 +746,7 @@ export async function runFeatureSprintPacketOnRunner(
   }
 
   if (mode === "mock") {
-    return buildRunnerResult({
+    return withRequestContext(request, {
       ok: true,
       profile: request.profile,
       runnerMode: mode,

@@ -1,4 +1,5 @@
 import { createId } from "./ids";
+import type { FeatureSprintRunnerExecutionContext } from "./featureSprintRunner";
 import type {
   HarnessFeatureSprintDependency,
   HarnessFeatureSprintExecutionModel,
@@ -862,6 +863,132 @@ export function getFeatureSprintLaunchBlockReason(
     return undefined;
   }
   return readiness.issues.find((issue) => issue.severity === "block")?.message ?? readiness.nextSafeAction;
+}
+
+export type BuildFeatureSprintRunnerExecutionContextInput = {
+  plan: Pick<
+    HarnessFeatureSprintPlan,
+    "id" | "title" | "goal" | "sprintMap" | "executionTarget" | "executionModel" | "steps"
+  >;
+  /** Required for authoritative map phase launches (implement/review/localize). */
+  phase?: HarnessFeatureSprintMapPhase;
+  stepId?: string;
+};
+
+export type BuildFeatureSprintRunnerExecutionContextResult =
+  | { ok: true; context: FeatureSprintRunnerExecutionContext }
+  | { ok: false; error: string };
+
+/**
+ * Build typed runner correlation context from authoritative app state.
+ * Call only after the existing launch readiness check has passed for map phases.
+ * Preview maps never produce authoritative map IDs.
+ */
+export function buildFeatureSprintRunnerExecutionContext(
+  input: BuildFeatureSprintRunnerExecutionContextInput
+): BuildFeatureSprintRunnerExecutionContextResult {
+  const planId = input.plan.id.trim();
+  if (!planId) {
+    return { ok: false, error: "planId is required to build runner execution context." };
+  }
+
+  const stepId = input.stepId?.trim() || undefined;
+
+  if (!isSprintMapAuthoritative(input.plan)) {
+    const context: FeatureSprintRunnerExecutionContext = {
+      planId,
+      executionModel: "legacy_steps"
+    };
+    if (stepId) {
+      context.stepId = stepId;
+    }
+    return { ok: true, context };
+  }
+
+  if (input.phase) {
+    const readiness = assessFeatureSprintPhaseLaunch(input.plan, input.phase);
+    if (!readiness.canLaunch || !readiness.resolved) {
+      return {
+        ok: false,
+        error:
+          readiness.issues.find((issue) => issue.severity === "block")?.message ??
+          readiness.nextSafeAction
+      };
+    }
+
+    const { target, task } = readiness.resolved;
+    const linkedStepId = task.linkedStepId?.trim() || stepId;
+    const context: FeatureSprintRunnerExecutionContext = {
+      planId,
+      executionModel: "sprint_map",
+      sprintId: target.sprintId,
+      storyId: target.storyId,
+      taskId: target.taskId,
+      phase: target.phase
+    };
+    if (linkedStepId) {
+      context.stepId = linkedStepId;
+    }
+    return { ok: true, context };
+  }
+
+  // Non-phase actions (e.g. prompt audit): correlate to current target when present,
+  // without inventing map IDs or silently falling back to legacy authority labeling.
+  const resolved = resolveFeatureSprintExecutionTarget(input.plan, input.plan.executionTarget);
+  if (!resolved.ok) {
+    const context: FeatureSprintRunnerExecutionContext = {
+      planId,
+      executionModel: "sprint_map"
+    };
+    if (stepId) {
+      context.stepId = stepId;
+    }
+    return { ok: true, context };
+  }
+
+  const linkedStepId = resolved.task.linkedStepId?.trim() || stepId;
+  const context: FeatureSprintRunnerExecutionContext = {
+    planId,
+    executionModel: "sprint_map",
+    sprintId: resolved.target.sprintId,
+    storyId: resolved.target.storyId,
+    taskId: resolved.target.taskId,
+    phase: resolved.target.phase
+  };
+  if (linkedStepId) {
+    context.stepId = linkedStepId;
+  }
+  return { ok: true, context };
+}
+
+/** History stores map phase as `mapPhase`; wire uses `phase`. */
+export function historyAttributionFromExecutionContext(
+  context: FeatureSprintRunnerExecutionContext | undefined
+): {
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  mapPhase?: HarnessFeatureSprintMapPhase;
+  planId?: string;
+  stepId?: string;
+} {
+  if (!context) {
+    return {};
+  }
+  if (context.executionModel !== "sprint_map") {
+    return {
+      planId: context.planId,
+      stepId: context.stepId
+    };
+  }
+  return {
+    planId: context.planId,
+    stepId: context.stepId,
+    sprintId: context.sprintId,
+    storyId: context.storyId,
+    taskId: context.taskId,
+    mapPhase: context.phase
+  };
 }
 
 export function clearStaleTargetNoticesOnSelection(

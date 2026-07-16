@@ -52,7 +52,11 @@ import {
   resolveStepImplementationPrompt,
   resolveStepImplementationPromptSource
 } from "../../src/core/featureSprintOrchestrator";
-import { seedSprintMapFromLegacySteps } from "../../src/core/featureSprintMap";
+import {
+  buildFeatureSprintRunnerExecutionContext,
+  historyAttributionFromExecutionContext,
+  seedSprintMapFromLegacySteps
+} from "../../src/core/featureSprintMap";
 import { parseFeatureSprintWorkerOutputEvidence } from "../../src/core/featureSprintWorkerOutput";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
@@ -62,12 +66,14 @@ import {
 import {
   buildRunnerProfile,
   formatRunnerProfileLabel,
+  formatRunnerResultUsabilityLabel,
   isImplementationProfile,
   isPromptAuditProfile,
   isReviewProfile,
   isScopingProfile,
   runnerAgentLabel,
-  type FeatureSprintRunnerAgent
+  type FeatureSprintRunnerAgent,
+  type FeatureSprintRunnerExecutionContext
 } from "../../src/core/featureSprintRunner";
 import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintRunnerHistory";
 import { buildFeatureSprintRunnerOutputView } from "../../src/core/featureSprintRunnerOutputView";
@@ -226,16 +232,60 @@ function sprintMapRunAttribution(plan: HarnessFeatureSprintPlan | undefined): {
   taskId?: string;
   mapPhase?: NonNullable<HarnessFeatureSprintPlan["executionTarget"]>["phase"];
 } {
-  const target = plan?.executionTarget;
-  if (!target) {
+  if (!plan) {
     return {};
   }
+  const built = buildFeatureSprintRunnerExecutionContext({
+    plan,
+    stepId: plan.currentStepId
+  });
+  if (!built.ok) {
+    return {};
+  }
+  const attribution = historyAttributionFromExecutionContext(built.context);
   return {
-    sprintId: target.sprintId,
-    storyId: target.storyId,
-    taskId: target.taskId,
-    mapPhase: target.phase
+    sprintId: attribution.sprintId,
+    storyId: attribution.storyId,
+    taskId: attribution.taskId,
+    mapPhase: attribution.mapPhase
   };
+}
+
+function buildLaunchExecutionContext(
+  plan: HarnessFeatureSprintPlan,
+  phase?: NonNullable<HarnessFeatureSprintPlan["executionTarget"]>["phase"]
+):
+  | { ok: true; context: FeatureSprintRunnerExecutionContext }
+  | { ok: false; error: string } {
+  return buildFeatureSprintRunnerExecutionContext({
+    plan,
+    phase,
+    stepId: plan.currentStepId
+  });
+}
+
+function runnerFailureNotice(result: {
+  error?: string;
+  resultUsability?: string;
+  failureClass?: string;
+  terminationReason?: string;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  diagnosticMessage?: string;
+}): string {
+  const usability = formatRunnerResultUsabilityLabel({
+    status: "failed",
+    resultUsability: result.resultUsability as never,
+    terminationReason: result.terminationReason as never,
+    timedOut: result.timedOut,
+    cancelled: result.cancelled,
+    failureClass: result.failureClass as never
+  });
+  const detail =
+    result.diagnosticMessage?.trim() ||
+    result.error?.trim() ||
+    "Runner run failed.";
+  return usability ? `${usability}. ${detail}` : detail;
 }
 
 function buildSessionInputFromForm(
@@ -1153,6 +1203,11 @@ export default function CardDetailScreen() {
     }
 
     const project = getProjectForCard(lifeHarnessData, cardId);
+    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan);
+    if (!executionContextResult.ok) {
+      showNotice("warning", executionContextResult.error);
+      return;
+    }
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
@@ -1176,7 +1231,8 @@ export default function CardDetailScreen() {
         cardId,
         planId: activeFeatureSprintPlan.id,
         stepId: activeFeatureSprintPlan.currentStepId,
-        repoPath: project?.repoPath
+        repoPath: project?.repoPath,
+        executionContext: executionContextResult.context
       });
 
       if (historyCreate.ok && historyCreate.runId) {
@@ -1184,7 +1240,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? "Codex prompt audit run failed.");
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1246,7 +1302,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? `${runnerAgentLabel(runnerAgent)} scoping run failed.`);
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1344,12 +1400,17 @@ export default function CardDetailScreen() {
     }
 
     const project = getProjectForCard(lifeHarnessData, cardId);
+    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan, "review");
+    if (!executionContextResult.ok) {
+      showNotice("warning", executionContextResult.error);
+      return;
+    }
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
-      ...sprintMapRunAttribution(activeFeatureSprintPlan),
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       repoPath: project?.repoPath
     });
     if (!historyCreate.ok) {
@@ -1367,7 +1428,8 @@ export default function CardDetailScreen() {
         cardId,
         planId: activeFeatureSprintPlan.id,
         stepId: activeFeatureSprintPlan.currentStepId,
-        repoPath: project?.repoPath
+        repoPath: project?.repoPath,
+        executionContext: executionContextResult.context
       });
 
       if (historyCreate.ok && historyCreate.runId) {
@@ -1375,7 +1437,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? `${runnerAgentLabel(runnerAgent)} review run failed.`);
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1429,12 +1491,17 @@ export default function CardDetailScreen() {
     }
 
     const profile = buildRunnerProfile(runnerAgent, "implementation");
+    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan, "implement");
+    if (!executionContextResult.ok) {
+      showNotice("warning", executionContextResult.error);
+      return;
+    }
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
-      ...sprintMapRunAttribution(activeFeatureSprintPlan),
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       repoPath: project.repoPath
     });
     if (!historyCreate.ok) {
@@ -1455,7 +1522,8 @@ export default function CardDetailScreen() {
         repoPath: project.repoPath,
         worktree: { enabled: true },
         verificationCommands: project.verificationCommands ?? [],
-        runVerification: Boolean(project.verificationCommands?.length)
+        runVerification: Boolean(project.verificationCommands?.length),
+        executionContext: executionContextResult.context
       });
 
       if (historyCreate.ok && historyCreate.runId) {
@@ -1463,7 +1531,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok) {
-        showNotice("warning", result.error ?? "Implementation run failed.");
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1939,7 +2007,19 @@ export default function CardDetailScreen() {
                   {formatRunnerProfileLabel(run.profile)} · {run.status} ·{" "}
                   {formatRunnerStartedAt(run.startedAt)}
                   {run.importedAt ? " · Imported" : ""}
+                  {formatRunnerResultUsabilityLabel(run)
+                    ? ` · ${formatRunnerResultUsabilityLabel(run)}`
+                    : ""}
                 </Text>
+                {run.taskId ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>
+                    Map task: {run.taskId}
+                    {run.mapPhase ? ` · ${run.mapPhase}` : ""}
+                  </Text>
+                ) : null}
+                {run.diagnosticMessage && run.status === "failed" ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>{run.diagnosticMessage}</Text>
+                ) : null}
                 {run.worktreePath ? (
                   <Text style={[styles.helpText, { marginTop: 4 }]}>Worktree: {run.worktreePath}</Text>
                 ) : null}

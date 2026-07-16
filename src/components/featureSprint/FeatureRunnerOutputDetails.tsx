@@ -80,7 +80,17 @@ export function FeatureRunnerOutputDetails({
         <Text style={styles.bodyText}>
           {profileLabel} · {view.status} · {formattedStartedAt}
           {view.importedAt ? " · Imported" : ""}
+          {view.usabilityLabel ? ` · ${view.usabilityLabel}` : ""}
         </Text>
+        {view.taskId ? (
+          <Text style={styles.helpText}>
+            Map: {view.sprintId}/{view.storyId}/{view.taskId}
+            {view.mapPhase ? ` · ${view.mapPhase}` : ""}
+          </Text>
+        ) : null}
+        {view.diagnosticMessage ? (
+          <Text style={styles.helpText}>{view.diagnosticMessage}</Text>
+        ) : null}
         {view.worktreePath ? <Text style={styles.helpText}>Worktree: {view.worktreePath}</Text> : null}
         {view.branchName ? <Text style={styles.helpText}>Branch: {view.branchName}</Text> : null}
       </DetailBlock>

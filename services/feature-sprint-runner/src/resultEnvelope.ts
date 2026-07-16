@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   resolveProfileProvider,
+  type FeatureSprintRunnerExecutionContext,
   type FeatureSprintRunnerFailureClass,
   type FeatureSprintRunnerModeLabel,
   type FeatureSprintRunnerProfile,
@@ -40,7 +41,7 @@ export type BuildRunnerResultInput = {
   parseWarnings?: string[];
   diagnosticMessage?: string;
   runId?: string;
-  executionContext?: unknown;
+  executionContext?: FeatureSprintRunnerExecutionContext;
 };
 
 function resolveFailureClass(

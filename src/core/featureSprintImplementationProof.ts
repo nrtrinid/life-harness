@@ -126,10 +126,22 @@ export function buildRunnerEvidenceSnapshot(
   const snapshot: HarnessFeatureSprintStepImplementationProofRunnerEvidence = {
     diffStat: capText(run.diffStat, FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX),
     gitStatus: capText(run.gitStatus, FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX),
-    verificationSummary: verificationSummary.length > 0 ? verificationSummary : undefined
+    verificationSummary: verificationSummary.length > 0 ? verificationSummary : undefined,
+    sprintId: run.sprintId,
+    storyId: run.storyId,
+    taskId: run.taskId,
+    mapPhase: run.mapPhase
   };
 
-  if (!snapshot.diffStat && !snapshot.gitStatus && !snapshot.verificationSummary?.length) {
+  if (
+    !snapshot.diffStat &&
+    !snapshot.gitStatus &&
+    !snapshot.verificationSummary?.length &&
+    !snapshot.sprintId &&
+    !snapshot.storyId &&
+    !snapshot.taskId &&
+    !snapshot.mapPhase
+  ) {
     return undefined;
   }
 

@@ -4,11 +4,13 @@ import {
   capGitMetadataFields,
   capVerificationResults,
   isReviewProfile,
+  parseFeatureSprintRunnerExecutionContext,
   type FeatureSprintRunnerAgent,
   type FeatureSprintRunnerProfile,
   type FeatureSprintRunnerResponse,
   type FeatureSprintWorktreeCleanupResponse
 } from "./featureSprintRunner";
+import { historyAttributionFromExecutionContext } from "./featureSprintMap";
 import { createId, nowIso } from "./ids";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type {
@@ -229,10 +231,19 @@ export function completeFeatureSprintRunnerRun(
   const status: HarnessFeatureSprintRunnerRunStatus = response.ok ? "succeeded" : "failed";
   const outputFields = response.ok ? buildStoredOutputFields(response.outputText) : {};
   const metadata = capGitMetadataFields(response);
+  const echoedContext = parseFeatureSprintRunnerExecutionContext(response.executionContext);
+  const attribution = historyAttributionFromExecutionContext(echoedContext);
 
   const updated: HarnessFeatureSprintRunnerRun = {
     ...existing,
     status,
+    // Prefer echoed runner context for map attribution; keep create-time fields as fallback.
+    sprintId: cleanOptional(attribution.sprintId) ?? existing.sprintId,
+    storyId: cleanOptional(attribution.storyId) ?? existing.storyId,
+    taskId: cleanOptional(attribution.taskId) ?? existing.taskId,
+    mapPhase: attribution.mapPhase ?? existing.mapPhase,
+    stepId: cleanOptional(attribution.stepId) ?? existing.stepId,
+    planId: cleanOptional(attribution.planId) ?? existing.planId,
     commandPreview: cleanOptional(response.commandPreview) ?? existing.commandPreview,
     exitCode: response.exitCode,
     error: cleanOptional(response.error),
@@ -244,6 +255,16 @@ export function completeFeatureSprintRunnerRun(
     changedFiles: metadata.changedFiles,
     diffText: cleanOptional(metadata.diffText),
     verificationResults: capVerificationResults(metadata.verificationResults),
+    terminationReason: response.terminationReason,
+    failureClass: response.failureClass,
+    resultUsability: response.resultUsability,
+    timedOut: response.timedOut === true ? true : response.timedOut === false ? false : existing.timedOut,
+    cancelled:
+      response.cancelled === true ? true : response.cancelled === false ? false : existing.cancelled,
+    diagnosticMessage: cleanOptional(response.diagnosticMessage),
+    parseWarnings: response.parseWarnings,
+    stdoutText: cleanOptional(response.stdoutText),
+    stderrText: cleanOptional(response.stderrText),
     completedAt: response.completedAt,
     updatedAt: now
   };
