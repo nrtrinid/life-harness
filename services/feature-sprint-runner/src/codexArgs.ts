@@ -1,3 +1,10 @@
+import type { FeatureSprintRunnerProfile } from "../../../src/core/featureSprintRunner";
+import {
+  isImplementationProfile,
+  isReviewProfile,
+  isScopingProfile
+} from "../../../src/core/featureSprintRunner";
+
 export type CodexArgsResult =
   | {
       ok: true;
@@ -9,7 +16,40 @@ export type CodexArgsResult =
     }
   | { ok: false; error: string };
 
-export function buildCodexArgs(_promptFilePath: string): CodexArgsResult {
+export type BuildCodexArgsOptions = {
+  workspacePath?: string;
+  profile?: FeatureSprintRunnerProfile;
+};
+
+function resolveSandbox(
+  profile: FeatureSprintRunnerProfile | undefined
+): "read-only" | "workspace-write" {
+  if (!profile) {
+    return "read-only";
+  }
+  if (isImplementationProfile(profile)) {
+    return "workspace-write";
+  }
+  if (isScopingProfile(profile) || isReviewProfile(profile)) {
+    return "read-only";
+  }
+  // prompt_audit and unknown → read-only by default
+  return "read-only";
+}
+
+/**
+ * Build Codex CLI args.
+ *
+ * Confirmed against `codex exec --help`:
+ * - `exec -` reads prompt from stdin
+ * - `-s/--sandbox read-only|workspace-write|danger-full-access`
+ * - `-C/--cd` sets working root
+ * - `-m` model, `-c key=value` config overrides
+ */
+export function buildCodexArgs(
+  _promptFilePath: string,
+  options?: BuildCodexArgsOptions
+): CodexArgsResult {
   const bin = process.env.FEATURE_SPRINT_CODEX_BIN?.trim() || "codex";
 
   const args: string[] = [];
@@ -32,7 +72,12 @@ export function buildCodexArgs(_promptFilePath: string): CodexArgsResult {
     };
   }
 
-  args.push("exec", "-");
+  const workspacePath = options?.workspacePath?.trim();
+  if (workspacePath) {
+    args.push("-C", workspacePath);
+  }
+
+  args.push("exec", "-s", resolveSandbox(options?.profile), "-");
 
   return {
     ok: true,

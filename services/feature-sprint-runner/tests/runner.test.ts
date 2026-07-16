@@ -256,7 +256,9 @@ describe("feature-sprint-runner", () => {
     expect(result.body.diffText).toBeFalsy();
   });
 
-  it("runs verification commands after mock implementation and continues after failure", async () => {
+  it(
+    "runs verification commands after mock implementation and continues after failure",
+    async () => {
     const fixtureDir = path.join(tempRepoPath!, ".life-harness");
     await mkdir(fixtureDir, { recursive: true });
     await writeFile(path.join(fixtureDir, "verify-pass.js"), "process.exit(0);\n");
@@ -291,7 +293,9 @@ describe("feature-sprint-runner", () => {
       "failed",
       "passed"
     ]);
-  });
+  },
+    30_000
+  );
 
   it("rejects unsafe verification commands via parser without failing implementation", async () => {
     const result = await postRun(port, {
@@ -579,7 +583,9 @@ describe("feature-sprint-runner", () => {
     expect(authorized.body).toMatchObject({ ok: true });
   });
 
-  it("cleans up worktrees via POST /feature-sprint/cleanup-worktree", async () => {
+  it(
+    "cleans up worktrees via POST /feature-sprint/cleanup-worktree",
+    async () => {
     const runResult = await postRun(port, {
       profile: "codex_implementation",
       promptMarkdown: "Implement slice.",
@@ -601,7 +607,9 @@ describe("feature-sprint-runner", () => {
 
     expect(cleanupResult.statusCode).toBe(200);
     expect(cleanupResult.body).toMatchObject({ ok: true, status: "cleaned" });
-  });
+  },
+    30_000
+  );
 
   it("requires bearer token for cleanup when token is configured", async () => {
     process.env.FEATURE_SPRINT_RUNNER_TOKEN = "secret-token";

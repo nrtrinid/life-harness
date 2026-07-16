@@ -54,6 +54,56 @@ function runGit(
   });
 }
 
+function splitNameOnlyLines(stdout: string): string[] {
+  const files: string[] = [];
+  for (const line of stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed) {
+      files.push(trimmed);
+    }
+  }
+  return files;
+}
+
+/**
+ * Changed paths vs HEAD (staged + unstaged tracked changes) plus untracked files.
+ * Includes adds, deletes, renames (new path), and modifications that `git diff HEAD`
+ * reports — not only the working-tree unstaged diff.
+ *
+ * Attribution limitation: this is a workspace snapshot vs HEAD, not exact per-run
+ * authorship. Callers that have a pre-run baseline should use
+ * {@link subtractPreRunChangedFiles} so preexisting dirt is not treated as new
+ * implementation evidence. Content-only edits to paths already dirty before the run
+ * may still be under-attributed.
+ */
+export async function captureChangedFiles(worktreePath: string): Promise<string[]> {
+  const [diffNames, untracked] = await Promise.all([
+    runGit(worktreePath, ["diff", "--name-only", "HEAD"]),
+    runGit(worktreePath, ["ls-files", "--others", "--exclude-standard"])
+  ]);
+
+  const files = new Set<string>();
+  for (const source of [diffNames.stdout, untracked.stdout]) {
+    for (const name of splitNameOnlyLines(source)) {
+      files.add(name);
+    }
+  }
+
+  return [...files].slice(0, FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX);
+}
+
+/**
+ * Paths present after a run that were not in the pre-run changed-file snapshot.
+ * Does not claim exact authorship for content edits to already-dirty paths.
+ */
+export function subtractPreRunChangedFiles(
+  preRunChangedFiles: string[],
+  postRunChangedFiles: string[]
+): string[] {
+  const baseline = new Set(preRunChangedFiles);
+  return postRunChangedFiles.filter((name) => !baseline.has(name));
+}
+
 export async function captureGitStatus(worktreePath: string): Promise<string> {
   const result = await runGit(worktreePath, ["status", "--short"]);
   const text = result.ok ? result.stdout : result.stderr || result.stdout;
@@ -61,7 +111,7 @@ export async function captureGitStatus(worktreePath: string): Promise<string> {
 }
 
 export async function captureDiffStat(worktreePath: string): Promise<string> {
-  const result = await runGit(worktreePath, ["diff", "--stat"]);
+  const result = await runGit(worktreePath, ["diff", "--stat", "HEAD"]);
   const text = result.ok ? result.stdout : result.stderr || result.stdout;
   if (text.trim()) {
     return truncate(text, FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX);
@@ -75,28 +125,9 @@ export async function captureDiffStat(worktreePath: string): Promise<string> {
   return "";
 }
 
-export async function captureChangedFiles(worktreePath: string): Promise<string[]> {
-  const [diffNames, untracked] = await Promise.all([
-    runGit(worktreePath, ["diff", "--name-only"]),
-    runGit(worktreePath, ["ls-files", "--others", "--exclude-standard"])
-  ]);
-
-  const files = new Set<string>();
-  for (const source of [diffNames.stdout, untracked.stdout]) {
-    for (const line of source.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed) {
-        files.add(trimmed);
-      }
-    }
-  }
-
-  return [...files].slice(0, FEATURE_SPRINT_RUNNER_CHANGED_FILES_MAX);
-}
-
 export async function captureDiffText(worktreePath: string): Promise<string | undefined> {
   try {
-    const result = await runGit(worktreePath, ["diff", "--"]);
+    const result = await runGit(worktreePath, ["diff", "HEAD", "--"]);
     if (!result.ok) {
       return undefined;
     }
@@ -112,18 +143,28 @@ export async function captureDiffText(worktreePath: string): Promise<string | un
   }
 }
 
-export async function captureGitMetadata(worktreePath: string): Promise<{
+export async function captureGitMetadata(
+  worktreePath: string,
+  options?: { preRunChangedFiles?: string[] }
+): Promise<{
   gitStatus: string;
   diffStat: string;
   changedFiles: string[];
   diffText?: string;
+  /** True when a pre-run baseline was applied to narrow changedFiles. */
+  usedPreRunBaseline: boolean;
 }> {
-  const [gitStatus, diffStat, changedFiles, diffText] = await Promise.all([
+  const [gitStatus, diffStat, postChangedFiles, diffText] = await Promise.all([
     captureGitStatus(worktreePath),
     captureDiffStat(worktreePath),
     captureChangedFiles(worktreePath),
     captureDiffText(worktreePath)
   ]);
 
-  return { gitStatus, diffStat, changedFiles, diffText };
+  const usedPreRunBaseline = Array.isArray(options?.preRunChangedFiles);
+  const changedFiles = usedPreRunBaseline
+    ? subtractPreRunChangedFiles(options!.preRunChangedFiles!, postChangedFiles)
+    : postChangedFiles;
+
+  return { gitStatus, diffStat, changedFiles, diffText, usedPreRunBaseline };
 }

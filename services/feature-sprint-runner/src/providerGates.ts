@@ -108,3 +108,17 @@ export function collectSetupMissingEnv(mode: RunnerMode): string[] {
 export function resolveRecommendedScript(mode: RunnerMode): RunnerMode {
   return mode;
 }
+
+export function resolveRunnerMode(): RunnerMode {
+  const mode = process.env.FEATURE_SPRINT_RUNNER_MODE?.trim().toLowerCase();
+  if (mode === "real") {
+    return "real";
+  }
+  if (mode === "codex") {
+    return "codex";
+  }
+  if (mode === "cursor") {
+    return "cursor";
+  }
+  return "mock";
+}

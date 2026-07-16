@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -12,58 +11,52 @@ import {
   type FeatureSprintRunnerRequest,
   type FeatureSprintRunnerResponse
 } from "../../../src/core/featureSprintRunner";
-import { buildAgentSpawnSpec } from "./agentSpawn";
+import { buildAgentSpawnSpec, type AgentSpawnSpec } from "./agentSpawn";
 import { buildCodexArgs } from "./codexArgs";
 import { buildCursorArgs } from "./cursorArgs";
-import { captureGitMetadata } from "./gitCapture";
+import { captureChangedFiles, captureGitMetadata } from "./gitCapture";
 import { buildMockRunnerOutput } from "./mockOutput";
+import {
+  captureReadonlyBaseline,
+  detectReadonlyMutations,
+  validateImplementationWorkspace
+} from "./phaseSafety";
 import {
   checkRealCodexGate,
   checkRealCursorGate,
-  checkRealImplementationGate
+  checkRealImplementationGate,
+  resolveRunnerMode,
+  type RunnerMode
 } from "./providerGates";
-import type { RunnerMode } from "./providerGates";
+import { normalizeAgentCapturedOutput } from "./outputNormalize";
+import { resolveCodexBin, resolveCursorBin } from "./resolveBin";
+import { buildRunnerResult } from "./resultEnvelope";
+import { assessCompletedRunUsability } from "./resultUsability";
+import { spawnAgentProcess } from "./spawnAgent";
 import { createFeatureWorktree } from "./worktree";
 import { runVerificationCommands } from "./verification";
 
+function resolveCursorOutputFormatEnv(): "text" | "json" | "stream-json" {
+  const configured = process.env.FEATURE_SPRINT_CURSOR_OUTPUT_FORMAT?.trim().toLowerCase();
+  if (configured === "json" || configured === "stream-json") {
+    return configured;
+  }
+  return "text";
+}
+
 export type { RunnerMode } from "./providerGates";
+export { resolveRunnerMode } from "./providerGates";
+export type { AgentSpawnSpec } from "./agentSpawn";
 
 const MOCK_IMPLEMENTATION_MARKER = ".life-harness/mock-implementation-result.md";
 
-export type AgentSpawnSpec = {
-  file: string;
-  args: string[];
-};
-
+/** @deprecated Prefer buildAgentSpawnSpec from agentSpawn.ts */
 export function buildAgentSpawn(
   bin: string,
   args: string[],
   platform: NodeJS.Platform = process.platform
 ): AgentSpawnSpec {
-  const ext = path.extname(bin).toLowerCase();
-  if (platform === "win32" && (ext === ".cmd" || ext === ".bat")) {
-    return {
-      file: process.env.ComSpec ?? "cmd.exe",
-      args: ["/d", "/s", "/c", bin, ...args]
-    };
-  }
-
-  return { file: bin, args };
-}
-
-
-export function resolveRunnerMode(): RunnerMode {
-  const mode = process.env.FEATURE_SPRINT_RUNNER_MODE?.trim().toLowerCase();
-  if (mode === "real") {
-    return "real";
-  }
-  if (mode === "codex") {
-    return "codex";
-  }
-  if (mode === "cursor") {
-    return "cursor";
-  }
-  return "mock";
+  return buildAgentSpawnSpec(bin, args, platform);
 }
 
 export function resolveMaxOutputChars(): number {
@@ -157,15 +150,25 @@ async function attachImplementationMetadata(
   request: FeatureSprintRunnerRequest,
   worktreePath: string,
   branchName: string,
-  base: FeatureSprintRunnerResponse
+  base: FeatureSprintRunnerResponse,
+  options?: { preRunChangedFiles?: string[] }
 ): Promise<FeatureSprintRunnerResponse> {
-  const git = await captureGitMetadata(worktreePath);
+  const git = await captureGitMetadata(worktreePath, {
+    preRunChangedFiles: options?.preRunChangedFiles
+  });
   let verificationResults = base.verificationResults;
 
   if (request.runVerification) {
     verificationResults = await runVerificationCommands(
       worktreePath,
       request.verificationCommands ?? []
+    );
+  }
+
+  const parseWarnings = [...(base.parseWarnings ?? [])];
+  if (git.usedPreRunBaseline) {
+    parseWarnings.push(
+      "Changed-file capture subtracts the pre-run workspace snapshot vs HEAD; preexisting dirty paths are not attributed to this run, and content-only edits to already-dirty paths may be under-attributed."
     );
   }
 
@@ -177,12 +180,19 @@ async function attachImplementationMetadata(
     diffStat: git.diffStat,
     changedFiles: git.changedFiles,
     diffText: git.diffText,
-    verificationResults
+    verificationResults,
+    parseWarnings: parseWarnings.length > 0 ? parseWarnings : undefined
   });
 }
 
 type SpawnAgentArgs =
-  | { ok: true; bin: string; args: string[]; preview: string; feedPromptViaStdin?: boolean }
+  | {
+      ok: true;
+      bin: string;
+      args: string[];
+      preview: string;
+      feedPromptViaStdin?: boolean;
+    }
   | { ok: false; error: string };
 
 function buildAgentArgs(
@@ -192,25 +202,27 @@ function buildAgentArgs(
 ): SpawnAgentArgs {
   const provider = resolveProfileProvider(profile);
   if (provider === "cursor") {
-    const cursorArgs = buildCursorArgs(promptPath, { workspacePath });
+    const cursorArgs = buildCursorArgs(promptPath, { workspacePath, profile });
     if (!cursorArgs.ok) {
       return cursorArgs;
     }
+    const resolved = resolveCursorBin();
     return {
       ok: true,
-      bin: cursorArgs.bin,
+      bin: resolved.exists ? resolved.resolved : cursorArgs.bin,
       args: cursorArgs.args,
       preview: cursorArgs.preview
     };
   }
 
-  const codexArgs = buildCodexArgs(promptPath);
+  const codexArgs = buildCodexArgs(promptPath, { workspacePath, profile });
   if (!codexArgs.ok) {
     return codexArgs;
   }
+  const resolved = resolveCodexBin();
   return {
     ok: true,
-    bin: codexArgs.bin,
+    bin: resolved.exists ? resolved.resolved : codexArgs.bin,
     args: codexArgs.args,
     preview: codexArgs.preview,
     feedPromptViaStdin: codexArgs.feedPromptViaStdin
@@ -224,159 +236,244 @@ function agentFailureLabel(profile: FeatureSprintRunnerProfile): string {
 async function spawnAgentInWorktree(
   request: FeatureSprintRunnerRequest,
   worktreePath: string,
-  startedAt: string
+  startedAt: string,
+  options?: { readOnly?: boolean }
 ): Promise<FeatureSprintRunnerResponse> {
+  const mode = resolveRunnerMode();
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "feature-sprint-runner-"));
   const promptPath = path.join(tempDir, "prompt.md");
   const agentLabel = agentFailureLabel(request.profile);
+  const readOnly = options?.readOnly === true;
+  let baselineStatus = "";
 
   try {
+    if (readOnly) {
+      baselineStatus = await captureReadonlyBaseline(worktreePath);
+    }
+
     await writeFile(promptPath, request.promptMarkdown, "utf8");
     const argsResult = buildAgentArgs(request.profile, promptPath, worktreePath);
     if (!argsResult.ok) {
-      return {
+      return buildRunnerResult({
         ok: false,
         profile: request.profile,
+        runnerMode: mode,
         error: argsResult.error,
         startedAt,
-        completedAt: new Date().toISOString()
-      };
+        terminationReason: "args_error",
+        failureClass: "runner"
+      });
+    }
+
+    if (resolveProfileProvider(request.profile) === "cursor") {
+      const cursorResolved = resolveCursorBin();
+      if (!cursorResolved.exists && argsResult.bin === "agent") {
+        return buildRunnerResult({
+          ok: false,
+          profile: request.profile,
+          runnerMode: mode,
+          error: `Cursor CLI not found (${cursorResolved.resolved}). Install with the Cursor installer and verify: agent --version`,
+          startedAt,
+          commandPreview: argsResult.preview,
+          terminationReason: "spawn_error",
+          failureClass: "environment",
+          diagnosticMessage: "Missing Cursor CLI."
+        });
+      }
+    }
+
+    if (resolveProfileProvider(request.profile) === "codex") {
+      const codexResolved = resolveCodexBin();
+      if (!codexResolved.exists && (argsResult.bin === "codex" || argsResult.bin.endsWith("codex"))) {
+        return buildRunnerResult({
+          ok: false,
+          profile: request.profile,
+          runnerMode: mode,
+          error: `Codex CLI not found (${codexResolved.resolved}). Install @openai/codex or set FEATURE_SPRINT_CODEX_BIN.`,
+          startedAt,
+          commandPreview: argsResult.preview,
+          terminationReason: "spawn_error",
+          failureClass: "environment",
+          diagnosticMessage: "Missing Codex CLI."
+        });
+      }
     }
 
     const timeoutMs = request.timeoutMs ?? FEATURE_SPRINT_RUNNER_DEFAULT_TIMEOUT_MS;
     const maxOutputChars = resolveMaxOutputChars();
 
-    const spawnSpec = buildAgentSpawnSpec(argsResult.bin, argsResult.args);
-
-    const result = await new Promise<{
-      exitCode: number | null;
-      stdout: string;
-      stderr: string;
-      timedOut: boolean;
-    }>((resolve) => {
-      let stdout = "";
-      let stderr = "";
-      let killed = false;
-      let child: ReturnType<typeof spawn>;
-
-      try {
-        child = spawn(spawnSpec.file, spawnSpec.args, {
-          shell: false,
-          cwd: worktreePath,
-          env: process.env,
-          stdio: argsResult.feedPromptViaStdin ? ["pipe", "pipe", "pipe"] : undefined
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        resolve({
-          exitCode: 1,
-          stdout: "",
-          stderr: `Failed to spawn ${agentLabel} CLI: ${message}`,
-          timedOut: false
-        });
-        return;
-      }
-
-      const timer = setTimeout(() => {
-        killed = true;
-        child.kill("SIGTERM");
-      }, timeoutMs);
-
-      if (argsResult.feedPromptViaStdin) {
-        if (!child.stdin) {
-          clearTimeout(timer);
-          resolve({
-            exitCode: 1,
-            stdout: "",
-            stderr: `Failed to pipe prompt to ${agentLabel} CLI: stdin unavailable.`,
-            timedOut: false
-          });
-          return;
-        }
-        child.stdin.write(request.promptMarkdown, "utf8");
-        child.stdin.end();
-      }
-
-      child.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
-        if (stdout.length > maxOutputChars * 2) {
-          stdout = stdout.slice(0, maxOutputChars * 2);
-        }
-      });
-
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-        if (stderr.length > maxOutputChars) {
-          stderr = stderr.slice(0, maxOutputChars);
-        }
-      });
-
-      child.on("close", (exitCode) => {
-        clearTimeout(timer);
-        resolve({ exitCode, stdout, stderr, timedOut: killed });
-      });
-
-      child.on("error", (error) => {
-        clearTimeout(timer);
-        resolve({
-          exitCode: 1,
-          stdout,
-          stderr: `${stderr}\nFailed to spawn ${agentLabel} CLI: ${error.message}`.trim(),
-          timedOut: false
-        });
-      });
+    const result = await spawnAgentProcess({
+      bin: argsResult.bin,
+      args: argsResult.args,
+      cwd: worktreePath,
+      env: process.env,
+      timeoutMs,
+      maxStdoutChars: maxOutputChars * 2,
+      maxStderrChars: maxOutputChars,
+      stdinText: argsResult.feedPromptViaStdin ? request.promptMarkdown : undefined
     });
 
     const completedAt = new Date().toISOString();
-    const outputText = truncateOutput(
-      [result.stdout, result.stderr].filter(Boolean).join("\n").trim(),
-      maxOutputChars
+    const provider = resolveProfileProvider(request.profile);
+    const outputFormat =
+      provider === "cursor" ? resolveCursorOutputFormatEnv() : "text";
+    const normalized = normalizeAgentCapturedOutput(
+      result.stdout,
+      result.stderr,
+      outputFormat
     );
+    const stdoutText = truncateOutput(result.stdout.trim(), maxOutputChars);
+    const stderrText = truncateOutput(result.stderr.trim(), maxOutputChars);
+    const outputText = truncateOutput(normalized.text, maxOutputChars);
 
-    if (result.timedOut) {
-      return {
+    const withContext = {
+      executionContext: request.executionContext
+    };
+
+    if (result.termination === "timeout") {
+      return buildRunnerResult({
         ok: false,
         profile: request.profile,
+        runnerMode: mode,
         error: `${agentLabel} runner timed out.`,
-        exitCode: result.exitCode ?? undefined,
+        exitCode: result.exitCode,
         startedAt,
         completedAt,
         commandPreview: argsResult.preview,
-        outputText: outputText || undefined
-      };
+        outputText: outputText || undefined,
+        stdoutText: stdoutText || undefined,
+        stderrText: stderrText || undefined,
+        terminationReason: "timeout",
+        timedOut: true,
+        resultUsability: "unusable",
+        diagnosticMessage: `${agentLabel} timed out after ${timeoutMs}ms.`,
+        ...withContext
+      });
     }
 
-    if ((result.exitCode ?? 1) !== 0) {
-      return {
+    if (result.termination === "cancelled") {
+      return buildRunnerResult({
         ok: false,
         profile: request.profile,
-        error: outputText || `${agentLabel} runner failed.`,
-        exitCode: result.exitCode ?? undefined,
+        runnerMode: mode,
+        error: `${agentLabel} run was cancelled.`,
+        exitCode: result.exitCode,
         startedAt,
         completedAt,
         commandPreview: argsResult.preview,
-        outputText: outputText || undefined
-      };
+        outputText: outputText || undefined,
+        stdoutText: stdoutText || undefined,
+        stderrText: stderrText || undefined,
+        terminationReason: "cancelled",
+        cancelled: true,
+        resultUsability: "unusable",
+        diagnosticMessage: `${agentLabel} run cancelled.`,
+        ...withContext
+      });
     }
 
-    let finalOutput = outputText;
-    if (!finalOutput) {
-      try {
-        finalOutput = await readFile(promptPath, "utf8");
-      } catch {
-        finalOutput = "";
+    if (result.termination === "spawn_error" || (result.exitCode ?? 1) !== 0) {
+      const terminationReason =
+        result.termination === "spawn_error" ? "spawn_error" : "agent_nonzero_exit";
+      return buildRunnerResult({
+        ok: false,
+        profile: request.profile,
+        runnerMode: mode,
+        error: outputText || `${agentLabel} runner failed.`,
+        exitCode: result.exitCode,
+        startedAt,
+        completedAt,
+        commandPreview: argsResult.preview,
+        outputText: outputText || undefined,
+        stdoutText: stdoutText || undefined,
+        stderrText: stderrText || undefined,
+        terminationReason,
+        failureClass: terminationReason === "spawn_error" ? "environment" : "agent",
+        resultUsability: terminationReason === "spawn_error" ? "unusable" : "needs_human_review",
+        diagnosticMessage:
+          terminationReason === "spawn_error"
+            ? `Failed to spawn ${agentLabel} CLI.`
+            : `${agentLabel} exited with code ${result.exitCode ?? 1}.`,
+        ...withContext
+      });
+    }
+
+    // Implementation usability is finalized after git capture (worktree evidence).
+    // Scoping/review require nonempty text now.
+    const parseWarnings = [...normalized.parseWarnings];
+    let response: FeatureSprintRunnerResponse;
+
+    if (isImplementationProfile(request.profile)) {
+      response = buildRunnerResult({
+        ok: true,
+        profile: request.profile,
+        runnerMode: mode,
+        outputText: outputText || undefined,
+        exitCode: result.exitCode ?? 0,
+        startedAt,
+        completedAt,
+        commandPreview: argsResult.preview,
+        stdoutText: stdoutText || undefined,
+        stderrText: stderrText || undefined,
+        terminationReason: "completed",
+        parseWarnings: parseWarnings.length > 0 ? parseWarnings : undefined,
+        ...withContext
+      });
+    } else {
+      const usability = assessCompletedRunUsability({
+        profile: request.profile,
+        outputText,
+        agentLabel
+      });
+      parseWarnings.push(...usability.parseWarnings);
+      response = buildRunnerResult({
+        ok: usability.ok,
+        profile: request.profile,
+        runnerMode: mode,
+        outputText: outputText || undefined,
+        error: usability.error,
+        exitCode: result.exitCode ?? 0,
+        startedAt,
+        completedAt,
+        commandPreview: argsResult.preview,
+        stdoutText: stdoutText || undefined,
+        stderrText: stderrText || undefined,
+        terminationReason: "completed",
+        failureClass: usability.failureClass,
+        resultUsability: usability.resultUsability,
+        parseWarnings: parseWarnings.length > 0 ? parseWarnings : undefined,
+        diagnosticMessage: usability.diagnosticMessage,
+        ...withContext
+      });
+    }
+
+    if (readOnly) {
+      const mutation = await detectReadonlyMutations(worktreePath, baselineStatus);
+      if (!mutation.ok) {
+        response = buildRunnerResult({
+          ok: false,
+          profile: request.profile,
+          runnerMode: mode,
+          error: mutation.error,
+          exitCode: result.exitCode ?? 0,
+          startedAt,
+          completedAt,
+          commandPreview: argsResult.preview,
+          outputText: response.outputText,
+          stdoutText: stdoutText || undefined,
+          stderrText: stderrText || undefined,
+          terminationReason: "readonly_mutation",
+          failureClass: "agent",
+          resultUsability: "needs_human_review",
+          diagnosticMessage:
+            "Read-only phase wrote unexpected changes. Review the working tree; nothing was reverted.",
+          gitStatus: (await captureGitMetadata(worktreePath)).gitStatus,
+          ...withContext
+        });
       }
     }
 
-    return {
-      ok: true,
-      profile: request.profile,
-      outputText: truncateOutput(finalOutput, maxOutputChars),
-      exitCode: result.exitCode ?? 0,
-      startedAt,
-      completedAt,
-      commandPreview: argsResult.preview
-    };
+    return response;
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -386,24 +483,30 @@ async function runRealScopingOrReview(
   request: FeatureSprintRunnerRequest,
   startedAt: string
 ): Promise<FeatureSprintRunnerResponse> {
+  const mode = resolveRunnerMode();
   const gateError = assertRealRunAllowed(request.profile);
   if (gateError) {
-    return {
+    return buildRunnerResult({
       ok: false,
       profile: request.profile,
+      runnerMode: mode,
       error: gateError,
       startedAt,
-      completedAt: new Date().toISOString()
-    };
+      terminationReason: "gate_rejected",
+      failureClass: "environment",
+      diagnosticMessage: gateError
+    });
   }
 
-  return spawnAgentInWorktree(request, request.repoPath?.trim() || process.cwd(), startedAt);
+  const cwd = request.repoPath?.trim() || process.cwd();
+  return spawnAgentInWorktree(request, cwd, startedAt, { readOnly: true });
 }
 
 async function runMockImplementation(
   request: FeatureSprintRunnerRequest,
   startedAt: string
 ): Promise<FeatureSprintRunnerResponse> {
+  const mode = resolveRunnerMode();
   const worktree = await createFeatureWorktree({
     repoPath: request.repoPath!,
     baseRef: request.worktree?.baseRef,
@@ -413,13 +516,35 @@ async function runMockImplementation(
   });
 
   if (!worktree.ok) {
-    return {
+    return buildRunnerResult({
       ok: false,
       profile: request.profile,
+      runnerMode: mode,
       error: worktree.error,
       startedAt,
-      completedAt: new Date().toISOString()
-    };
+      terminationReason: "worktree_invalid",
+      failureClass: "runner",
+      diagnosticMessage: worktree.error
+    });
+  }
+
+  const workspaceCheck = await validateImplementationWorkspace(
+    worktree.worktreePath,
+    worktree.repoTopLevel
+  );
+  if (!workspaceCheck.ok) {
+    return buildRunnerResult({
+      ok: false,
+      profile: request.profile,
+      runnerMode: mode,
+      error: workspaceCheck.error,
+      startedAt,
+      worktreePath: worktree.worktreePath,
+      branchName: worktree.branchName,
+      terminationReason: "worktree_invalid",
+      failureClass: "runner",
+      diagnosticMessage: workspaceCheck.error
+    });
   }
 
   await mkdir(path.join(worktree.worktreePath, ".life-harness"), { recursive: true });
@@ -445,14 +570,17 @@ async function runMockImplementation(
     request,
     worktree.worktreePath,
     worktree.branchName,
-    {
+    buildRunnerResult({
       ok: true,
       profile: request.profile,
+      runnerMode: mode,
       outputText,
       startedAt,
-      completedAt: new Date().toISOString(),
-      commandPreview: `mock:${request.profile}`
-    }
+      commandPreview: `mock:${request.profile}`,
+      terminationReason: "completed",
+      worktreePath: worktree.worktreePath,
+      branchName: worktree.branchName
+    })
   );
 }
 
@@ -460,15 +588,19 @@ async function runRealImplementation(
   request: FeatureSprintRunnerRequest,
   startedAt: string
 ): Promise<FeatureSprintRunnerResponse> {
+  const mode = resolveRunnerMode();
   const gateError = assertRealImplementationAllowed(request.profile);
   if (gateError) {
-    return {
+    return buildRunnerResult({
       ok: false,
       profile: request.profile,
+      runnerMode: mode,
       error: gateError,
       startedAt,
-      completedAt: new Date().toISOString()
-    };
+      terminationReason: "gate_rejected",
+      failureClass: "environment",
+      diagnosticMessage: gateError
+    });
   }
 
   const worktree = await createFeatureWorktree({
@@ -480,30 +612,112 @@ async function runRealImplementation(
   });
 
   if (!worktree.ok) {
-    return {
+    return buildRunnerResult({
       ok: false,
       profile: request.profile,
+      runnerMode: mode,
       error: worktree.error,
       startedAt,
-      completedAt: new Date().toISOString()
-    };
-  }
-
-  const agentResult = await spawnAgentInWorktree(request, worktree.worktreePath, startedAt);
-  if (!agentResult.ok) {
-    return capGitMetadataFields({
-      ...agentResult,
-      worktreePath: worktree.worktreePath,
-      branchName: worktree.branchName
+      terminationReason: "worktree_invalid",
+      failureClass: "runner",
+      diagnosticMessage: worktree.error
     });
   }
 
-  return attachImplementationMetadata(
+  const workspaceCheck = await validateImplementationWorkspace(
+    worktree.worktreePath,
+    worktree.repoTopLevel
+  );
+  if (!workspaceCheck.ok) {
+    return buildRunnerResult({
+      ok: false,
+      profile: request.profile,
+      runnerMode: mode,
+      error: workspaceCheck.error,
+      startedAt,
+      worktreePath: worktree.worktreePath,
+      branchName: worktree.branchName,
+      terminationReason: "worktree_invalid",
+      failureClass: "runner",
+      diagnosticMessage: workspaceCheck.error
+    });
+  }
+
+  const preRunChangedFiles = await captureChangedFiles(worktree.worktreePath);
+  const agentResult = await spawnAgentInWorktree(request, worktree.worktreePath, startedAt);
+  // Non-completed failures (timeout/cancel/spawn/nonzero) stay failed even before git capture.
+  if (
+    agentResult.terminationReason &&
+    agentResult.terminationReason !== "completed"
+  ) {
+    return capGitMetadataFields({
+      ...agentResult,
+      worktreePath: worktree.worktreePath,
+      branchName: worktree.branchName,
+      executionContext: request.executionContext
+    });
+  }
+
+  const withMeta = await attachImplementationMetadata(
     request,
     worktree.worktreePath,
     worktree.branchName,
-    agentResult
+    agentResult,
+    { preRunChangedFiles }
   );
+
+  const usability = assessCompletedRunUsability({
+    profile: request.profile,
+    outputText: withMeta.outputText,
+    changedFiles: withMeta.changedFiles,
+    agentLabel: agentFailureLabel(request.profile)
+  });
+
+  if (usability.ok) {
+    return {
+      ...withMeta,
+      ok: true,
+      failureClass: "none",
+      resultUsability: "usable",
+      parseWarnings: [
+        ...(withMeta.parseWarnings ?? []),
+        ...usability.parseWarnings
+      ].filter(Boolean),
+      executionContext: request.executionContext
+    };
+  }
+
+  // Preserve the subprocess runId — do not mint a second identity on reassessment.
+  return buildRunnerResult({
+    ok: false,
+    profile: request.profile,
+    runnerMode: mode,
+    runId: withMeta.runId,
+    outputText: withMeta.outputText,
+    error: usability.error,
+    exitCode: withMeta.exitCode,
+    startedAt: withMeta.startedAt,
+    completedAt: withMeta.completedAt,
+    commandPreview: withMeta.commandPreview,
+    worktreePath: withMeta.worktreePath,
+    branchName: withMeta.branchName,
+    gitStatus: withMeta.gitStatus,
+    diffStat: withMeta.diffStat,
+    changedFiles: withMeta.changedFiles,
+    diffText: withMeta.diffText,
+    verificationResults: withMeta.verificationResults,
+    stdoutText: withMeta.stdoutText,
+    stderrText: withMeta.stderrText,
+    terminationReason: "completed",
+    failureClass: usability.failureClass,
+    resultUsability: usability.resultUsability,
+    parseWarnings: [
+      ...(withMeta.parseWarnings ?? []),
+      ...usability.parseWarnings
+    ],
+    diagnosticMessage: usability.diagnosticMessage,
+    executionContext: request.executionContext
+  });
 }
 
 export async function runFeatureSprintPacketOnRunner(
@@ -520,14 +734,17 @@ export async function runFeatureSprintPacketOnRunner(
   }
 
   if (mode === "mock") {
-    return {
+    return buildRunnerResult({
       ok: true,
       profile: request.profile,
+      runnerMode: mode,
       outputText: buildMockRunnerOutput(request.profile),
       startedAt,
-      completedAt: new Date().toISOString(),
-      commandPreview: `mock:${request.profile}`
-    };
+      commandPreview: `mock:${request.profile}`,
+      terminationReason: "completed",
+      resultUsability: "usable",
+      executionContext: request.executionContext
+    });
   }
 
   return runRealScopingOrReview(request, startedAt);

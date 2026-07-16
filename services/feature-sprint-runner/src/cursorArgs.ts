@@ -1,3 +1,10 @@
+import type { FeatureSprintRunnerProfile } from "../../../src/core/featureSprintRunner";
+import {
+  isImplementationProfile,
+  isReviewProfile,
+  isScopingProfile
+} from "../../../src/core/featureSprintRunner";
+
 export type CursorArgsResult =
   | { ok: true; bin: string; args: string[]; preview: string; promptFilePath: string }
   | { ok: false; error: string };
@@ -14,22 +21,47 @@ function resolveCursorOutputFormat(): "text" | "json" {
 export type BuildCursorArgsOptions = {
   /** Isolated worktree or repo root the agent should treat as workspace. */
   workspacePath?: string;
+  /** Profile drives read-only vs write flags. */
+  profile?: FeatureSprintRunnerProfile;
 };
 
+function isReadOnlyProfile(profile: FeatureSprintRunnerProfile | undefined): boolean {
+  if (!profile) {
+    return false;
+  }
+  return isScopingProfile(profile) || isReviewProfile(profile);
+}
+
+/**
+ * Build Cursor `agent` CLI args.
+ *
+ * Confirmed against installed `agent --help` (2026.06.12):
+ * - `-p/--print` headless output to console (stdout)
+ * - `--output-format text|json|stream-json` (only with `--print`)
+ * - `--mode ask` / `--mode plan` are both read-only; Feature Sprint uses `ask` for
+ *   scoping/review because real `plan` smokes exited 0 with empty stdout capture
+ * - `--force` + `--trust` for implementation writes in headless mode
+ * - `--workspace` sets workspace directory
+ */
 export function buildCursorArgs(
   promptFilePath: string,
   options?: BuildCursorArgsOptions
 ): CursorArgsResult {
   const bin = process.env.FEATURE_SPRINT_CURSOR_BIN?.trim() || "agent";
   const normalizedPath = normalizePromptFilePathForCursor(promptFilePath);
+  const readOnly = isReadOnlyProfile(options?.profile);
 
-  const args: string[] = [
-    "-p",
-    "--force",
-    "--trust",
-    "--output-format",
-    resolveCursorOutputFormat()
-  ];
+  const args: string[] = ["-p"];
+
+  if (readOnly) {
+    // Prefer ask over plan for printable stdout under `-p` (see module doc).
+    args.push("--mode", "ask", "--trust");
+  } else {
+    // Implementation (and unknown) retain force/trust — required for non-interactive writes.
+    args.push("--force", "--trust");
+  }
+
+  args.push("--output-format", resolveCursorOutputFormat());
 
   const workspacePath = options?.workspacePath?.trim();
   if (workspacePath) {
@@ -41,9 +73,16 @@ export function buildCursorArgs(
     args.push("--model", model);
   }
 
+  const phaseHint = readOnly
+    ? "This is a read-only feature sprint phase. Do not edit files or run mutating shell commands. Print your full answer to stdout."
+    : isImplementationProfile(options?.profile ?? "cursor_implementation")
+      ? "Implement only inside the assigned workspace/worktree."
+      : "Follow the prompt exactly.";
+
   const prompt =
     `Execute the feature sprint task documented in ${normalizedPath}. ` +
-    "Read that file first, follow it exactly, and include any required fenced JSON blocks in your response.";
+    `${phaseHint} ` +
+    "Read that file first, follow it exactly, and include any required fenced JSON blocks in your printed response.";
 
   args.push(prompt);
 

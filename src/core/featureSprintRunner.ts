@@ -47,7 +47,48 @@ export type FeatureSprintRunnerRequest = {
   worktree?: FeatureSprintRunnerWorktreeRequest;
   verificationCommands?: string[];
   runVerification?: boolean;
+  /**
+   * Opaque Sprint Map / execution-target context. Optional.
+   * The runner copies this into the response when present and must not interpret it.
+   */
+  executionContext?: unknown;
 };
+
+/** Runner-side termination classification (optional; older clients ignore). */
+export type FeatureSprintRunnerTerminationReason =
+  | "completed"
+  | "timeout"
+  | "cancelled"
+  | "spawn_error"
+  | "gate_rejected"
+  | "agent_nonzero_exit"
+  | "worktree_invalid"
+  | "readonly_mutation"
+  | "args_error"
+  | "runner_error";
+
+/**
+ * Distinguishes agent vs runner/environment failures (optional).
+ * `empty_output` means the process exited normally but produced no usable Feature Sprint content.
+ */
+export type FeatureSprintRunnerFailureClass =
+  | "none"
+  | "agent"
+  | "runner"
+  | "environment"
+  | "empty_output";
+
+/**
+ * Workflow usability — independent of process termination.
+ * Prefer this over inferring from `ok` alone when classifying empty successful exits.
+ */
+export type FeatureSprintRunnerResultUsability =
+  | "usable"
+  | "empty_output"
+  | "needs_human_review"
+  | "unusable";
+
+export type FeatureSprintRunnerModeLabel = "mock" | "codex" | "cursor" | "real";
 
 export type FeatureSprintRunnerResponse = {
   ok: boolean;
@@ -66,6 +107,27 @@ export type FeatureSprintRunnerResponse = {
   changedFiles?: string[];
   diffText?: string;
   verificationResults?: FeatureSprintVerificationResult[];
+  /** Optional normalized envelope fields — backward compatible for Sprint Map clients. */
+  runId?: string;
+  provider?: FeatureSprintRunnerAgent;
+  runnerMode?: FeatureSprintRunnerModeLabel;
+  durationMs?: number;
+  terminationReason?: FeatureSprintRunnerTerminationReason;
+  failureClass?: FeatureSprintRunnerFailureClass;
+  /** Workflow usability; `ok` is false whenever this is not `usable`. */
+  resultUsability?: FeatureSprintRunnerResultUsability;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  stdoutText?: string;
+  stderrText?: string;
+  parseWarnings?: string[];
+  /** Safe user-facing failure detail (no secrets). */
+  diagnosticMessage?: string;
+  /**
+   * Opaque execution context echoed from the request (Sprint Map seam).
+   * Runner must not interpret sprint/story/task/phase relationships.
+   */
+  executionContext?: unknown;
 };
 
 export type FeatureSprintWorktreeCleanupRequest = {
@@ -455,6 +517,10 @@ export function validateFeatureSprintRunnerRequest(
     timeoutMs,
     worktree
   };
+
+  if ("executionContext" in record) {
+    request.executionContext = record.executionContext;
+  }
 
   if (isImplementationProfile(record.profile)) {
     if (verificationParsed.commands.length > 0) {
