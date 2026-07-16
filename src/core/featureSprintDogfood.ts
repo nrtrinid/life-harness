@@ -10,6 +10,11 @@ import {
   isFeatureSpecApproved,
   canAdoptNextSliceProposal
 } from "./featureSprintOrchestrator";
+import {
+  assessFeatureSprintMapReadiness,
+  isSprintMapAuthoritative,
+  resolveSprintMapLifecycle
+} from "./featureSprintMap";
 import { getFeatureSprintRunnerRunsForCard } from "./featureSprintRunnerHistory";
 import type { FeatureSprintRunnerHealthProbe } from "./featureSprintRunnerHealth";
 import { formatRunnerHealthCapabilityLine } from "./featureSprintRunnerHealth";
@@ -263,6 +268,37 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
         ? "Scoping output exists; import the plan to continue."
         : "No active plan yet. Run scoping or copy a scoping packet."
   });
+
+  if (plan?.sprintMap) {
+    const lifecycle = resolveSprintMapLifecycle(plan);
+    const authoritative = isSprintMapAuthoritative(plan);
+    const mapReadiness = assessFeatureSprintMapReadiness(plan, {
+      requireMap: authoritative
+    });
+    const noticeText =
+      plan.sprintMapNotices?.map((notice) => notice.message).join(" ") ?? "";
+    checks.push({
+      id: "sprint_map_target",
+      label: authoritative
+        ? "Sprint Map execution (authoritative)"
+        : "Sprint Map preview",
+      status: authoritative
+        ? mapReadiness.canLaunch
+          ? "ready"
+          : mapReadiness.issues.some((issue) => issue.severity === "block")
+            ? "blocked"
+            : "warning"
+        : lifecycle === "out_of_sync"
+          ? "warning"
+          : "ready",
+      detail: authoritative
+        ? [mapReadiness.nextSafeAction, noticeText].filter(Boolean).join(" ")
+        : lifecycle === "out_of_sync"
+          ? noticeText ||
+            "Sprint Map is out of sync with legacy steps. Legacy steps still gate launches."
+          : "Sprint Map is seeded/imported as a preview. Legacy steps still gate launches until you adopt Sprint Map execution."
+    });
+  }
 
   checks.push({
     id: "feature_spec",
