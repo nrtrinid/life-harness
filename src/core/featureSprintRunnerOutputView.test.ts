@@ -374,4 +374,67 @@ describe("buildFeatureSprintRunnerOutputView", () => {
     expect(view?.canCleanWorktree).toBe(true);
     expect(view?.safetyNotes.some((note) => note.includes("isolated worktree"))).toBe(true);
   });
+
+  it("does not expose cleanup for cursor_review runs", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "cursor_review",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "cursor_review",
+      outputText: "Reviewed.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      worktreePath: "/tmp/should-not-clean-review"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(completed.state, created.runId);
+    expect(view?.canCleanWorktree).toBe(false);
+  });
+
+  it("keeps cleanup eligible after blocked dirty cleanup status until force-clean succeeds", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "cursor_implementation",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "cursor_implementation",
+      outputText: "Done.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      worktreePath: "/tmp/worktree-dirty"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const blocked = markFeatureSprintRunnerRunWorktreeCleanup(completed.state, created.runId, {
+      ok: false,
+      status: "blocked",
+      worktreePath: "/tmp/worktree-dirty",
+      message: "Uncommitted changes detected.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    }, FIXED_NOW.toISOString());
+    if (!blocked.ok) {
+      throw new Error("Expected mark to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(blocked.state, created.runId);
+    expect(view?.canCleanWorktree).toBe(true);
+    expect(view?.worktreeCleanupStatus).toBe("blocked");
+  });
 });

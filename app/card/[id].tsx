@@ -75,6 +75,11 @@ import {
   type FeatureSprintRunnerAgent,
   type FeatureSprintRunnerExecutionContext
 } from "../../src/core/featureSprintRunner";
+import {
+  applyFeatureSprintProjectDefaultRunnerAgent,
+  bindFeatureSprintRunnerAgentForCard,
+  clearFeatureSprintProjectRunnerAgentDefault
+} from "../../src/core/featureSprintRunnerAgentSession";
 import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintRunnerHistory";
 import { buildFeatureSprintRunnerOutputView } from "../../src/core/featureSprintRunnerOutputView";
 import {
@@ -384,6 +389,8 @@ export default function CardDetailScreen() {
   const [runnerAgent, setRunnerAgent] = useState<FeatureSprintRunnerAgent>("codex");
   const [projectDefaultRunnerAgent, setProjectDefaultRunnerAgent] =
     useState<FeatureSprintRunnerAgent>("codex");
+  /** Session provider selection is sticky per card; do not reset on runner-history refreshes. */
+  const runnerAgentBoundToCardIdRef = useRef<string | null>(null);
   const [isCheckingRunner, setIsCheckingRunner] = useState(false);
   const [isRunningScoping, setIsRunningScoping] = useState(false);
   const [isRunningReview, setIsRunningReview] = useState(false);
@@ -430,7 +437,21 @@ export default function CardDetailScreen() {
     setProjectNotes(project?.notes ?? "");
     const defaultAgent = project?.defaultRunnerAgent ?? "codex";
     setProjectDefaultRunnerAgent(defaultAgent);
-    setRunnerAgent(defaultAgent);
+    // Bind session provider once per card. Do not snap back to project default when
+    // runner history / plans refresh after Cursor implement or review runs.
+    const nextBinding = bindFeatureSprintRunnerAgentForCard({
+      cardId: card.id,
+      binding: {
+        boundCardId: runnerAgentBoundToCardIdRef.current,
+        // Sticky path returns this binding unchanged; rebound path uses project default.
+        runnerAgent: "codex"
+      },
+      projectDefaultRunnerAgent: defaultAgent
+    });
+    if (nextBinding.boundCardId !== runnerAgentBoundToCardIdRef.current) {
+      runnerAgentBoundToCardIdRef.current = nextBinding.boundCardId;
+      setRunnerAgent(nextBinding.runnerAgent);
+    }
   }, [
     card,
     cards,
@@ -1514,7 +1535,10 @@ export default function CardDetailScreen() {
       if (historyCreate.ok && historyCreate.runId) {
         setSelectedRunnerRunId(historyCreate.runId);
       }
-      const hasVerifyFailure = result.verificationResults?.some((row) => row.status === "failed");
+      const hasVerifyFailure = result.verificationResults?.some(
+        (row) =>
+          row.status === "failed" || row.status === "timed_out" || row.status === "cancelled"
+      );
       showNotice(
         "success",
         hasVerifyFailure
@@ -2018,14 +2042,30 @@ export default function CardDetailScreen() {
                 ) : null}
                 {isImplementationProfile(run.profile) &&
                 run.verificationResults
-                  ?.filter((row) => row.status === "failed")
+                  ?.filter(
+                    (row) =>
+                      row.status === "failed" ||
+                      row.status === "rejected" ||
+                      row.status === "timed_out" ||
+                      row.status === "cancelled"
+                  )
                   .slice(0, 1)
-                  .map((failed) => {
-                    const detail = failed.error ?? failed.stderrExcerpt ?? failed.stdoutExcerpt;
+                  .map((issue) => {
+                    const detail = issue.error ?? issue.stderrExcerpt ?? issue.stdoutExcerpt;
                     const line = detail ? detail.split("\n")[0] : undefined;
+                    const prefix =
+                      issue.status === "rejected"
+                        ? "Rejected"
+                        : issue.status === "timed_out"
+                          ? "Timed out"
+                          : issue.status === "cancelled"
+                            ? "Cancelled"
+                            : "Failed";
                     return (
-                      <Text key={`${run.id}-verify-fail`} style={[styles.helpText, { marginTop: 4 }]}>
-                        {line ? `Failed: ${failed.command} — ${line}` : `Failed: ${failed.command}`}
+                      <Text key={`${run.id}-verify-issue`} style={[styles.helpText, { marginTop: 4 }]}>
+                        {line
+                          ? `${prefix}: ${issue.command} — ${line}`
+                          : `${prefix}: ${issue.command}`}
                       </Text>
                     );
                   })}
@@ -2799,7 +2839,9 @@ export default function CardDetailScreen() {
                 defaultRunnerAgent: projectDefaultRunnerAgent
               });
               if (result.ok) {
-                setRunnerAgent(projectDefaultRunnerAgent);
+                setRunnerAgent(
+                  applyFeatureSprintProjectDefaultRunnerAgent(projectDefaultRunnerAgent)
+                );
               }
               showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save project.");
             }}
@@ -2816,8 +2858,8 @@ export default function CardDetailScreen() {
               setLikelyFilesText("");
               setVerificationCommandsText("");
               setProjectNotes("");
-              setProjectDefaultRunnerAgent("codex");
-              setRunnerAgent("codex");
+              setProjectDefaultRunnerAgent(clearFeatureSprintProjectRunnerAgentDefault());
+              setRunnerAgent(clearFeatureSprintProjectRunnerAgentDefault());
               showNotice(result.ok ? "success" : "warning", result.message ?? "Could not clear project.");
             }}
           >

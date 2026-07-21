@@ -3,7 +3,8 @@ import { spawn } from "node:child_process";
 import {
   FEATURE_SPRINT_VERIFY_MAX_COMMANDS,
   FEATURE_SPRINT_VERIFY_MAX_OUTPUT_CHARS,
-  type FeatureSprintVerificationResult
+  type FeatureSprintVerificationResult,
+  type FeatureSprintVerificationStatus
 } from "../../../src/core/featureSprintRunner";
 
 export type ParsedVerificationCommand = {
@@ -32,7 +33,14 @@ const ALLOWED_BINS = new Set([
 
 const WINDOWS_PACKAGE_MANAGER_BINS = new Set(["npm", "npx", "pnpm", "yarn"]);
 
-const BLOCKED_BINS = new Set(["cd", "rm", "del", "mv", "cp", "curl", "wget", "ssh", "scp", "git"]);
+/** Fully blocked bins — never executed. Narrow git allowlist is handled separately. */
+const BLOCKED_BINS = new Set(["cd", "rm", "del", "mv", "cp", "curl", "wget", "ssh", "scp"]);
+
+/**
+ * Read-only git forms permitted for Project Registry verification.
+ * Other git verbs remain rejected (not executed).
+ */
+const ALLOWED_GIT_ARG_FORMS: ReadonlyArray<readonly string[]> = [["diff", "--check"]];
 
 const SHELL_METACHAR_PATTERN = /[|`;&<>$()\\\n\r"'`]/;
 
@@ -78,6 +86,12 @@ function truncateExcerpt(text: string, maxChars: number): string {
   return `${text.slice(0, maxChars)}\n[truncated]`;
 }
 
+function isAllowedGitArgs(args: string[]): boolean {
+  return ALLOWED_GIT_ARG_FORMS.some(
+    (form) => form.length === args.length && form.every((token, index) => token === args[index])
+  );
+}
+
 export function parseVerificationCommand(command: string): ParsedVerificationCommand | null {
   const trimmed = command.trim();
   if (!trimmed) {
@@ -99,6 +113,19 @@ export function parseVerificationCommand(command: string): ParsedVerificationCom
   }
 
   const binLower = first.toLowerCase();
+  const args = tokens.slice(1);
+
+  if (binLower === "git") {
+    if (!isAllowedGitArgs(args)) {
+      return null;
+    }
+    return {
+      command: trimmed,
+      bin: "git",
+      args
+    };
+  }
+
   if (BLOCKED_BINS.has(binLower)) {
     return null;
   }
@@ -110,22 +137,21 @@ export function parseVerificationCommand(command: string): ParsedVerificationCom
   return {
     command: trimmed,
     bin: binLower,
-    args: tokens.slice(1)
+    args
   };
 }
 
-function failedResult(
+function resultWithStatus(
   command: string,
   startedAt: string,
-  error: string,
+  status: FeatureSprintVerificationStatus,
   extras: Partial<FeatureSprintVerificationResult> = {}
 ): FeatureSprintVerificationResult {
   return {
     command,
-    status: "failed",
+    status,
     startedAt,
     completedAt: new Date().toISOString(),
-    error,
     ...extras
   };
 }
@@ -206,31 +232,37 @@ async function runSingleCommand(
   });
 
   const completedAt = new Date().toISOString();
+  const stdoutExcerpt = truncateExcerpt(result.stdout.trim(), maxOutputChars) || undefined;
+  const stderrExcerpt = truncateExcerpt(result.stderr.trim(), maxOutputChars) || undefined;
 
   if (result.spawnError) {
-    return failedResult(parsed.command, startedAt, result.spawnError, {
+    return resultWithStatus(parsed.command, startedAt, "failed", {
       completedAt,
-      stdoutExcerpt: truncateExcerpt(result.stdout.trim(), maxOutputChars) || undefined,
-      stderrExcerpt: truncateExcerpt(result.stderr.trim(), maxOutputChars) || undefined
+      error: result.spawnError,
+      stdoutExcerpt,
+      stderrExcerpt
     });
   }
 
   if (result.timedOut) {
-    return failedResult(parsed.command, startedAt, "Verification command timed out.", {
+    return resultWithStatus(parsed.command, startedAt, "timed_out", {
       completedAt,
       exitCode: result.exitCode ?? undefined,
-      stdoutExcerpt: truncateExcerpt(result.stdout.trim(), maxOutputChars) || undefined,
-      stderrExcerpt: truncateExcerpt(result.stderr.trim(), maxOutputChars) || undefined
+      error: "Verification command timed out.",
+      stdoutExcerpt,
+      stderrExcerpt
     });
   }
 
   const exitCode = result.exitCode ?? 1;
+  // Success follows process evidence: spawn ok, not timed out, exit code 0.
+  // Nonempty stderr alone does not fail a successful exit.
   return {
     command: parsed.command,
     status: exitCode === 0 ? "passed" : "failed",
     exitCode,
-    stdoutExcerpt: truncateExcerpt(result.stdout.trim(), maxOutputChars) || undefined,
-    stderrExcerpt: truncateExcerpt(result.stderr.trim(), maxOutputChars) || undefined,
+    stdoutExcerpt,
+    stderrExcerpt,
     startedAt,
     completedAt
   };
@@ -249,10 +281,13 @@ export async function runVerificationCommands(
 
   for (const command of cappedCommands) {
     const startedAt = new Date().toISOString();
+    const trimmed = command.trim() || command;
     const parsed = parseVerificationCommand(command);
     if (!parsed) {
       results.push(
-        failedResult(command.trim() || command, startedAt, "Command rejected by verification parser.")
+        resultWithStatus(trimmed, startedAt, "rejected", {
+          error: "Command rejected by verification parser."
+        })
       );
       continue;
     }

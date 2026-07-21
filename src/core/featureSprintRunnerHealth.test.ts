@@ -58,4 +58,17 @@ describe("featureSprintRunnerHealth", () => {
     expect(guardRunnerAgentAvailability("cursor", probe)).toContain("Cursor runs are unavailable");
     expect(buildRunnerAgentUnavailableHint("cursor", probe)).toContain("Runner setup");
   });
+
+  it("allows Cursor when Codex is disabled in real mode", () => {
+    const probe = {
+      ok: true,
+      mode: "real" as const,
+      codexAvailable: false,
+      cursorAvailable: true
+    };
+    expect(isRunnerAgentAvailable(probe, "cursor")).toBe(true);
+    expect(isRunnerAgentAvailable(probe, "codex")).toBe(false);
+    expect(guardRunnerAgentAvailability("cursor", probe)).toBeUndefined();
+    expect(guardRunnerAgentAvailability("codex", probe)).toContain("Codex runs are unavailable");
+  });
 });

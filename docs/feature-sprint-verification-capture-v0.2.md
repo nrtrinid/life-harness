@@ -2,7 +2,7 @@
 
 ## What this adds
 
-After a `codex_implementation` run finishes in an isolated worktree, the local runner can execute **user-configured verification commands** from Project Registry, capture pass/fail output excerpts, store results in runner history, and include a `## Verification` section in the agent output summary.
+After a `codex_implementation` or `cursor_implementation` run finishes in an isolated worktree, the local runner can execute **user-configured verification commands** from Project Registry, capture pass/fail/rejected output excerpts, store results in runner history, and include a `## Verification` section in the agent output summary.
 
 Goal in one sentence: **capture verification signal without auto-saving, auto-reviewing, or failing the implementation run when checks fail.**
 
@@ -28,11 +28,18 @@ Rejected:
 
 - Shell metacharacters: `|`, `;`, `&`, `&&`, `||`, `>`, `<`, backticks, `$(`, quotes, newlines
 - Env assignments (`FOO=bar ...`)
-- Blocked bins: `cd`, `git`, `rm`, `del`, `mv`, `cp`, `curl`, `wget`, `ssh`, `scp`
+- Blocked bins: `cd`, `rm`, `del`, `mv`, `cp`, `curl`, `wget`, `ssh`, `scp`
+- Other `git` forms (for example `git status`, `git commit`) — rejected, not executed
 
 Allowlisted first tokens: `npm`, `npx`, `pnpm`, `yarn`, `node`, `tsc`, `vitest`, `pytest`, `python`, `python3`
 
-Execution uses `spawn(..., { shell: false, cwd: worktreePath })` with per-command timeout. Native executables (`node`, `python`, etc.) spawn directly. On Windows, allowlisted package-manager bins (`npm`, `npx`, `pnpm`, `yarn`) use a fixed `cmd.exe /d /s /c <bin> ...args` shim path so `.cmd` batch wrappers launch safely — this is not arbitrary shell execution; only parser-validated bin tokens and whitespace-split args are passed.
+Narrow read-only git allowlist (exact args only):
+
+- `git diff --check`
+
+Policy-rejected commands are recorded with status `rejected` (not `failed`). Executed commands use exit-code evidence: `passed` when exit code is `0` (stderr alone does not fail), `failed` when exit code is nonzero, `timed_out` when the timeout kills the process.
+
+Execution uses `spawn(..., { shell: false, cwd: worktreePath })` with per-command timeout. Native executables (`node`, `python`, `git`, etc.) spawn directly. On Windows, allowlisted package-manager bins (`npm`, `npx`, `pnpm`, `yarn`) use a fixed `cmd.exe /d /s /c <bin> ...args` shim path so `.cmd` batch wrappers launch safely — this is not arbitrary shell execution; only parser-validated bin tokens and whitespace-split args are passed.
 
 No raw shell command strings are accepted.
 

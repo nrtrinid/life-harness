@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { isImplementationProfile } from "../../core/featureSprintRunner";
 import {
   FEATURE_SPRINT_RUNNER_DIFF_FALLBACK_MESSAGE,
   FEATURE_SPRINT_RUNNER_DIFF_TRUNCATION_NOTICE,
@@ -151,12 +152,19 @@ export function FeatureRunnerOutputDetails({
         )}
       </DetailBlock>
 
-      {view.profile === "codex_implementation" ? (
+      {isImplementationProfile(view.profile) ? (
         <DetailBlock label="Verification">
           <Text style={styles.bodyText}>Summary: {view.verificationSummary}</Text>
           {view.verificationResults.map((row) => (
             <Text key={`${row.command}-${row.status}`} style={styles.helpText}>
-              {row.status === "failed" ? "!" : row.status === "passed" ? "OK" : "-"} {row.command} ({row.status})
+              {row.status === "failed" || row.status === "timed_out" || row.status === "cancelled"
+                ? "!"
+                : row.status === "passed"
+                  ? "OK"
+                  : row.status === "rejected"
+                    ? "X"
+                    : "-"}{" "}
+              {row.command} ({row.status})
             </Text>
           ))}
           {view.verificationFailures.map((failure) => (
@@ -181,7 +189,7 @@ export function FeatureRunnerOutputDetails({
         </DetailBlock>
       ) : null}
 
-      {view.profile === "codex_implementation" && view.worktreePath ? (
+      {isImplementationProfile(view.profile) && view.worktreePath ? (
         <DetailBlock label="Worktree cleanup">
           {view.canCleanWorktree ? (
             <Text style={styles.helpText}>{FEATURE_SPRINT_WORKTREE_CLEANUP_HELPER}</Text>

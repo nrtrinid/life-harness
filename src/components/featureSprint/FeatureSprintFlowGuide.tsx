@@ -14,19 +14,19 @@ const BEFORE_PLAN_STEPS = [
   "1. Start feature panel — paste ChatGPT web spec, choose source, Save spec.",
   "2. Approve feature spec — required before Run implementation when a spec is saved.",
   "3. Check setup — project metadata, repo path, runner.",
-  "4. Scope it — copy scoping packet or run scoping with Codex.",
+  "4. Scope it — copy scoping packet or run scoping with the selected runner agent (Cursor or Codex).",
   "5. Import plan — inspect output, then click Import plan."
 ] as const;
 
 const AFTER_PLAN_STEPS = [
   "0. Optional: Copy for Cursor localization → import localization (read-only repo map)",
-  "1. Optional: Copy for GPT/Codex prompt audit → Run prompt audit with Codex → import prompt audit",
-  "2. Run implementation in worktree",
+  "1. Optional: Copy for Codex prompt audit → Run prompt audit with Codex → import (Codex-only)",
+  "2. Run implementation in worktree (selected agent)",
   "3. View details — open the run in Recent runner runs",
   "4. Inspect output, changed files, diff, and verification",
   "5. Save agent output",
   "6. Normalize for review",
-  "7. Run review with Codex/Cursor or copy review packet",
+  "7. Run review with the selected agent or copy review packet",
   "8. Import review verdict",
   "9. Advance step — repeat from step 2 for the next slice",
   "10. Mark feature complete",

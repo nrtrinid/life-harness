@@ -171,12 +171,12 @@ function prependOptionalAuditSteps(
   const auditSteps: FeatureSprintActionGuideStep[] = [
     step(
       "copy_prompt_audit",
-      "Copy for GPT/Codex prompt audit (optional)",
+      "Copy for Codex prompt audit (optional, Codex-only)",
       auditSaved ? "done" : "upcoming"
     ),
     step(
       "run_prompt_audit",
-      "Run prompt audit with Codex (optional)",
+      "Run prompt audit with Codex (optional, Codex-only)",
       auditSaved
         ? "done"
         : input.stepPromptAuditRunnerSucceeded
@@ -221,7 +221,7 @@ export function buildFeatureSprintActionGuide(
       steps = markCurrent([
         step("start_runner", "Start npm run feature-runner in a terminal", "current"),
         step("check_runner", "Click Check runner in Start feature", "upcoming"),
-        step("run_scoping", "Copy for ChatGPT/Codex scoping or run scoping", "upcoming")
+        step("run_scoping", `Copy for ${agentLabel} scoping or run scoping`, "upcoming")
       ]);
       break;
     case "run_scoping":
@@ -230,7 +230,7 @@ export function buildFeatureSprintActionGuide(
         step("save_feature_spec", "Save feature spec", "upcoming"),
         step(
           "run_scoping",
-          "Copy for ChatGPT/Codex scoping or run scoping with runner",
+          `Copy for ${agentLabel} scoping or run scoping with runner`,
           "upcoming"
         ),
         step("import_plan", "Import plan", "upcoming")
