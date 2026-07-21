@@ -39,6 +39,23 @@ describe("buildFeatureSprintActionGuide", () => {
     expect(steps.find((item) => item.id === "run_review")?.label).toBe("Run review with Cursor");
   });
 
+  it("names Cursor in scoping action labels when Cursor is selected", () => {
+    const steps = buildFeatureSprintActionGuide({
+      nextActionKind: "run_scoping",
+      runnerAgent: "cursor",
+      implementationRunViewed: false,
+      stepOutputSaved: false,
+      reviewOutputReady: false,
+      reviewVerdictImported: false,
+      scopingOutputReady: false,
+      planImportTextReady: false
+    });
+
+    const scoping = steps.find((item) => item.id === "run_scoping");
+    expect(scoping?.label).toContain("Cursor");
+    expect(scoping?.label).not.toContain("ChatGPT/Codex");
+  });
+
   it("guides post-implementation save flow", () => {
     const steps = buildFeatureSprintActionGuide({
       nextActionKind: "save_agent_output",

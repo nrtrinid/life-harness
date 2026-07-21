@@ -218,6 +218,12 @@ describe("buildFeatureSprintDogfoodSummary", () => {
     });
     expect(summary.nextAction.kind).toBe("run_review");
     expect(summary.nextAction.detail).toContain("Cursor");
+    expect(summary.checks.find((check) => check.id === "review_output")?.detail).toContain(
+      "Run review with Cursor"
+    );
+    expect(summary.checks.find((check) => check.id === "review_output")?.detail).not.toContain(
+      "Run review with Codex"
+    );
   });
 
   it("points project-backed cards with available runner and no plan to run_scoping", () => {

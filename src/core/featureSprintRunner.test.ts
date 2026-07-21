@@ -275,6 +275,31 @@ describe("featureSprintRunner validation", () => {
         }
       ])
     ).toBe("1 failed / 1 passed");
+    expect(
+      summarizeVerificationResults([
+        {
+          command: "git status",
+          status: "rejected",
+          error: "Command rejected by verification parser.",
+          startedAt: "t0",
+          completedAt: "t1"
+        },
+        {
+          command: "git diff --check",
+          status: "passed",
+          exitCode: 0,
+          startedAt: "t1",
+          completedAt: "t2"
+        }
+      ])
+    ).toBe("1 rejected / 1 passed");
+  });
+
+  it("buildRunnerProfile maps Cursor implement and review phases", () => {
+    expect(buildRunnerProfile("cursor", "implementation")).toBe("cursor_implementation");
+    expect(buildRunnerProfile("cursor", "review")).toBe("cursor_review");
+    expect(buildRunnerProfile("codex", "implementation")).toBe("codex_implementation");
+    expect(buildRunnerProfile("codex", "review")).toBe("codex_review");
   });
 
   it("caps verification excerpt lengths", () => {

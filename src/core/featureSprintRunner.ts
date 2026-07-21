@@ -23,7 +23,13 @@ export type FeatureSprintRunnerWorktreeRequest = {
   branchName?: string;
 };
 
-export type FeatureSprintVerificationStatus = "passed" | "failed" | "skipped";
+export type FeatureSprintVerificationStatus =
+  | "passed"
+  | "failed"
+  | "skipped"
+  | "rejected"
+  | "timed_out"
+  | "cancelled";
 
 export type FeatureSprintVerificationResult = {
   command: string;
@@ -479,11 +485,23 @@ export function summarizeVerificationResults(
 
   const passed = results.filter((item) => item.status === "passed").length;
   const failed = results.filter((item) => item.status === "failed").length;
+  const rejected = results.filter((item) => item.status === "rejected").length;
+  const timedOut = results.filter((item) => item.status === "timed_out").length;
+  const cancelled = results.filter((item) => item.status === "cancelled").length;
   const skipped = results.filter((item) => item.status === "skipped").length;
 
   const parts: string[] = [];
   if (failed > 0) {
     parts.push(`${failed} failed`);
+  }
+  if (rejected > 0) {
+    parts.push(`${rejected} rejected`);
+  }
+  if (timedOut > 0) {
+    parts.push(`${timedOut} timed out`);
+  }
+  if (cancelled > 0) {
+    parts.push(`${cancelled} cancelled`);
   }
   if (passed > 0) {
     parts.push(`${passed} passed`);

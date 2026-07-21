@@ -286,7 +286,9 @@ export function FeatureSprintStartFlow({
         <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
           {canCopyScopingPacket ? (
             <Pressable style={styles.secondaryAction} onPress={onCopyScopingPacket}>
-              <Text style={styles.secondaryActionText}>Copy for ChatGPT/Codex scoping</Text>
+              <Text style={styles.secondaryActionText}>
+                {`Copy for ${runnerAgentLabel(runnerAgent)} scoping`}
+              </Text>
             </Pressable>
           ) : (
             <Text style={styles.helpText}>Clipboard copy unavailable in this environment.</Text>

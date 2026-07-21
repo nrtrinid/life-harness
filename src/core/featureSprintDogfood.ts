@@ -204,6 +204,7 @@ function buildMissingCardSummary(cardId: string): FeatureSprintDogfoodSummary {
 
 function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
   const { data, cardId, card, plan, step, runnerHealth } = context;
+  const agentLabel = runnerAgentLabel(context.runnerAgent);
   const project = getProjectForCard(data, cardId);
   const repoPath = cleanOptional(project?.repoPath);
   const verifyCommands = project?.verificationCommands?.filter((command) => command.trim()) ?? [];
@@ -371,7 +372,7 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
         ? step.promptAudit?.verdict === "tighten_first"
           ? "Audit saved (review needed — tighten first). Implementation is not blocked."
           : "Audited implementation prompt saved for this step."
-        : "Optional: copy prompt audit packet, run GPT/Codex, then import."
+        : `Optional: copy prompt audit packet, run Codex (prompt-audit is Codex-only), then import.`
   });
 
   checks.push({
@@ -438,7 +439,7 @@ function buildChecks(context: BuildContext): FeatureSprintDogfoodCheck[] {
       : hasOutput(latestReviewRun)
         ? "Latest review run has output ready to import."
         : step?.outputSummary
-          ? "Run review with Codex or copy a review packet."
+          ? `Run review with ${agentLabel} or copy a review packet.`
           : "Save implementation output before review."
   });
 

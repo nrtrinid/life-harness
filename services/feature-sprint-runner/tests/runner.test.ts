@@ -313,7 +313,7 @@ describe("feature-sprint-runner", () => {
       throw new Error("Expected verificationResults in response.");
     }
 
-    expect(result.body.verificationResults?.[0]?.status).toBe("failed");
+    expect(result.body.verificationResults?.[0]?.status).toBe("rejected");
     expect(result.body.verificationResults?.[0]?.error).toContain("parser");
   });
 
