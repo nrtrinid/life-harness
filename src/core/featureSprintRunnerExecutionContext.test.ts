@@ -267,6 +267,76 @@ describe("buildFeatureSprintRunnerExecutionContext", () => {
     }
     expect(built.error.toLowerCase()).toMatch(/dependenc/);
   });
+
+  it("omits phase for authoritative non-phase (prompt audit) context and history", () => {
+    const { data, plan } = planWithMap(baseData(), {
+      authoritative: true,
+      phase: "implement"
+    });
+    const built = buildFeatureSprintRunnerExecutionContext({
+      plan,
+      stepId: plan.currentStepId
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) {
+      return;
+    }
+    expect(built.context.executionModel).toBe("sprint_map");
+    expect(built.context.sprintId).toBe("sprint-1");
+    expect(built.context.storyId).toBe("story-1");
+    expect(built.context.taskId).toBe("task-b");
+    expect(built.context.phase).toBeUndefined();
+    expect(built.context).not.toHaveProperty("phase");
+
+    const attribution = historyAttributionFromExecutionContext(built.context);
+    expect(attribution.mapPhase).toBeUndefined();
+    const created = createFeatureSprintRunnerRun(data, {
+      profile: "codex_prompt_audit",
+      cardId: "card-ctx-1",
+      ...attribution,
+      planId: plan.id,
+      stepId: plan.currentStepId
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+    const run = created.state.featureSprintRunnerRuns[0]!;
+    expect(run.profile).toBe("codex_prompt_audit");
+    expect(run.sprintId).toBe("sprint-1");
+    expect(run.taskId).toBe("task-b");
+    expect(run.mapPhase).toBeUndefined();
+  });
+
+  it("records implement and review mapPhase for authoritative phase launches", () => {
+    for (const phase of ["implement", "review"] as const) {
+      const { data, plan } = planWithMap(baseData(), { authoritative: true, phase });
+      const built = buildFeatureSprintRunnerExecutionContext({
+        plan,
+        phase,
+        stepId: plan.currentStepId
+      });
+      expect(built.ok).toBe(true);
+      if (!built.ok) {
+        return;
+      }
+      expect(built.context.phase).toBe(phase);
+      const attribution = historyAttributionFromExecutionContext(built.context);
+      expect(attribution.mapPhase).toBe(phase);
+      const created = createFeatureSprintRunnerRun(data, {
+        profile: phase === "implement" ? "cursor_implementation" : "cursor_review",
+        cardId: "card-ctx-1",
+        ...attribution,
+        planId: plan.id,
+        stepId: plan.currentStepId
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) {
+        return;
+      }
+      expect(created.state.featureSprintRunnerRuns[0]?.mapPhase).toBe(phase);
+    }
+  });
 });
 
 describe("execution context transport + history", () => {
@@ -451,6 +521,7 @@ describe("execution context transport + history", () => {
       startedAt: FIXED_NOW.toISOString(),
       completedAt: FIXED_NOW.toISOString(),
       error: "empty",
+      runId: "run-empty-echo",
       failureClass: "empty_output",
       resultUsability: "empty_output",
       terminationReason: "completed",
@@ -481,6 +552,204 @@ describe("execution context transport + history", () => {
     const view = buildFeatureSprintRunnerOutputView(completed.state, run.id)!;
     expect(view.usabilityLabel).toBe("Empty output (unusable)");
     expect(view.taskId).toBe("task-b");
+  });
+
+  it("overlays echoed context from structured readonly_mutation envelope", () => {
+    const { data, plan } = planWithMap(baseData(), { authoritative: true, phase: "review" });
+    const created = createFeatureSprintRunnerRun(data, {
+      profile: "cursor_review",
+      cardId: "card-ctx-1",
+      planId: plan.id,
+      stepId: plan.currentStepId,
+      sprintId: "sprint-1",
+      storyId: "story-1",
+      taskId: "task-b",
+      mapPhase: "review"
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: false,
+      profile: "cursor_review",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      runId: "run-ro-echo",
+      terminationReason: "readonly_mutation",
+      failureClass: "agent",
+      resultUsability: "needs_human_review",
+      error: "readonly_mutation",
+      executionContext: {
+        planId: plan.id,
+        executionModel: "sprint_map",
+        sprintId: "sprint-1",
+        storyId: "story-1",
+        taskId: "task-b",
+        phase: "review"
+      }
+    });
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) {
+      return;
+    }
+    const run = completed.state.featureSprintRunnerRuns[0]!;
+    expect(run.mapPhase).toBe("review");
+    expect(run.terminationReason).toBe("readonly_mutation");
+    expect(run.resultUsability).toBe("needs_human_review");
+  });
+
+  it("keeps create-time attribution on network failure without fabricating runner echo", async () => {
+    const { data, plan } = planWithMap(baseData(), { authoritative: true });
+    const built = buildFeatureSprintRunnerExecutionContext({
+      plan,
+      phase: "implement",
+      stepId: plan.currentStepId
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) {
+      return;
+    }
+    const created = createFeatureSprintRunnerRun(data, {
+      profile: "cursor_implementation",
+      cardId: "card-ctx-1",
+      ...historyAttributionFromExecutionContext(built.context),
+      planId: plan.id,
+      stepId: plan.currentStepId
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    const result = await runFeatureSprintPacket({
+      profile: "cursor_implementation",
+      promptMarkdown: "## implement",
+      repoPath: "C:/tmp/repo",
+      worktree: { enabled: true },
+      executionContext: built.context
+    });
+    expect(result.ok).toBe(false);
+    expect(result.runId).toBeUndefined();
+    expect(result.terminationReason).toBeUndefined();
+    expect(result.executionContext).toEqual(built.context);
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, result);
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) {
+      return;
+    }
+    const run = completed.state.featureSprintRunnerRuns[0]!;
+    expect(run.status).toBe("failed");
+    expect(run.sprintId).toBe("sprint-1");
+    expect(run.taskId).toBe("task-b");
+    expect(run.mapPhase).toBe("implement");
+    expect(run.terminationReason).toBeUndefined();
+    expect(run.failureClass).toBeUndefined();
+    expect(run.resultUsability).toBeUndefined();
+    expect(run.error).toBe(FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE);
+  });
+
+  it("keeps create-time attribution when response body is invalid JSON", async () => {
+    const { data, plan } = planWithMap(baseData(), { authoritative: true, phase: "review" });
+    const built = buildFeatureSprintRunnerExecutionContext({
+      plan,
+      phase: "review",
+      stepId: plan.currentStepId
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) {
+      return;
+    }
+    const created = createFeatureSprintRunnerRun(data, {
+      profile: "cursor_review",
+      cardId: "card-ctx-1",
+      ...historyAttributionFromExecutionContext(built.context),
+      planId: plan.id,
+      stepId: plan.currentStepId
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => {
+          throw new SyntaxError("Unexpected token");
+        }
+      })
+    );
+    const result = await runFeatureSprintPacket({
+      profile: "cursor_review",
+      promptMarkdown: "## review",
+      executionContext: built.context
+    });
+    expect(result.ok).toBe(false);
+    expect(result.runId).toBeUndefined();
+    expect(result.terminationReason).toBeUndefined();
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, result);
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) {
+      return;
+    }
+    const run = completed.state.featureSprintRunnerRuns[0]!;
+    expect(run.status).toBe("failed");
+    expect(run.mapPhase).toBe("review");
+    expect(run.terminationReason).toBeUndefined();
+  });
+
+  it("prefers echoed context from successful structured response", () => {
+    const { data, plan } = planWithMap(baseData(), { authoritative: true });
+    const created = createFeatureSprintRunnerRun(data, {
+      profile: "cursor_implementation",
+      cardId: "card-ctx-1",
+      planId: plan.id,
+      stepId: plan.currentStepId,
+      sprintId: "stale-sprint",
+      storyId: "stale-story",
+      taskId: "stale-task",
+      mapPhase: "localize"
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "cursor_implementation",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      outputText: "done",
+      runId: "run-ok-echo",
+      terminationReason: "completed",
+      failureClass: "none",
+      resultUsability: "usable",
+      executionContext: {
+        planId: plan.id,
+        executionModel: "sprint_map",
+        sprintId: "sprint-1",
+        storyId: "story-1",
+        taskId: "task-b",
+        phase: "implement"
+      }
+    });
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) {
+      return;
+    }
+    const run = completed.state.featureSprintRunnerRuns[0]!;
+    expect(run.sprintId).toBe("sprint-1");
+    expect(run.storyId).toBe("story-1");
+    expect(run.taskId).toBe("task-b");
+    expect(run.mapPhase).toBe("implement");
   });
 
   it("does not attribute preview map IDs onto a legacy run", () => {

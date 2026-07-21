@@ -202,4 +202,3 @@ if ([string]::IsNullOrWhiteSpace([string]$response.outputText) -and -not $isImpl
 
 Write-Host "SMOKE_STATUS=passed"
 Write-Host "Smoke finished OK for ${Profile}."
-

@@ -3,6 +3,7 @@ import {
   buildRunnerProfile,
   capGitMetadataFields,
   capVerificationResults,
+  hasStructuredFeatureSprintRunnerEnvelope,
   isReviewProfile,
   parseFeatureSprintRunnerExecutionContext,
   type FeatureSprintRunnerAgent,
@@ -231,19 +232,35 @@ export function completeFeatureSprintRunnerRun(
   const status: HarnessFeatureSprintRunnerRunStatus = response.ok ? "succeeded" : "failed";
   const outputFields = response.ok ? buildStoredOutputFields(response.outputText) : {};
   const metadata = capGitMetadataFields(response);
-  const echoedContext = parseFeatureSprintRunnerExecutionContext(response.executionContext);
+  // Only overlay map attribution from a structured runner envelope echo.
+  // Client-synthesized transport failures may carry request context for diagnostics,
+  // but that must not be treated as runner-confirmed.
+  const structuredEnvelope = hasStructuredFeatureSprintRunnerEnvelope(response);
+  const echoedContext = structuredEnvelope
+    ? parseFeatureSprintRunnerExecutionContext(response.executionContext)
+    : undefined;
   const attribution = historyAttributionFromExecutionContext(echoedContext);
 
   const updated: HarnessFeatureSprintRunnerRun = {
     ...existing,
     status,
-    // Prefer echoed runner context for map attribution; keep create-time fields as fallback.
-    sprintId: cleanOptional(attribution.sprintId) ?? existing.sprintId,
-    storyId: cleanOptional(attribution.storyId) ?? existing.storyId,
-    taskId: cleanOptional(attribution.taskId) ?? existing.taskId,
-    mapPhase: attribution.mapPhase ?? existing.mapPhase,
-    stepId: cleanOptional(attribution.stepId) ?? existing.stepId,
-    planId: cleanOptional(attribution.planId) ?? existing.planId,
+    // Prefer echoed runner context when present; otherwise keep create-time fields.
+    sprintId: structuredEnvelope
+      ? cleanOptional(attribution.sprintId) ?? existing.sprintId
+      : existing.sprintId,
+    storyId: structuredEnvelope
+      ? cleanOptional(attribution.storyId) ?? existing.storyId
+      : existing.storyId,
+    taskId: structuredEnvelope
+      ? cleanOptional(attribution.taskId) ?? existing.taskId
+      : existing.taskId,
+    mapPhase: structuredEnvelope ? attribution.mapPhase ?? existing.mapPhase : existing.mapPhase,
+    stepId: structuredEnvelope
+      ? cleanOptional(attribution.stepId) ?? existing.stepId
+      : existing.stepId,
+    planId: structuredEnvelope
+      ? cleanOptional(attribution.planId) ?? existing.planId
+      : existing.planId,
     commandPreview: cleanOptional(response.commandPreview) ?? existing.commandPreview,
     exitCode: response.exitCode,
     error: cleanOptional(response.error),
@@ -255,16 +272,29 @@ export function completeFeatureSprintRunnerRun(
     changedFiles: metadata.changedFiles,
     diffText: cleanOptional(metadata.diffText),
     verificationResults: capVerificationResults(metadata.verificationResults),
-    terminationReason: response.terminationReason,
-    failureClass: response.failureClass,
-    resultUsability: response.resultUsability,
-    timedOut: response.timedOut === true ? true : response.timedOut === false ? false : existing.timedOut,
-    cancelled:
-      response.cancelled === true ? true : response.cancelled === false ? false : existing.cancelled,
-    diagnosticMessage: cleanOptional(response.diagnosticMessage),
-    parseWarnings: response.parseWarnings,
-    stdoutText: cleanOptional(response.stdoutText),
-    stderrText: cleanOptional(response.stderrText),
+    terminationReason: structuredEnvelope ? response.terminationReason : existing.terminationReason,
+    failureClass: structuredEnvelope ? response.failureClass : existing.failureClass,
+    resultUsability: structuredEnvelope ? response.resultUsability : existing.resultUsability,
+    timedOut: structuredEnvelope
+      ? response.timedOut === true
+        ? true
+        : response.timedOut === false
+          ? false
+          : existing.timedOut
+      : existing.timedOut,
+    cancelled: structuredEnvelope
+      ? response.cancelled === true
+        ? true
+        : response.cancelled === false
+          ? false
+          : existing.cancelled
+      : existing.cancelled,
+    diagnosticMessage: structuredEnvelope
+      ? cleanOptional(response.diagnosticMessage)
+      : existing.diagnosticMessage,
+    parseWarnings: structuredEnvelope ? response.parseWarnings : existing.parseWarnings,
+    stdoutText: structuredEnvelope ? cleanOptional(response.stdoutText) : existing.stdoutText,
+    stderrText: structuredEnvelope ? cleanOptional(response.stderrText) : existing.stderrText,
     completedAt: response.completedAt,
     updatedAt: now
   };

@@ -317,29 +317,35 @@ describe("feature-sprint-runner", () => {
     expect(result.body.verificationResults?.[0]?.error).toContain("parser");
   });
 
-  it("runs npm --version verification without spawn EINVAL", async () => {
-    const result = await postRun(port, {
-      profile: "codex_implementation",
-      promptMarkdown: "Implement with npm verification.",
-      repoPath: tempRepoPath,
-      worktree: { enabled: true },
-      runVerification: true,
-      verificationCommands: ["npm --version"]
-    });
+  // Keep npm --version: it exercises Windows ComSpec/.cmd verification spawn (EINVAL guard).
+  // Explicit budget: Vitest default 5s is too tight under load/AV for real npm startup.
+  it(
+    "runs npm --version verification without spawn EINVAL",
+    async () => {
+      const result = await postRun(port, {
+        profile: "codex_implementation",
+        promptMarkdown: "Implement with npm verification.",
+        repoPath: tempRepoPath,
+        worktree: { enabled: true },
+        runVerification: true,
+        verificationCommands: ["npm --version"]
+      });
 
-    expect(result.statusCode).toBe(200);
-    expect(result.body).toMatchObject({ ok: true, profile: "codex_implementation" });
-    if (!("verificationResults" in result.body)) {
-      throw new Error("Expected verificationResults in response.");
-    }
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({ ok: true, profile: "codex_implementation" });
+      if (!("verificationResults" in result.body)) {
+        throw new Error("Expected verificationResults in response.");
+      }
 
-    expect(result.body.verificationResults).toHaveLength(1);
-    const row = result.body.verificationResults?.[0];
-    expect(row?.status).toBe("passed");
-    expect(row?.error).toBeUndefined();
-    const output = `${row?.stdoutExcerpt ?? ""}${row?.stderrExcerpt ?? ""}`;
-    expect(output).toMatch(/\d+\.\d+\.\d+/);
-  });
+      expect(result.body.verificationResults).toHaveLength(1);
+      const row = result.body.verificationResults?.[0];
+      expect(row?.status).toBe("passed");
+      expect(row?.error).toBeUndefined();
+      const output = `${row?.stdoutExcerpt ?? ""}${row?.stderrExcerpt ?? ""}`;
+      expect(output).toMatch(/\d+\.\d+\.\d+/);
+    },
+    30_000
+  );
 
   it.runIf(process.platform === "win32")(
     "spawns codex.cmd for real prompt audit without EINVAL",

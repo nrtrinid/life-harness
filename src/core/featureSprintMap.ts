@@ -932,8 +932,8 @@ export function buildFeatureSprintRunnerExecutionContext(
     return { ok: true, context };
   }
 
-  // Non-phase actions (e.g. prompt audit): correlate to current target when present,
-  // without inventing map IDs or silently falling back to legacy authority labeling.
+  // Non-phase actions (e.g. prompt audit): correlate to the current target when present,
+  // but never attach phase / mapPhase — that would falsely imply a localize/implement/review run.
   const resolved = resolveFeatureSprintExecutionTarget(input.plan, input.plan.executionTarget);
   if (!resolved.ok) {
     const context: FeatureSprintRunnerExecutionContext = {
@@ -952,8 +952,7 @@ export function buildFeatureSprintRunnerExecutionContext(
     executionModel: "sprint_map",
     sprintId: resolved.target.sprintId,
     storyId: resolved.target.storyId,
-    taskId: resolved.target.taskId,
-    phase: resolved.target.phase
+    taskId: resolved.target.taskId
   };
   if (linkedStepId) {
     context.stepId = linkedStepId;

@@ -226,31 +226,6 @@ function dogfoodCheckColor(status: FeatureSprintDogfoodCheckStatus): string {
   return colors.accentDanger;
 }
 
-function sprintMapRunAttribution(plan: HarnessFeatureSprintPlan | undefined): {
-  sprintId?: string;
-  storyId?: string;
-  taskId?: string;
-  mapPhase?: NonNullable<HarnessFeatureSprintPlan["executionTarget"]>["phase"];
-} {
-  if (!plan) {
-    return {};
-  }
-  const built = buildFeatureSprintRunnerExecutionContext({
-    plan,
-    stepId: plan.currentStepId
-  });
-  if (!built.ok) {
-    return {};
-  }
-  const attribution = historyAttributionFromExecutionContext(built.context);
-  return {
-    sprintId: attribution.sprintId,
-    storyId: attribution.storyId,
-    taskId: attribution.taskId,
-    mapPhase: attribution.mapPhase
-  };
-}
-
 function buildLaunchExecutionContext(
   plan: HarnessFeatureSprintPlan,
   phase?: NonNullable<HarnessFeatureSprintPlan["executionTarget"]>["phase"]
@@ -1211,9 +1186,9 @@ export default function CardDetailScreen() {
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
-      ...sprintMapRunAttribution(activeFeatureSprintPlan),
       repoPath: project?.repoPath
     });
     if (!historyCreate.ok) {
@@ -1408,9 +1383,9 @@ export default function CardDetailScreen() {
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
-      ...historyAttributionFromExecutionContext(executionContextResult.context),
       repoPath: project?.repoPath
     });
     if (!historyCreate.ok) {
@@ -1499,9 +1474,9 @@ export default function CardDetailScreen() {
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
-      ...historyAttributionFromExecutionContext(executionContextResult.context),
       repoPath: project.repoPath
     });
     if (!historyCreate.ok) {

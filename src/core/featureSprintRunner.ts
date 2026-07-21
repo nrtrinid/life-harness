@@ -209,6 +209,42 @@ export type FeatureSprintRunnerResponse = {
   executionContext?: FeatureSprintRunnerExecutionContext;
 };
 
+/**
+ * True when the response is a structured runner envelope (mock/real), not a
+ * client-synthesized transport failure. Do not infer this from executionContext alone.
+ */
+export function hasStructuredFeatureSprintRunnerEnvelope(
+  response: Pick<
+    FeatureSprintRunnerResponse,
+    "runId" | "terminationReason" | "failureClass" | "resultUsability" | "provider" | "runnerMode"
+  >
+): boolean {
+  if (typeof response.runId === "string" && response.runId.trim()) {
+    return true;
+  }
+  if (typeof response.terminationReason === "string" && response.terminationReason.trim()) {
+    return true;
+  }
+  if (typeof response.failureClass === "string" && response.failureClass.trim()) {
+    return true;
+  }
+  if (typeof response.resultUsability === "string" && response.resultUsability.trim()) {
+    return true;
+  }
+  if (response.provider === "codex" || response.provider === "cursor") {
+    return true;
+  }
+  if (
+    response.runnerMode === "mock" ||
+    response.runnerMode === "codex" ||
+    response.runnerMode === "cursor" ||
+    response.runnerMode === "real"
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export type FeatureSprintWorktreeCleanupRequest = {
   worktreePath: string;
   branchName?: string;
