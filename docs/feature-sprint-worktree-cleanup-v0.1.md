@@ -47,14 +47,21 @@ Response: `FeatureSprintWorktreeCleanupResponse` with `status`:
 
 | Status | Meaning |
 |--------|---------|
-| `cleaned` | `git worktree remove` succeeded |
+| `cleaned` | Git registration and filesystem path are both absent (including idempotent retry) |
 | `blocked` | Uncommitted changes; `force` not set |
-| `not_found` | Path missing on disk |
-| `failed` | Validation, auth, or git error |
+| `orphaned_on_disk` | Git registration removed; directory still on disk — retry filesystem cleanup |
+| `stale_git_registration` | Directory gone; Git registration remains — retry registration cleanup |
+| `not_found` | Legacy / historical only; new reconciliations prefer `cleaned` when both are absent |
+| `failed` | Validation error or both still present after an attempt |
 
-Expected safety outcomes (`blocked`, `not_found`) return HTTP 200 with typed body — not HTTP errors.
+Expected safety outcomes (`blocked`, partial statuses) return HTTP 200 with typed body — not HTTP errors.
 
-Removal uses `git -C <repoRoot> worktree remove [--force] <worktreePath>` only. No `rm -rf`, no shell, no branch deletion in v0.1.
+Cleanup runs in two stages after path validation:
+
+1. **Git registration** — `git worktree remove [--force]` when still registered; final status uses `git worktree list` probes (exit code alone is not trusted).
+2. **Filesystem** — only when registration is already gone and the directory remains. Uses a no-follow recursive walk (symlinks/junctions unlinked, not traversed). On Windows, a bounded-retry walk plus empty-directory `robocopy /MIR` fallback (arg-array spawn, no shell concatenation).
+
+Never deletes filesystem contents while the path is still a registered Git worktree.
 
 ## App wiring
 
@@ -73,7 +80,7 @@ Removal uses `git -C <repoRoot> worktree remove [--force] <worktreePath>` only. 
 
 ### Force clean gate
 
-**Force clean worktree** appears only after a `blocked` response for **that same run id**. Never on first render; never globally.
+**Force clean worktree** appears after a `blocked` response for **that same run id**, and may remain available after partial statuses (`orphaned_on_disk`, `stale_git_registration`) so the user can retry. Never on first render; never globally. Normal cleanup never silently escalates to force.
 
 ## Limitations (v0.1)
 

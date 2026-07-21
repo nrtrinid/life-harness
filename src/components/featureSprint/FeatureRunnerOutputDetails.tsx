@@ -34,6 +34,12 @@ function cleanupStatusLabel(view: FeatureSprintRunnerOutputView): string | undef
   if (view.worktreeCleanupStatus === "blocked") {
     return "Cleanup blocked: uncommitted changes";
   }
+  if (view.worktreeCleanupStatus === "orphaned_on_disk") {
+    return "Partial cleanup: Git removed, files remain";
+  }
+  if (view.worktreeCleanupStatus === "stale_git_registration") {
+    return "Partial cleanup: files gone, Git registration remains";
+  }
   if (view.worktreeCleanupStatus === "failed") {
     return "Cleanup failed";
   }
@@ -201,6 +207,17 @@ export function FeatureRunnerOutputDetails({
           {view.worktreeCleanupStatus === "blocked" && view.canCleanWorktree ? (
             <Text style={[styles.helpText, { marginTop: 4 }]}>
               Safety check passed: uncommitted changes detected. Use Force clean after inspection.
+            </Text>
+          ) : null}
+          {view.worktreeCleanupStatus === "orphaned_on_disk" && view.canCleanWorktree ? (
+            <Text style={[styles.helpText, { marginTop: 4 }]}>
+              Retry Clean worktree to finish filesystem removal. Force is not required for orphan
+              directories.
+            </Text>
+          ) : null}
+          {view.worktreeCleanupStatus === "stale_git_registration" && view.canCleanWorktree ? (
+            <Text style={[styles.helpText, { marginTop: 4 }]}>
+              Retry Clean worktree to remove the stale Git registration only.
             </Text>
           ) : null}
           <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>

@@ -1592,6 +1592,12 @@ export default function CardDetailScreen() {
         return;
       }
 
+      if (response.status === "orphaned_on_disk" || response.status === "stale_git_registration") {
+        setForceCleanEligibleRunId(run.id);
+        showNotice("warning", response.message ?? "Partial worktree cleanup — retry cleanup.");
+        return;
+      }
+
       if (response.status === "not_found") {
         showNotice("info", response.message ?? "Worktree path was not found on disk.");
         return;

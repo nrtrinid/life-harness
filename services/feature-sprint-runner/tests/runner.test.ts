@@ -643,7 +643,12 @@ describe("feature-sprint-runner", () => {
       { Authorization: "Bearer secret-token" }
     );
     expect(authorized.statusCode).toBe(200);
-    expect(authorized.body).toMatchObject({ status: "not_found" });
+    expect(authorized.body).toMatchObject({
+      ok: true,
+      status: "cleaned",
+      gitRegistered: false,
+      filesystemExists: false
+    });
   });
 
   it("echoes typed executionContext on mock success and invalid-worktree failure", async () => {
