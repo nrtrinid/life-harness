@@ -9,11 +9,13 @@ import {
   buildRunnerEvidenceSnapshot,
   capRawOutputExcerptForReviewPacket,
   capStringListForReviewPacket,
+  normalizeImplementationProofRecord,
   parseManualImplementationOutputSections,
   resolveLatestImplementationRunForStep,
   summarizeVerificationProofResult
 } from "./featureSprintImplementationProof";
 import { parseFeatureSprintWorkerOutputEvidence } from "./featureSprintWorkerOutput";
+import { normalizeFeatureSprintPlan } from "./stateHydration";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type { FeatureSprintVerificationResult } from "./featureSprintRunner";
 import type { HarnessFeatureSprintRunnerRun, HarnessFeatureSprintStep } from "./types";
@@ -180,6 +182,91 @@ Diff stat: 2 files changed
       expect(snapshot?.diffStat).toContain("1 file changed");
       expect(snapshot?.gitStatus).toContain("featureSprintImplementationProof.ts");
       expect(snapshot?.verificationSummary?.[0]).toContain("npm test -- featureSprint: passed");
+    });
+
+    it("preserves map correlation through normalize and plan hydration", () => {
+      const snapshot = buildRunnerEvidenceSnapshot(
+        fixtureRun({
+          sprintId: "sprint-1",
+          storyId: "story-1",
+          taskId: "task-1",
+          mapPhase: "implement"
+        })
+      );
+      expect(snapshot).toMatchObject({
+        sprintId: "sprint-1",
+        storyId: "story-1",
+        taskId: "task-1",
+        mapPhase: "implement"
+      });
+
+      const proof = buildImplementationProofFromSources({
+        rawOutput: "Changed files\n- src/core/featureSprintImplementationProof.ts",
+        step: fixtureStep(),
+        projectVerificationCommands: ["npm test -- featureSprint"],
+        matchingRun: fixtureRun({
+          sprintId: "sprint-1",
+          storyId: "story-1",
+          taskId: "task-1",
+          mapPhase: "implement"
+        }),
+        timestamp: FIXED_NOW
+      });
+      expect(proof.runnerEvidence?.sprintId).toBe("sprint-1");
+      expect(proof.runnerEvidence?.mapPhase).toBe("implement");
+
+      const normalized = normalizeImplementationProofRecord(proof);
+      expect(normalized?.runnerEvidence).toMatchObject({
+        sprintId: "sprint-1",
+        storyId: "story-1",
+        taskId: "task-1",
+        mapPhase: "implement"
+      });
+
+      const plan = normalizeFeatureSprintPlan({
+        id: PLAN_ID,
+        cardId: "card-1",
+        title: "Proof plan",
+        goal: "Keep map correlation",
+        status: "in_progress",
+        acceptanceCriteria: ["ok"],
+        nonGoals: [],
+        constraints: [],
+        steps: [
+          {
+            ...fixtureStep(),
+            implementationProof: normalized
+          }
+        ],
+        currentStepId: STEP_ID,
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW
+      });
+      expect(plan.steps[0]?.implementationProof?.runnerEvidence).toMatchObject({
+        sprintId: "sprint-1",
+        storyId: "story-1",
+        taskId: "task-1",
+        mapPhase: "implement"
+      });
+    });
+
+    it("still normalizes legacy runnerEvidence without map fields", () => {
+      const proof = buildImplementationProofFromSources({
+        rawOutput: "Changed files\n- src/manual.ts",
+        step: fixtureStep(),
+        projectVerificationCommands: [],
+        matchingRun: fixtureRun({
+          sprintId: undefined,
+          storyId: undefined,
+          taskId: undefined,
+          mapPhase: undefined
+        }),
+        timestamp: FIXED_NOW
+      });
+      const normalized = normalizeImplementationProofRecord(proof);
+      expect(normalized?.runnerEvidence?.diffStat).toBeTruthy();
+      expect(normalized?.runnerEvidence?.sprintId).toBeUndefined();
+      expect(normalized?.runnerEvidence?.mapPhase).toBeUndefined();
     });
   });
 

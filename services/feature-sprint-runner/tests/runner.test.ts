@@ -256,7 +256,9 @@ describe("feature-sprint-runner", () => {
     expect(result.body.diffText).toBeFalsy();
   });
 
-  it("runs verification commands after mock implementation and continues after failure", async () => {
+  it(
+    "runs verification commands after mock implementation and continues after failure",
+    async () => {
     const fixtureDir = path.join(tempRepoPath!, ".life-harness");
     await mkdir(fixtureDir, { recursive: true });
     await writeFile(path.join(fixtureDir, "verify-pass.js"), "process.exit(0);\n");
@@ -291,7 +293,9 @@ describe("feature-sprint-runner", () => {
       "failed",
       "passed"
     ]);
-  });
+  },
+    30_000
+  );
 
   it("rejects unsafe verification commands via parser without failing implementation", async () => {
     const result = await postRun(port, {
@@ -313,29 +317,35 @@ describe("feature-sprint-runner", () => {
     expect(result.body.verificationResults?.[0]?.error).toContain("parser");
   });
 
-  it("runs npm --version verification without spawn EINVAL", async () => {
-    const result = await postRun(port, {
-      profile: "codex_implementation",
-      promptMarkdown: "Implement with npm verification.",
-      repoPath: tempRepoPath,
-      worktree: { enabled: true },
-      runVerification: true,
-      verificationCommands: ["npm --version"]
-    });
+  // Keep npm --version: it exercises Windows ComSpec/.cmd verification spawn (EINVAL guard).
+  // Explicit budget: Vitest default 5s is too tight under load/AV for real npm startup.
+  it(
+    "runs npm --version verification without spawn EINVAL",
+    async () => {
+      const result = await postRun(port, {
+        profile: "codex_implementation",
+        promptMarkdown: "Implement with npm verification.",
+        repoPath: tempRepoPath,
+        worktree: { enabled: true },
+        runVerification: true,
+        verificationCommands: ["npm --version"]
+      });
 
-    expect(result.statusCode).toBe(200);
-    expect(result.body).toMatchObject({ ok: true, profile: "codex_implementation" });
-    if (!("verificationResults" in result.body)) {
-      throw new Error("Expected verificationResults in response.");
-    }
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({ ok: true, profile: "codex_implementation" });
+      if (!("verificationResults" in result.body)) {
+        throw new Error("Expected verificationResults in response.");
+      }
 
-    expect(result.body.verificationResults).toHaveLength(1);
-    const row = result.body.verificationResults?.[0];
-    expect(row?.status).toBe("passed");
-    expect(row?.error).toBeUndefined();
-    const output = `${row?.stdoutExcerpt ?? ""}${row?.stderrExcerpt ?? ""}`;
-    expect(output).toMatch(/\d+\.\d+\.\d+/);
-  });
+      expect(result.body.verificationResults).toHaveLength(1);
+      const row = result.body.verificationResults?.[0];
+      expect(row?.status).toBe("passed");
+      expect(row?.error).toBeUndefined();
+      const output = `${row?.stdoutExcerpt ?? ""}${row?.stderrExcerpt ?? ""}`;
+      expect(output).toMatch(/\d+\.\d+\.\d+/);
+    },
+    30_000
+  );
 
   it.runIf(process.platform === "win32")(
     "spawns codex.cmd for real prompt audit without EINVAL",
@@ -579,7 +589,9 @@ describe("feature-sprint-runner", () => {
     expect(authorized.body).toMatchObject({ ok: true });
   });
 
-  it("cleans up worktrees via POST /feature-sprint/cleanup-worktree", async () => {
+  it(
+    "cleans up worktrees via POST /feature-sprint/cleanup-worktree",
+    async () => {
     const runResult = await postRun(port, {
       profile: "codex_implementation",
       promptMarkdown: "Implement slice.",
@@ -601,7 +613,9 @@ describe("feature-sprint-runner", () => {
 
     expect(cleanupResult.statusCode).toBe(200);
     expect(cleanupResult.body).toMatchObject({ ok: true, status: "cleaned" });
-  });
+  },
+    30_000
+  );
 
   it("requires bearer token for cleanup when token is configured", async () => {
     process.env.FEATURE_SPRINT_RUNNER_TOKEN = "secret-token";
@@ -630,5 +644,42 @@ describe("feature-sprint-runner", () => {
     );
     expect(authorized.statusCode).toBe(200);
     expect(authorized.body).toMatchObject({ status: "not_found" });
+  });
+
+  it("echoes typed executionContext on mock success and invalid-worktree failure", async () => {
+    const executionContext = {
+      planId: "plan-http-1",
+      executionModel: "sprint_map" as const,
+      sprintId: "sprint-1",
+      storyId: "story-1",
+      taskId: "task-1",
+      phase: "review" as const,
+      stepId: "step-1"
+    };
+
+    const success = await postRun(port, {
+      profile: "cursor_review",
+      promptMarkdown: "Review this fixture.",
+      executionContext
+    });
+    expect(success.statusCode).toBe(200);
+    expect(success.body).toMatchObject({
+      ok: true,
+      executionContext
+    });
+
+    const invalidWorktree = await postRun(port, {
+      profile: "cursor_implementation",
+      promptMarkdown: "Implement fixture.",
+      repoPath: path.join(tempRepoPath!, "does-not-exist"),
+      worktree: { enabled: true },
+      executionContext
+    });
+    expect(invalidWorktree.statusCode).toBe(500);
+    expect(invalidWorktree.body).toMatchObject({
+      ok: false,
+      terminationReason: "worktree_invalid",
+      executionContext
+    });
   });
 });

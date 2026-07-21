@@ -13,6 +13,17 @@ import {
   resolveLatestImplementationRunForStep
 } from "./featureSprintImplementationProof";
 import {
+  canLaunchFeatureSprintPhase,
+  clearStaleTargetNoticesOnSelection,
+  formatFeatureSprintMapPacketSections,
+  getFeatureSprintLaunchBlockReason,
+  isSprintMapAuthoritative,
+  normalizeExecutionTarget,
+  normalizeFeatureSprintMap,
+  normalizePlanSprintMapFields,
+  sanitizeExecutionTargetAgainstMap
+} from "./featureSprintMap";
+import {
   formatWorkerOutputEvidencePacketSections,
   parseFeatureSprintWorkerOutputEvidence,
   redactWorkerOutputForReviewPacket,
@@ -34,6 +45,11 @@ import type {
   HarnessFeatureSpec,
   HarnessFeatureSpecSource,
   HarnessFeatureSprintAutomationPhase,
+  HarnessFeatureSprintExecutionModel,
+  HarnessFeatureSprintExecutionTarget,
+  HarnessFeatureSprintMap,
+  HarnessFeatureSprintMapNotice,
+  HarnessFeatureSprintMapPhase,
   HarnessFeatureSprintPlan,
   HarnessFeatureSprintReviewStatus,
   HarnessFeatureSprintStatus,
@@ -143,6 +159,10 @@ export type FeatureSprintPlanImport = {
   nonGoals: string[];
   constraints: string[];
   steps: FeatureSprintPlanStepImport[];
+  /** Optional Sprint Map hierarchy (additive). */
+  sprintMap?: HarnessFeatureSprintMap;
+  /** Optional canonical execution pointer (additive). */
+  executionTarget?: HarnessFeatureSprintExecutionTarget;
 };
 
 export type FeatureReviewVerdictImport = {
@@ -200,6 +220,10 @@ export type FeatureSprintPlanUpdateInput = Partial<
     | "automationPhase"
     | "nextSliceProposal"
     | "currentStepId"
+    | "sprintMap"
+    | "executionTarget"
+    | "executionModel"
+    | "sprintMapNotices"
   >
 > & {
   steps?: HarnessFeatureSprintStep[];
@@ -209,6 +233,14 @@ export type FeatureSprintPlanUpdateInput = Partial<
   nextSliceProposal?: HarnessFeatureSprintNextSliceProposal | null;
   /** Pass null to clear currentStepId on the plan. */
   currentStepId?: string | null;
+  /** Pass null to clear sprintMap on the plan. */
+  sprintMap?: HarnessFeatureSprintMap | null;
+  /** Pass null to clear executionTarget on the plan. */
+  executionTarget?: HarnessFeatureSprintExecutionTarget | null;
+  /** Pass null to revert to legacy_steps. */
+  executionModel?: HarnessFeatureSprintExecutionModel | null;
+  /** Pass null to clear sprintMapNotices. */
+  sprintMapNotices?: HarnessFeatureSprintMapNotice[] | null;
 };
 
 export type FeatureSprintStepUpdateInput = Partial<
@@ -434,10 +466,46 @@ function mergeVerificationCommandsForPacket(
 export function canRunFeatureSprintImplementation(
   plan: HarnessFeatureSprintPlan | undefined
 ): boolean {
-  if (!plan?.featureSpec?.body?.trim()) {
+  if (!plan) {
     return true;
   }
-  return isFeatureSpecApproved(plan);
+  if (plan.featureSpec?.body?.trim() && !isFeatureSpecApproved(plan)) {
+    return false;
+  }
+  // Map-authoritative plans cannot fall back to legacy step readiness.
+  if (isSprintMapAuthoritative(plan) && !canLaunchFeatureSprintPhase(plan, "implement")) {
+    return false;
+  }
+  return true;
+}
+
+export function canRunFeatureSprintPhaseAction(
+  plan: HarnessFeatureSprintPlan | undefined,
+  phase: HarnessFeatureSprintMapPhase
+): boolean {
+  if (!plan) {
+    return true;
+  }
+  if (phase === "implement") {
+    return canRunFeatureSprintImplementation(plan);
+  }
+  if (isSprintMapAuthoritative(plan)) {
+    return canLaunchFeatureSprintPhase(plan, phase);
+  }
+  return true;
+}
+
+export function describeFeatureSprintPhaseLaunchBlock(
+  plan: HarnessFeatureSprintPlan | undefined,
+  phase: HarnessFeatureSprintMapPhase
+): string | undefined {
+  if (!plan) {
+    return undefined;
+  }
+  if (phase === "implement" && plan.featureSpec?.body?.trim() && !isFeatureSpecApproved(plan)) {
+    return "Approve the feature spec before running implementation.";
+  }
+  return getFeatureSprintLaunchBlockReason(plan, phase);
 }
 
 export function coerceAutomationPhase(
@@ -749,14 +817,138 @@ export function updateFeatureSprintPlan(
         : patch.automationPhase !== undefined
           ? patch.automationPhase
           : existing.automationPhase,
+    sprintMap:
+      patch.sprintMap === null
+        ? undefined
+        : patch.sprintMap !== undefined
+          ? normalizeFeatureSprintMap(patch.sprintMap)
+          : existing.sprintMap,
+    // Keep the pre-sanitize pointer so normalizePlanSprintMapFields can emit stale-target notices.
+    executionTarget:
+      patch.executionTarget === null
+        ? undefined
+        : patch.executionTarget !== undefined
+          ? normalizeExecutionTarget(patch.executionTarget)
+          : existing.executionTarget,
+    executionModel:
+      patch.executionModel === null
+        ? undefined
+        : patch.executionModel !== undefined
+          ? patch.executionModel
+          : existing.executionModel,
+    sprintMapNotices:
+      patch.sprintMapNotices === null
+        ? undefined
+        : patch.sprintMapNotices !== undefined
+          ? patch.sprintMapNotices
+          : existing.sprintMapNotices,
     updatedAt: timestamp
   };
+
+  if (
+    patch.executionTarget !== undefined &&
+    updated.executionTarget &&
+    sanitizeExecutionTargetAgainstMap(updated.sprintMap, updated.executionTarget)
+  ) {
+    updated.sprintMapNotices = clearStaleTargetNoticesOnSelection(updated.sprintMapNotices);
+  }
+
+  if (updated.executionModel === "sprint_map" && !updated.sprintMap) {
+    return { ok: false, error: "Cannot adopt Sprint Map execution without a Sprint Map." };
+  }
+
+  if (updated.executionModel === "sprint_map") {
+    updated.sprintMapNotices = (updated.sprintMapNotices ?? []).filter(
+      (notice) => notice.code !== "seed_preview"
+    );
+  }
+
+  const normalizedMapFields = normalizePlanSprintMapFields(updated, timestamp);
+  if (normalizedMapFields.sprintMap) {
+    updated.sprintMap = normalizedMapFields.sprintMap;
+  } else {
+    delete updated.sprintMap;
+  }
+  if (normalizedMapFields.executionTarget) {
+    updated.executionTarget = normalizedMapFields.executionTarget;
+  } else {
+    delete updated.executionTarget;
+  }
+  if (normalizedMapFields.executionModel === "sprint_map" && updated.sprintMap) {
+    updated.executionModel = "sprint_map";
+  } else {
+    delete updated.executionModel;
+  }
+  if (normalizedMapFields.sprintMapNotices.length > 0) {
+    updated.sprintMapNotices = normalizedMapFields.sprintMapNotices;
+  } else {
+    delete updated.sprintMapNotices;
+  }
+
+  if (!updated.sprintMap) {
+    delete updated.sprintMap;
+    delete updated.executionTarget;
+    delete updated.executionModel;
+    delete updated.sprintMapNotices;
+  }
 
   return {
     ok: true,
     planId,
     state: replacePlan(data, updated)
   };
+}
+
+/** Deliberately switch authority from legacy steps to Sprint Map. */
+export function adoptSprintMapExecutionForPlan(
+  data: LifeHarnessData,
+  planId: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  const plan = findPlan(data, planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${planId}` };
+  }
+  if (!plan.sprintMap) {
+    return { ok: false, error: "Seed or import a Sprint Map before adopting it as authoritative." };
+  }
+  const target =
+    sanitizeExecutionTargetAgainstMap(plan.sprintMap, plan.executionTarget) ??
+    (() => {
+      const first = plan.sprintMap.sprints[0]?.stories[0]?.tasks.find(
+        (task) => task.status === "ready" || task.status === "in_progress"
+      ) ?? plan.sprintMap.sprints[0]?.stories[0]?.tasks[0];
+      if (!first) {
+        return undefined;
+      }
+      return {
+        sprintId: plan.sprintMap.sprints[0].id,
+        storyId: plan.sprintMap.sprints[0].stories[0].id,
+        taskId: first.id,
+        phase: "implement" as const
+      };
+    })();
+  if (!target) {
+    return { ok: false, error: "Sprint Map has no selectable task to adopt." };
+  }
+  return updateFeatureSprintPlan(
+    data,
+    planId,
+    {
+      executionModel: "sprint_map",
+      executionTarget: target
+    },
+    now
+  );
+}
+
+/** Revert to legacy step authority without deleting a preview map. */
+export function revertSprintMapExecutionForPlan(
+  data: LifeHarnessData,
+  planId: string,
+  now: Date = new Date()
+): FeatureSprintPlanResult {
+  return updateFeatureSprintPlan(data, planId, { executionModel: null }, now);
 }
 
 export function updateFeatureSprintStep(
@@ -1193,9 +1385,18 @@ export function replaceActiveFeatureSprintPlanFromImport(
   const active = getActiveFeatureSprintPlanForCard(data, cardId);
   const timestamp = resolveNow(now);
   const steps = buildStepsFromImport(imported.steps, timestamp);
+  const sprintMap = imported.sprintMap
+    ? normalizeFeatureSprintMap(imported.sprintMap)
+    : undefined;
+  const executionTarget = sanitizeExecutionTargetAgainstMap(
+    sprintMap ?? active?.sprintMap,
+    imported.executionTarget
+      ? normalizeExecutionTarget(imported.executionTarget)
+      : undefined
+  );
 
   if (active) {
-    return updateFeatureSprintPlan(data, active.id, {
+    const patch: FeatureSprintPlanUpdateInput = {
       title: imported.title.trim(),
       goal: imported.goal.trim(),
       whyNow: cleanOptional(imported.whyNow),
@@ -1207,19 +1408,42 @@ export function replaceActiveFeatureSprintPlanFromImport(
       status: "in_progress",
       featureSpec: active.featureSpec,
       automationPhase: active.automationPhase
-    }, now);
+    };
+    if (imported.sprintMap !== undefined) {
+      patch.sprintMap = sprintMap ?? null;
+      patch.executionTarget = executionTarget ?? null;
+    } else if (imported.executionTarget !== undefined) {
+      patch.executionTarget = executionTarget ?? null;
+    }
+    return updateFeatureSprintPlan(data, active.id, patch, now);
   }
 
-  return createFeatureSprintPlanForCard(data, {
-    cardId,
-    title: imported.title,
-    goal: imported.goal,
-    whyNow: imported.whyNow,
-    acceptanceCriteria: imported.acceptanceCriteria,
-    nonGoals: imported.nonGoals,
-    constraints: imported.constraints,
-    steps: imported.steps
-  }, now);
+  const created = createFeatureSprintPlanForCard(
+    data,
+    {
+      cardId,
+      title: imported.title,
+      goal: imported.goal,
+      whyNow: imported.whyNow,
+      acceptanceCriteria: imported.acceptanceCriteria,
+      nonGoals: imported.nonGoals,
+      constraints: imported.constraints,
+      steps: imported.steps
+    },
+    now
+  );
+  if (!created.ok || imported.sprintMap === undefined) {
+    return created;
+  }
+  return updateFeatureSprintPlan(
+    created.state,
+    created.planId,
+    {
+      sprintMap: sprintMap ?? null,
+      executionTarget: executionTarget ?? null
+    },
+    now
+  );
 }
 
 export function importFeatureSprintPlanFromText(
@@ -1471,7 +1695,9 @@ export function parseFeatureSprintPlanBlock(text: string): FeatureSprintPlanImpo
         acceptanceCriteria,
         nonGoals: parseStringList(item.nonGoals) ?? [],
         constraints: parseStringList(item.constraints) ?? [],
-        steps
+        steps,
+        sprintMap: normalizeFeatureSprintMap(item.sprintMap),
+        executionTarget: normalizeExecutionTarget(item.executionTarget)
       };
     } catch {
       // ignore invalid JSON
@@ -2171,6 +2397,19 @@ function resolvePlanStep(
   return plan.steps.find((step) => step.id === resolvedId);
 }
 
+function executionTargetForPacketPhase(
+  plan: HarnessFeatureSprintPlan,
+  phase: "localize" | "implement" | "review"
+): HarnessFeatureSprintExecutionTarget | undefined {
+  if (!plan.executionTarget) {
+    return undefined;
+  }
+  return {
+    ...plan.executionTarget,
+    phase
+  };
+}
+
 export function buildFeatureStepLocalizationPacket(
   data: LifeHarnessData,
   planId: string,
@@ -2227,6 +2466,12 @@ export function buildFeatureStepLocalizationPacket(
     ...formatBulletSection("## Step acceptance criteria", step.acceptanceCriteria),
     ...formatBulletSection("## Feature non-goals", plan.nonGoals),
     ...formatBulletSection("## Feature constraints", plan.constraints)
+  );
+
+  lines.push(
+    ...formatFeatureSprintMapPacketSections(plan, {
+      target: executionTargetForPacketPhase(plan, "localize")
+    })
   );
 
   if (project) {
@@ -2464,6 +2709,12 @@ export function buildFeatureStepImplementationPacket(
     ...formatBulletSection("## Feature constraints", plan.constraints)
   );
 
+  lines.push(
+    ...formatFeatureSprintMapPacketSections(plan, {
+      target: executionTargetForPacketPhase(plan, "implement")
+    })
+  );
+
   if (project) {
     lines.push("## Project");
     if (project.repoPath) {
@@ -2558,6 +2809,12 @@ export function buildFeatureStepReviewPacket(
     ...formatRunnerEvidencePacketSections(data, step),
     untrustedOutput,
     ""
+  );
+
+  lines.push(
+    ...formatFeatureSprintMapPacketSections(plan, {
+      target: executionTargetForPacketPhase(plan, "review")
+    })
   );
 
   if (session) {

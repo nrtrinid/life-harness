@@ -36,6 +36,85 @@ export type FeatureSprintVerificationResult = {
   error?: string;
 };
 
+/**
+ * Typed correlation metadata for Feature Sprint runner transport.
+ * Shared by app ↔ runner HTTP. The runner echoes this unchanged and must not
+ * interpret Sprint Map hierarchy, dependencies, or authority.
+ * Wire field for map phase is always `phase` (app history may store `mapPhase`).
+ */
+export type FeatureSprintRunnerExecutionContext = {
+  planId: string;
+  stepId?: string;
+  executionModel?: "legacy_steps" | "sprint_map";
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  phase?: "localize" | "implement" | "review";
+};
+
+const FEATURE_SPRINT_RUNNER_EXECUTION_MODELS = ["legacy_steps", "sprint_map"] as const;
+const FEATURE_SPRINT_RUNNER_EXECUTION_PHASES = ["localize", "implement", "review"] as const;
+
+function cleanContextString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** Soft-parse known correlation fields; reject non-plain / secret-prone shapes. */
+export function parseFeatureSprintRunnerExecutionContext(
+  value: unknown
+): FeatureSprintRunnerExecutionContext | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const planId = cleanContextString(record.planId);
+  if (!planId) {
+    return undefined;
+  }
+
+  const executionModelRaw = cleanContextString(record.executionModel);
+  const executionModel =
+    executionModelRaw &&
+    (FEATURE_SPRINT_RUNNER_EXECUTION_MODELS as readonly string[]).includes(executionModelRaw)
+      ? (executionModelRaw as FeatureSprintRunnerExecutionContext["executionModel"])
+      : undefined;
+
+  const phaseRaw = cleanContextString(record.phase);
+  const phase =
+    phaseRaw && (FEATURE_SPRINT_RUNNER_EXECUTION_PHASES as readonly string[]).includes(phaseRaw)
+      ? (phaseRaw as FeatureSprintRunnerExecutionContext["phase"])
+      : undefined;
+
+  const context: FeatureSprintRunnerExecutionContext = { planId };
+  const stepId = cleanContextString(record.stepId);
+  const sprintId = cleanContextString(record.sprintId);
+  const storyId = cleanContextString(record.storyId);
+  const taskId = cleanContextString(record.taskId);
+  if (stepId) {
+    context.stepId = stepId;
+  }
+  if (executionModel) {
+    context.executionModel = executionModel;
+  }
+  if (sprintId) {
+    context.sprintId = sprintId;
+  }
+  if (storyId) {
+    context.storyId = storyId;
+  }
+  if (taskId) {
+    context.taskId = taskId;
+  }
+  if (phase) {
+    context.phase = phase;
+  }
+  return context;
+}
+
 export type FeatureSprintRunnerRequest = {
   profile: FeatureSprintRunnerProfile;
   promptMarkdown: string;
@@ -47,7 +126,48 @@ export type FeatureSprintRunnerRequest = {
   worktree?: FeatureSprintRunnerWorktreeRequest;
   verificationCommands?: string[];
   runVerification?: boolean;
+  /**
+   * Typed Sprint Map / execution-target correlation context. Optional.
+   * The runner copies this into the response when present and must not interpret it.
+   */
+  executionContext?: FeatureSprintRunnerExecutionContext;
 };
+
+/** Runner-side termination classification (optional; older clients ignore). */
+export type FeatureSprintRunnerTerminationReason =
+  | "completed"
+  | "timeout"
+  | "cancelled"
+  | "spawn_error"
+  | "gate_rejected"
+  | "agent_nonzero_exit"
+  | "worktree_invalid"
+  | "readonly_mutation"
+  | "args_error"
+  | "runner_error";
+
+/**
+ * Distinguishes agent vs runner/environment failures (optional).
+ * `empty_output` means the process exited normally but produced no usable Feature Sprint content.
+ */
+export type FeatureSprintRunnerFailureClass =
+  | "none"
+  | "agent"
+  | "runner"
+  | "environment"
+  | "empty_output";
+
+/**
+ * Workflow usability — independent of process termination.
+ * Prefer this over inferring from `ok` alone when classifying empty successful exits.
+ */
+export type FeatureSprintRunnerResultUsability =
+  | "usable"
+  | "empty_output"
+  | "needs_human_review"
+  | "unusable";
+
+export type FeatureSprintRunnerModeLabel = "mock" | "codex" | "cursor" | "real";
 
 export type FeatureSprintRunnerResponse = {
   ok: boolean;
@@ -66,7 +186,64 @@ export type FeatureSprintRunnerResponse = {
   changedFiles?: string[];
   diffText?: string;
   verificationResults?: FeatureSprintVerificationResult[];
+  /** Optional normalized envelope fields — backward compatible for Sprint Map clients. */
+  runId?: string;
+  provider?: FeatureSprintRunnerAgent;
+  runnerMode?: FeatureSprintRunnerModeLabel;
+  durationMs?: number;
+  terminationReason?: FeatureSprintRunnerTerminationReason;
+  failureClass?: FeatureSprintRunnerFailureClass;
+  /** Workflow usability; `ok` is false whenever this is not `usable`. */
+  resultUsability?: FeatureSprintRunnerResultUsability;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  stdoutText?: string;
+  stderrText?: string;
+  parseWarnings?: string[];
+  /** Safe user-facing failure detail (no secrets). */
+  diagnosticMessage?: string;
+  /**
+   * Typed execution context echoed from the request (Sprint Map seam).
+   * Runner must not interpret sprint/story/task/phase relationships.
+   */
+  executionContext?: FeatureSprintRunnerExecutionContext;
 };
+
+/**
+ * True when the response is a structured runner envelope (mock/real), not a
+ * client-synthesized transport failure. Do not infer this from executionContext alone.
+ */
+export function hasStructuredFeatureSprintRunnerEnvelope(
+  response: Pick<
+    FeatureSprintRunnerResponse,
+    "runId" | "terminationReason" | "failureClass" | "resultUsability" | "provider" | "runnerMode"
+  >
+): boolean {
+  if (typeof response.runId === "string" && response.runId.trim()) {
+    return true;
+  }
+  if (typeof response.terminationReason === "string" && response.terminationReason.trim()) {
+    return true;
+  }
+  if (typeof response.failureClass === "string" && response.failureClass.trim()) {
+    return true;
+  }
+  if (typeof response.resultUsability === "string" && response.resultUsability.trim()) {
+    return true;
+  }
+  if (response.provider === "codex" || response.provider === "cursor") {
+    return true;
+  }
+  if (
+    response.runnerMode === "mock" ||
+    response.runnerMode === "codex" ||
+    response.runnerMode === "cursor" ||
+    response.runnerMode === "real"
+  ) {
+    return true;
+  }
+  return false;
+}
 
 export type FeatureSprintWorktreeCleanupRequest = {
   worktreePath: string;
@@ -166,6 +343,36 @@ export const FEATURE_SPRINT_RUNNER_PROFILE_LABELS: Record<FeatureSprintRunnerPro
 
 export function formatRunnerProfileLabel(profile: FeatureSprintRunnerProfile): string {
   return FEATURE_SPRINT_RUNNER_PROFILE_LABELS[profile];
+}
+
+/** Compact label for recent-run list / notices. */
+export function formatRunnerResultUsabilityLabel(run: {
+  status: string;
+  resultUsability?: FeatureSprintRunnerResultUsability;
+  terminationReason?: FeatureSprintRunnerTerminationReason;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  failureClass?: FeatureSprintRunnerFailureClass;
+}): string | undefined {
+  if (run.timedOut || run.terminationReason === "timeout") {
+    return "Timed out";
+  }
+  if (run.cancelled || run.terminationReason === "cancelled") {
+    return "Cancelled";
+  }
+  if (run.resultUsability === "empty_output" || run.failureClass === "empty_output") {
+    return "Empty output (unusable)";
+  }
+  if (run.resultUsability === "needs_human_review" || run.terminationReason === "readonly_mutation") {
+    return "Needs human review";
+  }
+  if (run.resultUsability === "unusable") {
+    return "Unusable result";
+  }
+  if (run.status === "failed" && run.terminationReason) {
+    return run.terminationReason.replace(/_/g, " ");
+  }
+  return undefined;
 }
 
 export function runnerAgentLabel(agent: FeatureSprintRunnerAgent): string {
@@ -455,6 +662,13 @@ export function validateFeatureSprintRunnerRequest(
     timeoutMs,
     worktree
   };
+
+  if ("executionContext" in record) {
+    const parsed = parseFeatureSprintRunnerExecutionContext(record.executionContext);
+    if (parsed) {
+      request.executionContext = parsed;
+    }
+  }
 
   if (isImplementationProfile(record.profile)) {
     if (verificationParsed.commands.length > 0) {

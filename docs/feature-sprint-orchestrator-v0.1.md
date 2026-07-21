@@ -72,6 +72,17 @@ Collection: `featureSprintPlans: HarnessFeatureSprintPlan[]`
 - `featureSpec` — persisted living spec with approval gate (v2, shipped)
 - `nextSliceProposal` — preview-only next slice from spec update until adopted (v2, shipped)
 - `evidenceLogId` / `evidenceProofItemId` for idempotent completion proof
+- Optional Sprint Map fields (additive):
+  - `executionModel`: `legacy_steps` (default) or `sprint_map`
+  - `sprintMap`: Feature → Sprint → Story → Task hierarchy
+  - `executionTarget`: canonical `{ sprintId, storyId, taskId, phase }`
+  - `sprintMapNotices`: actionable normalization / sync warnings (not executable state)
+
+**Authority invariant:** a plan has one authoritative execution model at a time. Seeding or importing a map does **not** flip authority; adopt Sprint Map execution deliberately. When `executionModel === "sprint_map"`, map target / dependency / phase gates apply and legacy `stepId` readiness must not bypass them.
+
+**Story vs Slice:** persisted schema uses `Story`. User-facing / packet label is **Story / Slice** (approved execution slice). Do not add a parallel `slices[]` collection.
+
+**Runner history attribution (app-owned, integration-ready):** when a map-authoritative run is recorded, history may store `sprintId`, `storyId`, `taskId`, and `mapPhase`. The shared runner request/response DTO is intentionally unchanged in this slice; a later integration pass should echo those fields without Track A owning the runner contract.
 
 `LifeCard` status is unchanged — plans are parallel metadata.
 
@@ -184,6 +195,8 @@ Later items:
 
 ## Core module
 
-Logic lives in [`src/core/featureSprintOrchestrator.ts`](../src/core/featureSprintOrchestrator.ts).
+- Orchestrator / packets / imports: [`src/core/featureSprintOrchestrator.ts`](../src/core/featureSprintOrchestrator.ts)
+- Sprint Map authority, readiness, seed, and notices: [`src/core/featureSprintMap.ts`](../src/core/featureSprintMap.ts)
+- Canonical launch-block copy: `describeFeatureSprintPhaseLaunchBlock` / `getFeatureSprintLaunchBlockReason`
 
-Tests: [`src/core/featureSprintOrchestrator.test.ts`](../src/core/featureSprintOrchestrator.test.ts).
+Tests: [`src/core/featureSprintOrchestrator.test.ts`](../src/core/featureSprintOrchestrator.test.ts), [`src/core/featureSprintMap.test.ts`](../src/core/featureSprintMap.test.ts).

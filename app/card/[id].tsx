@@ -7,6 +7,7 @@ import { CardStateButtons } from "../../src/components/CardStateButtons";
 import { FeatureRunnerOutputDetails } from "../../src/components/featureSprint/FeatureRunnerOutputDetails";
 import { FeatureSprintActionGuide } from "../../src/components/featureSprint/FeatureSprintActionGuide";
 import { FeatureSprintFlowGuide } from "../../src/components/featureSprint/FeatureSprintFlowGuide";
+import { FeatureSprintMapPanel } from "../../src/components/featureSprint/FeatureSprintMapPanel";
 import { FeatureSprintStartFlow } from "../../src/components/featureSprint/FeatureSprintStartFlow";
 import { CollapsibleSection } from "../../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../../src/components/Notice";
@@ -36,6 +37,8 @@ import {
   buildFeatureStepPromptAuditPacket,
   buildFeatureStepReviewPacket,
   canRunFeatureSprintImplementation,
+  canRunFeatureSprintPhaseAction,
+  describeFeatureSprintPhaseLaunchBlock,
   canAdoptNextSliceProposal,
   doesFeatureSprintStepRequireSpecUpdate,
   getActiveFeatureSprintPlanForCard,
@@ -49,8 +52,12 @@ import {
   resolveStepImplementationPrompt,
   resolveStepImplementationPromptSource
 } from "../../src/core/featureSprintOrchestrator";
+import {
+  buildFeatureSprintRunnerExecutionContext,
+  historyAttributionFromExecutionContext,
+  seedSprintMapFromLegacySteps
+} from "../../src/core/featureSprintMap";
 import { parseFeatureSprintWorkerOutputEvidence } from "../../src/core/featureSprintWorkerOutput";
-import type { HarnessFeatureSprintWorkerOutputEvidence } from "../../src/core/types";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
   buildFeatureSprintDogfoodSummary,
@@ -59,12 +66,14 @@ import {
 import {
   buildRunnerProfile,
   formatRunnerProfileLabel,
+  formatRunnerResultUsabilityLabel,
   isImplementationProfile,
   isPromptAuditProfile,
   isReviewProfile,
   isScopingProfile,
   runnerAgentLabel,
-  type FeatureSprintRunnerAgent
+  type FeatureSprintRunnerAgent,
+  type FeatureSprintRunnerExecutionContext
 } from "../../src/core/featureSprintRunner";
 import { getFeatureSprintRunnerRunsForCard } from "../../src/core/featureSprintRunnerHistory";
 import { buildFeatureSprintRunnerOutputView } from "../../src/core/featureSprintRunnerOutputView";
@@ -97,10 +106,13 @@ import { buildApplicationResumeReadiness } from "../../src/core/resumeReadiness"
 import { computeCardWarmth } from "../../src/core/warmth";
 import { useLifeHarness } from "../../src/state/LifeHarnessState";
 import type { ResumeModulePatch } from "../../src/core/actions";
-import type { HarnessFeatureSpecSource } from "../../src/core/types";
 import type {
   HarnessAgentSession,
+  HarnessFeatureSpecSource,
+  HarnessFeatureSprintExecutionTarget,
+  HarnessFeatureSprintPlan,
   HarnessFeatureSprintRunnerRun,
+  HarnessFeatureSprintWorkerOutputEvidence,
   HarnessProject,
   LifeCard,
   ResumeModuleSection
@@ -214,6 +226,43 @@ function dogfoodCheckColor(status: FeatureSprintDogfoodCheckStatus): string {
   return colors.accentDanger;
 }
 
+function buildLaunchExecutionContext(
+  plan: HarnessFeatureSprintPlan,
+  phase?: NonNullable<HarnessFeatureSprintPlan["executionTarget"]>["phase"]
+):
+  | { ok: true; context: FeatureSprintRunnerExecutionContext }
+  | { ok: false; error: string } {
+  return buildFeatureSprintRunnerExecutionContext({
+    plan,
+    phase,
+    stepId: plan.currentStepId
+  });
+}
+
+function runnerFailureNotice(result: {
+  error?: string;
+  resultUsability?: string;
+  failureClass?: string;
+  terminationReason?: string;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  diagnosticMessage?: string;
+}): string {
+  const usability = formatRunnerResultUsabilityLabel({
+    status: "failed",
+    resultUsability: result.resultUsability as never,
+    terminationReason: result.terminationReason as never,
+    timedOut: result.timedOut,
+    cancelled: result.cancelled,
+    failureClass: result.failureClass as never
+  });
+  const detail =
+    result.diagnosticMessage?.trim() ||
+    result.error?.trim() ||
+    "Runner run failed.";
+  return usability ? `${usability}. ${detail}` : detail;
+}
+
 function buildSessionInputFromForm(
   cardId: string,
   form: SessionFormState
@@ -270,6 +319,7 @@ export default function CardDetailScreen() {
     completeAgentSession,
     deleteAgentSession,
     updateFeatureSprintStep,
+    updateFeatureSprintPlan,
     advanceFeatureSprintStep,
     adoptNextSliceProposalForPlan,
     completeFeatureSprintPlan,
@@ -612,6 +662,9 @@ export default function CardDetailScreen() {
   const featureSpecApproved = isFeatureSpecApproved(activeFeatureSprintPlan);
   const persistedFeatureSpec = hasPersistedFeatureSpec(activeFeatureSprintPlan);
   const canRunImplementation = canRunFeatureSprintImplementation(activeFeatureSprintPlan);
+  const implementationLaunchBlock = activeFeatureSprintPlan
+    ? describeFeatureSprintPhaseLaunchBlock(activeFeatureSprintPlan, "implement")
+    : undefined;
   const stepLocalizationSaved = hasStepPromptLocalization(currentFeatureStep);
   const stepPromptAuditSaved = hasStepPromptAudit(currentFeatureStep);
   const stepImplementationProofSaved = hasStepImplementationProof(currentFeatureStep);
@@ -1125,9 +1178,15 @@ export default function CardDetailScreen() {
     }
 
     const project = getProjectForCard(lifeHarnessData, cardId);
+    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan);
+    if (!executionContextResult.ok) {
+      showNotice("warning", executionContextResult.error);
+      return;
+    }
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
       repoPath: project?.repoPath
@@ -1147,7 +1206,8 @@ export default function CardDetailScreen() {
         cardId,
         planId: activeFeatureSprintPlan.id,
         stepId: activeFeatureSprintPlan.currentStepId,
-        repoPath: project?.repoPath
+        repoPath: project?.repoPath,
+        executionContext: executionContextResult.context
       });
 
       if (historyCreate.ok && historyCreate.runId) {
@@ -1155,7 +1215,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? "Codex prompt audit run failed.");
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1217,7 +1277,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? `${runnerAgentLabel(runnerAgent)} scoping run failed.`);
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1289,6 +1349,15 @@ export default function CardDetailScreen() {
       return;
     }
 
+    if (!canRunFeatureSprintPhaseAction(activeFeatureSprintPlan, "review")) {
+      showNotice(
+        "warning",
+        describeFeatureSprintPhaseLaunchBlock(activeFeatureSprintPlan, "review") ??
+          "Review launch is blocked by Sprint Map readiness."
+      );
+      return;
+    }
+
     if (!ensureRunnerAgentAvailable()) {
       return;
     }
@@ -1306,9 +1375,15 @@ export default function CardDetailScreen() {
     }
 
     const project = getProjectForCard(lifeHarnessData, cardId);
+    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan, "review");
+    if (!executionContextResult.ok) {
+      showNotice("warning", executionContextResult.error);
+      return;
+    }
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
       repoPath: project?.repoPath
@@ -1328,7 +1403,8 @@ export default function CardDetailScreen() {
         cardId,
         planId: activeFeatureSprintPlan.id,
         stepId: activeFeatureSprintPlan.currentStepId,
-        repoPath: project?.repoPath
+        repoPath: project?.repoPath,
+        executionContext: executionContextResult.context
       });
 
       if (historyCreate.ok && historyCreate.runId) {
@@ -1336,7 +1412,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", result.error ?? `${runnerAgentLabel(runnerAgent)} review run failed.`);
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1357,6 +1433,15 @@ export default function CardDetailScreen() {
 
   async function handleRunImplementationInWorktree() {
     if (!activeFeatureSprintPlan?.currentStepId || isRunningImplementation) {
+      return;
+    }
+
+    if (!canRunFeatureSprintImplementation(activeFeatureSprintPlan)) {
+      showNotice(
+        "warning",
+        describeFeatureSprintPhaseLaunchBlock(activeFeatureSprintPlan, "implement") ??
+          "Implementation launch is blocked."
+      );
       return;
     }
 
@@ -1381,9 +1466,15 @@ export default function CardDetailScreen() {
     }
 
     const profile = buildRunnerProfile(runnerAgent, "implementation");
+    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan, "implement");
+    if (!executionContextResult.ok) {
+      showNotice("warning", executionContextResult.error);
+      return;
+    }
     const historyCreate = createFeatureSprintRunnerRun({
       profile,
       cardId,
+      ...historyAttributionFromExecutionContext(executionContextResult.context),
       planId: activeFeatureSprintPlan.id,
       stepId: activeFeatureSprintPlan.currentStepId,
       repoPath: project.repoPath
@@ -1406,7 +1497,8 @@ export default function CardDetailScreen() {
         repoPath: project.repoPath,
         worktree: { enabled: true },
         verificationCommands: project.verificationCommands ?? [],
-        runVerification: Boolean(project.verificationCommands?.length)
+        runVerification: Boolean(project.verificationCommands?.length),
+        executionContext: executionContextResult.context
       });
 
       if (historyCreate.ok && historyCreate.runId) {
@@ -1414,7 +1506,7 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok) {
-        showNotice("warning", result.error ?? "Implementation run failed.");
+        showNotice("warning", runnerFailureNotice(result));
         return;
       }
 
@@ -1805,6 +1897,74 @@ export default function CardDetailScreen() {
           </View>
         </View>
 
+        {activeFeatureSprintPlan ? (
+          <FeatureSprintMapPanel
+            plan={activeFeatureSprintPlan}
+            onSelectExecutionTarget={(target: HarnessFeatureSprintExecutionTarget) => {
+              const result = updateFeatureSprintPlan(activeFeatureSprintPlan.id, {
+                executionTarget: target
+              });
+              if (!result.ok) {
+                showNotice("warning", result.message ?? "Could not set execution target.");
+                return;
+              }
+              showNotice(
+                "success",
+                `Execution target set: ${target.taskId} · ${target.phase}`
+              );
+            }}
+            onSeedFromSteps={() => {
+              const seeded = seedSprintMapFromLegacySteps(activeFeatureSprintPlan);
+              if (!seeded.ok) {
+                showNotice("warning", seeded.error);
+                return;
+              }
+              const result = updateFeatureSprintPlan(activeFeatureSprintPlan.id, {
+                sprintMap: seeded.sprintMap,
+                executionTarget: seeded.executionTarget ?? null,
+                executionModel: null,
+                sprintMapNotices: [seeded.notice]
+              });
+              if (!result.ok) {
+                showNotice("warning", result.message ?? "Could not seed Sprint Map.");
+                return;
+              }
+              showNotice("success", seeded.notice.message);
+            }}
+            onAdoptSprintMap={() => {
+              if (!activeFeatureSprintPlan.executionTarget) {
+                showNotice(
+                  "warning",
+                  "Select a Sprint Map task and phase before adopting map execution."
+                );
+                return;
+              }
+              const result = updateFeatureSprintPlan(activeFeatureSprintPlan.id, {
+                executionModel: "sprint_map",
+                executionTarget: activeFeatureSprintPlan.executionTarget
+              });
+              if (!result.ok) {
+                showNotice("warning", result.message ?? "Could not adopt Sprint Map execution.");
+                return;
+              }
+              showNotice(
+                "success",
+                "Sprint Map is now authoritative. Legacy step readiness will not bypass map gates."
+              );
+            }}
+            onRevertToLegacy={() => {
+              const result = updateFeatureSprintPlan(activeFeatureSprintPlan.id, {
+                executionModel: null
+              });
+              if (!result.ok) {
+                showNotice("warning", result.message ?? "Could not revert to legacy steps.");
+                return;
+              }
+              showNotice("success", "Reverted to legacy steps authority. Sprint Map kept as preview.");
+            }}
+          />
+        ) : null}
+
         <View style={{ marginTop: 12 }}>
           <Text style={styles.label}>Recent runner runs</Text>
           {recentRunnerRuns.length === 0 ? (
@@ -1822,7 +1982,19 @@ export default function CardDetailScreen() {
                   {formatRunnerProfileLabel(run.profile)} · {run.status} ·{" "}
                   {formatRunnerStartedAt(run.startedAt)}
                   {run.importedAt ? " · Imported" : ""}
+                  {formatRunnerResultUsabilityLabel(run)
+                    ? ` · ${formatRunnerResultUsabilityLabel(run)}`
+                    : ""}
                 </Text>
+                {run.taskId ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>
+                    Map task: {run.taskId}
+                    {run.mapPhase ? ` · ${run.mapPhase}` : ""}
+                  </Text>
+                ) : null}
+                {run.diagnosticMessage && run.status === "failed" ? (
+                  <Text style={[styles.helpText, { marginTop: 4 }]}>{run.diagnosticMessage}</Text>
+                ) : null}
                 {run.worktreePath ? (
                   <Text style={[styles.helpText, { marginTop: 4 }]}>Worktree: {run.worktreePath}</Text>
                 ) : null}
@@ -2190,9 +2362,12 @@ export default function CardDetailScreen() {
                   </Text>
                 </Pressable>
               ) : null}
-              {!canRunImplementation ? (
-                <Text style={[styles.helpText, { marginTop: 8 }]}>
-                  Approve the persisted feature spec before running implementation in worktree.
+              {!canRunImplementation && implementationLaunchBlock ? (
+                <Text
+                  style={[styles.helpText, { marginTop: 8 }]}
+                  testID="feature-sprint-implementation-block-reason"
+                >
+                  {implementationLaunchBlock}
                 </Text>
               ) : null}
               <Pressable

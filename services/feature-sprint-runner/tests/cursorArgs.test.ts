@@ -9,9 +9,9 @@ describe("cursorArgs", () => {
     process.env = { ...envSnapshot };
   });
 
-  it("builds headless agent args with prompt file reference", () => {
+  it("builds headless implementation args with force/trust", () => {
     delete process.env.FEATURE_SPRINT_CURSOR_MODEL;
-    const result = buildCursorArgs("C:/tmp/prompt.md");
+    const result = buildCursorArgs("C:/tmp/prompt.md", { profile: "cursor_implementation" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.bin).toBe("agent");
@@ -26,6 +26,26 @@ describe("cursorArgs", () => {
     }
   });
 
+  it("uses read-only ask mode for scoping and review", () => {
+    const scoping = buildCursorArgs("C:/tmp/prompt.md", { profile: "cursor_scoping" });
+    expect(scoping.ok).toBe(true);
+    if (scoping.ok) {
+      expect(scoping.args).toContain("--mode");
+      expect(scoping.args).toContain("ask");
+      expect(scoping.args).not.toContain("--force");
+      expect(scoping.args).toContain("--output-format");
+      expect(scoping.args).toContain("text");
+      expect(scoping.args.at(-1)).toContain("read-only");
+    }
+
+    const review = buildCursorArgs("C:/tmp/prompt.md", { profile: "cursor_review" });
+    expect(review.ok).toBe(true);
+    if (review.ok) {
+      expect(review.args).toContain("--mode");
+      expect(review.args).toContain("ask");
+    }
+  });
+
   it("normalizes Windows prompt paths to forward slashes", () => {
     const result = buildCursorArgs("C:\\Users\\me\\AppData\\Local\\Temp\\prompt.md");
     expect(result.ok).toBe(true);
@@ -37,7 +57,8 @@ describe("cursorArgs", () => {
 
   it("passes workspace path for headless trust in isolated worktrees", () => {
     const result = buildCursorArgs("C:/tmp/prompt.md", {
-      workspacePath: "C:\\worktrees\\life-harness\\feature-step-abc"
+      workspacePath: "C:\\worktrees\\life-harness\\feature-step-abc",
+      profile: "cursor_implementation"
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -50,7 +71,7 @@ describe("cursorArgs", () => {
     process.env.FEATURE_SPRINT_CURSOR_BIN = "cursor-agent";
     process.env.FEATURE_SPRINT_CURSOR_MODEL = "composer-2.5";
 
-    const result = buildCursorArgs("/tmp/prompt.md");
+    const result = buildCursorArgs("/tmp/prompt.md", { profile: "cursor_implementation" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.bin).toBe("cursor-agent");

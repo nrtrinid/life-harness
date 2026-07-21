@@ -36,6 +36,37 @@ function capText(value: string | undefined, max: number): string | undefined {
   return `${trimmed.slice(0, max)}\n[truncated]`;
 }
 
+function cleanOptionalId(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function coerceMapPhase(
+  value: string | undefined
+): HarnessFeatureSprintStepImplementationProofRunnerEvidence["mapPhase"] {
+  if (value === "localize" || value === "implement" || value === "review") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeRunnerEvidence(
+  evidence: HarnessFeatureSprintStepImplementationProofRunnerEvidence
+): HarnessFeatureSprintStepImplementationProofRunnerEvidence {
+  return {
+    diffStat: capText(evidence.diffStat, FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX),
+    gitStatus: capText(evidence.gitStatus, FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX),
+    verificationSummary: cleanStringList(evidence.verificationSummary).slice(
+      0,
+      FEATURE_SPRINT_PROOF_VERIFICATION_SUMMARY_MAX
+    ),
+    sprintId: cleanOptionalId(evidence.sprintId),
+    storyId: cleanOptionalId(evidence.storyId),
+    taskId: cleanOptionalId(evidence.taskId),
+    mapPhase: coerceMapPhase(evidence.mapPhase)
+  };
+}
+
 export function resolveLatestImplementationRunForStep(
   data: LifeHarnessData,
   planId: string,
@@ -126,10 +157,22 @@ export function buildRunnerEvidenceSnapshot(
   const snapshot: HarnessFeatureSprintStepImplementationProofRunnerEvidence = {
     diffStat: capText(run.diffStat, FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX),
     gitStatus: capText(run.gitStatus, FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX),
-    verificationSummary: verificationSummary.length > 0 ? verificationSummary : undefined
+    verificationSummary: verificationSummary.length > 0 ? verificationSummary : undefined,
+    sprintId: run.sprintId,
+    storyId: run.storyId,
+    taskId: run.taskId,
+    mapPhase: run.mapPhase
   };
 
-  if (!snapshot.diffStat && !snapshot.gitStatus && !snapshot.verificationSummary?.length) {
+  if (
+    !snapshot.diffStat &&
+    !snapshot.gitStatus &&
+    !snapshot.verificationSummary?.length &&
+    !snapshot.sprintId &&
+    !snapshot.storyId &&
+    !snapshot.taskId &&
+    !snapshot.mapPhase
+  ) {
     return undefined;
   }
 
@@ -309,14 +352,7 @@ export function normalizeImplementationProofRecord(
     knownRisks: cleanStringList(proof.knownRisks),
     suggestedReviewFocus: cleanStringList(proof.suggestedReviewFocus),
     runnerEvidence: proof.runnerEvidence
-      ? {
-          diffStat: capText(proof.runnerEvidence.diffStat, FEATURE_SPRINT_RUNNER_DIFF_STAT_MAX),
-          gitStatus: capText(proof.runnerEvidence.gitStatus, FEATURE_SPRINT_RUNNER_GIT_STATUS_MAX),
-          verificationSummary: cleanStringList(proof.runnerEvidence.verificationSummary).slice(
-            0,
-            FEATURE_SPRINT_PROOF_VERIFICATION_SUMMARY_MAX
-          )
-        }
+      ? normalizeRunnerEvidence(proof.runnerEvidence)
       : undefined,
     workerOutputEvidence: proof.workerOutputEvidence
       ? normalizeWorkerOutputEvidenceRecord(proof.workerOutputEvidence)

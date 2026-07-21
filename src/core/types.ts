@@ -1,6 +1,9 @@
 import type {
   FeatureSprintRunnerAgent,
+  FeatureSprintRunnerFailureClass,
   FeatureSprintRunnerProfile,
+  FeatureSprintRunnerResultUsability,
+  FeatureSprintRunnerTerminationReason,
   FeatureSprintVerificationResult,
   FeatureSprintWorktreeCleanupStatus
 } from "./featureSprintRunner";
@@ -483,6 +486,11 @@ export type HarnessFeatureSprintStepImplementationProofRunnerEvidence = {
   diffStat?: string;
   gitStatus?: string;
   verificationSummary?: string[];
+  /** Optional Sprint Map correlation copied from the source runner run. */
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  mapPhase?: HarnessFeatureSprintMapPhase;
 };
 
 export type HarnessFeatureSprintStepImplementationProof = {
@@ -529,6 +537,117 @@ export type HarnessFeatureSprintNextSliceProposal = {
   riskTier?: "tiny" | "normal" | "risky";
 };
 
+/**
+ * A plan has one authoritative execution model at a time.
+ * - `legacy_steps`: currentStepId / steps[] gate launches (default when absent).
+ * - `sprint_map`: executionTarget + sprintMap gate launches; steps[] remain a compatibility lens.
+ * Seeding or importing a map does not flip authority until the plan deliberately adopts sprint_map.
+ */
+export type HarnessFeatureSprintExecutionModel = "legacy_steps" | "sprint_map";
+
+/** Canonical task-phase pointer for Sprint Map agent runs. */
+export type HarnessFeatureSprintMapPhase = "localize" | "implement" | "review";
+
+/**
+ * Schema-level container under a sprint is `Story`.
+ * Product/execution label for research and infrastructure workflows is `Slice`
+ * (an approved execution slice). Do not add a parallel `slices[]` collection.
+ */
+export type HarnessFeatureSprintMapNoticeCode =
+  | "stale_execution_target"
+  | "stale_linked_step"
+  | "map_out_of_sync"
+  | "seed_preview";
+
+export type HarnessFeatureSprintMapNotice = {
+  code: HarnessFeatureSprintMapNoticeCode;
+  message: string;
+  /** Dedupes the same condition across repeated hydration. */
+  fingerprint: string;
+  createdAt: string;
+};
+
+export type HarnessFeatureSprintTaskStatus =
+  | "planned"
+  | "ready"
+  | "in_progress"
+  | "blocked"
+  | "done"
+  | "parked";
+
+export type HarnessFeatureSprintGateState = "open" | "blocked" | "passed";
+
+export type HarnessFeatureSprintTaskScope = {
+  allowedPaths?: string[];
+  forbiddenPaths?: string[];
+  architecturalAreas?: string[];
+  contractsMayChange?: string[];
+  expectedFileCountBudget?: number;
+};
+
+export type HarnessFeatureSprintTaskAcceptanceCriterion = {
+  id: string;
+  text: string;
+};
+
+export type HarnessFeatureSprintTaskVerificationRequirement = {
+  id: string;
+  description: string;
+  command?: string;
+};
+
+export type HarnessFeatureSprintDependency = {
+  id: string;
+  /** Prerequisite task id (must resolve inside the same feature map). */
+  taskId: string;
+  /** Defaults to true when omitted. */
+  required?: boolean;
+};
+
+export type HarnessFeatureSprintTask = {
+  id: string;
+  title: string;
+  objective: string;
+  status: HarnessFeatureSprintTaskStatus;
+  acceptanceCriteria: HarnessFeatureSprintTaskAcceptanceCriterion[];
+  dependencies: HarnessFeatureSprintDependency[];
+  scope: HarnessFeatureSprintTaskScope;
+  verificationRequirements: HarnessFeatureSprintTaskVerificationRequirement[];
+  completionEvidence?: string[];
+  architectureDecisions?: string[];
+  gateState?: HarnessFeatureSprintGateState;
+  /** Optional bridge to legacy fixed-step / living-spec step id. */
+  linkedStepId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/** Schema name: Story. User-facing label: Story / Slice (execution slice). */
+export type HarnessFeatureSprintStory = {
+  id: string;
+  title: string;
+  outcome: string;
+  tasks: HarnessFeatureSprintTask[];
+};
+
+export type HarnessFeatureSprintSprint = {
+  id: string;
+  title: string;
+  objective: string;
+  stories: HarnessFeatureSprintStory[];
+};
+
+export type HarnessFeatureSprintMap = {
+  sprints: HarnessFeatureSprintSprint[];
+};
+
+export type HarnessFeatureSprintExecutionTarget = {
+  sprintId: string;
+  storyId: string;
+  taskId: string;
+  phase: HarnessFeatureSprintMapPhase;
+};
+
 export type HarnessFeatureSprintSpecUpdate = {
   stepId: string;
   revisedSpec: string;
@@ -548,6 +667,11 @@ export type HarnessFeatureSprintRunnerRun = {
   cardId?: string;
   planId?: string;
   stepId?: string;
+  /** Sprint Map attribution (optional; additive). */
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  mapPhase?: HarnessFeatureSprintMapPhase;
   repoPath?: string;
   commandPreview?: string;
   outputExcerpt?: string;
@@ -561,6 +685,16 @@ export type HarnessFeatureSprintRunnerRun = {
   changedFiles?: string[];
   diffText?: string;
   verificationResults?: FeatureSprintVerificationResult[];
+  /** Optional runner usability classification (additive; older records omit). */
+  terminationReason?: FeatureSprintRunnerTerminationReason;
+  failureClass?: FeatureSprintRunnerFailureClass;
+  resultUsability?: FeatureSprintRunnerResultUsability;
+  timedOut?: boolean;
+  cancelled?: boolean;
+  diagnosticMessage?: string;
+  parseWarnings?: string[];
+  stdoutText?: string;
+  stderrText?: string;
   worktreeCleanedAt?: string;
   worktreeCleanupStatus?: FeatureSprintWorktreeCleanupStatus;
   worktreeCleanupMessage?: string;
@@ -595,6 +729,17 @@ export type HarnessFeatureSprintPlan = {
   latestSpecUpdate?: HarnessFeatureSprintSpecUpdate;
   nextSliceProposal?: HarnessFeatureSprintNextSliceProposal;
   automationPhase?: HarnessFeatureSprintAutomationPhase;
+  /**
+   * Authoritative execution model. Absent means `legacy_steps`.
+   * Invariant: a plan has one authoritative execution model at a time.
+   */
+  executionModel?: HarnessFeatureSprintExecutionModel;
+  /** Optional Sprint Map hierarchy (Feature → Sprint → Story/Slice → Task). */
+  sprintMap?: HarnessFeatureSprintMap;
+  /** Canonical current execution pointer into sprintMap. */
+  executionTarget?: HarnessFeatureSprintExecutionTarget;
+  /** Actionable Sprint Map normalization / sync notices (not executable state). */
+  sprintMapNotices?: HarnessFeatureSprintMapNotice[];
 };
 
 export type PrimaryActionKind =

@@ -3,15 +3,19 @@ import {
   buildRunnerProfile,
   capGitMetadataFields,
   capVerificationResults,
+  hasStructuredFeatureSprintRunnerEnvelope,
   isReviewProfile,
+  parseFeatureSprintRunnerExecutionContext,
   type FeatureSprintRunnerAgent,
   type FeatureSprintRunnerProfile,
   type FeatureSprintRunnerResponse,
   type FeatureSprintWorktreeCleanupResponse
 } from "./featureSprintRunner";
+import { historyAttributionFromExecutionContext } from "./featureSprintMap";
 import { createId, nowIso } from "./ids";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import type {
+  HarnessFeatureSprintMapPhase,
   HarnessFeatureSprintRunnerRun,
   HarnessFeatureSprintRunnerRunStatus
 } from "./types";
@@ -28,6 +32,10 @@ export type FeatureSprintRunnerRunCreateInput = {
   cardId?: string;
   planId?: string;
   stepId?: string;
+  sprintId?: string;
+  storyId?: string;
+  taskId?: string;
+  mapPhase?: HarnessFeatureSprintMapPhase;
   repoPath?: string;
   commandPreview?: string;
   startedAt?: string;
@@ -189,6 +197,10 @@ export function createFeatureSprintRunnerRun(
     cardId: input.cardId,
     planId: input.planId,
     stepId: input.stepId,
+    sprintId: cleanOptional(input.sprintId),
+    storyId: cleanOptional(input.storyId),
+    taskId: cleanOptional(input.taskId),
+    mapPhase: input.mapPhase,
     repoPath: cleanOptional(input.repoPath),
     commandPreview: cleanOptional(input.commandPreview),
     startedAt,
@@ -220,10 +232,35 @@ export function completeFeatureSprintRunnerRun(
   const status: HarnessFeatureSprintRunnerRunStatus = response.ok ? "succeeded" : "failed";
   const outputFields = response.ok ? buildStoredOutputFields(response.outputText) : {};
   const metadata = capGitMetadataFields(response);
+  // Only overlay map attribution from a structured runner envelope echo.
+  // Client-synthesized transport failures may carry request context for diagnostics,
+  // but that must not be treated as runner-confirmed.
+  const structuredEnvelope = hasStructuredFeatureSprintRunnerEnvelope(response);
+  const echoedContext = structuredEnvelope
+    ? parseFeatureSprintRunnerExecutionContext(response.executionContext)
+    : undefined;
+  const attribution = historyAttributionFromExecutionContext(echoedContext);
 
   const updated: HarnessFeatureSprintRunnerRun = {
     ...existing,
     status,
+    // Prefer echoed runner context when present; otherwise keep create-time fields.
+    sprintId: structuredEnvelope
+      ? cleanOptional(attribution.sprintId) ?? existing.sprintId
+      : existing.sprintId,
+    storyId: structuredEnvelope
+      ? cleanOptional(attribution.storyId) ?? existing.storyId
+      : existing.storyId,
+    taskId: structuredEnvelope
+      ? cleanOptional(attribution.taskId) ?? existing.taskId
+      : existing.taskId,
+    mapPhase: structuredEnvelope ? attribution.mapPhase ?? existing.mapPhase : existing.mapPhase,
+    stepId: structuredEnvelope
+      ? cleanOptional(attribution.stepId) ?? existing.stepId
+      : existing.stepId,
+    planId: structuredEnvelope
+      ? cleanOptional(attribution.planId) ?? existing.planId
+      : existing.planId,
     commandPreview: cleanOptional(response.commandPreview) ?? existing.commandPreview,
     exitCode: response.exitCode,
     error: cleanOptional(response.error),
@@ -235,6 +272,29 @@ export function completeFeatureSprintRunnerRun(
     changedFiles: metadata.changedFiles,
     diffText: cleanOptional(metadata.diffText),
     verificationResults: capVerificationResults(metadata.verificationResults),
+    terminationReason: structuredEnvelope ? response.terminationReason : existing.terminationReason,
+    failureClass: structuredEnvelope ? response.failureClass : existing.failureClass,
+    resultUsability: structuredEnvelope ? response.resultUsability : existing.resultUsability,
+    timedOut: structuredEnvelope
+      ? response.timedOut === true
+        ? true
+        : response.timedOut === false
+          ? false
+          : existing.timedOut
+      : existing.timedOut,
+    cancelled: structuredEnvelope
+      ? response.cancelled === true
+        ? true
+        : response.cancelled === false
+          ? false
+          : existing.cancelled
+      : existing.cancelled,
+    diagnosticMessage: structuredEnvelope
+      ? cleanOptional(response.diagnosticMessage)
+      : existing.diagnosticMessage,
+    parseWarnings: structuredEnvelope ? response.parseWarnings : existing.parseWarnings,
+    stdoutText: structuredEnvelope ? cleanOptional(response.stdoutText) : existing.stdoutText,
+    stderrText: structuredEnvelope ? cleanOptional(response.stderrText) : existing.stderrText,
     completedAt: response.completedAt,
     updatedAt: now
   };
