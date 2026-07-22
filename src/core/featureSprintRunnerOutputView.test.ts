@@ -310,6 +310,48 @@ describe("buildFeatureSprintRunnerOutputView", () => {
     expect(view?.safetyNotes.some((note) => note.includes("Worktree was cleaned"))).toBe(true);
   });
 
+  it("surfaces orphaned_on_disk cleanup status on the output view", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "cursor_implementation",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "cursor_implementation",
+      outputText: "Done.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      worktreePath: "/tmp/worktree-1"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const marked = markFeatureSprintRunnerRunWorktreeCleanup(completed.state, created.runId, {
+      ok: false,
+      status: "orphaned_on_disk",
+      worktreePath: "/tmp/worktree-1",
+      message: "Git worktree removed, but files remain on disk. Retry filesystem cleanup.",
+      gitRegistered: false,
+      filesystemExists: true,
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString()
+    });
+    if (!marked.ok) {
+      throw new Error("Expected mark to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(marked.state, created.runId);
+    expect(view?.canCleanWorktree).toBe(true);
+    expect(view?.worktreeCleanupStatus).toBe("orphaned_on_disk");
+    expect(view?.worktreeCleanupMessage).toContain("files remain on disk");
+    expect(view?.worktreeCleanedAt).toBeUndefined();
+  });
+
   it("surfaces not_found cleanup status on the output view", () => {
     const created = createFeatureSprintRunnerRun(baseData(), {
       profile: "codex_implementation",

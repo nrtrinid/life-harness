@@ -47,14 +47,21 @@ Response: `FeatureSprintWorktreeCleanupResponse` with `status`:
 
 | Status | Meaning |
 |--------|---------|
-| `cleaned` | `git worktree remove` succeeded |
+| `cleaned` | Git registration and filesystem path are both absent (including idempotent retry) |
 | `blocked` | Uncommitted changes; `force` not set |
-| `not_found` | Path missing on disk |
-| `failed` | Validation, auth, or git error |
+| `orphaned_on_disk` | Git registration removed; directory still on disk — retry filesystem cleanup |
+| `stale_git_registration` | Directory gone; Git registration remains — retry registration cleanup |
+| `not_found` | Legacy / historical only; new reconciliations prefer `cleaned` when both are absent |
+| `failed` | Validation error or both still present after an attempt |
 
-Expected safety outcomes (`blocked`, `not_found`) return HTTP 200 with typed body — not HTTP errors.
+Expected safety outcomes (`blocked`, partial statuses) return HTTP 200 with typed body — not HTTP errors.
 
-Removal uses `git -C <repoRoot> worktree remove [--force] <worktreePath>` only. No `rm -rf`, no shell, no branch deletion in v0.1.
+Cleanup runs in two stages after path validation:
+
+1. **Git registration** — `git worktree remove [--force]` when still registered; final status uses `git worktree list` probes (exit code alone is not trusted).
+2. **Filesystem** — only when registration is already gone, the directory remains, and `force: true`. Uses a no-follow recursive walk (symlinks/junctions unlinked, not traversed). On Windows, a bounded-retry walk plus empty-directory `robocopy /MIR` fallback (arg-array spawn, no shell concatenation) **only after** the destination is confirmed link-free; robocopy is refused if any symlink/junction remains.
+
+Never deletes filesystem contents while the path is still a registered Git worktree.
 
 ## App wiring
 
@@ -66,14 +73,15 @@ Removal uses `git -C <repoRoot> worktree remove [--force] <worktreePath>` only. 
 
 ### History audit rules
 
-- Always set `worktreeCleanupStatus` and `worktreeCleanupMessage` from the response (including `blocked`, `failed`, `not_found`).
+- Always set `worktreeCleanupStatus` and `worktreeCleanupMessage` from the response (including `blocked`, `failed`, `not_found`, and partial statuses).
 - Set `worktreeCleanedAt` **only** when `ok && status === "cleaned"`.
-- For `not_found`: record status/message; **do not** set `worktreeCleanedAt` (path already gone ≠ confirmed clean removal in this session).
+- For `not_found`: record status/message; **do not** set `worktreeCleanedAt` (legacy historical rows remain compatible).
+- Filesystem deletion of orphan directories (`gitRegistered=false`, path still on disk) requires explicit `force: true` — same consent bar as discarding dirty worktree changes.
 - Do not delete the history row; keep `worktreePath` for audit.
 
 ### Force clean gate
 
-**Force clean worktree** appears only after a `blocked` response for **that same run id**. Never on first render; never globally.
+**Force clean worktree** appears after a `blocked` response for **that same run id**, and may remain available after partial statuses (`orphaned_on_disk`, `stale_git_registration`) so the user can retry. Never on first render; never globally. Normal cleanup never silently escalates to force.
 
 ## Limitations (v0.1)
 

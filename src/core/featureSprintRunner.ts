@@ -262,7 +262,17 @@ export type FeatureSprintWorktreeCleanupStatus =
   | "cleaned"
   | "blocked"
   | "not_found"
+  | "orphaned_on_disk"
+  | "stale_git_registration"
   | "failed";
+
+export type FeatureSprintWorktreeCleanupStageResult = {
+  attempted: boolean;
+  ok: boolean;
+  skipped?: boolean;
+  error?: string;
+  method?: string;
+};
 
 export type FeatureSprintWorktreeCleanupResponse = {
   ok: boolean;
@@ -273,6 +283,12 @@ export type FeatureSprintWorktreeCleanupResponse = {
   hadChanges?: boolean;
   gitStatus?: string;
   error?: string;
+  /** Final probe: path still listed by `git worktree list`. */
+  gitRegistered?: boolean;
+  /** Final probe: path still exists on disk. */
+  filesystemExists?: boolean;
+  gitStage?: FeatureSprintWorktreeCleanupStageResult;
+  filesystemStage?: FeatureSprintWorktreeCleanupStageResult;
   startedAt: string;
   completedAt: string;
 };
@@ -773,6 +789,62 @@ export function isFeatureSprintWorktreeCleanupStatus(
     value === "cleaned" ||
     value === "blocked" ||
     value === "not_found" ||
+    value === "orphaned_on_disk" ||
+    value === "stale_git_registration" ||
     value === "failed"
   );
+}
+
+/**
+ * Derive cleanup status from independent Git-registration and filesystem probes.
+ * Callers supply the observed final state after staged attempts.
+ */
+export function reconcileFeatureSprintWorktreeCleanupState(input: {
+  gitRegistered: boolean;
+  filesystemExists: boolean;
+  blocked?: boolean;
+  hadChanges?: boolean;
+}): {
+  status: FeatureSprintWorktreeCleanupStatus;
+  ok: boolean;
+  message: string;
+} {
+  if (input.blocked) {
+    return {
+      status: "blocked",
+      ok: false,
+      message:
+        "Worktree has uncommitted changes. Inspect output and diff, then use force clean after review."
+    };
+  }
+
+  if (!input.gitRegistered && !input.filesystemExists) {
+    return {
+      status: "cleaned",
+      ok: true,
+      message: "Worktree already removed from Git and disk."
+    };
+  }
+
+  if (!input.gitRegistered && input.filesystemExists) {
+    return {
+      status: "orphaned_on_disk",
+      ok: false,
+      message: "Git worktree removed, but files remain on disk. Retry filesystem cleanup."
+    };
+  }
+
+  if (input.gitRegistered && !input.filesystemExists) {
+    return {
+      status: "stale_git_registration",
+      ok: false,
+      message: "Files are gone, but a stale Git worktree registration remains. Retry registration cleanup."
+    };
+  }
+
+  return {
+    status: "failed",
+    ok: false,
+    message: "Worktree cleanup did not complete."
+  };
 }
