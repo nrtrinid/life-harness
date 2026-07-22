@@ -1,6 +1,9 @@
 import { syncApplicationStatus } from "./career";
+import { normalizeClarifiedSpec } from "./featureSprintClarifiedSpec";
+import { resolveFeatureSprintAutonomyPolicy } from "./featureSprintAutonomyPolicy";
 import { normalizePlanSprintMapFields } from "./featureSprintMap";
 import { coerceAutomationPhase, normalizeFeatureSprintStep } from "./featureSprintOrchestrator";
+import { resolvePlanStateRevision } from "./featureSprintTaskContract";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { normalizeResumeModules } from "./resumeModuleBank";
 import type {
@@ -59,14 +62,34 @@ export function normalizeFeatureSprintPlan(plan: HarnessFeatureSprintPlan): Harn
   const automationPhase = coerceAutomationPhase(plan.automationPhase);
   const { sprintMap, executionTarget, executionModel, sprintMapNotices } =
     normalizePlanSprintMapFields(plan);
+  const clarifiedSpec = normalizeClarifiedSpec(plan.clarifiedSpec);
+  const clarifiedSpecHistory = (plan.clarifiedSpecHistory ?? [])
+    .map((item) => normalizeClarifiedSpec(item))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   const next: HarnessFeatureSprintPlan = {
     ...plan,
     featureSpec,
     automationPhase,
     executionModel,
-    steps: plan.steps.map(normalizeFeatureSprintStep)
+    steps: plan.steps.map(normalizeFeatureSprintStep),
+    stateRevision: resolvePlanStateRevision(plan),
+    autonomyPolicy: plan.autonomyPolicy
+      ? resolveFeatureSprintAutonomyPolicy(plan)
+      : undefined
   };
+
+  if (clarifiedSpec) {
+    next.clarifiedSpec = clarifiedSpec;
+  } else {
+    delete next.clarifiedSpec;
+  }
+
+  if (clarifiedSpecHistory.length > 0) {
+    next.clarifiedSpecHistory = clarifiedSpecHistory;
+  } else {
+    delete next.clarifiedSpecHistory;
+  }
 
   if (executionModel === "legacy_steps") {
     delete next.executionModel;

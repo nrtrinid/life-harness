@@ -842,6 +842,20 @@ export function updateFeatureSprintPlan(
         : patch.sprintMapNotices !== undefined
           ? patch.sprintMapNotices
           : existing.sprintMapNotices,
+    stateRevision:
+      patch.stateRevision !== undefined ? patch.stateRevision : existing.stateRevision,
+    clarifiedSpec:
+      patch.clarifiedSpec !== undefined ? patch.clarifiedSpec : existing.clarifiedSpec,
+    clarifiedSpecHistory:
+      patch.clarifiedSpecHistory !== undefined
+        ? patch.clarifiedSpecHistory
+        : existing.clarifiedSpecHistory,
+    autonomyPolicy:
+      patch.autonomyPolicy !== undefined ? patch.autonomyPolicy : existing.autonomyPolicy,
+    appliedActionIds:
+      patch.appliedActionIds !== undefined ? patch.appliedActionIds : existing.appliedActionIds,
+    actionAuditLog:
+      patch.actionAuditLog !== undefined ? patch.actionAuditLog : existing.actionAuditLog,
     updatedAt: timestamp
   };
 
@@ -1024,6 +1038,18 @@ export function updateFeatureSprintStep(
         ? cleanOptional(patch.reviewVerdict)
         : current.reviewVerdict,
     reviewStatus: patch.reviewStatus ?? current.reviewStatus,
+    frozenSpecRevision:
+      patch.frozenSpecRevision !== undefined
+        ? patch.frozenSpecRevision
+        : current.frozenSpecRevision,
+    correctionAttempt:
+      patch.correctionAttempt !== undefined
+        ? patch.correctionAttempt
+        : current.correctionAttempt,
+    maxCorrectionAttempts:
+      patch.maxCorrectionAttempts !== undefined
+        ? patch.maxCorrectionAttempts
+        : current.maxCorrectionAttempts,
     promptLocalization:
       patch.promptLocalization !== undefined
         ? patch.promptLocalization
@@ -2699,6 +2725,15 @@ export function buildFeatureStepImplementationPacket(
     lines.push(...formatApprovedFeatureSpecPacketSection(plan.featureSpec));
   }
 
+  if (plan.clarifiedSpec?.status === "frozen") {
+    lines.push(
+      "## Frozen clarified spec",
+      `- Revision: ${plan.clarifiedSpec.revision}`,
+      `- Objective: ${plan.clarifiedSpec.objective}`,
+      ""
+    );
+  }
+
   lines.push(
     "## Current step",
     `- Title: ${step.title}`,
@@ -2794,6 +2829,15 @@ export function buildFeatureStepReviewPacket(
 
   if (plan.featureSpec?.approvedAt) {
     lines.push(...formatApprovedFeatureSpecPacketSection(plan.featureSpec));
+  }
+
+  if (plan.clarifiedSpec?.status === "frozen") {
+    lines.push(
+      "## Frozen clarified spec",
+      `- Revision: ${plan.clarifiedSpec.revision}`,
+      `- Objective: ${plan.clarifiedSpec.objective}`,
+      ""
+    );
   }
 
   lines.push(

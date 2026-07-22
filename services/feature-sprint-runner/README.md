@@ -4,6 +4,12 @@ Local optional bridge for running Feature Sprint **scoping**, **review**, and **
 
 The Expo app never spawns CLI processes. Card Detail Backroom calls this service when the user explicitly clicks a runner button.
 
+## Next-legal-action kernel (persistence blocker)
+
+Deterministic Feature Sprint next-legal-action logic lives in app core (`getNextFeatureSprintLegalAction` / `applyFeatureSprintLegalAction`). Plan state is stored in Expo/web `LifeHarnessData`, which this runner does **not** read.
+
+Do **not** add `GET /feature-sprint/plans/:planId/next-legal-action` here without an explicit state-export API. See [docs/feature-sprint-next-legal-action-kernel.md](../../docs/feature-sprint-next-legal-action-kernel.md).
+
 ## Quickstart (mock mode — default)
 
 From repo root:
