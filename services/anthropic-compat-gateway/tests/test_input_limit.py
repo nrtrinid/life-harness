@@ -66,6 +66,12 @@ def test_exactly_at_limit_accepted() -> None:
         enable_real=False,
         log_bodies=False,
         max_input_chars=limit,
+        enable_local_ai_gateway=False,
+        local_ai_gateway_base_url="http://127.0.0.1:8111",
+        local_ai_gateway_timeout_seconds=120.0,
+        local_ai_gateway_connect_timeout_seconds=5.0,
+        local_ai_gateway_max_response_bytes=1_048_576,
+        local_ai_gateway_model_alias="local-qwen",
     )
     app = build_app(cfg)
     with TestClient(app) as client:
@@ -92,6 +98,12 @@ def test_one_char_over_limit_rejected_before_provider() -> None:
         enable_real=False,
         log_bodies=False,
         max_input_chars=limit,
+        enable_local_ai_gateway=False,
+        local_ai_gateway_base_url="http://127.0.0.1:8111",
+        local_ai_gateway_timeout_seconds=120.0,
+        local_ai_gateway_connect_timeout_seconds=5.0,
+        local_ai_gateway_max_response_bytes=1_048_576,
+        local_ai_gateway_model_alias="local-qwen",
     )
     app = build_app(cfg)
     with TestClient(app) as client:

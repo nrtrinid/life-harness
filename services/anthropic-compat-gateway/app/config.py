@@ -12,6 +12,11 @@ def _env_flag(name: str, default: bool) -> bool:
 
 
 DEFAULT_MAX_INPUT_CHARS = 100_000
+DEFAULT_LOCAL_AI_GATEWAY_BASE_URL = "http://127.0.0.1:8111"
+DEFAULT_LOCAL_AI_GATEWAY_TIMEOUT_SECONDS = 120.0
+DEFAULT_LOCAL_AI_GATEWAY_CONNECT_TIMEOUT_SECONDS = 5.0
+DEFAULT_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES = 1_048_576
+DEFAULT_LOCAL_AI_GATEWAY_MODEL_ALIAS = "local-qwen"
 
 
 @dataclass(frozen=True)
@@ -24,6 +29,14 @@ class Settings:
     enable_real: bool
     log_bodies: bool
     max_input_chars: int
+    enable_local_ai_gateway: bool = False
+    local_ai_gateway_base_url: str = DEFAULT_LOCAL_AI_GATEWAY_BASE_URL
+    local_ai_gateway_timeout_seconds: float = DEFAULT_LOCAL_AI_GATEWAY_TIMEOUT_SECONDS
+    local_ai_gateway_connect_timeout_seconds: float = (
+        DEFAULT_LOCAL_AI_GATEWAY_CONNECT_TIMEOUT_SECONDS
+    )
+    local_ai_gateway_max_response_bytes: int = DEFAULT_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES
+    local_ai_gateway_model_alias: str = DEFAULT_LOCAL_AI_GATEWAY_MODEL_ALIAS
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -42,6 +55,32 @@ class Settings:
             log_bodies=_env_flag("ACGW_LOG_BODIES", False),
             max_input_chars=int(
                 os.getenv("ACGW_MAX_INPUT_CHARS", str(DEFAULT_MAX_INPUT_CHARS))
+            ),
+            enable_local_ai_gateway=_env_flag("ACGW_ENABLE_LOCAL_AI_GATEWAY", False),
+            local_ai_gateway_base_url=os.getenv(
+                "ACGW_LOCAL_AI_GATEWAY_BASE_URL", DEFAULT_LOCAL_AI_GATEWAY_BASE_URL
+            ),
+            local_ai_gateway_timeout_seconds=float(
+                os.getenv(
+                    "ACGW_LOCAL_AI_GATEWAY_TIMEOUT_SECONDS",
+                    str(DEFAULT_LOCAL_AI_GATEWAY_TIMEOUT_SECONDS),
+                )
+            ),
+            local_ai_gateway_connect_timeout_seconds=float(
+                os.getenv(
+                    "ACGW_LOCAL_AI_GATEWAY_CONNECT_TIMEOUT_SECONDS",
+                    str(DEFAULT_LOCAL_AI_GATEWAY_CONNECT_TIMEOUT_SECONDS),
+                )
+            ),
+            local_ai_gateway_max_response_bytes=int(
+                os.getenv(
+                    "ACGW_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES",
+                    str(DEFAULT_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES),
+                )
+            ),
+            local_ai_gateway_model_alias=os.getenv(
+                "ACGW_LOCAL_AI_GATEWAY_MODEL_ALIAS",
+                DEFAULT_LOCAL_AI_GATEWAY_MODEL_ALIAS,
             ),
         )
 

@@ -73,7 +73,12 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             resolved.port,
             resolved.max_input_chars,
         )
-        yield
+        try:
+            yield
+        finally:
+            close = getattr(provider, "close", None)
+            if callable(close):
+                close()
 
     application = FastAPI(
         title="Anthropic Compat Gateway",
@@ -181,7 +186,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse(status_code=401, content=detail)
 
         input_chars = input_char_count(body)
-        scenario = resolve_scenario(body.model, x_acgw_scenario)
+        # Local provider ignores mock scenario headers; fixed scenario label only.
+        if getattr(provider, "name", None) == "local_ai_gateway":
+            scenario = "local"
+        else:
+            scenario = resolve_scenario(body.model, x_acgw_scenario)
 
         if input_chars > cfg.max_input_chars:
             log_request_meta(
@@ -240,7 +249,24 @@ def build_app(settings: Settings | None = None) -> FastAPI:
             )
 
         if not body.stream:
-            response = provider.complete(body, scenario=scenario)
+            try:
+                response = provider.complete(body, scenario=scenario)
+            except PreStreamProviderError as exc:
+                log_request_meta(
+                    cfg,
+                    request_id=request_id,
+                    model=body.model,
+                    scenario=scenario,
+                    stream=False,
+                    input_chars=input_chars,
+                    message_count=len(body.messages),
+                    tool_count=len(body.tools or []),
+                    status=exc.status_code,
+                    extra={"elapsed_ms": timer.ms()},
+                )
+                return _http_anthropic_error(
+                    exc.status_code, type_=exc.error_type, message=exc.message
+                )
             log_request_meta(
                 cfg,
                 request_id=request_id,
