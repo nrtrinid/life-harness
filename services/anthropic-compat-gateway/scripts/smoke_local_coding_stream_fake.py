@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""In-process smoke for local_coding with a fake /ai/coding/chat via MockTransport."""
+"""In-process smoke: fake incremental coding stream → ACGW Anthropic SSE."""
 
 from __future__ import annotations
 
@@ -21,28 +21,25 @@ def main() -> int:
     from app.main import build_app
     from app.providers.local_coding import LocalCodingProvider
     from app.upstream.coding_client import CodingClient
+    from tests.conftest import parse_sse
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/ai/coding/chat"
-        assert request.url.path != "/raw-lab"
-        payload = json.loads(request.content.decode("utf-8"))
-        assert payload["model_alias"] == "coding_fast"
-        assert "messages" in payload
-        assert "recent_turns" not in payload
-        return httpx.Response(
-            200,
-            json={
-                "id": "coding_smoke",
-                "model_alias": "coding_fast",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "fake-coding: " + payload["messages"][-1]["content"][:40],
-                    }
-                ],
+        assert request.url.path == "/ai/coding/chat/stream"
+        assert request.url.path != "/raw-lab/stream"
+        events = [
+            {"type": "start", "id": "coding_smoke", "model_alias": "coding_fast"},
+            {"type": "delta", "text": "Alpha"},
+            {"type": "delta", "text": "Bravo"},
+            {"type": "delta", "text": "Charlie"},
+            {
+                "type": "done",
                 "stop_reason": "end_turn",
                 "usage": {"input_tokens": 0, "output_tokens": 0},
             },
+        ]
+        body = "".join(f"data: {json.dumps(e)}\n\n" for e in events).encode("utf-8")
+        return httpx.Response(
+            200, content=body, headers={"content-type": "text/event-stream"}
         )
 
     settings = Settings(
@@ -61,7 +58,6 @@ def main() -> int:
         local_coding_max_response_bytes=1_048_576,
         local_coding_model_alias="local-qwen-coding",
     )
-
     client = CodingClient(
         base_url="http://127.0.0.1:8111",
         timeout=5.0,
@@ -70,36 +66,32 @@ def main() -> int:
         transport=httpx.MockTransport(handler),
     )
     provider = LocalCodingProvider(settings, client=client)
-
     app = build_app(settings)
 
     with TestClient(app) as http:
         http.app.state.provider = provider
-
-        health = http.get("/health")
-        assert health.status_code == 200, health.text
-        assert health.json()["provider"] == "local_coding"
-        print("ok: health")
-
-        text = http.post(
+        response = http.post(
             "/v1/messages",
             json={
                 "model": "local-qwen-coding",
                 "max_tokens": 64,
-                "system": "Be brief.",
-                "messages": [
-                    {"role": "user", "content": "What is a list?"},
-                ],
+                "stream": True,
+                "messages": [{"role": "user", "content": "Say fragments."}],
             },
         )
-        assert text.status_code == 200, text.text
-        body = text.json()
-        assert body["content"][0]["text"].startswith("fake-coding:")
-        print("ok: coding non-streaming text")
-        # Streaming is covered by scripts/smoke_local_coding_stream_fake.py
+        assert response.status_code == 200, response.text
+        assert "text/event-stream" in response.headers["content-type"]
+        events = parse_sse(response.text)
+        names = [n for n, _ in events]
+        assert names[0] == "message_start"
+        deltas = [p["delta"]["text"] for n, p in events if n == "content_block_delta"]
+        assert deltas == ["Alpha", "Bravo", "Charlie"]
+        assert len(deltas) >= 2, "must see multiple deltas before completion"
+        assert names[-1] == "message_stop"
+        print("ok: multiple Anthropic text deltas before done")
 
     provider.close()
-    print("smoke_local_coding_fake: all checks passed")
+    print("smoke_local_coding_stream_fake: all checks passed")
     return 0
 
 

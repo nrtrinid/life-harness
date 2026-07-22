@@ -17,7 +17,7 @@ def _provider() -> LocalCodingProvider:
     return LocalCodingProvider(settings, client=_FakeClient())  # type: ignore[arg-type]
 
 
-def test_stream_rejected() -> None:
+def test_stream_plan_accepted() -> None:
     provider = _provider()
     req = MessagesRequest(
         model="local-qwen-coding",
@@ -25,8 +25,8 @@ def test_stream_rejected() -> None:
         stream=True,
         messages=[Message(role="user", content="hi")],
     )
-    with pytest.raises(PreStreamProviderError, match="Streaming is not enabled"):
-        provider.plan(req, scenario="local")
+    plan = provider.plan(req, scenario="local")
+    assert plan.kind == "text"
 
 
 def test_tools_rejected() -> None:

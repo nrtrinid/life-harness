@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -167,6 +167,94 @@ class CodingClient:
             )
 
         return parsed
+
+    def iter_coding_chat_stream(
+        self, body: CodingRequestBody
+    ) -> Iterator[dict[str, Any]]:
+        """Yield parsed JSON objects from ``POST /ai/coding/chat/stream`` SSE.
+
+        Closing this generator (client disconnect / GeneratorExit) exits the
+        ``stream`` context manager and closes the upstream HTTP connection.
+        """
+        payload = body.model_dump(mode="json", exclude_none=True)
+        payload["stream"] = True
+        try:
+            with self._client.stream(
+                "POST",
+                "/ai/coding/chat/stream",
+                json=payload,
+                headers={
+                    "content-type": "application/json",
+                    "accept": "text/event-stream",
+                },
+            ) as response:
+                if response.status_code >= 400:
+                    # Read a small error body for mapping.
+                    raw = response.read()
+                    snippet = raw.decode("utf-8", errors="replace")[:200]
+                    raise UpstreamHttpError(
+                        f"Coding stream upstream HTTP {response.status_code}: {snippet}",
+                        status=response.status_code,
+                    )
+
+                total = 0
+                buffer = ""
+                try:
+                    for chunk in response.iter_text():
+                        total += len(chunk.encode("utf-8"))
+                        if total > self._max_response_bytes:
+                            raise UpstreamResponseTooLargeError(
+                                f"Coding stream exceeded "
+                                f"max_response_bytes={self._max_response_bytes}"
+                            )
+                        buffer += chunk
+                        while "\n\n" in buffer:
+                            block, buffer = buffer.split("\n\n", 1)
+                            block = block.strip()
+                            if not block:
+                                continue
+                            data_lines: list[str] = []
+                            for line in block.split("\n"):
+                                if line.startswith("data:"):
+                                    data_lines.append(line[5:].lstrip())
+                            if not data_lines:
+                                raise UpstreamProtocolError(
+                                    "Coding stream SSE block missing data line"
+                                )
+                            raw_json = "\n".join(data_lines)
+                            try:
+                                event = json.loads(raw_json)
+                            except json.JSONDecodeError as exc:
+                                raise UpstreamProtocolError(
+                                    f"Coding stream event was not valid JSON: {exc}"
+                                ) from exc
+                            if not isinstance(event, dict) or "type" not in event:
+                                raise UpstreamProtocolError(
+                                    "Coding stream event missing type"
+                                )
+                            yield event
+                except GeneratorExit:
+                    # Ensure upstream socket closes promptly on ACGW client disconnect.
+                    response.close()
+                    raise
+        except UpstreamResponseTooLargeError:
+            raise
+        except UpstreamHttpError:
+            raise
+        except UpstreamProtocolError:
+            raise
+        except GeneratorExit:
+            raise
+        except httpx.ConnectError as exc:
+            raise UpstreamOfflineError(
+                f"Coding upstream offline/unreachable: {exc}"
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise UpstreamTimeoutError(f"Coding upstream timeout: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise UpstreamProtocolError(
+                f"Coding HTTP transport error: {exc}"
+            ) from exc
 
     def close(self) -> None:
         self._client.close()

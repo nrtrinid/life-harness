@@ -11,12 +11,13 @@ from typing import Any, Iterator
 
 from app.config import Settings
 from app.models import ContentBlock, MessagesRequest, MessagesResponse, Usage
-from app.providers.base import MockPlan, PreStreamProviderError
+from app.providers.base import MockPlan, MidStreamProviderError, PreStreamProviderError
 from app.upstream.coding_client import (
     CodingClient,
     CodingRequestBody,
     CodingTurn,
 )
+from app.translate import events as ev
 from app.upstream.errors import (
     UpstreamEmptyAnswerError,
     UpstreamHttpError,
@@ -28,11 +29,6 @@ from app.upstream.errors import (
 
 HARDCODED_MODEL_ALIAS = "acgw-local-coding"
 UPSTREAM_MODEL_ALIAS = "coding_fast"
-
-_STREAM_REJECT_MSG = (
-    "Streaming is not enabled for local_coding in Coding Slice A "
-    "(set stream=false; true streaming is Coding Slice B)"
-)
 
 
 def _new_message_id() -> str:
@@ -165,22 +161,17 @@ class LocalCodingProvider:
 
     def plan(self, request: MessagesRequest, *, scenario: str) -> MockPlan:
         _ = scenario
-        if request.stream:
-            raise PreStreamProviderError(
-                _STREAM_REJECT_MSG,
-                error_type="invalid_request_error",
-                status_code=400,
-            )
+        # stream=true is allowed; stream_events handles translation.
 
         if request.tools:
             raise PreStreamProviderError(
-                "local_coding Coding Slice A does not support tools",
+                "local_coding does not support tools",
                 error_type="invalid_request_error",
                 status_code=400,
             )
         if not _is_default_tool_choice(request.tool_choice):
             raise PreStreamProviderError(
-                "local_coding Coding Slice A rejects explicit non-default tool_choice",
+                "local_coding rejects explicit non-default tool_choice",
                 error_type="invalid_request_error",
                 status_code=400,
             )
@@ -188,14 +179,14 @@ class LocalCodingProvider:
         for msg in request.messages:
             if _content_has_tools(msg.content):
                 raise PreStreamProviderError(
-                    "local_coding Coding Slice A rejects tool_use/tool_result content",
+                    "local_coding rejects tool_use/tool_result content",
                     error_type="invalid_request_error",
                     status_code=400,
                 )
 
         if request.stop_sequences:
             raise PreStreamProviderError(
-                "local_coding Coding Slice A rejects non-empty stop_sequences",
+                "local_coding rejects non-empty stop_sequences",
                 error_type="invalid_request_error",
                 status_code=400,
             )
@@ -265,14 +256,153 @@ class LocalCodingProvider:
     def stream_events(
         self, request: MessagesRequest, *, scenario: str
     ) -> Iterator[tuple[str, dict[str, Any]]]:
-        _ = request
-        _ = scenario
-        raise PreStreamProviderError(
-            _STREAM_REJECT_MSG,
-            error_type="invalid_request_error",
-            status_code=400,
+        self.plan(request, scenario=scenario)
+        body = translate_messages_to_coding(request)
+        body = body.model_copy(update={"stream": True})
+        message_id = _new_message_id()
+
+        try:
+            upstream_events = self._client.iter_coding_chat_stream(body)
+        except UpstreamOfflineError as exc:
+            raise PreStreamProviderError(
+                exc.message, error_type="api_error", status_code=502
+            ) from exc
+        except UpstreamTimeoutError as exc:
+            raise PreStreamProviderError(
+                exc.message, error_type="api_error", status_code=504
+            ) from exc
+        except UpstreamHttpError as exc:
+            status = exc.status if 400 <= exc.status < 600 else 502
+            raise PreStreamProviderError(
+                exc.message, error_type="api_error", status_code=status
+            ) from exc
+        except UpstreamProtocolError as exc:
+            raise PreStreamProviderError(
+                exc.message, error_type="api_error", status_code=502
+            ) from exc
+        except UpstreamResponseTooLargeError as exc:
+            raise PreStreamProviderError(
+                exc.message, error_type="api_error", status_code=502
+            ) from exc
+
+        started = False
+        saw_delta = False
+        input_tokens = 0
+        output_tokens = 0
+        stop_reason = "end_turn"
+
+        try:
+            for event in upstream_events:
+                etype = event.get("type")
+                if etype == "start":
+                    started = True
+                    yield ev.message_start_event(
+                        message_id=message_id,
+                        model=request.model,
+                        input_tokens=0,
+                    )
+                    yield ev.content_block_start_text(index=0)
+                elif etype == "delta":
+                    if not started:
+                        raise MidStreamProviderError(
+                            "coding stream delta before start",
+                            error_type="api_error",
+                        )
+                    text = event.get("text")
+                    if not isinstance(text, str) or not text:
+                        continue
+                    saw_delta = True
+                    yield ev.content_block_delta_text(index=0, text=text)
+                elif etype == "done":
+                    if not started:
+                        raise MidStreamProviderError(
+                            "coding stream done before start",
+                            error_type="api_error",
+                        )
+                    if not saw_delta:
+                        raise MidStreamProviderError(
+                            "coding stream completed with zero text",
+                            error_type="api_error",
+                        )
+                    usage = event.get("usage") or {}
+                    if isinstance(usage, dict):
+                        input_tokens = int(usage.get("input_tokens") or 0)
+                        output_tokens = int(usage.get("output_tokens") or 0)
+                    stop_reason = str(event.get("stop_reason") or "end_turn")
+                    yield ev.content_block_stop(index=0)
+                    yield ev.message_delta(
+                        stop_reason=stop_reason, output_tokens=output_tokens
+                    )
+                    # message_start already sent input_tokens=0; honest policy.
+                    _ = input_tokens
+                    yield ev.message_stop()
+                    return
+                elif etype == "error":
+                    message = str(event.get("message") or "coding stream error")
+                    error_type = str(event.get("error_type") or "api_error")
+                    if not started:
+                        raise PreStreamProviderError(
+                            message, error_type=error_type, status_code=502
+                        )
+                    yield ev.error_event(error_type=error_type, message=message)
+                    return
+                else:
+                    raise MidStreamProviderError(
+                        f"unknown coding stream event type: {etype!r}",
+                        error_type="api_error",
+                    )
+        except MidStreamProviderError:
+            raise
+        except PreStreamProviderError:
+            raise
+        except UpstreamHttpError as exc:
+            # Raised on first iteration when upstream returns a non-2xx status.
+            if not started:
+                status = exc.status if 400 <= exc.status < 600 else 502
+                raise PreStreamProviderError(
+                    exc.message, error_type="api_error", status_code=status
+                ) from exc
+            yield ev.error_event(error_type="api_error", message=exc.message)
+            return
+        except UpstreamOfflineError as exc:
+            if not started:
+                raise PreStreamProviderError(
+                    exc.message, error_type="api_error", status_code=502
+                ) from exc
+            yield ev.error_event(error_type="api_error", message=exc.message)
+            return
+        except UpstreamTimeoutError as exc:
+            if not started:
+                raise PreStreamProviderError(
+                    exc.message, error_type="api_error", status_code=504
+                ) from exc
+            yield ev.error_event(error_type="api_error", message=exc.message)
+            return
+        except UpstreamResponseTooLargeError as exc:
+            if not started:
+                raise PreStreamProviderError(
+                    exc.message, error_type="api_error", status_code=502
+                ) from exc
+            yield ev.error_event(error_type="api_error", message=exc.message)
+            return
+        except UpstreamProtocolError as exc:
+            if not started:
+                raise PreStreamProviderError(
+                    exc.message, error_type="api_error", status_code=502
+                ) from exc
+            yield ev.error_event(error_type="api_error", message=exc.message)
+            return
+
+        if not started:
+            raise PreStreamProviderError(
+                "coding stream ended without events",
+                error_type="api_error",
+                status_code=502,
+            )
+        raise MidStreamProviderError(
+            "coding stream ended without done event",
+            error_type="api_error",
         )
-        yield  # pragma: no cover
 
     def close(self) -> None:
         if self._owns_client:

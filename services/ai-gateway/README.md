@@ -375,6 +375,14 @@ SSE streaming variant of Raw Lab. Emits `data: {"chunk": "..."}` events, then a 
 
 **Errors:** provider errors are emitted as SSE `error` events with HTTP 200 on the stream response.
 
+### `POST /ai/coding/chat` and `POST /ai/coding/chat/stream`
+
+Dedicated coding text lane (not Raw Lab). Non-stream JSON vs typed SSE (`start` / `delta` / `done` / `error`). Logical slot `coding_fast` shares the physical `companion_fast` OpenVINO backend.
+
+**Pipeline ownership:** only one `pipeline.generate` may run per physical backend. A second generation while a worker is still alive is rejected with a temporary busy / `ProviderNotReadyError` (not presented as missing weights). Timeout and client disconnect request cancellation but keep ownership until the worker exits. Health/readiness do not take ownership.
+
+**Streaming capability:** feature-detected (`TextStreamer`, `StreamingStatus`, `streamer=` support). Missing or unconfirmable streaming APIs fail the stream route clearly; non-streaming coding and companion remain available.
+
 ## Model slot catalog (`models.yaml`)
 
 Gateway-internal slot definitions for future multi-model routing. **Not app-facing** — the Expo UI never reads this file.

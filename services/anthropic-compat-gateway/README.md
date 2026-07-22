@@ -132,12 +132,11 @@ $env:ACGW_AUTH_TOKEN="acgw-local-dev"
 
 **Security:** base URL must be loopback `http://127.0.0.1` or `http://localhost` only. IPv6 `::1`, LAN/public hosts, https, and URL userinfo are rejected at startup.
 
-## Local Coding provider (Coding Slice A)
+## Local Coding provider (Coding Slice A/B)
 
-Dedicated non-streaming bridge from Anthropic `POST /v1/messages` to local
-ai-gateway `POST /ai/coding/chat`. **Does not call Raw Lab.** Preserves native
-`system` and ordered user/assistant history. Uses coding-specific prompt and
-logical `coding_fast` slot (shared OpenVINO Qwen pipeline).
+Dedicated bridge from Anthropic `POST /v1/messages` to local
+ai-gateway `POST /ai/coding/chat` (non-stream) and `POST /ai/coding/chat/stream`
+(true incremental SSE). **Does not call Raw Lab.**
 
 **Enable:**
 
@@ -155,14 +154,18 @@ $env:ACGW_AUTH_TOKEN="acgw-local-dev"
 **Translation:** Anthropic `system` + ordered `messages` → coding contract
 (structured; not Raw Lab `message`/`recent_turns`). Forwards `max_tokens`,
 `temperature`, `top_p`, and transport `metadata` for ai-gateway policy mapping.
-Rejects `stream`, tools, non-default `tool_choice`, tool blocks, and non-empty
-`stop_sequences` in Slice A.
+Rejects tools, non-default `tool_choice`, tool blocks, and non-empty
+`stop_sequences`. Streaming is supported via `/ai/coding/chat/stream` (Coding Slice B).
 
-**No fallback** to Raw Lab, MockProvider, or cloud. Logs are metadata/lengths only.
+**Streaming** via `LocalCodingProvider` maps Anthropic SSE onto ai-gateway
+`POST /ai/coding/chat/stream`. Pipeline busy behavior (ai-gateway): while a
+generation worker holds the shared OpenVINO backend, a second coding/companion
+call is **rejected immediately** with a temporary busy / provider-unavailable
+error (not “model missing”). Ownership releases only after the worker exits;
+health stays responsive.
 
 ### Later notes
 
-- Coding Slice B: true OpenVINO streaming on `/ai/coding/chat/stream`
 - Coding Slice C: structured tools
 - Raw Lab remains diagnostics-only; keep Raw Lab endpoint ownership explicit
 

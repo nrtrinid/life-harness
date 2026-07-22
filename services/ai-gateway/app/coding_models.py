@@ -55,19 +55,18 @@ class CodingChatRequest(StrictModel):
 
     @model_validator(mode="after")
     def _reject_unsupported(self) -> CodingChatRequest:
-        if self.stream:
-            raise ValueError("stream=true is not supported on /ai/coding/chat (Coding Slice A)")
+        # stream=true is rejected on /ai/coding/chat and accepted on /ai/coding/chat/stream.
         if self.tools:
-            raise ValueError("tools are not supported on /ai/coding/chat (Coding Slice A)")
+            raise ValueError("tools are not supported on /ai/coding/chat (Coding Slice A/B)")
         if self.tool_choice is not None:
-            # Reject any explicit tool_choice; omit for Slice A.
-            raise ValueError("tool_choice is not supported on /ai/coding/chat (Coding Slice A)")
+            raise ValueError("tool_choice is not supported on /ai/coding/chat (Coding Slice A/B)")
         if self.stop_sequences:
             raise ValueError(
                 "non-empty stop_sequences are not supported on /ai/coding/chat "
-                "(Coding Slice A; GenAI stop_strings mapping deferred)"
+                "(GenAI stop_strings mapping deferred)"
             )
         return self
+
 
 
 class CodingUsage(StrictModel):

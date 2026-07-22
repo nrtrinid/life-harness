@@ -519,3 +519,18 @@ class OpenVinoProvider:
             settings=self._settings,
             backend=self._backend,
         )
+
+    def coding_chat_stream(self, request):
+        from app.coding_models import CodingChatRequest
+        from app.coding_stream import coding_chat_stream_with_backend
+
+        typed = (
+            request
+            if isinstance(request, CodingChatRequest)
+            else CodingChatRequest.model_validate(request)
+        )
+        return coding_chat_stream_with_backend(
+            typed,
+            settings=self._settings,
+            backend=self._backend,
+        )
