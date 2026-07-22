@@ -1,3 +1,5 @@
+"""Typed HTTP client for ai-gateway ``POST /ai/coding/chat`` (Coding Slice A)."""
+
 from __future__ import annotations
 
 import json
@@ -8,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.upstream.errors import (
     UpstreamEmptyAnswerError,
-    UpstreamError,
     UpstreamHttpError,
     UpstreamOfflineError,
     UpstreamProtocolError,
@@ -16,45 +17,54 @@ from app.upstream.errors import (
     UpstreamTimeoutError,
 )
 
-__all__ = [
-    "UpstreamEmptyAnswerError",
-    "UpstreamError",
-    "UpstreamHttpError",
-    "UpstreamOfflineError",
-    "UpstreamProtocolError",
-    "UpstreamResponseTooLargeError",
-    "UpstreamTimeoutError",
-    "RawLabTurn",
-    "RawLabRequestBody",
-    "RawLabResponseBody",
-    "RawLabClient",
-]
 
-
-class RawLabTurn(BaseModel):
+class CodingTurn(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    content: str | list[dict[str, Any]]
 
 
-class RawLabRequestBody(BaseModel):
-    message: str
-    recent_turns: list[RawLabTurn] = Field(default_factory=list)
-    thread_state: dict[str, Any] = Field(default_factory=dict)
-    companion_self_memories: list[Any] = Field(default_factory=list)
-    reasoning_depth: str = "fast"
+class CodingRequestBody(BaseModel):
+    model_alias: str
+    system: str | None = None
+    messages: list[CodingTurn]
+    max_tokens: int | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    stop_sequences: list[str] | None = None
+    stream: bool = False
+    metadata: dict[str, Any] | None = None
 
 
-class RawLabResponseBody(BaseModel):
+class CodingTextBlock(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    answer: str
-    mode: str = "raw_lab"
-    safety_notes: list[str] = Field(default_factory=list)
-    used_context: bool = False
+    type: Literal["text"] = "text"
+    text: str
 
 
-class RawLabClient:
-    """Typed HTTP client for ``POST /raw-lab`` (non-streaming). No automatic retries."""
+class CodingUsage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+class CodingResponseBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    model_alias: str
+    content: list[CodingTextBlock] = Field(..., min_length=1)
+    stop_reason: str = "end_turn"
+    usage: CodingUsage = Field(default_factory=CodingUsage)
+
+    @property
+    def answer_text(self) -> str:
+        return "".join(block.text for block in self.content if block.type == "text")
+
+
+class CodingClient:
+    """Bounded loopback client for ``/ai/coding/chat``. No retries. Distinct from Raw Lab."""
 
     def __init__(
         self,
@@ -73,13 +83,16 @@ class RawLabClient:
             transport=transport,
         )
 
-    def post_raw_lab(self, body: RawLabRequestBody) -> RawLabResponseBody:
+    def post_coding_chat(self, body: CodingRequestBody) -> CodingResponseBody:
         try:
             with self._client.stream(
                 "POST",
-                "/raw-lab",
-                json=body.model_dump(mode="json"),
-                headers={"content-type": "application/json", "accept": "application/json"},
+                "/ai/coding/chat",
+                json=body.model_dump(mode="json", exclude_none=True),
+                headers={
+                    "content-type": "application/json",
+                    "accept": "application/json",
+                },
             ) as response:
                 content_length = response.headers.get("content-length")
                 if content_length is not None:
@@ -90,7 +103,7 @@ class RawLabClient:
                     if declared > self._max_response_bytes:
                         response.close()
                         raise UpstreamResponseTooLargeError(
-                            f"Raw Lab Content-Length {declared} exceeds "
+                            f"Coding upstream Content-Length {declared} exceeds "
                             f"max_response_bytes={self._max_response_bytes}"
                         )
 
@@ -101,7 +114,7 @@ class RawLabClient:
                         total += len(chunk)
                         if total > self._max_response_bytes:
                             raise UpstreamResponseTooLargeError(
-                                f"Raw Lab response exceeded "
+                                f"Coding upstream response exceeded "
                                 f"max_response_bytes={self._max_response_bytes}"
                             )
                         chunks.append(chunk)
@@ -115,17 +128,19 @@ class RawLabClient:
             raise
         except httpx.ConnectError as exc:
             raise UpstreamOfflineError(
-                f"Raw Lab upstream offline/unreachable: {exc}"
+                f"Coding upstream offline/unreachable: {exc}"
             ) from exc
         except httpx.TimeoutException as exc:
-            raise UpstreamTimeoutError(f"Raw Lab upstream timeout: {exc}") from exc
+            raise UpstreamTimeoutError(f"Coding upstream timeout: {exc}") from exc
         except httpx.HTTPError as exc:
-            raise UpstreamProtocolError(f"Raw Lab HTTP transport error: {exc}") from exc
+            raise UpstreamProtocolError(
+                f"Coding HTTP transport error: {exc}"
+            ) from exc
 
         if status >= 400:
             snippet = raw.decode("utf-8", errors="replace")[:200]
             raise UpstreamHttpError(
-                f"Raw Lab upstream HTTP {status}: {snippet}",
+                f"Coding upstream HTTP {status}: {snippet}",
                 status=status,
             )
 
@@ -133,22 +148,22 @@ class RawLabClient:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise UpstreamProtocolError(
-                f"Raw Lab response was not valid JSON: {exc}"
+                f"Coding response was not valid JSON: {exc}"
             ) from exc
 
         if not isinstance(payload, dict):
-            raise UpstreamProtocolError("Raw Lab response JSON must be an object")
+            raise UpstreamProtocolError("Coding response JSON must be an object")
 
         try:
-            parsed = RawLabResponseBody.model_validate(payload)
-        except Exception as exc:  # pydantic ValidationError
+            parsed = CodingResponseBody.model_validate(payload)
+        except Exception as exc:
             raise UpstreamProtocolError(
-                f"Raw Lab response failed schema validation: {exc}"
+                f"Coding response failed schema validation: {exc}"
             ) from exc
 
-        if not parsed.answer or not parsed.answer.strip():
+        if not parsed.answer_text.strip():
             raise UpstreamEmptyAnswerError(
-                "Raw Lab response answer is missing or empty/whitespace"
+                "Coding response text is missing or empty/whitespace"
             )
 
         return parsed

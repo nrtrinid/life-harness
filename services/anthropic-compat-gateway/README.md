@@ -10,14 +10,16 @@ This is **not** full Anthropic API compatibility. It is a mock-first gateway tha
 - Anthropic-shaped request/response and error envelopes
 - Optional **experimental Raw Lab connectivity provider** for local-model
   diagnostics (Slice 2A) via loopback `services/ai-gateway`
+- Optional **LocalCodingProvider** (Coding Slice A) via loopback
+  `POST /ai/coding/chat` — dedicated coding text lane (not Raw Lab)
 - Fail-closed real-provider seam (`DisabledRealProvider`) until a future slice enables inference
 - Service-local only: no Companion board state, Expo app, or root npm scripts required
 
 The Raw Lab provider is **not** the permanent Claude Code coding provider, does
 **not** preserve complete Anthropic coding semantics, is **not** used for
-structured tool loops, and is **not** the planned true-streaming path. A
-dedicated coding lane will supersede it for Claude Code use. Keep it for
-diagnostics; do not delete it.
+structured tool loops, and is **not** the planned true-streaming path. Keep it for
+diagnostics; do not delete it. Prefer `ACGW_PROVIDER=local_coding` for Claude Code
+local text experiments.
 
 ## Supported API subset
 
@@ -52,7 +54,7 @@ All settings use the `ACGW_*` prefix.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `ACGW_PROVIDER` | `mock` | `mock`, `disabled_real`, or `local_ai_gateway` |
+| `ACGW_PROVIDER` | `mock` | `mock`, `disabled_real`, `local_ai_gateway`, or `local_coding` |
 | `ACGW_HOST` | `127.0.0.1` | Bind host |
 | `ACGW_PORT` | `8131` | Bind port |
 | `ACGW_AUTH_TOKEN` | empty | **Required by default.** Bearer / `x-api-key` value |
@@ -66,6 +68,12 @@ All settings use the `ACGW_*` prefix.
 | `ACGW_LOCAL_AI_GATEWAY_CONNECT_TIMEOUT_SECONDS` | `5` | Connect timeout |
 | `ACGW_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES` | `1048576` | Max upstream response body size |
 | `ACGW_LOCAL_AI_GATEWAY_MODEL_ALIAS` | `local-qwen` | Canonical model alias (plus fixed `acgw-local-qwen`) |
+| `ACGW_ENABLE_LOCAL_CODING` | `0` | Must be `1` when `ACGW_PROVIDER=local_coding` |
+| `ACGW_LOCAL_CODING_BASE_URL` | `http://127.0.0.1:8111` | Loopback-only coding base |
+| `ACGW_LOCAL_CODING_TIMEOUT_SECONDS` | `120` | Overall HTTP timeout |
+| `ACGW_LOCAL_CODING_CONNECT_TIMEOUT_SECONDS` | `5` | Connect timeout |
+| `ACGW_LOCAL_CODING_MAX_RESPONSE_BYTES` | `1048576` | Max upstream response body size |
+| `ACGW_LOCAL_CODING_MODEL_ALIAS` | `local-qwen-coding` | Canonical coding alias (plus fixed `acgw-local-coding`) |
 
 Empty `ACGW_AUTH_TOKEN` without `ACGW_ALLOW_NO_AUTH=1` is invalid: the process refuses to start.
 
@@ -124,11 +132,39 @@ $env:ACGW_AUTH_TOKEN="acgw-local-dev"
 
 **Security:** base URL must be loopback `http://127.0.0.1` or `http://localhost` only. IPv6 `::1`, LAN/public hosts, https, and URL userinfo are rejected at startup.
 
-### Later notes (not implemented here)
+## Local Coding provider (Coding Slice A)
 
-- Dedicated coding lane for Claude Code (supersedes this provider for coding use)
-- True streaming on a coding path (not via this Raw Lab adapter)
-- Do **not** consolidate onto a shared `generate_chat` early — keep Raw Lab endpoint ownership explicit for diagnostics
+Dedicated non-streaming bridge from Anthropic `POST /v1/messages` to local
+ai-gateway `POST /ai/coding/chat`. **Does not call Raw Lab.** Preserves native
+`system` and ordered user/assistant history. Uses coding-specific prompt and
+logical `coding_fast` slot (shared OpenVINO Qwen pipeline).
+
+**Enable:**
+
+```powershell
+$env:ACGW_PROVIDER="local_coding"
+$env:ACGW_ENABLE_LOCAL_CODING="1"
+$env:ACGW_LOCAL_CODING_BASE_URL="http://127.0.0.1:8111"
+$env:ACGW_AUTH_TOKEN="acgw-local-dev"
+```
+
+**Model aliases:** configured `ACGW_LOCAL_CODING_MODEL_ALIAS` (default
+`local-qwen-coding`) and hardcoded `acgw-local-coding`. Upstream always uses
+`model_alias=coding_fast`. Echo `request.model` on the response.
+
+**Translation:** Anthropic `system` + ordered `messages` → coding contract
+(structured; not Raw Lab `message`/`recent_turns`). Forwards `max_tokens`,
+`temperature`, `top_p`, and transport `metadata` for ai-gateway policy mapping.
+Rejects `stream`, tools, non-default `tool_choice`, tool blocks, and non-empty
+`stop_sequences` in Slice A.
+
+**No fallback** to Raw Lab, MockProvider, or cloud. Logs are metadata/lengths only.
+
+### Later notes
+
+- Coding Slice B: true OpenVINO streaming on `/ai/coding/chat/stream`
+- Coding Slice C: structured tools
+- Raw Lab remains diagnostics-only; keep Raw Lab endpoint ownership explicit
 
 ## Local startup
 
@@ -226,6 +262,7 @@ In-process smoke (no live server required):
 ```powershell
 python scripts/smoke_http.py
 python scripts/smoke_local_fake.py
+python scripts/smoke_local_coding_fake.py
 ```
 
 ## Claude Code smoke status
@@ -280,4 +317,5 @@ Note: `--model acgw-mock-coding` with `--tools ""` returns HTTP 400 from this ga
 |--------|------|
 | `scripts/run_uvicorn.py` | Validate auth config from env, print host/port, run uvicorn |
 | `scripts/smoke_http.py` | In-process TestClient smoke: non-stream, stream, tool loop (mock) |
-| `scripts/smoke_local_fake.py` | In-process local provider smoke with MockTransport fake Raw Lab |
+| `scripts/smoke_local_fake.py` | In-process local Raw Lab provider smoke with MockTransport |
+| `scripts/smoke_local_coding_fake.py` | In-process local coding provider smoke with MockTransport |

@@ -18,6 +18,7 @@ class InferenceBackend(Protocol):
         system: str,
         history: list[ConversationTurn],
         message: str,
+        generation_overrides: dict | None = None,
     ) -> str: ...
 
     def generate_chat_repair(

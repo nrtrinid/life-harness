@@ -44,6 +44,8 @@ from app.synthesis_models import (
     DeepSynthesisQueuedBody,
     DeepSynthesisRequest,
 )
+from app.coding_models import CodingChatRequest, CodingChatResponse
+from app.coding_chat import run_coding_chat
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +257,25 @@ def deep_synthesis_jobs_endpoint(
             json.dumps(route.to_dict(), sort_keys=True),
         )
     return create_deep_synthesis_job(request)
+
+
+@app.post("/ai/coding/chat", response_model=CodingChatResponse)
+def coding_chat_endpoint(request: CodingChatRequest) -> CodingChatResponse:
+    """Dedicated non-streaming coding lane — not Raw Lab, no board/memories."""
+    provider = get_provider()
+    logger.info(
+        "coding_chat provider=%s model_alias=%s message_count=%d stream=%s",
+        provider.name,
+        request.model_alias,
+        len(request.messages),
+        request.stream,
+    )
+    try:
+        return run_coding_chat(request, provider=provider)
+    except ProviderInputError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except ProviderNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
 
 
 @app.get("/ai/jobs/{job_id}", response_model=AiJobStatusResponse)

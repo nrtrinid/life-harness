@@ -31,6 +31,20 @@ slots:
     # role: Ask, Raw Lab, chat, transcript, self-reflection
     # load_policy: keep_loaded
 
+  # Logical coding lane — shares companion_fast OpenVINO pipeline (no duplicate VRAM).
+  coding_fast:
+    enabled: true
+    backend: openvino
+    model_id: OpenVINO/Qwen3-8B-int4-ov
+    model_path: models/qwen3-8b-int4-ov
+    device: GPU
+    keep_loaded: true
+    heavy: false
+    max_new_tokens: 2048
+    temperature: 0.2
+    # role: /ai/coding/chat (ACGW LocalCodingProvider)
+    # load_policy: alias of companion_fast physical backend
+
   memory_embed:
     enabled: false
     backend: openvino

@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 ModelSlotId = Literal[
     "companion_fast",
+    "coding_fast",
     "memory_embed",
     "critic_small",
     "coder_daily",
@@ -18,6 +19,7 @@ BackendKind = Literal["openvino", "llamacpp", "mock"]
 KNOWN_SLOT_IDS: frozenset[str] = frozenset(
     {
         "companion_fast",
+        "coding_fast",
         "memory_embed",
         "critic_small",
         "coder_daily",

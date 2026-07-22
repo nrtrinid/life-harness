@@ -61,7 +61,9 @@ class ModelSlotManager:
         if not slot.enabled:
             raise SlotDisabledError(f"Slot {slot_id} is disabled")
 
-        if slot_id == "companion_fast":
+        # coding_fast is a logical alias of the companion_fast OpenVINO pipeline.
+        # Both must return the same companion_backend instance (no duplicate load).
+        if slot_id in ("companion_fast", "coding_fast"):
             if self._settings.provider == "mock":
                 return AcquiredSlot(slot_id=slot_id, backend=None, enabled=True)
             if slot.backend == "openvino":
@@ -115,7 +117,7 @@ class ModelSlotManager:
     def slot_health(self) -> dict[str, SlotHealthEntry]:
         entries: dict[str, SlotHealthEntry] = {}
         for slot_id, slot in self._registry.config.slots.items():
-            if slot_id == "companion_fast":
+            if slot_id in ("companion_fast", "coding_fast"):
                 state = self._companion_fast_state()
             elif slot_id == "critic_small" and slot.enabled:
                 state = SlotHealthStatus.degraded

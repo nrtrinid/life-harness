@@ -504,3 +504,18 @@ class OpenVinoProvider:
 
     def _generate(self, prompt: str) -> str:
         return self._backend.generate(prompt)
+
+    def coding_chat(self, request):
+        from app.coding_chat import coding_chat_with_backend
+        from app.coding_models import CodingChatRequest
+
+        typed = (
+            request
+            if isinstance(request, CodingChatRequest)
+            else CodingChatRequest.model_validate(request)
+        )
+        return coding_chat_with_backend(
+            typed,
+            settings=self._settings,
+            backend=self._backend,
+        )
