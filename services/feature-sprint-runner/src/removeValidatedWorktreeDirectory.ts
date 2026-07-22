@@ -120,6 +120,53 @@ async function removeTreeNoFollow(current: string, validatedRoot: string): Promi
   await rmdir(fsPath(current));
 }
 
+/** Collect symlink/junction paths under a validated root without following them. */
+export async function listReparsePointsUnder(validatedRoot: string): Promise<string[]> {
+  const resolvedRoot = path.resolve(validatedRoot);
+  const found: string[] = [];
+
+  async function walk(current: string): Promise<void> {
+    assertInsideValidatedRoot(current, resolvedRoot);
+    let stat;
+    try {
+      stat = await lstat(fsPath(current));
+    } catch {
+      return;
+    }
+    if (stat.isSymbolicLink()) {
+      found.push(current);
+      return;
+    }
+    if (!stat.isDirectory()) {
+      return;
+    }
+    const entries = await readdir(fsPath(current), { withFileTypes: true });
+    for (const entry of entries) {
+      const child = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) {
+        found.push(child);
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(child);
+      }
+    }
+  }
+
+  await walk(resolvedRoot);
+  return found;
+}
+
+/** Unlink every symlink/junction under the root (links only; never follow targets). */
+export async function unlinkReparsePointsUnder(validatedRoot: string): Promise<number> {
+  const links = await listReparsePointsUnder(validatedRoot);
+  for (const link of links) {
+    assertInsideValidatedRoot(link, path.resolve(validatedRoot));
+    await unlink(fsPath(link));
+  }
+  return links.length;
+}
+
 function runRobocopyMirror(emptyDir: string, targetDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -156,18 +203,47 @@ function runRobocopyMirror(emptyDir: string, targetDir: string): Promise<void> {
 /**
  * Windows fallback: mirror an empty directory onto the validated target (arg-array spawn),
  * then remove the emptied directory. Never uses shell string concatenation.
+ *
+ * Robocopy follows destination junctions/symlinks during /MIR, so this path refuses to
+ * run unless the destination is first confirmed link-free.
  */
 async function windowsEmptyMirrorRemove(
   validatedRoot: string
 ): Promise<RemoveValidatedDirectoryResult> {
+  // Best-effort: unlink remaining reparse points before considering robocopy.
+  try {
+    await unlinkReparsePointsUnder(validatedRoot);
+  } catch (error) {
+    return {
+      ok: false,
+      method: "robocopy_refused_links",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to unlink reparse points before robocopy.",
+      attempts: 1
+    };
+  }
+
+  const remainingLinks = await listReparsePointsUnder(validatedRoot);
+  if (remainingLinks.length > 0) {
+    return {
+      ok: false,
+      method: "robocopy_refused_links",
+      error: `Refusing robocopy /MIR: ${remainingLinks.length} symlink/junction(s) remain under the validated worktree.`,
+      attempts: 1
+    };
+  }
+
   const emptyDir = await mkdtemp(path.join(os.tmpdir(), "fsr-empty-"));
   try {
     await runRobocopyMirror(emptyDir, validatedRoot);
     if (await pathStillExists(validatedRoot)) {
+      // Never use recursive rm here — it can follow junctions on Windows.
       try {
         await rmdir(fsPath(validatedRoot));
       } catch {
-        await rm(fsPath(validatedRoot), { recursive: true, force: true });
+        await removeTreeNoFollow(validatedRoot, validatedRoot);
       }
     }
     if (await pathStillExists(validatedRoot)) {

@@ -211,8 +211,7 @@ export function FeatureRunnerOutputDetails({
           ) : null}
           {view.worktreeCleanupStatus === "orphaned_on_disk" && view.canCleanWorktree ? (
             <Text style={[styles.helpText, { marginTop: 4 }]}>
-              Retry Clean worktree to finish filesystem removal. Force is not required for orphan
-              directories.
+              Use Force clean to finish filesystem removal after inspecting leftover files.
             </Text>
           ) : null}
           {view.worktreeCleanupStatus === "stale_git_registration" && view.canCleanWorktree ? (

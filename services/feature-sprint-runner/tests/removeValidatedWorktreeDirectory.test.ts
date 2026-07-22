@@ -5,8 +5,10 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  listReparsePointsUnder,
   removeValidatedWorktreeDirectory,
-  toWindowsLongPath
+  toWindowsLongPath,
+  unlinkReparsePointsUnder
 } from "../src/removeValidatedWorktreeDirectory";
 
 async function makeTempRoot(): Promise<string> {
@@ -63,6 +65,24 @@ describe("removeValidatedWorktreeDirectory", () => {
     expect(result.ok).toBe(true);
     await expect(lstat(root)).rejects.toMatchObject({ code: "ENOENT" });
     // Outside target must remain.
+    await expect(lstat(path.join(outside, "keep.txt"))).resolves.toBeTruthy();
+  });
+
+  it("lists and unlinks reparse points without touching their targets", async () => {
+    const outside = await makeTempRoot();
+    roots.push(outside);
+    await writeFile(path.join(outside, "keep.txt"), "safe");
+
+    const root = await makeTempRoot();
+    roots.push(root);
+    await symlink(outside, path.join(root, "outside-link"), process.platform === "win32" ? "junction" : "dir");
+
+    const listed = await listReparsePointsUnder(root);
+    expect(listed.length).toBe(1);
+
+    const unlinked = await unlinkReparsePointsUnder(root);
+    expect(unlinked).toBe(1);
+    expect(await listReparsePointsUnder(root)).toEqual([]);
     await expect(lstat(path.join(outside, "keep.txt"))).resolves.toBeTruthy();
   });
 

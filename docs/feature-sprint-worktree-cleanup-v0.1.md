@@ -59,7 +59,7 @@ Expected safety outcomes (`blocked`, partial statuses) return HTTP 200 with type
 Cleanup runs in two stages after path validation:
 
 1. **Git registration** — `git worktree remove [--force]` when still registered; final status uses `git worktree list` probes (exit code alone is not trusted).
-2. **Filesystem** — only when registration is already gone and the directory remains. Uses a no-follow recursive walk (symlinks/junctions unlinked, not traversed). On Windows, a bounded-retry walk plus empty-directory `robocopy /MIR` fallback (arg-array spawn, no shell concatenation).
+2. **Filesystem** — only when registration is already gone, the directory remains, and `force: true`. Uses a no-follow recursive walk (symlinks/junctions unlinked, not traversed). On Windows, a bounded-retry walk plus empty-directory `robocopy /MIR` fallback (arg-array spawn, no shell concatenation) **only after** the destination is confirmed link-free; robocopy is refused if any symlink/junction remains.
 
 Never deletes filesystem contents while the path is still a registered Git worktree.
 
@@ -73,9 +73,10 @@ Never deletes filesystem contents while the path is still a registered Git workt
 
 ### History audit rules
 
-- Always set `worktreeCleanupStatus` and `worktreeCleanupMessage` from the response (including `blocked`, `failed`, `not_found`).
+- Always set `worktreeCleanupStatus` and `worktreeCleanupMessage` from the response (including `blocked`, `failed`, `not_found`, and partial statuses).
 - Set `worktreeCleanedAt` **only** when `ok && status === "cleaned"`.
-- For `not_found`: record status/message; **do not** set `worktreeCleanedAt` (path already gone ≠ confirmed clean removal in this session).
+- For `not_found`: record status/message; **do not** set `worktreeCleanedAt` (legacy historical rows remain compatible).
+- Filesystem deletion of orphan directories (`gitRegistered=false`, path still on disk) requires explicit `force: true` — same consent bar as discarding dirty worktree changes.
 - Do not delete the history row; keep `worktreePath` for audit.
 
 ### Force clean gate

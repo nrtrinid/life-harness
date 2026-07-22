@@ -245,10 +245,21 @@ describe("cleanupFeatureSprintWorktree", () => {
     await mkdir(orphanPath, { recursive: true });
     await writeFile(path.join(orphanPath, "leftover.txt"), "orphan\n");
 
-    const result = await cleanupFeatureSprintWorktree({
+    const blockedWithoutForce = await cleanupFeatureSprintWorktree({
       worktreePath: orphanPath,
       branchName,
       repoPath: tempRepoPath!
+    });
+    expect(blockedWithoutForce.status).toBe("orphaned_on_disk");
+    expect(blockedWithoutForce.ok).toBe(false);
+    expect(blockedWithoutForce.message).toContain("Force clean");
+    expect(await pathExists(orphanPath)).toBe(true);
+
+    const result = await cleanupFeatureSprintWorktree({
+      worktreePath: orphanPath,
+      branchName,
+      repoPath: tempRepoPath!,
+      force: true
     });
 
     expect(result.status).toBe("cleaned");
@@ -270,7 +281,8 @@ describe("cleanupFeatureSprintWorktree", () => {
     const result = await cleanupFeatureSprintWorktree({
       worktreePath: orphanPath,
       branchName,
-      repoPath: tempRepoPath!
+      repoPath: tempRepoPath!,
+      force: true
     });
     expect(result.ok).toBe(true);
     expect(result.status).toBe("cleaned");

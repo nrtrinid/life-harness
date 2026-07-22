@@ -337,18 +337,23 @@ export async function cleanupFeatureSprintWorktree(
 
   // Stage 2: filesystem cleanup only when Git registration is already gone.
   // Never delete files for a path that is still a registered worktree.
+  // Orphan directories may retain dirty leftovers — require explicit force.
   filesystemExists = await pathExists(resolvedWorktreePath);
   gitRegistered = await isGitWorktreeRegistered(repoRoot, resolvedWorktreePath);
   if (filesystemExists && !gitRegistered) {
-    const removal = await removeValidatedWorktreeDirectory(resolvedWorktreePath);
-    filesystemExists = await pathExists(resolvedWorktreePath);
-    if (removal.ok && !filesystemExists) {
-      filesystemStage = stageOk(removal.method);
+    if (request.force !== true) {
+      filesystemStage = stageSkipped("force required for orphan filesystem cleanup");
     } else {
-      filesystemStage = stageFailed(
-        removal.error || "Filesystem directory removal failed.",
-        removal.method
-      );
+      const removal = await removeValidatedWorktreeDirectory(resolvedWorktreePath);
+      filesystemExists = await pathExists(resolvedWorktreePath);
+      if (removal.ok && !filesystemExists) {
+        filesystemStage = stageOk(removal.method);
+      } else {
+        filesystemStage = stageFailed(
+          removal.error || "Filesystem directory removal failed.",
+          removal.method
+        );
+      }
     }
   } else if (!filesystemExists) {
     filesystemStage = stageSkipped("filesystem path already absent");
@@ -366,7 +371,14 @@ export async function cleanupFeatureSprintWorktree(
   });
 
   let message = reconciled.message;
-  if (reconciled.status === "cleaned" && request.force === true && hadChanges) {
+  if (
+    reconciled.status === "orphaned_on_disk" &&
+    filesystemStage.skipped &&
+    request.force !== true
+  ) {
+    message =
+      "Git worktree removed, but files remain on disk. Use Force clean to finish filesystem cleanup.";
+  } else if (reconciled.status === "cleaned" && request.force === true && hadChanges) {
     message = "Worktree removed with force after uncommitted changes.";
   } else if (reconciled.status === "cleaned" && gitStage.attempted && filesystemStage.attempted) {
     message = "Worktree removed.";
