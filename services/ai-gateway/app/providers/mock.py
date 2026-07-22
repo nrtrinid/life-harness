@@ -1555,3 +1555,90 @@ class MockProvider:
             stop_reason="end_turn",
             usage=CodingUsage(input_tokens=0, output_tokens=0),
         )
+
+    def coding_chat_stream(self, request):
+        """Deterministic fragmented SSE for Coding Slice B CI."""
+        import json
+        import uuid
+
+        from app.coding_chat import build_coding_history, validate_coding_request
+        from app.coding_models import CodingChatRequest
+        from app.providers.base import ProviderNotReadyError
+
+        typed = (
+            request
+            if isinstance(request, CodingChatRequest)
+            else CodingChatRequest.model_validate(request)
+        )
+        validate_coding_request(typed)
+        _system, _history, message = build_coding_history(typed)
+
+        def _sse(payload: dict) -> str:
+            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        if message.strip() == "__CODING_EMPTY__":
+            yield _sse(
+                {
+                    "type": "start",
+                    "id": f"coding_{uuid.uuid4().hex[:12]}",
+                    "model_alias": typed.model_alias,
+                }
+            )
+            yield _sse(
+                {
+                    "type": "error",
+                    "error_type": "api_error",
+                    "message": "coding model returned empty output",
+                }
+            )
+            return
+
+        if message.strip() == "__CODING_FAIL__":
+            yield _sse(
+                {
+                    "type": "error",
+                    "error_type": "api_error",
+                    "message": "forced coding backend failure",
+                }
+            )
+            return
+
+        if message.strip() == "__CODING_STREAM_MID_FAIL__":
+            yield _sse(
+                {
+                    "type": "start",
+                    "id": f"coding_{uuid.uuid4().hex[:12]}",
+                    "model_alias": typed.model_alias,
+                }
+            )
+            yield _sse({"type": "delta", "text": "partial-"})
+            yield _sse(
+                {
+                    "type": "error",
+                    "error_type": "api_error",
+                    "message": "coding stream failed",
+                }
+            )
+            return
+
+        response_id = f"coding_{uuid.uuid4().hex[:20]}"
+        yield _sse(
+            {
+                "type": "start",
+                "id": response_id,
+                "model_alias": typed.model_alias,
+            }
+        )
+        # Deterministic multi-fragment stream (must arrive before done).
+        fragments = ["CODE", "STREAM", "_OK", f":{message[:24]}"]
+        if "unicode" in message.lower():
+            fragments = ["café", " — ", "東京", " ✓"]
+        for frag in fragments:
+            yield _sse({"type": "delta", "text": frag})
+        yield _sse(
+            {
+                "type": "done",
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+            }
+        )

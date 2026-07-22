@@ -21,6 +21,16 @@ class InferenceBackend(Protocol):
         generation_overrides: dict | None = None,
     ) -> str: ...
 
+    def generate_chat_iter(
+        self,
+        *,
+        system: str,
+        history: list[ConversationTurn],
+        message: str,
+        generation_overrides: dict | None = None,
+        cancel_event: object | None = None,
+    ): ...
+
     def generate_chat_repair(
         self,
         *,

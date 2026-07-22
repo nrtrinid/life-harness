@@ -262,6 +262,11 @@ def deep_synthesis_jobs_endpoint(
 @app.post("/ai/coding/chat", response_model=CodingChatResponse)
 def coding_chat_endpoint(request: CodingChatRequest) -> CodingChatResponse:
     """Dedicated non-streaming coding lane — not Raw Lab, no board/memories."""
+    if request.stream:
+        raise HTTPException(
+            status_code=422,
+            detail="stream=true is not supported on /ai/coding/chat; use /ai/coding/chat/stream",
+        )
     provider = get_provider()
     logger.info(
         "coding_chat provider=%s model_alias=%s message_count=%d stream=%s",
@@ -276,6 +281,40 @@ def coding_chat_endpoint(request: CodingChatRequest) -> CodingChatResponse:
         raise HTTPException(status_code=422, detail=exc.message) from exc
     except ProviderNotReadyError as exc:
         raise HTTPException(status_code=503, detail=exc.message) from exc
+
+
+@app.post("/ai/coding/chat/stream")
+def coding_chat_stream_endpoint(request: CodingChatRequest) -> StreamingResponse:
+    """True incremental coding SSE — typed events, not Raw Lab chunk contract."""
+    from app.coding_stream import iter_coding_chat_sse
+
+    provider = get_provider()
+    logger.info(
+        "coding_chat_stream provider=%s model_alias=%s message_count=%d",
+        provider.name,
+        request.model_alias,
+        len(request.messages),
+    )
+    try:
+        # Validate early so failures are HTTP pre-stream errors when possible.
+        from app.coding_chat import validate_coding_request
+
+        validate_coding_request(request)
+        stream_iter = iter_coding_chat_sse(request, provider=provider)
+    except ProviderInputError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except ProviderNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
+
+    return StreamingResponse(
+        stream_iter,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/ai/jobs/{job_id}", response_model=AiJobStatusResponse)
