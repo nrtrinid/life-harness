@@ -4,9 +4,17 @@ import {
   isReviewProfile,
   isScopingProfile
 } from "../../../src/core/featureSprintRunner";
+import { resolveCursorModelForProfile } from "./cursorModel";
 
 export type CursorArgsResult =
-  | { ok: true; bin: string; args: string[]; preview: string; promptFilePath: string }
+  | {
+      ok: true;
+      bin: string;
+      args: string[];
+      preview: string;
+      promptFilePath: string;
+      requestedModel?: string;
+    }
   | { ok: false; error: string };
 
 export function normalizePromptFilePathForCursor(promptFilePath: string): string {
@@ -21,7 +29,7 @@ function resolveCursorOutputFormat(): "text" | "json" {
 export type BuildCursorArgsOptions = {
   /** Isolated worktree or repo root the agent should treat as workspace. */
   workspacePath?: string;
-  /** Profile drives read-only vs write flags. */
+  /** Profile drives read-only vs write flags and model precedence. */
   profile?: FeatureSprintRunnerProfile;
 };
 
@@ -35,13 +43,17 @@ function isReadOnlyProfile(profile: FeatureSprintRunnerProfile | undefined): boo
 /**
  * Build Cursor `agent` CLI args.
  *
- * Confirmed against installed `agent --help` (2026.06.12):
+ * Confirmed against installed `agent --help` (2026.07.17):
  * - `-p/--print` headless output to console (stdout)
  * - `--output-format text|json|stream-json` (only with `--print`)
  * - `--mode ask` / `--mode plan` are both read-only; Feature Sprint uses `ask` for
  *   scoping/review because real `plan` smokes exited 0 with empty stdout capture
  * - `--force` + `--trust` for implementation writes in headless mode
  * - `--workspace` sets workspace directory
+ * - `--model <id>` selects model (e.g. `cursor-grok-4.5-high`)
+ *
+ * Model precedence: review-specific env → general Cursor model → CLI default/Auto.
+ * Implementation never reads `FEATURE_SPRINT_CURSOR_REVIEW_MODEL`.
  */
 export function buildCursorArgs(
   promptFilePath: string,
@@ -50,6 +62,11 @@ export function buildCursorArgs(
   const bin = process.env.FEATURE_SPRINT_CURSOR_BIN?.trim() || "agent";
   const normalizedPath = normalizePromptFilePathForCursor(promptFilePath);
   const readOnly = isReadOnlyProfile(options?.profile);
+
+  const modelResult = resolveCursorModelForProfile(options?.profile);
+  if (!modelResult.ok) {
+    return { ok: false, error: modelResult.error };
+  }
 
   const args: string[] = ["-p"];
 
@@ -68,9 +85,8 @@ export function buildCursorArgs(
     args.push("--workspace", normalizePromptFilePathForCursor(workspacePath));
   }
 
-  const model = process.env.FEATURE_SPRINT_CURSOR_MODEL?.trim();
-  if (model) {
-    args.push("--model", model);
+  if (modelResult.model) {
+    args.push("--model", modelResult.model);
   }
 
   const phaseHint = readOnly
@@ -91,6 +107,7 @@ export function buildCursorArgs(
     bin,
     args,
     preview: `${bin} ${args.slice(0, -1).join(" ")} "<prompt>"`,
-    promptFilePath: normalizedPath
+    promptFilePath: normalizedPath,
+    requestedModel: modelResult.model
   };
 }

@@ -1170,4 +1170,95 @@ describe("markFeatureSprintRunnerRunWorktreeCleanup", () => {
       expect(codexRun?.importedAt).toBeUndefined();
     });
   });
+
+  describe("model evidence", () => {
+    it("persists requested/resolved model from structured envelopes only", () => {
+      const created = createFeatureSprintRunnerRun(baseData(), {
+        profile: "cursor_review",
+        cardId: "card-build-test"
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) {
+        return;
+      }
+
+      const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+        ok: true,
+        profile: "cursor_review",
+        outputText: "Reviewed with fence.",
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString(),
+        runId: "run-structured",
+        provider: "cursor",
+        runnerMode: "cursor",
+        terminationReason: "completed",
+        failureClass: "none",
+        resultUsability: "usable",
+        requestedModel: "cursor-grok-4.5-high",
+        resolvedModel: "cursor-grok-4.5-high",
+        modelEvidenceSource: "cli_output"
+      });
+      expect(completed.ok).toBe(true);
+      if (!completed.ok) {
+        return;
+      }
+
+      const run = completed.state.featureSprintRunnerRuns.find((item) => item.id === created.runId);
+      expect(run?.requestedModel).toBe("cursor-grok-4.5-high");
+      expect(run?.resolvedModel).toBe("cursor-grok-4.5-high");
+      expect(run?.modelEvidenceSource).toBe("cli_output");
+    });
+
+    it("keeps legacy history without model fields compatible via normalizeData", () => {
+      const legacy = baseData({
+        featureSprintRunnerRuns: [
+          {
+            id: "run-legacy",
+            profile: "cursor_review",
+            status: "succeeded",
+            cardId: "card-build-test",
+            outputText: "old review",
+            startedAt: FIXED_NOW.toISOString(),
+            completedAt: FIXED_NOW.toISOString(),
+            createdAt: FIXED_NOW.toISOString(),
+            updatedAt: FIXED_NOW.toISOString()
+          }
+        ]
+      });
+
+      const normalized = normalizeData(legacy as LifeHarnessData);
+      const run = normalized.featureSprintRunnerRuns.find((item) => item.id === "run-legacy");
+      expect(run?.requestedModel).toBeUndefined();
+      expect(run?.resolvedModel).toBeUndefined();
+      expect(run?.modelEvidenceSource).toBeUndefined();
+      expect(run?.outputText).toBe("old review");
+    });
+
+    it("does not invent resolvedModel from client transport failures", () => {
+      const created = createFeatureSprintRunnerRun(baseData(), {
+        profile: "cursor_review",
+        cardId: "card-build-test"
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) {
+        return;
+      }
+
+      const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+        ok: false,
+        profile: "cursor_review",
+        error: "Runner unreachable.",
+        startedAt: FIXED_NOW.toISOString(),
+        completedAt: FIXED_NOW.toISOString()
+      });
+      expect(completed.ok).toBe(true);
+      if (!completed.ok) {
+        return;
+      }
+
+      const run = completed.state.featureSprintRunnerRuns.find((item) => item.id === created.runId);
+      expect(run?.requestedModel).toBeUndefined();
+      expect(run?.resolvedModel).toBeUndefined();
+    });
+  });
 });

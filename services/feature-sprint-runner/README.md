@@ -70,7 +70,8 @@ See [docs/feature-sprint-cursor-runner-v0.1.md](../../docs/feature-sprint-cursor
 | `FEATURE_SPRINT_CODEX_MODEL` | optional | Experimental |
 | `FEATURE_SPRINT_CODEX_REASONING_EFFORT` | optional | Passed via `-c model_reasoning_effort=...` if set |
 | `FEATURE_SPRINT_CURSOR_BIN` | `agent` | Experimental real Cursor mode only |
-| `FEATURE_SPRINT_CURSOR_MODEL` | optional | e.g. `composer-2.5` |
+| `FEATURE_SPRINT_CURSOR_MODEL` | optional | General Cursor model (e.g. `auto`, `composer-2.5`) |
+| `FEATURE_SPRINT_CURSOR_REVIEW_MODEL` | optional | Review-only override (e.g. `cursor-grok-4.5-high`); never applied to implementation |
 | `CURSOR_API_KEY` | unset | Required for real Cursor mode (server-side only) |
 | `FEATURE_SPRINT_RUNNER_TIMEOUT_MS` | `600000` | Run timeout |
 | `FEATURE_SPRINT_RUNNER_MAX_OUTPUT_CHARS` | `500000` | Response cap |

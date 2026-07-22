@@ -67,6 +67,12 @@ export type FeatureSprintRunnerOutputView = {
   diagnosticMessage?: string;
   usabilityLabel?: string;
 
+  requestedModel?: string;
+  resolvedModel?: string;
+  modelEvidenceSource?: string;
+  /** Honest display line for resolved model (never invents confirmation). */
+  resolvedModelLabel?: string;
+
   worktreeCleanedAt?: string;
   worktreeCleanupStatus?: string;
   worktreeCleanupMessage?: string;
@@ -156,6 +162,14 @@ function mapRun(run: HarnessFeatureSprintRunnerRun): FeatureSprintRunnerOutputVi
     cancelled: run.cancelled,
     diagnosticMessage: run.diagnosticMessage,
     usabilityLabel: formatRunnerResultUsabilityLabel(run),
+    requestedModel: run.requestedModel,
+    resolvedModel: run.resolvedModel,
+    modelEvidenceSource: run.modelEvidenceSource,
+    resolvedModelLabel: run.resolvedModel?.trim()
+      ? run.resolvedModel
+      : run.requestedModel?.trim()
+        ? "not confirmed by Cursor CLI"
+        : undefined,
     worktreeCleanedAt: run.worktreeCleanedAt,
     worktreeCleanupStatus: run.worktreeCleanupStatus,
     worktreeCleanupMessage: run.worktreeCleanupMessage,
