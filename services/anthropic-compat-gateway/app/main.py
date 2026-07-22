@@ -187,7 +187,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
         input_chars = input_char_count(body)
         # Local provider ignores mock scenario headers; fixed scenario label only.
-        if getattr(provider, "name", None) == "local_ai_gateway":
+        if getattr(provider, "name", None) in ("local_ai_gateway", "local_coding"):
             scenario = "local"
         else:
             scenario = resolve_scenario(body.model, x_acgw_scenario)

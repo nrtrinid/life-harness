@@ -4,6 +4,7 @@ from app.config import Settings
 from app.providers.base import MessagesProvider
 from app.providers.disabled import DisabledRealProvider
 from app.providers.local_ai_gateway import LocalAiGatewayProvider
+from app.providers.local_coding import LocalCodingProvider
 from app.providers.mock import MockProvider
 from app.upstream.loopback import validate_loopback_base_url
 
@@ -38,7 +39,17 @@ def create_provider(settings: Settings) -> MessagesProvider:
         except ValueError as exc:
             raise ProviderConfigError(str(exc)) from exc
         return LocalAiGatewayProvider(settings, base_url=base)
+    if settings.provider == "local_coding":
+        if not settings.enable_local_coding:
+            raise ProviderConfigError(
+                "ACGW_PROVIDER=local_coding requires ACGW_ENABLE_LOCAL_CODING=1"
+            )
+        try:
+            base = validate_loopback_base_url(settings.local_coding_base_url)
+        except ValueError as exc:
+            raise ProviderConfigError(str(exc)) from exc
+        return LocalCodingProvider(settings, base_url=base)
     raise ProviderConfigError(
         f"Unsupported ACGW_PROVIDER={settings.provider!r}; expected 'mock', "
-        "'disabled_real', or 'local_ai_gateway'."
+        "'disabled_real', 'local_ai_gateway', or 'local_coding'."
     )

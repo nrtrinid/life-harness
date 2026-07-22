@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from app.config import Settings
@@ -46,10 +47,19 @@ def missing_model_message(settings: Settings) -> str:
 
 
 class OpenVinoBackend:
+    """Shared OpenVINO GenAI pipeline backend.
+
+    All ``generate*`` entry points take ``_generation_lock`` so companion, Raw Lab,
+    coding, and other consumers of this physical ``LLMPipeline`` cannot overlap.
+    Health/readiness checks do not acquire the lock.
+    """
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._pipeline: Any | None = None
         self._load_error: str | None = None
+        # Narrowest shared guard for this physical pipeline instance.
+        self._generation_lock = Lock()
 
     @property
     def load_error(self) -> str | None:
@@ -59,11 +69,26 @@ class OpenVinoBackend:
     def pipeline_loaded(self) -> bool:
         return self._pipeline is not None
 
+    @property
+    def generation_lock(self) -> Lock:
+        """Exposed for tests that assert shared serialization across lanes."""
+        return self._generation_lock
+
     def is_model_path_ready(self) -> bool:
         return model_path_ready(self._settings.model_path)
 
     def is_importable(self) -> bool:
         return _OPENVINO_IMPORTABLE
+
+    def supports_generation_top_p(self) -> bool:
+        """True when installed GenAI GenerationConfig exposes ``top_p``."""
+        if not _OPENVINO_IMPORTABLE or ov_genai is None:
+            return False
+        try:
+            probe = ov_genai.GenerationConfig()
+        except Exception:
+            return False
+        return hasattr(probe, "top_p")
 
     def ensure_ready(self) -> None:
         if self._pipeline is not None:
@@ -113,6 +138,40 @@ class OpenVinoBackend:
             config.apply_chat_template = True
         return config
 
+    def coding_generation_config(self, overrides: dict[str, Any] | None = None) -> Any:
+        assert ov_genai is not None
+        config = ov_genai.GenerationConfig()
+        overrides = overrides or {}
+        config.max_new_tokens = int(
+            overrides.get("max_new_tokens", self._settings.max_new_tokens)
+        )
+        if hasattr(config, "temperature"):
+            config.temperature = float(
+                overrides.get("temperature", self._settings.temperature)
+            )
+        if "top_p" in overrides and hasattr(config, "top_p"):
+            config.top_p = float(overrides["top_p"])
+        if hasattr(config, "apply_chat_template"):
+            config.apply_chat_template = True
+        return config
+
+    def _run_generate(self, chat_history: Any, config: Any) -> str:
+        assert self._pipeline is not None
+
+        def _run() -> str:
+            result = self._pipeline.generate(chat_history, config)
+            return str(result)
+
+        with self._generation_lock:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_run)
+                try:
+                    return future.result(timeout=self._settings.timeout_seconds)
+                except FuturesTimeoutError as exc:
+                    raise ProviderNotReadyError(
+                        f"Inference timed out after {self._settings.timeout_seconds}s"
+                    ) from exc
+
     def generate_chat_repair(
         self,
         *,
@@ -137,18 +196,7 @@ class OpenVinoBackend:
         chat_history.append({"role": "user", "content": repair_instruction})
         chat_history.append({"role": "user", "content": message})
 
-        def _run() -> str:
-            result = self._pipeline.generate(chat_history, config)
-            return str(result)
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
-            try:
-                return future.result(timeout=self._settings.timeout_seconds)
-            except FuturesTimeoutError as exc:
-                raise ProviderNotReadyError(
-                    f"Inference timed out after {self._settings.timeout_seconds}s"
-                ) from exc
+        return self._run_generate(chat_history, config)
 
     def generate_chat(
         self,
@@ -156,32 +204,39 @@ class OpenVinoBackend:
         system: str,
         history: list[ConversationTurn],
         message: str,
+        generation_overrides: dict[str, Any] | None = None,
     ) -> str:
         self.ensure_ready()
         assert self._pipeline is not None
-        assert ov_genai is not None
 
-        config = self.raw_lab_generation_config()
+        if generation_overrides is not None:
+            if ov_genai is None:
+                # Test doubles may inject a fake pipeline without GenAI installed.
+                config: Any = generation_overrides
+            else:
+                config = self.coding_generation_config(generation_overrides)
+        else:
+            if ov_genai is None:
+                raise ProviderNotReadyError(missing_deps_message())
+            # Preserve existing Raw Lab / companion chat config path.
+            config = self.raw_lab_generation_config()
 
-        chat_history = ov_genai.ChatHistory()
-        chat_history.set_extra_context({"enable_thinking": False})
-        chat_history.append({"role": "system", "content": system})
-        for turn in history:
-            chat_history.append({"role": turn.role.value, "content": turn.content})
-        chat_history.append({"role": "user", "content": message})
+        if ov_genai is not None:
+            chat_history = ov_genai.ChatHistory()
+            chat_history.set_extra_context({"enable_thinking": False})
+            chat_history.append({"role": "system", "content": system})
+            for turn in history:
+                chat_history.append({"role": turn.role.value, "content": turn.content})
+            chat_history.append({"role": "user", "content": message})
+        else:
+            # Fake-pipeline path for CI serialization tests.
+            chat_history = {
+                "system": system,
+                "history": history,
+                "message": message,
+            }
 
-        def _run() -> str:
-            result = self._pipeline.generate(chat_history, config)
-            return str(result)
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
-            try:
-                return future.result(timeout=self._settings.timeout_seconds)
-            except FuturesTimeoutError as exc:
-                raise ProviderNotReadyError(
-                    f"Inference timed out after {self._settings.timeout_seconds}s"
-                ) from exc
+        return self._run_generate(chat_history, config)
 
     def generate(self, prompt: str) -> str:
         self.ensure_ready()
@@ -194,15 +249,4 @@ class OpenVinoBackend:
         history.set_extra_context({"enable_thinking": False})
         history.append({"role": "user", "content": prompt})
 
-        def _run() -> str:
-            result = self._pipeline.generate(history, config)
-            return str(result)
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run)
-            try:
-                return future.result(timeout=self._settings.timeout_seconds)
-            except FuturesTimeoutError as exc:
-                raise ProviderNotReadyError(
-                    f"Inference timed out after {self._settings.timeout_seconds}s"
-                ) from exc
+        return self._run_generate(history, config)

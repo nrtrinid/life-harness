@@ -38,10 +38,10 @@ def test_companion_fast_defaults():
     assert companion.heavy is False
 
 
-def test_enabled_slots_only_companion_fast():
+def test_enabled_slots_companion_and_coding_fast():
     registry = load_registry(DEFAULT_MODELS_YAML)
     enabled_ids = {slot.slot_id for slot in registry.enabled_slots()}
-    assert enabled_ids == {"companion_fast"}
+    assert enabled_ids == {"companion_fast", "coding_fast"}
 
 
 def test_missing_config_file_raises(tmp_path: Path):

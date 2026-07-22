@@ -24,7 +24,7 @@ ALLOWED_FIXTURES = frozenset(
     }
 )
 
-# Explicit defaults for Settings(...) constructions in tests (Slice 2A fields).
+# Explicit defaults for Settings(...) constructions in tests (Slice 2A + Coding Slice A).
 LOCAL_GATEWAY_SETTINGS_DEFAULTS = dict(
     enable_local_ai_gateway=False,
     local_ai_gateway_base_url="http://127.0.0.1:8111",
@@ -32,6 +32,12 @@ LOCAL_GATEWAY_SETTINGS_DEFAULTS = dict(
     local_ai_gateway_connect_timeout_seconds=5.0,
     local_ai_gateway_max_response_bytes=1_048_576,
     local_ai_gateway_model_alias="local-qwen",
+    enable_local_coding=False,
+    local_coding_base_url="http://127.0.0.1:8111",
+    local_coding_timeout_seconds=120.0,
+    local_coding_connect_timeout_seconds=5.0,
+    local_coding_max_response_bytes=1_048_576,
+    local_coding_model_alias="local-qwen-coding",
 )
 
 
@@ -61,22 +67,8 @@ def load_fixture(name: str) -> dict:
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(
-        provider="mock",
-        host="127.0.0.1",
-        port=8131,
-        auth_token="",
-        allow_no_auth=True,  # explicit test-only no-auth
-        enable_real=False,
-        log_bodies=False,
-        max_input_chars=100_000,
-        enable_local_ai_gateway=False,
-        local_ai_gateway_base_url="http://127.0.0.1:8111",
-        local_ai_gateway_timeout_seconds=120.0,
-        local_ai_gateway_connect_timeout_seconds=5.0,
-        local_ai_gateway_max_response_bytes=1_048_576,
-        local_ai_gateway_model_alias="local-qwen",
-    )
+    return make_settings()
+
 
 
 @pytest.fixture

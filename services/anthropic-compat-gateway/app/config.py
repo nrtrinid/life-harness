@@ -17,6 +17,11 @@ DEFAULT_LOCAL_AI_GATEWAY_TIMEOUT_SECONDS = 120.0
 DEFAULT_LOCAL_AI_GATEWAY_CONNECT_TIMEOUT_SECONDS = 5.0
 DEFAULT_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES = 1_048_576
 DEFAULT_LOCAL_AI_GATEWAY_MODEL_ALIAS = "local-qwen"
+DEFAULT_LOCAL_CODING_BASE_URL = "http://127.0.0.1:8111"
+DEFAULT_LOCAL_CODING_TIMEOUT_SECONDS = 120.0
+DEFAULT_LOCAL_CODING_CONNECT_TIMEOUT_SECONDS = 5.0
+DEFAULT_LOCAL_CODING_MAX_RESPONSE_BYTES = 1_048_576
+DEFAULT_LOCAL_CODING_MODEL_ALIAS = "local-qwen-coding"
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,14 @@ class Settings:
     )
     local_ai_gateway_max_response_bytes: int = DEFAULT_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES
     local_ai_gateway_model_alias: str = DEFAULT_LOCAL_AI_GATEWAY_MODEL_ALIAS
+    enable_local_coding: bool = False
+    local_coding_base_url: str = DEFAULT_LOCAL_CODING_BASE_URL
+    local_coding_timeout_seconds: float = DEFAULT_LOCAL_CODING_TIMEOUT_SECONDS
+    local_coding_connect_timeout_seconds: float = (
+        DEFAULT_LOCAL_CODING_CONNECT_TIMEOUT_SECONDS
+    )
+    local_coding_max_response_bytes: int = DEFAULT_LOCAL_CODING_MAX_RESPONSE_BYTES
+    local_coding_model_alias: str = DEFAULT_LOCAL_CODING_MODEL_ALIAS
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -81,6 +94,32 @@ class Settings:
             local_ai_gateway_model_alias=os.getenv(
                 "ACGW_LOCAL_AI_GATEWAY_MODEL_ALIAS",
                 DEFAULT_LOCAL_AI_GATEWAY_MODEL_ALIAS,
+            ),
+            enable_local_coding=_env_flag("ACGW_ENABLE_LOCAL_CODING", False),
+            local_coding_base_url=os.getenv(
+                "ACGW_LOCAL_CODING_BASE_URL", DEFAULT_LOCAL_CODING_BASE_URL
+            ),
+            local_coding_timeout_seconds=float(
+                os.getenv(
+                    "ACGW_LOCAL_CODING_TIMEOUT_SECONDS",
+                    str(DEFAULT_LOCAL_CODING_TIMEOUT_SECONDS),
+                )
+            ),
+            local_coding_connect_timeout_seconds=float(
+                os.getenv(
+                    "ACGW_LOCAL_CODING_CONNECT_TIMEOUT_SECONDS",
+                    str(DEFAULT_LOCAL_CODING_CONNECT_TIMEOUT_SECONDS),
+                )
+            ),
+            local_coding_max_response_bytes=int(
+                os.getenv(
+                    "ACGW_LOCAL_CODING_MAX_RESPONSE_BYTES",
+                    str(DEFAULT_LOCAL_CODING_MAX_RESPONSE_BYTES),
+                )
+            ),
+            local_coding_model_alias=os.getenv(
+                "ACGW_LOCAL_CODING_MODEL_ALIAS",
+                DEFAULT_LOCAL_CODING_MODEL_ALIAS,
             ),
         )
 

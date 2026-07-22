@@ -1487,3 +1487,71 @@ class MockProvider:
             else RawLabThreadReflectionRequest.model_validate(request)
         )
         return mock_thread_reflection(typed)
+
+    def coding_chat(self, request):
+        """Deterministic coding lane for CI — no Raw Lab / companion finalize."""
+        import uuid
+
+        from app.coding_chat import (
+            build_coding_history,
+            validate_coding_request,
+        )
+        from app.coding_models import (
+            CodingChatRequest,
+            CodingChatResponse,
+            CodingTextBlock,
+            CodingUsage,
+        )
+        from app.prompt_loader import load_coding_template, load_raw_lab_template
+        from app.providers.base import ProviderNotReadyError
+
+        typed = (
+            request
+            if isinstance(request, CodingChatRequest)
+            else CodingChatRequest.model_validate(request)
+        )
+        validate_coding_request(typed)
+
+        coding_prompt = load_coding_template()
+        # Isolation guards used by tests.
+        assert "concise local coding assistant" in coding_prompt.lower()
+        assert "companion_self_memories" not in coding_prompt.lower()
+        assert "thread_state" not in coding_prompt.lower()
+        raw_lab_prompt = load_raw_lab_template()
+        assert coding_prompt.strip() != raw_lab_prompt.strip()
+
+        system, history, message = build_coding_history(typed)
+        assert "concise local coding assistant" in system.lower()
+        if typed.system:
+            assert typed.system in system
+        # Memories / board markers must not appear.
+        assert "companion_self_memories" not in system.lower()
+        assert "HarnessContext" not in system
+
+        if message.strip() == "__CODING_EMPTY__":
+            raise ProviderNotReadyError("coding model returned empty output")
+        if message.strip() == "__CODING_FAIL__":
+            raise ProviderNotReadyError("forced coding backend failure")
+        if message.strip() == "__CODING_TIMEOUT__":
+            raise ProviderNotReadyError("Inference timed out after 1s")
+
+        parts = [
+            "CODING_MOCK_OK",
+            f"history_turns={len(history)}",
+            f"last={message[:80]}",
+        ]
+        if typed.system:
+            parts.append(f"caller_system_len={len(typed.system)}")
+        if typed.max_tokens is not None:
+            parts.append(f"max_tokens={typed.max_tokens}")
+        if typed.temperature is not None:
+            parts.append(f"temperature={typed.temperature}")
+        answer = " | ".join(parts)
+
+        return CodingChatResponse(
+            id=f"coding_{uuid.uuid4().hex[:20]}",
+            model_alias=typed.model_alias,
+            content=[CodingTextBlock(type="text", text=answer)],
+            stop_reason="end_turn",
+            usage=CodingUsage(input_tokens=0, output_tokens=0),
+        )

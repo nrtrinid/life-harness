@@ -38,6 +38,7 @@ _DEEP_SYNTHESIS_FAST_ONLY_PROMPT_PATH = (
     Path(__file__).parent / "prompts" / "deep_synthesis_fast_only.md"
 )
 _SYNTHESIS_CRITIC_PROMPT_PATH = Path(__file__).parent / "prompts" / "synthesis_critic.md"
+_CODING_PROMPT_PATH = Path(__file__).parent / "prompts" / "coding.md"
 
 
 def load_prompt_template() -> str:
@@ -326,3 +327,12 @@ def estimate_raw_lab_input_chars(*, system: str, request: RawLabRequest) -> int:
         + len(request.message)
         + RAW_LAB_INPUT_OVERHEAD_CHARS
     )
+
+
+def load_coding_template() -> str:
+    return _CODING_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def build_coding_system_prompt() -> str:
+    """Coding-lane system shell only — no memories, board, or sandbox state."""
+    return load_coding_template().strip()
