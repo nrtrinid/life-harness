@@ -312,6 +312,23 @@ function normalizeTask(raw: unknown): HarnessFeatureSprintTask | undefined {
   if (architectureDecisions.length > 0) {
     task.architectureDecisions = architectureDecisions;
   }
+  if (raw.riskTier === "tiny" || raw.riskTier === "standard" || raw.riskTier === "risky") {
+    task.riskTier = raw.riskTier;
+  } else if (raw.riskTier === "normal") {
+    task.riskTier = "standard";
+  }
+  if (typeof raw.frozenSpecRevision === "number" && Number.isFinite(raw.frozenSpecRevision)) {
+    task.frozenSpecRevision = Math.floor(raw.frozenSpecRevision);
+  }
+  if (typeof raw.correctionAttempt === "number" && Number.isFinite(raw.correctionAttempt)) {
+    task.correctionAttempt = Math.max(0, Math.floor(raw.correctionAttempt));
+  }
+  if (typeof raw.maxCorrectionAttempts === "number" && Number.isFinite(raw.maxCorrectionAttempts)) {
+    task.maxCorrectionAttempts = Math.max(0, Math.floor(raw.maxCorrectionAttempts));
+  }
+  if (raw.humanApprovedForRisk === true) {
+    task.humanApprovedForRisk = true;
+  }
   return task;
 }
 

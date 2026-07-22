@@ -506,6 +506,8 @@ export type HarnessFeatureSprintStepImplementationProof = {
   sourceRunnerRunId?: string;
   runnerEvidence?: HarnessFeatureSprintStepImplementationProofRunnerEvidence;
   workerOutputEvidence?: HarnessFeatureSprintWorkerOutputEvidence;
+  /** Frozen clarified-spec revision this proof claims to satisfy. */
+  frozenSpecRevision?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -525,6 +527,10 @@ export type HarnessFeatureSprintStep = {
   outputSummary?: string;
   reviewVerdict?: string;
   reviewStatus?: HarnessFeatureSprintReviewStatus;
+  /** Frozen clarified-spec revision bound to this step's execution artifacts. */
+  frozenSpecRevision?: number;
+  correctionAttempt?: number;
+  maxCorrectionAttempts?: number;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -605,6 +611,8 @@ export type HarnessFeatureSprintDependency = {
   required?: boolean;
 };
 
+export type HarnessFeatureSprintTaskRiskTier = "tiny" | "standard" | "risky";
+
 export type HarnessFeatureSprintTask = {
   id: string;
   title: string;
@@ -619,6 +627,15 @@ export type HarnessFeatureSprintTask = {
   gateState?: HarnessFeatureSprintGateState;
   /** Optional bridge to legacy fixed-step / living-spec step id. */
   linkedStepId?: string;
+  /** Autonomous-execution risk classification (kernel holds on risky without approval). */
+  riskTier?: HarnessFeatureSprintTaskRiskTier;
+  /** Frozen clarified-spec revision this task contract is bound to. */
+  frozenSpecRevision?: number;
+  /** Bounded correction attempts after needs_changes. */
+  correctionAttempt?: number;
+  maxCorrectionAttempts?: number;
+  /** Explicit human approval for risky-task implementation. */
+  humanApprovedForRisk?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -710,6 +727,123 @@ export type HarnessFeatureSprintRunnerRun = {
   updatedAt: string;
 };
 
+/**
+ * Clarified-spec lifecycle for Feature Sprint kernel control plane.
+ * Legacy plans without clarifiedSpec remain manual-compatible.
+ */
+export type HarnessFeatureSprintClarifiedSpecStatus =
+  | "draft"
+  | "clarifying"
+  | "approved"
+  | "frozen"
+  | "revision_required";
+
+export type HarnessFeatureSprintClarificationQuestionStatus = "open" | "answered" | "waived";
+
+export type HarnessFeatureSprintClarificationQuestion = {
+  id: string;
+  question: string;
+  status: HarnessFeatureSprintClarificationQuestionStatus;
+  answer?: string;
+  /** When true, open status blocks approve/freeze. Defaults to true. */
+  required?: boolean;
+};
+
+export type HarnessFeatureSprintClarifiedSpec = {
+  revision: number;
+  status: HarnessFeatureSprintClarifiedSpecStatus;
+  objective: string;
+  userIntent: string;
+  assumptions: string[];
+  constraints: string[];
+  nonGoals: string[];
+  acceptanceCriteria: string[];
+  clarificationQuestions: HarnessFeatureSprintClarificationQuestion[];
+  /** Optional risk notes that escalate material-change classification. */
+  riskNotes?: string[];
+  /** External side effects / schema / auth / deploy flags for material-change rules. */
+  sideEffectFlags?: string[];
+  approvedAt?: string;
+  frozenAt?: string;
+  supersedesRevision?: number;
+  updatedAt?: string;
+};
+
+export type HarnessFeatureSprintAutonomyMode = "manual" | "recommend" | "supervised";
+
+export type HarnessFeatureSprintAutonomyPolicy = {
+  mode: HarnessFeatureSprintAutonomyMode;
+  autoSaveValidProof: boolean;
+  autoImportValidVerdict: boolean;
+  autoAdvanceAcceptedTinyTasks: boolean;
+  requireHumanForRiskyTasks: boolean;
+  requireHumanForSpecFreeze: boolean;
+  requireHumanForFinalCompletion: boolean;
+  maxCorrectionAttempts: number;
+};
+
+export type HarnessFeatureSprintHumanHoldReason =
+  | "spec_approval_required"
+  | "spec_revision_required"
+  | "risky_task_approval_required"
+  | "scope_violation"
+  | "verification_failed"
+  | "review_blocked"
+  | "review_conflict"
+  | "missing_evidence"
+  | "retry_limit_reached"
+  | "runner_unavailable"
+  | "stale_action"
+  | "unsupported_legacy_state"
+  | "unfinished_tasks_remain"
+  | "dependency_unmet"
+  | "task_not_executable";
+
+export type HarnessFeatureSprintLegalAction =
+  | "request_clarification"
+  | "approve_spec"
+  | "freeze_spec"
+  | "adopt_sprint_map"
+  | "select_task"
+  | "launch_localization"
+  | "save_localization"
+  | "launch_implementation"
+  | "save_implementation_proof"
+  | "launch_review"
+  | "import_review_verdict"
+  | "launch_correction"
+  | "save_correction_proof"
+  | "advance_task"
+  | "complete_sprint"
+  | "human_hold"
+  | "terminal_complete";
+
+export type HarnessFeatureSprintActionAuditResult =
+  | "recommended"
+  | "applied"
+  | "rejected"
+  | "held";
+
+export type HarnessFeatureSprintActionAuditEntry = {
+  actionId: string;
+  action: HarnessFeatureSprintLegalAction | string;
+  stateRevisionBefore: number;
+  stateRevisionAfter?: number;
+  result: HarnessFeatureSprintActionAuditResult;
+  reason: string;
+  executionContext?: {
+    executionModel?: HarnessFeatureSprintExecutionModel;
+    sprintId?: string;
+    storyId?: string;
+    taskId?: string;
+    phase?: HarnessFeatureSprintMapPhase;
+    frozenSpecRevision?: number;
+  };
+  specRevision?: number;
+  holdReason?: HarnessFeatureSprintHumanHoldReason;
+  createdAt: string;
+};
+
 export type HarnessFeatureSprintPlan = {
   id: string;
   cardId: string;
@@ -745,6 +879,21 @@ export type HarnessFeatureSprintPlan = {
   executionTarget?: HarnessFeatureSprintExecutionTarget;
   /** Actionable Sprint Map normalization / sync notices (not executable state). */
   sprintMapNotices?: HarnessFeatureSprintMapNotice[];
+  /**
+   * Monotonic workflow revision for stale-action protection.
+   * Absent / non-finite values normalize to 0. UI-only display changes must not bump this.
+   */
+  stateRevision?: number;
+  /** Typed clarified specification (optional; legacy plans omit this). */
+  clarifiedSpec?: HarnessFeatureSprintClarifiedSpec;
+  /** Prior clarified-spec revisions kept for attribution (capped on write). */
+  clarifiedSpecHistory?: HarnessFeatureSprintClarifiedSpec[];
+  /** Autonomy policy placeholder; default remains manual. */
+  autonomyPolicy?: HarnessFeatureSprintAutonomyPolicy;
+  /** Recently applied action IDs for idempotent replay detection. */
+  appliedActionIds?: string[];
+  /** Structured kernel audit trail (capped). */
+  actionAuditLog?: HarnessFeatureSprintActionAuditEntry[];
 };
 
 export type PrimaryActionKind =
