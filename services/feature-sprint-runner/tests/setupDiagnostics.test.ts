@@ -160,6 +160,47 @@ describe("buildSetupCheckReport", () => {
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain("dev-token");
   });
+
+  it("reports review model unset vs configured honestly", async () => {
+    process.env.FEATURE_SPRINT_RUNNER_MODE = "cursor";
+    process.env.FEATURE_SPRINT_RUNNER_ENABLE_CURSOR = "1";
+    process.env.FEATURE_SPRINT_RUNNER_TOKEN = "dev-token";
+    process.env.CURSOR_API_KEY = "sk-test-key-not-real";
+    process.env.FEATURE_SPRINT_CURSOR_BIN = path.join(os.tmpdir(), "missing-cursor-agent-bin");
+    delete process.env.FEATURE_SPRINT_CURSOR_REVIEW_MODEL;
+    delete process.env.FEATURE_SPRINT_CURSOR_MODEL;
+
+    const unsetReport = await buildSetupCheckReport();
+    const unsetItem = unsetReport.items.find((item) => item.id === "cursor_review_model");
+    expect(unsetItem?.status).toBe("ok");
+    expect(unsetItem?.detail.toLowerCase()).toMatch(/unset/);
+    expect(unsetReport.items.some((item) => item.id === "cursor_general_model")).toBe(true);
+
+    process.env.FEATURE_SPRINT_CURSOR_REVIEW_MODEL = "cursor-grok-4.5-high";
+    process.env.FEATURE_SPRINT_CURSOR_MODEL = "auto";
+    const configured = await buildSetupCheckReport();
+    const configuredItem = configured.items.find((item) => item.id === "cursor_review_model");
+    expect(configuredItem?.detail).toContain("cursor-grok-4.5-high");
+    expect(configuredItem?.detail.toLowerCase()).toMatch(/not proven/);
+    const general = configured.items.find((item) => item.id === "cursor_general_model");
+    expect(general?.detail).toContain("auto");
+    expect(JSON.stringify(configured)).not.toContain("sk-test-key-not-real");
+    expect(JSON.stringify(configured)).not.toContain("dev-token");
+  });
+
+  it("blocks unsafe review model override strings", async () => {
+    process.env.FEATURE_SPRINT_RUNNER_MODE = "cursor";
+    process.env.FEATURE_SPRINT_RUNNER_ENABLE_CURSOR = "1";
+    process.env.FEATURE_SPRINT_RUNNER_TOKEN = "dev-token";
+    process.env.CURSOR_API_KEY = "sk-test-key-not-real";
+    process.env.FEATURE_SPRINT_CURSOR_BIN = path.join(os.tmpdir(), "missing-cursor-agent-bin");
+    process.env.FEATURE_SPRINT_CURSOR_REVIEW_MODEL = "evil&whoami";
+
+    const report = await buildSetupCheckReport();
+    const item = report.items.find((row) => row.id === "cursor_review_model");
+    expect(item?.status).toBe("blocker");
+    expect(item?.detail.toLowerCase()).toMatch(/unsafe/);
+  });
 });
 
 describe("buildRunnerResult envelope", () => {

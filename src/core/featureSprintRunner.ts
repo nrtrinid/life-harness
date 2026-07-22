@@ -175,6 +175,13 @@ export type FeatureSprintRunnerResultUsability =
 
 export type FeatureSprintRunnerModeLabel = "mock" | "codex" | "cursor" | "real";
 
+/** How model identity was attributed on a runner response. */
+export type FeatureSprintRunnerModelEvidenceSource =
+  | "request"
+  | "cli_output"
+  | "runner"
+  | "unknown";
+
 export type FeatureSprintRunnerResponse = {
   ok: boolean;
   profile: FeatureSprintRunnerProfile;
@@ -213,6 +220,14 @@ export type FeatureSprintRunnerResponse = {
    * Runner must not interpret sprint/story/task/phase relationships.
    */
   executionContext?: FeatureSprintRunnerExecutionContext;
+  /** Model Life Harness asked the provider CLI to use (informational). */
+  requestedModel?: string;
+  /**
+   * Model confirmed by CLI/structured evidence only.
+   * Never copied from requestedModel solely because the process succeeded.
+   */
+  resolvedModel?: string;
+  modelEvidenceSource?: FeatureSprintRunnerModelEvidenceSource;
 };
 
 /**

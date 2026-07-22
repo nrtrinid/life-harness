@@ -2831,11 +2831,21 @@ export function buildFeatureStepReviewPacket(
   lines.push(
     ...formatBulletSection("## Verification commands", verifyCommands),
     "## Review request",
-    "Return a verdict: accepted, needs_changes, or blocked.",
+    "Act as an independent, read-only critic.",
+    "Do not edit files.",
+    "Do not run destructive commands.",
+    "Do not expand the approved scope.",
+    "Report only evidence-backed findings.",
+    "Do not manufacture findings to appear thorough.",
+    "Distinguish defects from optional improvements.",
+    "Recommend the smallest safe correction.",
+    "In your verdict prose, distinguish blocking findings, non-blocking findings, missing evidence, accepted deviations, and a final classification.",
+    "Return a verdict status of accepted, needs_changes, or blocked.",
     "Call out scope creep or missing tests.",
     "If changes are needed, include a next implementation prompt.",
+    "Return the existing feature-review-verdict format.",
     "",
-    "## Optional fenced verdict block",
+    "## Required fenced verdict block",
     "```feature-review-verdict",
     JSON.stringify(
       {

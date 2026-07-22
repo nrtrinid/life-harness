@@ -1,6 +1,7 @@
 import type {
   FeatureSprintRunnerAgent,
   FeatureSprintRunnerFailureClass,
+  FeatureSprintRunnerModelEvidenceSource,
   FeatureSprintRunnerProfile,
   FeatureSprintRunnerResultUsability,
   FeatureSprintRunnerTerminationReason,
@@ -695,6 +696,10 @@ export type HarnessFeatureSprintRunnerRun = {
   parseWarnings?: string[];
   stdoutText?: string;
   stderrText?: string;
+  /** Informational Cursor/Codex model attribution (additive). */
+  requestedModel?: string;
+  resolvedModel?: string;
+  modelEvidenceSource?: FeatureSprintRunnerModelEvidenceSource;
   worktreeCleanedAt?: string;
   worktreeCleanupStatus?: FeatureSprintWorktreeCleanupStatus;
   worktreeCleanupMessage?: string;

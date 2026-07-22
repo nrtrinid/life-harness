@@ -16,6 +16,7 @@ import { resolveCodexBin, resolveCursorBin } from "./resolveBin";
 import { secretConfigured } from "./redact";
 import { spawnAgentProcess } from "./spawnAgent";
 import { resolveWorktreeRoot } from "./worktree";
+import { isSafeCursorModelId } from "./cursorModel";
 
 export type FeatureSprintRunnerCliProbe = {
   detected: boolean;
@@ -478,6 +479,89 @@ export async function buildSetupCheckReport(
         detail: cursorKey ? "Configured (value not shown)." : "Missing — required for real Cursor runs.",
         remediation:
           "Copy services/feature-sprint-runner/.env.local.example → .env.local and set CURSOR_API_KEY (User API key)."
+      },
+      blockers,
+      warnings
+    );
+
+    const reviewModelRaw = process.env.FEATURE_SPRINT_CURSOR_REVIEW_MODEL;
+    const reviewModel = reviewModelRaw?.trim() ?? "";
+    const generalModel = process.env.FEATURE_SPRINT_CURSOR_MODEL?.trim() ?? "";
+    if (!reviewModelRaw || !reviewModel) {
+      pushItem(
+        items,
+        {
+          id: "cursor_review_model",
+          status: "ok",
+          label: "Cursor review model override",
+          detail:
+            "FEATURE_SPRINT_CURSOR_REVIEW_MODEL unset — review uses general Cursor model or CLI Auto/default."
+        },
+        blockers,
+        warnings
+      );
+    } else if (!isSafeCursorModelId(reviewModel)) {
+      pushItem(
+        items,
+        {
+          id: "cursor_review_model",
+          status: "blocker",
+          label: "Cursor review model override",
+          detail:
+            "FEATURE_SPRINT_CURSOR_REVIEW_MODEL is set but contains unsafe characters for --model.",
+          remediation:
+            "Use an exact CLI model id from `agent --list-models` (e.g. cursor-grok-4.5-high)."
+        },
+        blockers,
+        warnings
+      );
+    } else {
+      pushItem(
+        items,
+        {
+          id: "cursor_review_model",
+          status: "ok",
+          label: "Cursor review model override",
+          detail: `Configured for cursor_review: ${reviewModel} (availability not proven by env alone).`,
+          remediation:
+            "Confirm with: agent --list-models (authenticated). Example Grok id: cursor-grok-4.5-high"
+        },
+        blockers,
+        warnings
+      );
+    }
+
+    pushItem(
+      items,
+      {
+        id: "cursor_general_model",
+        status:
+          generalModel && !isSafeCursorModelId(generalModel) ? "blocker" : "ok",
+        label: "Cursor general model",
+        detail:
+          generalModel && !isSafeCursorModelId(generalModel)
+            ? "FEATURE_SPRINT_CURSOR_MODEL is set but contains unsafe characters for --model."
+            : generalModel
+              ? `FEATURE_SPRINT_CURSOR_MODEL=${generalModel} (implementation/scoping; review falls back here when override unset).`
+              : "FEATURE_SPRINT_CURSOR_MODEL unset — CLI Auto/default when no review override.",
+        remediation:
+          generalModel && !isSafeCursorModelId(generalModel)
+            ? "Use an exact CLI model id from `agent --list-models` (e.g. auto, composer-2.5)."
+            : undefined
+      },
+      blockers,
+      warnings
+    );
+
+    pushItem(
+      items,
+      {
+        id: "cursor_model_selection",
+        status: cursorProbe.detected ? "ok" : "warning",
+        label: "Cursor CLI model selection",
+        detail: cursorProbe.detected
+          ? "Installed agent supports --model and --list-models (see agent --help)."
+          : "Cannot verify --model support until Cursor CLI is detected."
       },
       blockers,
       warnings

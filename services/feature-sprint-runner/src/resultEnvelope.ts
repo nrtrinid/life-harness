@@ -5,6 +5,7 @@ import {
   type FeatureSprintRunnerExecutionContext,
   type FeatureSprintRunnerFailureClass,
   type FeatureSprintRunnerModeLabel,
+  type FeatureSprintRunnerModelEvidenceSource,
   type FeatureSprintRunnerProfile,
   type FeatureSprintRunnerResponse,
   type FeatureSprintRunnerResultUsability,
@@ -42,6 +43,9 @@ export type BuildRunnerResultInput = {
   diagnosticMessage?: string;
   runId?: string;
   executionContext?: FeatureSprintRunnerExecutionContext;
+  requestedModel?: string;
+  resolvedModel?: string;
+  modelEvidenceSource?: FeatureSprintRunnerModelEvidenceSource;
 };
 
 function resolveFailureClass(
@@ -145,6 +149,9 @@ export function buildRunnerResult(input: BuildRunnerResultInput): FeatureSprintR
     stderrText,
     parseWarnings: input.parseWarnings,
     diagnosticMessage: safeDiagnostic,
-    executionContext: input.executionContext
+    executionContext: input.executionContext,
+    requestedModel: input.requestedModel,
+    resolvedModel: input.resolvedModel,
+    modelEvidenceSource: input.modelEvidenceSource
   };
 }

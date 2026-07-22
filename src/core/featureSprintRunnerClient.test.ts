@@ -143,7 +143,10 @@ describe("runFeatureSprintPacket structured envelopes", () => {
       resultUsability: "usable",
       timedOut: false,
       cancelled: false,
-      commandPreview: "agent -p ..."
+      commandPreview: "agent -p ...",
+      requestedModel: "cursor-grok-4.5-high",
+      resolvedModel: "cursor-grok-4.5-high",
+      modelEvidenceSource: "cli_output"
     };
 
     vi.stubGlobal(
@@ -161,6 +164,58 @@ describe("runFeatureSprintPacket structured envelopes", () => {
     expect(result.runId).toBe("run-ok-1");
     expect(result.failureClass).toBe("none");
     expect(result.resultUsability).toBe("usable");
+    expect(result.requestedModel).toBe("cursor-grok-4.5-high");
+    expect(result.resolvedModel).toBe("cursor-grok-4.5-high");
+    expect(result.modelEvidenceSource).toBe("cli_output");
+  });
+
+  it("preserves requested model without inventing resolved on structured failure", async () => {
+    const envelope: FeatureSprintRunnerResponse = {
+      ok: false,
+      profile: "cursor_review",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-01T00:00:01.000Z",
+      runId: "run-model-fail",
+      provider: "cursor",
+      runnerMode: "cursor",
+      terminationReason: "agent_nonzero_exit",
+      failureClass: "agent",
+      resultUsability: "needs_human_review",
+      requestedModel: "cursor-grok-4.5-high",
+      modelEvidenceSource: "unknown",
+      error: "Cursor exited with code 1."
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => envelope
+      })
+    );
+
+    const result = await runFeatureSprintPacket({
+      profile: "cursor_review",
+      promptMarkdown: "## review\n\nCheck."
+    });
+    expect(result.ok).toBe(false);
+    expect(result.requestedModel).toBe("cursor-grok-4.5-high");
+    expect(result.resolvedModel).toBeUndefined();
+    expect(result.modelEvidenceSource).toBe("unknown");
+  });
+
+  it("does not label network fallback as runner-confirmed model evidence", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    const result = await runFeatureSprintPacket({
+      profile: "cursor_review",
+      promptMarkdown: "## review\n\nCheck."
+    });
+    expect(result.ok).toBe(false);
+    expect(result.requestedModel).toBeUndefined();
+    expect(result.resolvedModel).toBeUndefined();
+    expect(result.modelEvidenceSource).toBeUndefined();
   });
 
   it("does not convert structured ok:false into success", async () => {

@@ -209,7 +209,16 @@ function mapStructuredRunnerResponse(
       : undefined,
     diagnosticMessage:
       typeof body.diagnosticMessage === "string" ? body.diagnosticMessage : undefined,
-    executionContext: parseFeatureSprintRunnerExecutionContext(body.executionContext)
+    executionContext: parseFeatureSprintRunnerExecutionContext(body.executionContext),
+    requestedModel: typeof body.requestedModel === "string" ? body.requestedModel : undefined,
+    resolvedModel: typeof body.resolvedModel === "string" ? body.resolvedModel : undefined,
+    modelEvidenceSource:
+      body.modelEvidenceSource === "request" ||
+      body.modelEvidenceSource === "cli_output" ||
+      body.modelEvidenceSource === "runner" ||
+      body.modelEvidenceSource === "unknown"
+        ? body.modelEvidenceSource
+        : undefined
   });
 }
 

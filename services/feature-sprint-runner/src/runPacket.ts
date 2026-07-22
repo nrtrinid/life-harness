@@ -33,6 +33,7 @@ import { resolveCodexBin, resolveCursorBin } from "./resolveBin";
 import { buildRunnerResult } from "./resultEnvelope";
 import { assessCompletedRunUsability } from "./resultUsability";
 import { spawnAgentProcess } from "./spawnAgent";
+import { extractResolvedModelFromCursorOutput } from "./cursorModel";
 import { createFeatureWorktree } from "./worktree";
 import { runVerificationCommands } from "./verification";
 
@@ -204,6 +205,7 @@ type SpawnAgentArgs =
       args: string[];
       preview: string;
       feedPromptViaStdin?: boolean;
+      requestedModel?: string;
     }
   | { ok: false; error: string };
 
@@ -223,7 +225,8 @@ function buildAgentArgs(
       ok: true,
       bin: resolved.exists ? resolved.resolved : cursorArgs.bin,
       args: cursorArgs.args,
-      preview: cursorArgs.preview
+      preview: cursorArgs.preview,
+      requestedModel: cursorArgs.requestedModel
     };
   }
 
@@ -277,6 +280,31 @@ async function spawnAgentInWorktree(
       });
     }
 
+    const requestedModel = argsResult.requestedModel;
+    const modelAttribution = (stdout?: string) => {
+      if (resolveProfileProvider(request.profile) !== "cursor") {
+        return {
+          requestedModel: undefined,
+          resolvedModel: undefined,
+          modelEvidenceSource: undefined
+        };
+      }
+      const format = resolveCursorOutputFormatEnv();
+      const extracted = extractResolvedModelFromCursorOutput(
+        stdout,
+        format === "json" ? "json" : "text"
+      );
+      return {
+        requestedModel,
+        resolvedModel: extracted.resolvedModel,
+        modelEvidenceSource: extracted.resolvedModel
+          ? extracted.modelEvidenceSource
+          : requestedModel
+            ? ("unknown" as const)
+            : extracted.modelEvidenceSource
+      };
+    };
+
     if (resolveProfileProvider(request.profile) === "cursor") {
       const cursorResolved = resolveCursorBin();
       if (!cursorResolved.exists && argsResult.bin === "agent") {
@@ -289,7 +317,9 @@ async function spawnAgentInWorktree(
           commandPreview: argsResult.preview,
           terminationReason: "spawn_error",
           failureClass: "environment",
-          diagnosticMessage: "Missing Cursor CLI."
+          diagnosticMessage: "Missing Cursor CLI.",
+          requestedModel,
+          modelEvidenceSource: requestedModel ? "unknown" : undefined
         });
       }
     }
@@ -339,7 +369,8 @@ async function spawnAgentInWorktree(
     const outputText = truncateOutput(normalized.text, maxOutputChars);
 
     const withContext = {
-      executionContext: request.executionContext
+      executionContext: request.executionContext,
+      ...modelAttribution(result.stdout)
     };
 
     if (result.termination === "timeout") {

@@ -98,6 +98,12 @@ export function FeatureRunnerOutputDetails({
         {view.diagnosticMessage ? (
           <Text style={styles.helpText}>{view.diagnosticMessage}</Text>
         ) : null}
+        {view.requestedModel ? (
+          <Text style={styles.helpText}>Requested model: {view.requestedModel}</Text>
+        ) : null}
+        {view.resolvedModelLabel ? (
+          <Text style={styles.helpText}>Resolved model: {view.resolvedModelLabel}</Text>
+        ) : null}
         {view.worktreePath ? <Text style={styles.helpText}>Worktree: {view.worktreePath}</Text> : null}
         {view.branchName ? <Text style={styles.helpText}>Branch: {view.branchName}</Text> : null}
       </DetailBlock>

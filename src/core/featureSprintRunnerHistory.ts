@@ -295,6 +295,15 @@ export function completeFeatureSprintRunnerRun(
     parseWarnings: structuredEnvelope ? response.parseWarnings : existing.parseWarnings,
     stdoutText: structuredEnvelope ? cleanOptional(response.stdoutText) : existing.stdoutText,
     stderrText: structuredEnvelope ? cleanOptional(response.stderrText) : existing.stderrText,
+    requestedModel: structuredEnvelope
+      ? cleanOptional(response.requestedModel) ?? existing.requestedModel
+      : existing.requestedModel,
+    resolvedModel: structuredEnvelope
+      ? cleanOptional(response.resolvedModel)
+      : existing.resolvedModel,
+    modelEvidenceSource: structuredEnvelope
+      ? response.modelEvidenceSource ?? existing.modelEvidenceSource
+      : existing.modelEvidenceSource,
     completedAt: response.completedAt,
     updatedAt: now
   };

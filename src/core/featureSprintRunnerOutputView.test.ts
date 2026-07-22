@@ -479,4 +479,71 @@ describe("buildFeatureSprintRunnerOutputView", () => {
     expect(view?.canCleanWorktree).toBe(true);
     expect(view?.worktreeCleanupStatus).toBe("blocked");
   });
+
+  it("displays requested model and honest unresolved label", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "cursor_review",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "cursor_review",
+      outputText: "Reviewed.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      runId: "run-model-unknown",
+      provider: "cursor",
+      runnerMode: "cursor",
+      terminationReason: "completed",
+      failureClass: "none",
+      resultUsability: "usable",
+      requestedModel: "cursor-grok-4.5-high",
+      modelEvidenceSource: "unknown"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(completed.state, created.runId);
+    expect(view?.requestedModel).toBe("cursor-grok-4.5-high");
+    expect(view?.resolvedModel).toBeUndefined();
+    expect(view?.resolvedModelLabel).toBe("not confirmed by Cursor CLI");
+  });
+
+  it("displays confirmed resolved model when present", () => {
+    const created = createFeatureSprintRunnerRun(baseData(), {
+      profile: "cursor_review",
+      cardId: "card-build-test"
+    });
+    if (!created.ok) {
+      throw new Error("Expected create to succeed.");
+    }
+
+    const completed = completeFeatureSprintRunnerRun(created.state, created.runId, {
+      ok: true,
+      profile: "cursor_review",
+      outputText: "Reviewed.",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: FIXED_NOW.toISOString(),
+      runId: "run-model-confirmed",
+      provider: "cursor",
+      runnerMode: "cursor",
+      terminationReason: "completed",
+      failureClass: "none",
+      resultUsability: "usable",
+      requestedModel: "cursor-grok-4.5-high",
+      resolvedModel: "cursor-grok-4.5-high",
+      modelEvidenceSource: "cli_output"
+    });
+    if (!completed.ok) {
+      throw new Error("Expected complete to succeed.");
+    }
+
+    const view = buildFeatureSprintRunnerOutputView(completed.state, created.runId);
+    expect(view?.resolvedModelLabel).toBe("cursor-grok-4.5-high");
+  });
 });
