@@ -282,7 +282,6 @@ def coding_chat_endpoint(request: CodingChatRequest) -> CodingChatResponse:
     except ProviderNotReadyError as exc:
         raise HTTPException(status_code=503, detail=exc.message) from exc
 
-
 @app.post("/ai/coding/chat/stream")
 def coding_chat_stream_endpoint(request: CodingChatRequest) -> StreamingResponse:
     """True incremental coding SSE — typed events, not Raw Lab chunk contract."""
@@ -297,9 +296,14 @@ def coding_chat_stream_endpoint(request: CodingChatRequest) -> StreamingResponse
     )
     try:
         # Validate early so failures are HTTP pre-stream errors when possible.
-        from app.coding_chat import validate_coding_request
+        from app.coding_chat import validate_coding_request, _tools_requested
 
         validate_coding_request(request)
+        if _tools_requested(request):
+            raise ProviderInputError(
+                "structured tool streaming is deferred to Coding Slice C3; "
+                "use non-streaming /ai/coding/chat for tool requests"
+            )
         stream_iter = iter_coding_chat_sse(request, provider=provider)
     except ProviderInputError as exc:
         raise HTTPException(status_code=422, detail=exc.message) from exc

@@ -1,4 +1,4 @@
-"""Typed HTTP client for ai-gateway ``POST /ai/coding/chat`` (Coding Slice A)."""
+"""Typed HTTP client for ai-gateway ``POST /ai/coding/chat`` (Coding Slice A/C)."""
 
 from __future__ import annotations
 
@@ -18,9 +18,27 @@ from app.upstream.errors import (
 )
 
 
+class CodingToolDefinition(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    description: str | None = None
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+
+
+class CodingToolChoice(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: Literal["auto", "none", "tool"]
+    name: str | None = None
+
+
+CodingContentBlock = dict[str, Any]
+
+
 class CodingTurn(BaseModel):
     role: Literal["user", "assistant"]
-    content: str | list[dict[str, Any]]
+    content: str | list[CodingContentBlock]
 
 
 class CodingRequestBody(BaseModel):
@@ -32,14 +50,9 @@ class CodingRequestBody(BaseModel):
     top_p: float | None = None
     stop_sequences: list[str] | None = None
     stream: bool = False
+    tools: list[CodingToolDefinition] | None = None
+    tool_choice: CodingToolChoice | None = None
     metadata: dict[str, Any] | None = None
-
-
-class CodingTextBlock(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    type: Literal["text"] = "text"
-    text: str
 
 
 class CodingUsage(BaseModel):
@@ -54,13 +67,21 @@ class CodingResponseBody(BaseModel):
 
     id: str
     model_alias: str
-    content: list[CodingTextBlock] = Field(..., min_length=1)
+    content: list[dict[str, Any]] = Field(..., min_length=1)
     stop_reason: str = "end_turn"
     usage: CodingUsage = Field(default_factory=CodingUsage)
 
     @property
     def answer_text(self) -> str:
-        return "".join(block.text for block in self.content if block.type == "text")
+        return "".join(
+            block.get("text") or ""
+            for block in self.content
+            if block.get("type") == "text"
+        )
+
+    @property
+    def has_tool_use(self) -> bool:
+        return any(block.get("type") == "tool_use" for block in self.content)
 
 
 class CodingClient:
@@ -161,9 +182,15 @@ class CodingClient:
                 f"Coding response failed schema validation: {exc}"
             ) from exc
 
-        if not parsed.answer_text.strip():
+        if not parsed.content:
+            raise UpstreamEmptyAnswerError("Coding response content is empty")
+        if parsed.stop_reason == "end_turn" and not parsed.answer_text.strip():
             raise UpstreamEmptyAnswerError(
                 "Coding response text is missing or empty/whitespace"
+            )
+        if parsed.stop_reason == "tool_use" and not parsed.has_tool_use:
+            raise UpstreamProtocolError(
+                "Coding response stop_reason=tool_use without tool_use block"
             )
 
         return parsed
@@ -171,11 +198,7 @@ class CodingClient:
     def iter_coding_chat_stream(
         self, body: CodingRequestBody
     ) -> Iterator[dict[str, Any]]:
-        """Yield parsed JSON objects from ``POST /ai/coding/chat/stream`` SSE.
-
-        Closing this generator (client disconnect / GeneratorExit) exits the
-        ``stream`` context manager and closes the upstream HTTP connection.
-        """
+        """Yield parsed JSON objects from ``POST /ai/coding/chat/stream`` SSE."""
         payload = body.model_dump(mode="json", exclude_none=True)
         payload["stream"] = True
         try:
@@ -189,7 +212,6 @@ class CodingClient:
                 },
             ) as response:
                 if response.status_code >= 400:
-                    # Read a small error body for mapping.
                     raw = response.read()
                     snippet = raw.decode("utf-8", errors="replace")[:200]
                     raise UpstreamHttpError(
@@ -234,7 +256,6 @@ class CodingClient:
                                 )
                             yield event
                 except GeneratorExit:
-                    # Ensure upstream socket closes promptly on ACGW client disconnect.
                     response.close()
                     raise
         except UpstreamResponseTooLargeError:

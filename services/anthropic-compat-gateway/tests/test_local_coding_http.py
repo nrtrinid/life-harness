@@ -7,7 +7,8 @@ import pytest
 
 from app.models import Message, MessagesRequest
 from app.providers.base import PreStreamProviderError
-from app.providers.local_coding import LocalCodingProvider, UPSTREAM_MODEL_ALIAS
+from app.providers.local_coding import LocalCodingProvider
+from app.translate.coding_tools import UPSTREAM_MODEL_ALIAS
 from app.upstream.coding_client import CodingClient, CodingRequestBody
 from app.upstream.errors import (
     UpstreamEmptyAnswerError,

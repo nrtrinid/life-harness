@@ -383,6 +383,10 @@ Dedicated coding text lane (not Raw Lab). Non-stream JSON vs typed SSE (`start` 
 
 **Streaming capability:** feature-detected (`TextStreamer`, `StreamingStatus`, `streamer=` support). Missing or unconfirmable streaming APIs fail the stream route clearly; non-streaming coding and companion remain available.
 
+**Structured tools (Slice C1):** Typed tool definitions and content blocks on `/ai/coding/chat`. Deterministic fake tool responses when `SCOUT_PROVIDER=mock` only — see `app/coding_fake_backend.py`. Test-only scenario markers (`__CODING_TOOL_CALL__`, etc.) are interpreted exclusively by the mock fake backend; OpenVINO never reads them. The OpenVINO production path rejects tool-enabled requests until Slice C2. Tool streaming is deferred to Slice C3. Neither gateway executes tools.
+
+**JSON Schema subset (C1 tool `input_schema`):** object root with `type`, `properties`, `required`, `items`, `enum`, `additionalProperties` (boolean or nested object schema). Types: `string`, `number`, `integer`, `boolean`, `object`, `array`, `null`. Rejected: `anyOf`, `oneOf`, `allOf`, and schemas exceeding size/nesting limits. Argument validation uses a bounded draft-7 subset implementation in `app/coding_tools_schema.py` — not full JSON Schema compliance and not a claim that Qwen chat templates accept every C1-valid schema. Schemas, arguments, and tool results are not logged.
+
 ## Model slot catalog (`models.yaml`)
 
 Gateway-internal slot definitions for future multi-model routing. **Not app-facing** — the Expo UI never reads this file.
