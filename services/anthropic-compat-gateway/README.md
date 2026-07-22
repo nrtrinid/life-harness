@@ -136,7 +136,20 @@ $env:ACGW_AUTH_TOKEN="acgw-local-dev"
 
 Dedicated bridge from Anthropic `POST /v1/messages` to local
 ai-gateway `POST /ai/coding/chat` (non-stream) and `POST /ai/coding/chat/stream`
-(true incremental SSE). **Does not call Raw Lab.**
+(true incremental text SSE). **Does not call Raw Lab.**
+
+**Coding Slice C1 (tools):** Non-streaming structured tools via deterministic fake
+upstream only when ai-gateway runs `SCOUT_PROVIDER=mock`. Production OpenVINO
+coding rejects tool-enabled requests. Tool streaming is deferred to Slice C3.
+Neither gateway executes tools — the client supplies `tool_result` and owns execution.
+
+**Validation ownership:** ACGW validates Anthropic wire shape (messages, tool blocks,
+tool_choice) and rejects obviously invalid requests before upstream calls.
+ai-gateway remains authoritative for the internal coding tool contract,
+tool-definition schema subset, and transcript state machine (`coding_transcript.py`).
+Both layers share limits and sequence semantics from the same contract constants.
+Unsupported JSON Schema keywords (e.g. `anyOf`, `oneOf`, `allOf`) are rejected
+before generation; C1 does not claim full JSON Schema support.
 
 **Enable:**
 
@@ -155,7 +168,9 @@ $env:ACGW_AUTH_TOKEN="acgw-local-dev"
 (structured; not Raw Lab `message`/`recent_turns`). Forwards `max_tokens`,
 `temperature`, `top_p`, and transport `metadata` for ai-gateway policy mapping.
 Rejects tools, non-default `tool_choice`, tool blocks, and non-empty
-`stop_sequences`. Streaming is supported via `/ai/coding/chat/stream` (Coding Slice B).
+`stop_sequences`. Non-streaming structured tools are supported when upstream
+mock fake backend is active (Slice C1). Streaming with tools is rejected.
+Streaming is supported for text via `/ai/coding/chat/stream` (Coding Slice B).
 
 **Streaming** via `LocalCodingProvider` maps Anthropic SSE onto ai-gateway
 `POST /ai/coding/chat/stream`. Pipeline busy behavior (ai-gateway): while a
@@ -166,7 +181,9 @@ health stays responsive.
 
 ### Later notes
 
-- Coding Slice C: structured tools
+- Coding Slice C1: structured tool contract + fake non-stream tool loop (mock upstream)
+- Coding Slice C2: native OpenVINO/Qwen tools (requires model metadata + A770 evidence)
+- Coding Slice C3: streaming tool calls
 - Raw Lab remains diagnostics-only; keep Raw Lab endpoint ownership explicit
 
 ## Local startup

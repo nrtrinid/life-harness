@@ -1489,13 +1489,9 @@ class MockProvider:
         return mock_thread_reflection(typed)
 
     def coding_chat(self, request):
-        """Deterministic coding lane for CI — no Raw Lab / companion finalize."""
-        import uuid
-
-        from app.coding_chat import (
-            build_coding_history,
-            validate_coding_request,
-        )
+        """Deterministic coding lane for CI — text-only or fake structured tools."""
+        from app.coding_chat import build_coding_history, validate_coding_request, _tools_requested
+        from app.coding_fake_backend import run_fake_coding_backend
         from app.coding_models import (
             CodingChatRequest,
             CodingChatResponse,
@@ -1504,6 +1500,7 @@ class MockProvider:
         )
         from app.prompt_loader import load_coding_template, load_raw_lab_template
         from app.providers.base import ProviderNotReadyError
+        import uuid
 
         typed = (
             request
@@ -1511,6 +1508,9 @@ class MockProvider:
             else CodingChatRequest.model_validate(request)
         )
         validate_coding_request(typed)
+
+        if _tools_requested(typed):
+            return run_fake_coding_backend(typed)
 
         coding_prompt = load_coding_template()
         # Isolation guards used by tests.

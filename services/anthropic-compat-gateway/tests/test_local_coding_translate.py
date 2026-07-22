@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.models import ContentBlock, Message, MessagesRequest
-from app.providers.local_coding import UPSTREAM_MODEL_ALIAS, translate_messages_to_coding
+from app.translate.coding_tools import UPSTREAM_MODEL_ALIAS, translate_messages_to_coding
 
 
 def _req(**kwargs: object) -> MessagesRequest:
@@ -52,7 +52,7 @@ def test_generation_fields_forwarded_not_flattened_into_text() -> None:
     assert body.system is None
 
 
-def test_text_blocks_flattened_per_message() -> None:
+def test_text_blocks_preserved_as_structured_list() -> None:
     body = translate_messages_to_coding(
         _req(
             messages=[
@@ -66,4 +66,7 @@ def test_text_blocks_flattened_per_message() -> None:
             ]
         )
     )
-    assert body.messages[0].content == "Hi there"
+    content = body.messages[0].content
+    assert isinstance(content, list)
+    assert content[0]["text"] == "Hi "
+    assert content[1]["text"] == "there"

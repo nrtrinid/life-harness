@@ -10,9 +10,11 @@ from collections.abc import Iterator
 from typing import Any, Protocol
 
 from app.coding_chat import (
+    assert_openvino_tools_not_requested,
     build_coding_history,
     resolve_coding_generation,
     validate_coding_request,
+    _tools_requested,
 )
 from app.coding_models import CodingChatRequest, CodingUsage
 from app.config import Settings, get_settings
@@ -42,6 +44,11 @@ def iter_coding_chat_sse(
     provider: CodingStreamCapableProvider,
 ) -> Iterator[str]:
     validate_coding_request(request)
+    if _tools_requested(request):
+        raise ProviderInputError(
+            "structured tool streaming is deferred to Coding Slice C3; "
+            "use non-streaming /ai/coding/chat for tool requests"
+        )
     logger.info(
         "coding_chat_stream provider=%s model_alias=%s message_count=%d",
         provider.name,
@@ -61,6 +68,12 @@ def coding_chat_stream_with_backend(
     """Produce SSE event strings from ``generate_chat_iter``."""
     resolved = settings or get_settings()
     validate_coding_request(request)
+    if _tools_requested(request):
+        raise ProviderInputError(
+            "structured tool streaming is deferred to Coding Slice C3; "
+            "use non-streaming /ai/coding/chat for tool requests"
+        )
+    assert_openvino_tools_not_requested(request)
     cancel_event = cancel_event or threading.Event()
 
     slot_manager = get_slot_manager()

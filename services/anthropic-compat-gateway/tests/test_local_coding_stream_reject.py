@@ -17,7 +17,7 @@ def _provider() -> LocalCodingProvider:
     return LocalCodingProvider(settings, client=_FakeClient())  # type: ignore[arg-type]
 
 
-def test_stream_plan_accepted() -> None:
+def test_stream_plan_accepted_without_tools() -> None:
     provider = _provider()
     req = MessagesRequest(
         model="local-qwen-coding",
@@ -29,19 +29,32 @@ def test_stream_plan_accepted() -> None:
     assert plan.kind == "text"
 
 
-def test_tools_rejected() -> None:
+def test_tools_accepted_non_stream() -> None:
     provider = _provider()
     req = MessagesRequest(
         model="local-qwen-coding",
         max_tokens=16,
         messages=[Message(role="user", content="hi")],
-        tools=[ToolDefinition(name="Read", input_schema={"type": "object"})],
+        tools=[ToolDefinition(name="get_test_value", input_schema={"type": "object"})],
     )
-    with pytest.raises(PreStreamProviderError, match="does not support tools"):
+    plan = provider.plan(req, scenario="local")
+    assert plan.kind == "text"
+
+
+def test_tools_stream_rejected() -> None:
+    provider = _provider()
+    req = MessagesRequest(
+        model="local-qwen-coding",
+        max_tokens=16,
+        stream=True,
+        messages=[Message(role="user", content="hi")],
+        tools=[ToolDefinition(name="get_test_value", input_schema={"type": "object"})],
+    )
+    with pytest.raises(PreStreamProviderError, match="tool streaming is deferred"):
         provider.plan(req, scenario="local")
 
 
-def test_tool_blocks_rejected() -> None:
+def test_unknown_tool_result_rejected() -> None:
     provider = _provider()
     req = MessagesRequest(
         model="local-qwen-coding",
@@ -54,8 +67,9 @@ def test_tool_blocks_rejected() -> None:
                 ],
             )
         ],
+        tools=[ToolDefinition(name="get_test_value", input_schema={"type": "object"})],
     )
-    with pytest.raises(PreStreamProviderError, match="tool_use/tool_result"):
+    with pytest.raises(PreStreamProviderError, match="unknown tool_use_id"):
         provider.plan(req, scenario="local")
 
 

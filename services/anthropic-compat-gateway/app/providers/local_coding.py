@@ -1,7 +1,7 @@
 """LocalCodingProvider — Anthropic Messages → ai-gateway ``POST /ai/coding/chat``.
 
-Coding Slice A: non-streaming text only. Does not call Raw Lab. Does not fall back
-to MockProvider or cloud. Distinct from the experimental Raw Lab connectivity provider.
+Dedicated coding lane (not Raw Lab). Supports structured tools via fake upstream
+in C1; does not execute tools or fall back to mock/cloud/Raw Lab.
 """
 
 from __future__ import annotations
@@ -10,13 +10,13 @@ import uuid
 from typing import Any, Iterator
 
 from app.config import Settings
-from app.models import ContentBlock, MessagesRequest, MessagesResponse, Usage
+from app.models import MessagesRequest, MessagesResponse, Usage
 from app.providers.base import MockPlan, MidStreamProviderError, PreStreamProviderError
-from app.upstream.coding_client import (
-    CodingClient,
-    CodingRequestBody,
-    CodingTurn,
+from app.translate.coding_tools import (
+    anthropic_content_from_upstream,
+    translate_messages_to_coding,
 )
+from app.upstream.coding_client import CodingClient
 from app.translate import events as ev
 from app.upstream.errors import (
     UpstreamEmptyAnswerError,
@@ -28,86 +28,10 @@ from app.upstream.errors import (
 )
 
 HARDCODED_MODEL_ALIAS = "acgw-local-coding"
-UPSTREAM_MODEL_ALIAS = "coding_fast"
 
 
 def _new_message_id() -> str:
     return f"msg_{uuid.uuid4().hex[:20]}"
-
-
-def _flatten_text_content(content: str | list[ContentBlock]) -> str:
-    if isinstance(content, str):
-        return content
-    parts: list[str] = []
-    for block in content:
-        if block.type == "text":
-            parts.append(block.text or "")
-    return "".join(parts)
-
-
-def _system_text(system: str | list[dict[str, Any]] | None) -> str | None:
-    if system is None:
-        return None
-    if isinstance(system, str):
-        text = system.strip()
-        return text or None
-    parts: list[str] = []
-    for item in system:
-        if isinstance(item, dict):
-            value = item.get("text")
-            if isinstance(value, str) and value:
-                parts.append(value)
-    joined = "\n".join(parts).strip()
-    return joined or None
-
-
-def _content_has_tools(content: str | list[ContentBlock]) -> bool:
-    if isinstance(content, str):
-        return False
-    return any(block.type in ("tool_use", "tool_result") for block in content)
-
-
-def _is_default_tool_choice(tool_choice: Any) -> bool:
-    if tool_choice is None:
-        return True
-    if isinstance(tool_choice, str):
-        return tool_choice.strip().lower() in ("", "auto")
-    if isinstance(tool_choice, dict):
-        if not tool_choice:
-            return True
-        keys = set(tool_choice.keys())
-        if keys <= {"type"} and tool_choice.get("type") == "auto":
-            return True
-        return False
-    return False
-
-
-def translate_messages_to_coding(request: MessagesRequest) -> CodingRequestBody:
-    """Preserve native system + ordered user/assistant turns (no Raw Lab flattening)."""
-    if not request.messages:
-        raise PreStreamProviderError(
-            "messages must be non-empty",
-            error_type="invalid_request_error",
-            status_code=400,
-        )
-
-    turns: list[CodingTurn] = []
-    for msg in request.messages:
-        turns.append(
-            CodingTurn(role=msg.role, content=_flatten_text_content(msg.content))
-        )
-
-    return CodingRequestBody(
-        model_alias=UPSTREAM_MODEL_ALIAS,
-        system=_system_text(request.system),
-        messages=turns,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature,
-        top_p=request.top_p,
-        stop_sequences=request.stop_sequences,
-        stream=False,
-        metadata=request.metadata,
-    )
 
 
 class LocalCodingProvider:
@@ -161,29 +85,6 @@ class LocalCodingProvider:
 
     def plan(self, request: MessagesRequest, *, scenario: str) -> MockPlan:
         _ = scenario
-        # stream=true is allowed; stream_events handles translation.
-
-        if request.tools:
-            raise PreStreamProviderError(
-                "local_coding does not support tools",
-                error_type="invalid_request_error",
-                status_code=400,
-            )
-        if not _is_default_tool_choice(request.tool_choice):
-            raise PreStreamProviderError(
-                "local_coding rejects explicit non-default tool_choice",
-                error_type="invalid_request_error",
-                status_code=400,
-            )
-
-        for msg in request.messages:
-            if _content_has_tools(msg.content):
-                raise PreStreamProviderError(
-                    "local_coding rejects tool_use/tool_result content",
-                    error_type="invalid_request_error",
-                    status_code=400,
-                )
-
         if request.stop_sequences:
             raise PreStreamProviderError(
                 "local_coding rejects non-empty stop_sequences",
@@ -205,6 +106,17 @@ class LocalCodingProvider:
                 error_type="invalid_request_error",
                 status_code=400,
             )
+
+        if request.stream and request.tools:
+            raise PreStreamProviderError(
+                "local_coding tool streaming is deferred to Coding Slice C3; "
+                "use non-streaming requests for tools",
+                error_type="invalid_request_error",
+                status_code=400,
+            )
+
+        # Validate translation (tool_choice, structured content) early.
+        translate_messages_to_coding(request)
 
         return MockPlan(kind="text", text=None, stop_reason="end_turn")
 
@@ -245,11 +157,14 @@ class LocalCodingProvider:
             input_tokens=upstream.usage.input_tokens,
             output_tokens=upstream.usage.output_tokens,
         )
+        stop_reason = upstream.stop_reason
+        if stop_reason not in ("end_turn", "tool_use", "max_tokens"):
+            stop_reason = "end_turn"
         return MessagesResponse(
             id=_new_message_id(),
-            content=[{"type": "text", "text": upstream.answer_text}],
+            content=anthropic_content_from_upstream(upstream.content),
             model=request.model,
-            stop_reason="end_turn",
+            stop_reason=stop_reason,
             usage=usage,
         )
 
@@ -287,7 +202,6 @@ class LocalCodingProvider:
 
         started = False
         saw_delta = False
-        input_tokens = 0
         output_tokens = 0
         stop_reason = "end_turn"
 
@@ -326,15 +240,12 @@ class LocalCodingProvider:
                         )
                     usage = event.get("usage") or {}
                     if isinstance(usage, dict):
-                        input_tokens = int(usage.get("input_tokens") or 0)
                         output_tokens = int(usage.get("output_tokens") or 0)
                     stop_reason = str(event.get("stop_reason") or "end_turn")
                     yield ev.content_block_stop(index=0)
                     yield ev.message_delta(
                         stop_reason=stop_reason, output_tokens=output_tokens
                     )
-                    # message_start already sent input_tokens=0; honest policy.
-                    _ = input_tokens
                     yield ev.message_stop()
                     return
                 elif etype == "error":
@@ -356,7 +267,6 @@ class LocalCodingProvider:
         except PreStreamProviderError:
             raise
         except UpstreamHttpError as exc:
-            # Raised on first iteration when upstream returns a non-2xx status.
             if not started:
                 status = exc.status if 400 <= exc.status < 600 else 502
                 raise PreStreamProviderError(

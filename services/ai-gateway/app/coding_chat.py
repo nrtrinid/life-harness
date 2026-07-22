@@ -9,9 +9,12 @@ from typing import Any, Protocol
 from app.coding_models import (
     CodingChatRequest,
     CodingChatResponse,
+    CodingMessage,
     CodingTextBlock,
     CodingUsage,
 )
+from app.coding_tools_schema import validate_tool_definitions
+from app.coding_transcript import validate_coding_transcript
 from app.config import Settings, get_settings
 from app.models import ChatRole, ConversationTurn
 from app.prompt_loader import build_coding_system_prompt
@@ -31,6 +34,11 @@ CODING_DEFAULT_TEMPERATURE = 0.2
 CODING_TOP_P_MIN = 0.0
 CODING_TOP_P_MAX = 1.0
 
+OPENVINO_TOOLS_NOT_READY = (
+    "Coding structured tools are not available on the OpenVINO backend (Slice C1). "
+    "Tool execution belongs to the client; native model tool generation is deferred to Slice C2."
+)
+
 
 class CodingCapableProvider(Protocol):
     name: str
@@ -40,6 +48,20 @@ class CodingCapableProvider(Protocol):
 
 def _new_response_id() -> str:
     return f"coding_{uuid.uuid4().hex[:20]}"
+
+
+def _messages_have_tool_blocks(messages: list[CodingMessage]) -> bool:
+    for msg in messages:
+        content = msg.content
+        if isinstance(content, list):
+            for block in content:
+                if block.type in ("tool_use", "tool_result"):
+                    return True
+    return False
+
+
+def _tools_requested(request: CodingChatRequest) -> bool:
+    return bool(request.tools) or _messages_have_tool_blocks(request.messages)
 
 
 def validate_coding_request(request: CodingChatRequest) -> None:
@@ -88,20 +110,43 @@ def validate_coding_request(request: CodingChatRequest) -> None:
             f"top_p must be in [{CODING_TOP_P_MIN}, {CODING_TOP_P_MAX}]"
         )
 
+    tools_present = bool(request.tools)
+    if request.tools is not None and len(request.tools) == 0:
+        raise ProviderInputError("tools must be non-empty when provided")
+
+    if _tools_requested(request):
+        if request.tools:
+            validate_tool_definitions(
+                [t.model_dump(mode="json") for t in request.tools]
+            )
+        validate_coding_transcript(
+            request.messages,
+            tools_present=tools_present,
+            tool_choice=request.tool_choice,
+        )
+    elif request.tool_choice is not None and request.tool_choice.type != "auto":
+        raise ProviderInputError("tool_choice requires a non-empty tools list")
+
     # Metadata is transport-only; never inspect into prompts.
     _ = request.metadata
 
 
-def flatten_coding_text(content: str | list[CodingTextBlock]) -> str:
+def flatten_coding_text(content: str | list[Any]) -> str:
     if isinstance(content, str):
         return content
-    return "".join(block.text for block in content)
+    parts: list[str] = []
+    for block in content:
+        if hasattr(block, "text"):
+            parts.append(getattr(block, "text", "") or "")
+        elif isinstance(block, dict) and block.get("type") == "text":
+            parts.append(str(block.get("text") or ""))
+    return "".join(parts)
 
 
 def build_coding_history(
     request: CodingChatRequest,
 ) -> tuple[str, list[ConversationTurn], str]:
-    """Return (system, prior_turns, latest_user_message)."""
+    """Return (system, prior_turns, latest_user_message) for text-only backends."""
     coding_shell = build_coding_system_prompt()
     caller_system = (request.system or "").strip()
     if caller_system:
@@ -127,11 +172,7 @@ def resolve_coding_generation(
     settings: Settings,
     config_supports_top_p: bool,
 ) -> dict[str, Any]:
-    """Map request generation fields to backend overrides.
-
-    ``top_p`` is applied only when the GenerationConfig supports it; otherwise
-    any non-default request value is rejected.
-    """
+    """Map request generation fields to backend overrides."""
     max_new_tokens = (
         request.max_tokens
         if request.max_tokens is not None
@@ -154,7 +195,6 @@ def resolve_coding_generation(
     }
 
     if request.top_p is not None:
-        # Treat omitted as unset; explicit values require backend support.
         if not config_supports_top_p:
             raise ProviderInputError(
                 "top_p is not supported by the current OpenVINO GenerationConfig"
@@ -164,6 +204,11 @@ def resolve_coding_generation(
     return overrides
 
 
+def assert_openvino_tools_not_requested(request: CodingChatRequest) -> None:
+    if _tools_requested(request):
+        raise ProviderNotReadyError(OPENVINO_TOOLS_NOT_READY)
+
+
 def run_coding_chat(
     request: CodingChatRequest,
     *,
@@ -171,11 +216,12 @@ def run_coding_chat(
 ) -> CodingChatResponse:
     validate_coding_request(request)
     logger.info(
-        "coding_chat provider=%s model_alias=%s message_count=%d system_len=%d",
+        "coding_chat provider=%s model_alias=%s message_count=%d system_len=%d tools=%d",
         provider.name,
         request.model_alias,
         len(request.messages),
         len(request.system or ""),
+        len(request.tools or []),
     )
     return provider.coding_chat(request)
 
@@ -186,9 +232,10 @@ def coding_chat_with_backend(
     settings: Settings | None = None,
     backend: Any | None = None,
 ) -> CodingChatResponse:
-    """Shared OpenVINO/mock path used by providers."""
+    """Shared OpenVINO path used by providers (text-only in C1)."""
     resolved = settings or get_settings()
     validate_coding_request(request)
+    assert_openvino_tools_not_requested(request)
 
     slot_manager = get_slot_manager()
     acquired = slot_manager.acquire("coding_fast")
@@ -199,7 +246,6 @@ def coding_chat_with_backend(
             )
         backend = acquired.backend
 
-    # Structural guarantee: same physical pipeline as companion_fast.
     companion = slot_manager.acquire("companion_fast")
     if (
         acquired.backend is not None
@@ -233,7 +279,6 @@ def coding_chat_with_backend(
             generation_overrides=overrides,
         )
     except TypeError:
-        # Backends that do not yet accept overrides (should not happen post-Slice A).
         raw = generate(system=system, history=history, message=message)
 
     text = sanitize_raw_lab_text(str(raw or ""))

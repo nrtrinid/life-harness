@@ -188,15 +188,38 @@ def test_metadata_not_model_visible() -> None:
     assert all("secret" not in t.content for t in history)
 
 
-def test_tools_and_stream_rejected(client: TestClient) -> None:
+def test_tools_and_stream_policy(client: TestClient) -> None:
     tools = client.post(
         "/ai/coding/chat",
-        json=_coding_body(tools=[{"name": "Read"}]),
+        json=_coding_body(
+            tools=[
+                {
+                    "name": "get_test_value",
+                    "input_schema": {"type": "object", "additionalProperties": False},
+                }
+            ],
+            messages=[{"role": "user", "content": "__CODING_TOOL_CALL__"}],
+        ),
     )
-    assert tools.status_code == 422
+    assert tools.status_code == 200
+    assert tools.json()["stop_reason"] == "tool_use"
 
     stream = client.post("/ai/coding/chat", json=_coding_body(stream=True))
     assert stream.status_code == 422
+
+    tool_stream = client.post(
+        "/ai/coding/chat/stream",
+        json=_coding_body(
+            stream=True,
+            tools=[
+                {
+                    "name": "get_test_value",
+                    "input_schema": {"type": "object"},
+                }
+            ],
+        ),
+    )
+    assert tool_stream.status_code == 422
 
     choice = client.post(
         "/ai/coding/chat",
@@ -205,14 +228,21 @@ def test_tools_and_stream_rejected(client: TestClient) -> None:
     assert choice.status_code == 422
 
 
-def test_tool_blocks_not_in_schema() -> None:
-    with pytest.raises(ValidationError):
-        CodingMessage.model_validate(
-            {
-                "role": "user",
-                "content": [{"type": "tool_use", "id": "x", "name": "Read", "input": {}}],
-            }
-        )
+def test_tool_blocks_in_schema() -> None:
+    msg = CodingMessage.model_validate(
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_x",
+                    "name": "get_test_value",
+                    "input": {},
+                }
+            ],
+        }
+    )
+    assert msg.content[0].type == "tool_use"
 
 
 def test_empty_backend_output(client: TestClient) -> None:
