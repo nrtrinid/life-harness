@@ -8,8 +8,16 @@ This is **not** full Anthropic API compatibility. It is a mock-first gateway tha
 
 - Deterministic mock completions for local client smoke tests
 - Anthropic-shaped request/response and error envelopes
+- Optional **experimental Raw Lab connectivity provider** for local-model
+  diagnostics (Slice 2A) via loopback `services/ai-gateway`
 - Fail-closed real-provider seam (`DisabledRealProvider`) until a future slice enables inference
-- Service-local only: no Companion board state, Expo app, Raw Lab, or root npm scripts required
+- Service-local only: no Companion board state, Expo app, or root npm scripts required
+
+The Raw Lab provider is **not** the permanent Claude Code coding provider, does
+**not** preserve complete Anthropic coding semantics, is **not** used for
+structured tool loops, and is **not** the planned true-streaming path. A
+dedicated coding lane will supersede it for Claude Code use. Keep it for
+diagnostics; do not delete it.
 
 ## Supported API subset
 
@@ -30,10 +38,13 @@ Supported request fields (Slice 1):
 ## Unsupported features
 
 - Real model inference (`ACGW_ENABLE_REAL=1` fails startup)
+- Local Raw Lab provider streaming (`stream: true` / `/raw-lab/stream` — not this path)
+- Local Raw Lab provider tools, non-default `tool_choice`, and tool_use/tool_result content
 - Images, documents, thinking blocks, citations, batches, files, models list, count tokens
 - Anthropic admin / organization APIs
 - Cloud auth (OAuth, Anthropic console keys as upstream)
 - Full beta feature parity
+- Automatic fallback from local provider to mock or cloud
 
 ## Configuration
 
@@ -41,7 +52,7 @@ All settings use the `ACGW_*` prefix.
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `ACGW_PROVIDER` | `mock` | `mock` (default) or `disabled_real` (fail-closed seam for tests) |
+| `ACGW_PROVIDER` | `mock` | `mock`, `disabled_real`, or `local_ai_gateway` |
 | `ACGW_HOST` | `127.0.0.1` | Bind host |
 | `ACGW_PORT` | `8131` | Bind port |
 | `ACGW_AUTH_TOKEN` | empty | **Required by default.** Bearer / `x-api-key` value |
@@ -49,8 +60,75 @@ All settings use the `ACGW_*` prefix.
 | `ACGW_ENABLE_REAL` | `0` | Must stay `0`; `1` fails startup |
 | `ACGW_LOG_BODIES` | `0` | Metadata-only logs by default |
 | `ACGW_MAX_INPUT_CHARS` | `100000` | Budget over serialized `system` + `messages` + `tools` |
+| `ACGW_ENABLE_LOCAL_AI_GATEWAY` | `0` | Must be `1` when `ACGW_PROVIDER=local_ai_gateway` |
+| `ACGW_LOCAL_AI_GATEWAY_BASE_URL` | `http://127.0.0.1:8111` | Loopback-only Raw Lab base (`http` + `127.0.0.1`/`localhost`) |
+| `ACGW_LOCAL_AI_GATEWAY_TIMEOUT_SECONDS` | `120` | Overall HTTP timeout |
+| `ACGW_LOCAL_AI_GATEWAY_CONNECT_TIMEOUT_SECONDS` | `5` | Connect timeout |
+| `ACGW_LOCAL_AI_GATEWAY_MAX_RESPONSE_BYTES` | `1048576` | Max upstream response body size |
+| `ACGW_LOCAL_AI_GATEWAY_MODEL_ALIAS` | `local-qwen` | Canonical model alias (plus fixed `acgw-local-qwen`) |
 
 Empty `ACGW_AUTH_TOKEN` without `ACGW_ALLOW_NO_AUTH=1` is invalid: the process refuses to start.
+
+## Local Raw Lab provider (Slice 2A)
+
+**Experimental Raw Lab connectivity provider for local-model diagnostics.**
+
+Non-streaming bridge from Anthropic `POST /v1/messages` to local ai-gateway
+`POST /raw-lab`. This is not the permanent Claude Code coding provider and does
+not preserve complete Anthropic coding semantics. It is not used for structured
+tool loops and is not the planned true-streaming path. A dedicated coding lane
+will supersede it for Claude Code use.
+
+**Enable:**
+
+```powershell
+$env:ACGW_PROVIDER="local_ai_gateway"
+$env:ACGW_ENABLE_LOCAL_AI_GATEWAY="1"
+$env:ACGW_LOCAL_AI_GATEWAY_BASE_URL="http://127.0.0.1:8111"
+$env:ACGW_AUTH_TOKEN="acgw-local-dev"
+```
+
+**Model aliases:** configured `ACGW_LOCAL_AI_GATEWAY_MODEL_ALIAS` (default `local-qwen`) and hardcoded `acgw-local-qwen` (same upstream path). Echo `request.model` on the response.
+
+**Translation:**
+
+| Anthropic | Raw Lab |
+|-----------|---------|
+| `system` (str or text parts) | **Prompt translation** only: prepended into final user `message` as `System:\n...\n\n{user}` — not a native system role and not a separate Raw Lab field |
+| `messages[:-1]` | `recent_turns` (role + flattened plain text) |
+| last user message | `message` |
+| — | `thread_state={}`, `companion_self_memories=[]`, `reasoning_depth="fast"` |
+
+**Generation / transport fields** (accepted for Anthropic protocol compatibility; **never** forwarded to Raw Lab; do **not** claim they influence Raw Lab generation):
+
+| Field | Behavior |
+|-------|----------|
+| `max_tokens`, `temperature`, `top_p` | Accepted; Raw Lab applies its own server-side generation policy |
+| `metadata` | Transport-only; never placed in model-visible text or the upstream body |
+| Non-empty `stop_sequences` | **Rejected** (would be silently ignored) |
+
+**`tool_choice` / tools policy** (never forwarded to Raw Lab):
+
+- Non-empty `tools` list → reject
+- `tool_use` / `tool_result` content blocks → reject
+- Explicit non-default `tool_choice` → reject
+- Omitted or default (`auto` / `{"type":"auto"}` / empty) with no tools → accept
+
+**Usage:** honest zeros — `input_tokens=0`, `output_tokens=0` (Raw Lab does not expose token counts in this slice).
+
+**Also rejected:** `stream: true`. Mock scenario header `x-acgw-scenario` is ignored (scenario label fixed to `local`).
+
+**No fallback:** offline/timeout/malformed Raw Lab responses surface as Anthropic errors. There is no automatic switch to MockProvider or cloud.
+
+**Logging:** lengths/metadata only. Raw Lab prompts, answers, and upstream bodies are never logged.
+
+**Security:** base URL must be loopback `http://127.0.0.1` or `http://localhost` only. IPv6 `::1`, LAN/public hosts, https, and URL userinfo are rejected at startup.
+
+### Later notes (not implemented here)
+
+- Dedicated coding lane for Claude Code (supersedes this provider for coding use)
+- True streaming on a coding path (not via this Raw Lab adapter)
+- Do **not** consolidate onto a shared `generate_chat` early — keep Raw Lab endpoint ownership explicit for diagnostics
 
 ## Local startup
 
@@ -147,6 +225,7 @@ In-process smoke (no live server required):
 
 ```powershell
 python scripts/smoke_http.py
+python scripts/smoke_local_fake.py
 ```
 
 ## Claude Code smoke status
@@ -200,4 +279,5 @@ Note: `--model acgw-mock-coding` with `--tools ""` returns HTTP 400 from this ga
 | Script | Role |
 |--------|------|
 | `scripts/run_uvicorn.py` | Validate auth config from env, print host/port, run uvicorn |
-| `scripts/smoke_http.py` | In-process TestClient smoke: non-stream, stream, tool loop |
+| `scripts/smoke_http.py` | In-process TestClient smoke: non-stream, stream, tool loop (mock) |
+| `scripts/smoke_local_fake.py` | In-process local provider smoke with MockTransport fake Raw Lab |

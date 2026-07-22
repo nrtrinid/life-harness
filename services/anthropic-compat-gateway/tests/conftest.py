@@ -24,6 +24,32 @@ ALLOWED_FIXTURES = frozenset(
     }
 )
 
+# Explicit defaults for Settings(...) constructions in tests (Slice 2A fields).
+LOCAL_GATEWAY_SETTINGS_DEFAULTS = dict(
+    enable_local_ai_gateway=False,
+    local_ai_gateway_base_url="http://127.0.0.1:8111",
+    local_ai_gateway_timeout_seconds=120.0,
+    local_ai_gateway_connect_timeout_seconds=5.0,
+    local_ai_gateway_max_response_bytes=1_048_576,
+    local_ai_gateway_model_alias="local-qwen",
+)
+
+
+def make_settings(**overrides: object) -> Settings:
+    base = dict(
+        provider="mock",
+        host="127.0.0.1",
+        port=8131,
+        auth_token="",
+        allow_no_auth=True,
+        enable_real=False,
+        log_bodies=False,
+        max_input_chars=100_000,
+        **LOCAL_GATEWAY_SETTINGS_DEFAULTS,
+    )
+    base.update(overrides)
+    return Settings(**base)  # type: ignore[arg-type]
+
 
 def load_fixture(name: str) -> dict:
     if "/" in name or "\\" in name or ".." in name or name != Path(name).name:
@@ -44,6 +70,12 @@ def settings() -> Settings:
         enable_real=False,
         log_bodies=False,
         max_input_chars=100_000,
+        enable_local_ai_gateway=False,
+        local_ai_gateway_base_url="http://127.0.0.1:8111",
+        local_ai_gateway_timeout_seconds=120.0,
+        local_ai_gateway_connect_timeout_seconds=5.0,
+        local_ai_gateway_max_response_bytes=1_048_576,
+        local_ai_gateway_model_alias="local-qwen",
     )
 
 

@@ -40,6 +40,12 @@ def test_build_app_allow_no_auth_warning(caplog: pytest.LogCaptureFixture) -> No
         enable_real=False,
         log_bodies=False,
         max_input_chars=100_000,
+        enable_local_ai_gateway=False,
+        local_ai_gateway_base_url="http://127.0.0.1:8111",
+        local_ai_gateway_timeout_seconds=120.0,
+        local_ai_gateway_connect_timeout_seconds=5.0,
+        local_ai_gateway_max_response_bytes=1_048_576,
+        local_ai_gateway_model_alias="local-qwen",
     )
     with caplog.at_level(logging.WARNING, logger="acgw"):
         with TestClient(build_app(cfg)):
