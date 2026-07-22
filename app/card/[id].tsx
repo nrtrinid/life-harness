@@ -8,6 +8,7 @@ import { FeatureRunnerOutputDetails } from "../../src/components/featureSprint/F
 import { FeatureSprintActionGuide } from "../../src/components/featureSprint/FeatureSprintActionGuide";
 import { FeatureSprintFlowGuide } from "../../src/components/featureSprint/FeatureSprintFlowGuide";
 import { FeatureSprintMapPanel } from "../../src/components/featureSprint/FeatureSprintMapPanel";
+import { FeatureSprintNextLegalActionPanel } from "../../src/components/featureSprint/FeatureSprintNextLegalActionPanel";
 import { FeatureSprintStartFlow } from "../../src/components/featureSprint/FeatureSprintStartFlow";
 import { CollapsibleSection } from "../../src/components/CollapsibleSection";
 import { Notice, type NoticeState } from "../../src/components/Notice";
@@ -57,6 +58,24 @@ import {
   historyAttributionFromExecutionContext,
   seedSprintMapFromLegacySteps
 } from "../../src/core/featureSprintMap";
+import {
+  buildApplyInputFromPresentation,
+  buildImplementationProofArtifactForStep,
+  buildReviewVerdictArtifactForStep,
+  formatFeatureSprintLegalActionFailure,
+  guardKernelManagedLegacyControl,
+  isKernelDelegatedRunnerLaunchAllowed,
+  isKernelManagedPromptAuditLaunchAllowed,
+  KERNEL_MANAGED_PROMPT_AUDIT_MESSAGE,
+  KERNEL_MANAGED_USE_PANEL_MESSAGE,
+  buildLocalizationArtifactForStep,
+  isKernelManagedFeatureSprintPlan,
+  KERNEL_LAUNCH_INTENT_APPLIED_MESSAGE,
+  presentFeatureSprintNextLegalAction,
+  resolveManualKernelBridgeTriggerKind,
+  validateFeatureSprintLegalActionTrigger
+} from "../../src/core/featureSprintManualKernelBridge";
+import type { LifeHarnessData } from "../../src/core/lifeHarnessData";
 import { parseFeatureSprintWorkerOutputEvidence } from "../../src/core/featureSprintWorkerOutput";
 import { buildFeatureSprintActionGuide } from "../../src/core/featureSprintActionGuide";
 import {
@@ -337,6 +356,7 @@ export default function CardDetailScreen() {
     importFeaturePromptAuditForPlan,
     importFeatureSpecUpdateForPlan,
     normalizeImplementationProofForPlan,
+    applyFeatureSprintLegalActionForPlan,
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
     markMostRecentFeatureSprintRunnerRunImported,
@@ -397,6 +417,7 @@ export default function CardDetailScreen() {
   const [isRunningPromptAudit, setIsRunningPromptAudit] = useState(false);
   const [isNormalizingProof, setIsNormalizingProof] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
+  const [isTriggeringKernelAction, setIsTriggeringKernelAction] = useState(false);
   const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
   const [forceCleanEligibleRunId, setForceCleanEligibleRunId] = useState<string | null>(null);
   const [cleaningRunId, setCleaningRunId] = useState<string | null>(null);
@@ -671,6 +692,17 @@ export default function CardDetailScreen() {
   }, [params.focusSection, params.patchModule]);
 
   const activeFeatureSprintPlan = getActiveFeatureSprintPlanForCard(lifeHarnessData, card.id);
+  const kernelNextLegalActionPresentation = useMemo(
+    () =>
+      activeFeatureSprintPlan
+        ? presentFeatureSprintNextLegalAction(lifeHarnessData, activeFeatureSprintPlan.id)
+        : null,
+    [lifeHarnessData, activeFeatureSprintPlan?.id, activeFeatureSprintPlan?.stateRevision]
+  );
+  const kernelManagedPlan = Boolean(
+    activeFeatureSprintPlan && isKernelManagedFeatureSprintPlan(activeFeatureSprintPlan)
+  );
+
   const cardProject = getProjectForCard(lifeHarnessData, card.id);
   const currentFeatureStep = activeFeatureSprintPlan?.steps.find(
     (step) => step.id === activeFeatureSprintPlan.currentStepId
@@ -938,7 +970,19 @@ export default function CardDetailScreen() {
     showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save feature spec.");
   }
 
+  function showKernelLegacyBlockNotice(plan: typeof activeFeatureSprintPlan) {
+    const guard = guardKernelManagedLegacyControl(plan, "mutate_sprint_map");
+    if (guard.mode === "kernel_blocked") {
+      showNotice("warning", guard.message);
+      return true;
+    }
+    return false;
+  }
+
   function handleApproveFeatureSpec() {
+    if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+      return;
+    }
     if (!activeFeatureSprintPlan) {
       showNotice("warning", "Save a feature spec before approving.");
       return;
@@ -969,6 +1013,63 @@ export default function CardDetailScreen() {
       showNotice("warning", "No active feature sprint plan.");
       return;
     }
+
+    if (isKernelManagedFeatureSprintPlan(activeFeatureSprintPlan)) {
+      const fresh = presentFeatureSprintNextLegalAction(
+        lifeHarnessData,
+        activeFeatureSprintPlan.id
+      );
+      if (!fresh.next || fresh.next.action !== "save_localization") {
+        showNotice(
+          "warning",
+          fresh.next
+            ? `Kernel expects ${fresh.next.action}, not localization import right now.`
+            : fresh.detail
+        );
+        return;
+      }
+
+      const validation = validateFeatureSprintLegalActionTrigger(lifeHarnessData, {
+        planId: activeFeatureSprintPlan.id,
+        actionId: fresh.next.actionId,
+        stateRevision: fresh.next.stateRevision,
+        expectedAction: "save_localization"
+      });
+      if (!validation.ok) {
+        showNotice(
+          "warning",
+          formatFeatureSprintLegalActionFailure(validation.error, validation.holdReason)
+        );
+        return;
+      }
+
+      const artifactResult = buildLocalizationArtifactForStep(
+        lifeHarnessData,
+        activeFeatureSprintPlan.id,
+        localizationImportText,
+        activeFeatureSprintPlan.currentStepId
+      );
+      if (!artifactResult.ok) {
+        showNotice(
+          "warning",
+          formatFeatureSprintLegalActionFailure(artifactResult.error, artifactResult.holdReason)
+        );
+        return;
+      }
+
+      const applyResult = applyFeatureSprintLegalActionForPlan(
+        buildApplyInputFromPresentation(validation.next, artifactResult.artifact)
+      );
+      if (!applyResult.ok) {
+        showNotice("warning", applyResult.message ?? "Could not apply localization through kernel.");
+        return;
+      }
+
+      setLocalizationImportText("");
+      showNotice("success", applyResult.message ?? "Localization imported through kernel.");
+      return;
+    }
+
     const result = importFeaturePromptLocalizationForPlan(
       activeFeatureSprintPlan.id,
       localizationImportText,
@@ -1009,6 +1110,73 @@ export default function CardDetailScreen() {
     );
   }
 
+  async function handleTriggerKernelLegalAction() {
+    if (!activeFeatureSprintPlan || !kernelNextLegalActionPresentation?.next || isTriggeringKernelAction) {
+      return;
+    }
+
+    const envelope = kernelNextLegalActionPresentation.next;
+    const validation = validateFeatureSprintLegalActionTrigger(lifeHarnessData, {
+      planId: activeFeatureSprintPlan.id,
+      actionId: envelope.actionId,
+      stateRevision: envelope.stateRevision,
+      expectedAction: envelope.action
+    });
+    if (!validation.ok) {
+      showNotice(
+        "warning",
+        formatFeatureSprintLegalActionFailure(validation.error, validation.holdReason)
+      );
+      return;
+    }
+
+    const triggerKind = resolveManualKernelBridgeTriggerKind(validation.next);
+    if (triggerKind === "blocked") {
+      showNotice("warning", validation.next.reason);
+      return;
+    }
+
+    setIsTriggeringKernelAction(true);
+    try {
+      if (triggerKind === "launch_worker") {
+        const applyResult = applyFeatureSprintLegalActionForPlan(
+          buildApplyInputFromPresentation(validation.next)
+        );
+        if (!applyResult.ok || !applyResult.plan || !applyResult.data) {
+          showNotice("warning", applyResult.message ?? "Could not record kernel launch intent.");
+          return;
+        }
+
+        if (validation.next.action === "launch_review") {
+          await handleRunReview(applyResult.plan, applyResult.data, { kernelDelegatedLaunch: true });
+        } else if (
+          validation.next.action === "launch_implementation" ||
+          validation.next.action === "launch_correction"
+        ) {
+          await handleRunImplementationInWorktree(applyResult.plan, applyResult.data, {
+            kernelDelegatedLaunch: true
+          });
+        } else if (validation.next.action === "launch_localization") {
+          showNotice(
+            "warning",
+            `${KERNEL_LAUNCH_INTENT_APPLIED_MESSAGE} Use the localization controls below to run the worker.`
+          );
+        }
+        return;
+      }
+
+      const applyResult = applyFeatureSprintLegalActionForPlan(
+        buildApplyInputFromPresentation(validation.next)
+      );
+      showNotice(
+        applyResult.ok ? "success" : "warning",
+        applyResult.message ?? "Kernel action could not be applied."
+      );
+    } finally {
+      setIsTriggeringKernelAction(false);
+    }
+  }
+
   function handleSaveAgentOutput() {
     if (!activeFeatureSprintPlan?.currentStepId) {
       showNotice("warning", "No current step to save output on.");
@@ -1039,6 +1207,68 @@ export default function CardDetailScreen() {
     if (!activeFeatureSprintPlan?.currentStepId || isNormalizingProof) {
       return;
     }
+
+    if (isKernelManagedFeatureSprintPlan(activeFeatureSprintPlan)) {
+      setIsNormalizingProof(true);
+      try {
+        const fresh = presentFeatureSprintNextLegalAction(
+          lifeHarnessData,
+          activeFeatureSprintPlan.id
+        );
+        if (
+          !fresh.next ||
+          (fresh.next.action !== "save_implementation_proof" &&
+            fresh.next.action !== "save_correction_proof")
+        ) {
+          showNotice(
+            "warning",
+            fresh.next
+              ? `Kernel expects ${fresh.next.action}, not proof save right now.`
+              : fresh.detail
+          );
+          return;
+        }
+
+        const validation = validateFeatureSprintLegalActionTrigger(lifeHarnessData, {
+          planId: activeFeatureSprintPlan.id,
+          actionId: fresh.next.actionId,
+          stateRevision: fresh.next.stateRevision,
+          expectedAction: fresh.next.action
+        });
+        if (!validation.ok) {
+          showNotice(
+            "warning",
+            formatFeatureSprintLegalActionFailure(validation.error, validation.holdReason)
+          );
+          return;
+        }
+
+        const artifactResult = buildImplementationProofArtifactForStep(
+          lifeHarnessData,
+          activeFeatureSprintPlan.id,
+          activeFeatureSprintPlan.currentStepId
+        );
+        if (!artifactResult.ok) {
+          showNotice(
+            "warning",
+            formatFeatureSprintLegalActionFailure(artifactResult.error, artifactResult.holdReason)
+          );
+          return;
+        }
+
+        const applyResult = applyFeatureSprintLegalActionForPlan(
+          buildApplyInputFromPresentation(validation.next, artifactResult.artifact)
+        );
+        showNotice(
+          applyResult.ok ? "success" : "warning",
+          applyResult.message ?? "Could not apply implementation proof through kernel."
+        );
+      } finally {
+        setIsNormalizingProof(false);
+      }
+      return;
+    }
+
     setIsNormalizingProof(true);
     try {
       const result = normalizeImplementationProofForPlan(
@@ -1063,6 +1293,68 @@ export default function CardDetailScreen() {
       showNotice("warning", "No current step to import review verdict on.");
       return;
     }
+
+    if (isKernelManagedFeatureSprintPlan(activeFeatureSprintPlan)) {
+      const fresh = presentFeatureSprintNextLegalAction(lifeHarnessData, activeFeatureSprintPlan.id);
+      if (!fresh.next || fresh.next.action !== "import_review_verdict") {
+        showNotice(
+          "warning",
+          fresh.next
+            ? `Kernel expects ${fresh.next.action}, not review import right now.`
+            : fresh.detail
+        );
+        return;
+      }
+
+      const validation = validateFeatureSprintLegalActionTrigger(lifeHarnessData, {
+        planId: activeFeatureSprintPlan.id,
+        actionId: fresh.next.actionId,
+        stateRevision: fresh.next.stateRevision,
+        expectedAction: "import_review_verdict"
+      });
+      if (!validation.ok) {
+        showNotice(
+          "warning",
+          formatFeatureSprintLegalActionFailure(validation.error, validation.holdReason)
+        );
+        return;
+      }
+
+      const artifactResult = buildReviewVerdictArtifactForStep(
+        lifeHarnessData,
+        activeFeatureSprintPlan.id,
+        reviewImportText,
+        activeFeatureSprintPlan.currentStepId
+      );
+      if (!artifactResult.ok) {
+        showNotice(
+          "warning",
+          formatFeatureSprintLegalActionFailure(artifactResult.error, artifactResult.holdReason)
+        );
+        return;
+      }
+
+      const applyResult = applyFeatureSprintLegalActionForPlan(
+        buildApplyInputFromPresentation(validation.next, artifactResult.artifact)
+      );
+      if (!applyResult.ok) {
+        showNotice("warning", applyResult.message ?? "Could not import review verdict through kernel.");
+        return;
+      }
+
+      markReviewRunnerRunImportedForVerdict({
+        cardId,
+        planId: activeFeatureSprintPlan.id,
+        stepId: activeFeatureSprintPlan.currentStepId,
+        reviewImportText,
+        selectedRunId: selectedRunnerRunId,
+        runnerAgent
+      });
+      setReviewImportText("");
+      showNotice("success", applyResult.message ?? "Review verdict imported.");
+      return;
+    }
+
     const result = importFeatureReviewVerdictForPlan(
       activeFeatureSprintPlan.id,
       reviewImportText,
@@ -1106,6 +1398,9 @@ export default function CardDetailScreen() {
   }
 
   function handleAdvanceFeatureStep() {
+    if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+      return;
+    }
     if (!activeFeatureSprintPlan?.currentStepId) {
       showNotice("warning", "No current step to advance.");
       return;
@@ -1118,6 +1413,9 @@ export default function CardDetailScreen() {
   }
 
   function handleAdoptNextSlice() {
+    if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+      return;
+    }
     if (!activeFeatureSprintPlan) {
       showNotice("warning", "No active feature sprint plan.");
       return;
@@ -1127,6 +1425,9 @@ export default function CardDetailScreen() {
   }
 
   function handleCompleteFeatureSprint() {
+    if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+      return;
+    }
     if (!activeFeatureSprintPlan) {
       showNotice("warning", "No active feature sprint plan.");
       return;
@@ -1180,6 +1481,11 @@ export default function CardDetailScreen() {
 
   async function handleRunPromptAudit() {
     if (!activeFeatureSprintPlan?.currentStepId || isRunningPromptAudit) {
+      return;
+    }
+
+    if (!isKernelManagedPromptAuditLaunchAllowed(activeFeatureSprintPlan)) {
+      showNotice("warning", KERNEL_MANAGED_PROMPT_AUDIT_MESSAGE);
       return;
     }
 
@@ -1365,15 +1671,26 @@ export default function CardDetailScreen() {
     showNotice("success", "Wrapped output in a feature-review-verdict block. Inspect, then Import review verdict.");
   }
 
-  async function handleRunReview() {
-    if (!activeFeatureSprintPlan || isRunningReview) {
+  async function handleRunReview(
+    planOverride?: HarnessFeatureSprintPlan,
+    dataOverride?: LifeHarnessData,
+    options?: { kernelDelegatedLaunch?: boolean }
+  ) {
+    const plan = planOverride ?? activeFeatureSprintPlan;
+    const harnessData = dataOverride ?? lifeHarnessData;
+    if (!plan || isRunningReview) {
       return;
     }
 
-    if (!canRunFeatureSprintPhaseAction(activeFeatureSprintPlan, "review")) {
+    if (!isKernelDelegatedRunnerLaunchAllowed(plan, options?.kernelDelegatedLaunch === true)) {
+      showNotice("warning", KERNEL_MANAGED_USE_PANEL_MESSAGE);
+      return;
+    }
+
+    if (!canRunFeatureSprintPhaseAction(plan, "review")) {
       showNotice(
         "warning",
-        describeFeatureSprintPhaseLaunchBlock(activeFeatureSprintPlan, "review") ??
+        describeFeatureSprintPhaseLaunchBlock(plan, "review") ??
           "Review launch is blocked by Sprint Map readiness."
       );
       return;
@@ -1385,9 +1702,9 @@ export default function CardDetailScreen() {
 
     const profile = buildRunnerProfile(runnerAgent, "review");
     const packet = buildFeatureStepReviewPacket(
-      lifeHarnessData,
-      activeFeatureSprintPlan.id,
-      activeFeatureSprintPlan.currentStepId,
+      harnessData,
+      plan.id,
+      plan.currentStepId,
       agentOutputText
     );
     if (!packet.ok) {
@@ -1395,8 +1712,8 @@ export default function CardDetailScreen() {
       return;
     }
 
-    const project = getProjectForCard(lifeHarnessData, cardId);
-    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan, "review");
+    const project = getProjectForCard(harnessData, cardId);
+    const executionContextResult = buildLaunchExecutionContext(plan, "review");
     if (!executionContextResult.ok) {
       showNotice("warning", executionContextResult.error);
       return;
@@ -1405,8 +1722,8 @@ export default function CardDetailScreen() {
       profile,
       cardId,
       ...historyAttributionFromExecutionContext(executionContextResult.context),
-      planId: activeFeatureSprintPlan.id,
-      stepId: activeFeatureSprintPlan.currentStepId,
+      planId: plan.id,
+      stepId: plan.currentStepId,
       repoPath: project?.repoPath
     });
     if (!historyCreate.ok) {
@@ -1422,8 +1739,8 @@ export default function CardDetailScreen() {
         profile,
         promptMarkdown: packet.markdown,
         cardId,
-        planId: activeFeatureSprintPlan.id,
-        stepId: activeFeatureSprintPlan.currentStepId,
+        planId: plan.id,
+        stepId: plan.currentStepId,
         repoPath: project?.repoPath,
         executionContext: executionContextResult.context
       });
@@ -1433,7 +1750,10 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok || !result.outputText) {
-        showNotice("warning", runnerFailureNotice(result));
+        const prefix = options?.kernelDelegatedLaunch
+          ? `${KERNEL_LAUNCH_INTENT_APPLIED_MESSAGE} `
+          : "";
+        showNotice("warning", `${prefix}${runnerFailureNotice(result)}`);
         return;
       }
 
@@ -1452,15 +1772,26 @@ export default function CardDetailScreen() {
     }
   }
 
-  async function handleRunImplementationInWorktree() {
-    if (!activeFeatureSprintPlan?.currentStepId || isRunningImplementation) {
+  async function handleRunImplementationInWorktree(
+    planOverride?: HarnessFeatureSprintPlan,
+    dataOverride?: LifeHarnessData,
+    options?: { kernelDelegatedLaunch?: boolean }
+  ) {
+    const plan = planOverride ?? activeFeatureSprintPlan;
+    const harnessData = dataOverride ?? lifeHarnessData;
+    if (!plan?.currentStepId || isRunningImplementation) {
       return;
     }
 
-    if (!canRunFeatureSprintImplementation(activeFeatureSprintPlan)) {
+    if (!isKernelDelegatedRunnerLaunchAllowed(plan, options?.kernelDelegatedLaunch === true)) {
+      showNotice("warning", KERNEL_MANAGED_USE_PANEL_MESSAGE);
+      return;
+    }
+
+    if (!canRunFeatureSprintImplementation(plan)) {
       showNotice(
         "warning",
-        describeFeatureSprintPhaseLaunchBlock(activeFeatureSprintPlan, "implement") ??
+        describeFeatureSprintPhaseLaunchBlock(plan, "implement") ??
           "Implementation launch is blocked."
       );
       return;
@@ -1470,24 +1801,20 @@ export default function CardDetailScreen() {
       return;
     }
 
-    const project = getProjectForCard(lifeHarnessData, cardId);
+    const project = getProjectForCard(harnessData, cardId);
     if (!project?.repoPath?.trim()) {
       showNotice("warning", "Add project repo path before running implementation.");
       return;
     }
 
-    const packet = buildFeatureStepImplementationPacket(
-      lifeHarnessData,
-      activeFeatureSprintPlan.id,
-      activeFeatureSprintPlan.currentStepId
-    );
+    const packet = buildFeatureStepImplementationPacket(harnessData, plan.id, plan.currentStepId);
     if (!packet.ok) {
       showNotice("warning", packet.error);
       return;
     }
 
     const profile = buildRunnerProfile(runnerAgent, "implementation");
-    const executionContextResult = buildLaunchExecutionContext(activeFeatureSprintPlan, "implement");
+    const executionContextResult = buildLaunchExecutionContext(plan, "implement");
     if (!executionContextResult.ok) {
       showNotice("warning", executionContextResult.error);
       return;
@@ -1496,8 +1823,8 @@ export default function CardDetailScreen() {
       profile,
       cardId,
       ...historyAttributionFromExecutionContext(executionContextResult.context),
-      planId: activeFeatureSprintPlan.id,
-      stepId: activeFeatureSprintPlan.currentStepId,
+      planId: plan.id,
+      stepId: plan.currentStepId,
       repoPath: project.repoPath
     });
     if (!historyCreate.ok) {
@@ -1513,8 +1840,8 @@ export default function CardDetailScreen() {
         profile,
         promptMarkdown: packet.markdown,
         cardId,
-        planId: activeFeatureSprintPlan.id,
-        stepId: activeFeatureSprintPlan.currentStepId,
+        planId: plan.id,
+        stepId: plan.currentStepId,
         repoPath: project.repoPath,
         worktree: { enabled: true },
         verificationCommands: project.verificationCommands ?? [],
@@ -1527,7 +1854,10 @@ export default function CardDetailScreen() {
       }
 
       if (!result.ok) {
-        showNotice("warning", runnerFailureNotice(result));
+        const prefix = options?.kernelDelegatedLaunch
+          ? `${KERNEL_LAUNCH_INTENT_APPLIED_MESSAGE} `
+          : "";
+        showNotice("warning", `${prefix}${runnerFailureNotice(result)}`);
         return;
       }
 
@@ -1857,6 +2187,7 @@ export default function CardDetailScreen() {
           revisedSpecAwaitingApproval={
             stepRequiresSpecUpdate && !currentStepSpecUpdateSatisfied && Boolean(latestSpecUpdateForCurrentStep)
           }
+          kernelManagedPlan={kernelManagedPlan}
           onSaveFeatureSpec={handleSaveFeatureSpec}
           onApproveFeatureSpec={handleApproveFeatureSpec}
           runnerAgent={runnerAgent}
@@ -1927,10 +2258,24 @@ export default function CardDetailScreen() {
           </View>
         </View>
 
+        {kernelNextLegalActionPresentation ? (
+          <FeatureSprintNextLegalActionPanel
+            presentation={kernelNextLegalActionPresentation}
+            isTriggering={isTriggeringKernelAction}
+            onTrigger={() => {
+              void handleTriggerKernelLegalAction();
+            }}
+          />
+        ) : null}
+
         {activeFeatureSprintPlan ? (
           <FeatureSprintMapPanel
             plan={activeFeatureSprintPlan}
+            kernelManagedReadOnly={kernelManagedPlan}
             onSelectExecutionTarget={(target: HarnessFeatureSprintExecutionTarget) => {
+              if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+                return;
+              }
               const result = updateFeatureSprintPlan(activeFeatureSprintPlan.id, {
                 executionTarget: target
               });
@@ -1944,6 +2289,9 @@ export default function CardDetailScreen() {
               );
             }}
             onSeedFromSteps={() => {
+              if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+                return;
+              }
               const seeded = seedSprintMapFromLegacySteps(activeFeatureSprintPlan);
               if (!seeded.ok) {
                 showNotice("warning", seeded.error);
@@ -1962,6 +2310,9 @@ export default function CardDetailScreen() {
               showNotice("success", seeded.notice.message);
             }}
             onAdoptSprintMap={() => {
+              if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+                return;
+              }
               if (!activeFeatureSprintPlan.executionTarget) {
                 showNotice(
                   "warning",
@@ -1983,6 +2334,9 @@ export default function CardDetailScreen() {
               );
             }}
             onRevertToLegacy={() => {
+              if (showKernelLegacyBlockNotice(activeFeatureSprintPlan)) {
+                return;
+              }
               const result = updateFeatureSprintPlan(activeFeatureSprintPlan.id, {
                 executionModel: null
               });
@@ -2352,8 +2706,11 @@ export default function CardDetailScreen() {
                 </Pressable>
               ) : null}
               <Pressable
-                style={[styles.secondaryAction, isRunningPromptAudit && { opacity: 0.5 }]}
-                disabled={isRunningPromptAudit}
+                style={[
+                  styles.secondaryAction,
+                  (isRunningPromptAudit || kernelManagedPlan) && { opacity: 0.5 }
+                ]}
+                disabled={isRunningPromptAudit || kernelManagedPlan}
                 onPress={() => {
                   void handleRunPromptAudit();
                 }}
@@ -2420,9 +2777,11 @@ export default function CardDetailScreen() {
                 testID="feature-sprint-run-implementation"
                 style={[
                   styles.secondaryAction,
-                  (isRunningImplementation || !canRunImplementation) && { opacity: 0.5 }
+                  (isRunningImplementation || !canRunImplementation || kernelManagedPlan) && {
+                    opacity: 0.5
+                  }
                 ]}
-                disabled={isRunningImplementation || !canRunImplementation}
+                disabled={isRunningImplementation || !canRunImplementation || kernelManagedPlan}
                 onPress={() => {
                   void handleRunImplementationInWorktree();
                 }}
@@ -2453,8 +2812,8 @@ export default function CardDetailScreen() {
                 </Pressable>
               ) : null}
               <Pressable
-                style={[styles.secondaryAction, isRunningReview && { opacity: 0.5 }]}
-                disabled={isRunningReview}
+                style={[styles.secondaryAction, (isRunningReview || kernelManagedPlan) && { opacity: 0.5 }]}
+                disabled={isRunningReview || kernelManagedPlan}
                 onPress={() => {
                   void handleRunReview();
                 }}
@@ -2468,6 +2827,7 @@ export default function CardDetailScreen() {
               Uses the enriched review packet (normalized proof when saved). Output fills Import review
               verdict below — import remains manual.
               {stepImplementationProofSaved ? " Review packet will include normalized proof." : ""}
+              {kernelManagedPlan ? ` ${KERNEL_MANAGED_USE_PANEL_MESSAGE}` : ""}
             </Text>
           </>
         ) : null}
@@ -2723,7 +3083,8 @@ export default function CardDetailScreen() {
               {canAdoptNextSlice ? (
                 <Pressable
                   testID="feature-sprint-adopt-next-slice"
-                  style={styles.secondaryAction}
+                  style={[styles.secondaryAction, kernelManagedPlan && { opacity: 0.5 }]}
+                  disabled={kernelManagedPlan}
                   onPress={handleAdoptNextSlice}
                 >
                   <Text style={styles.secondaryActionText}>Adopt next slice</Text>
@@ -2731,12 +3092,17 @@ export default function CardDetailScreen() {
               ) : null}
               <Pressable
                 testID="feature-sprint-advance-step"
-                style={styles.secondaryAction}
+                style={[styles.secondaryAction, kernelManagedPlan && { opacity: 0.5 }]}
+                disabled={kernelManagedPlan}
                 onPress={handleAdvanceFeatureStep}
               >
                 <Text style={styles.secondaryActionText}>Advance step</Text>
               </Pressable>
-              <Pressable style={styles.secondaryAction} onPress={handleCompleteFeatureSprint}>
+              <Pressable
+                style={[styles.secondaryAction, kernelManagedPlan && { opacity: 0.5 }]}
+                disabled={kernelManagedPlan}
+                onPress={handleCompleteFeatureSprint}
+              >
                 <Text style={styles.secondaryActionText}>Mark feature complete</Text>
               </Pressable>
               <Pressable style={styles.secondaryAction} onPress={handleDeleteFeatureSprint}>

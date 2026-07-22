@@ -26,6 +26,7 @@ import {
 import {
   adoptSprintMapExecutionForPlan,
   completeFeatureSprintPlan,
+  importFeaturePromptLocalizationFromText,
   importFeatureReviewVerdictFromText,
   normalizeImplementationProofForStep,
   updateFeatureSprintPlan,
@@ -110,10 +111,21 @@ export type RiskApprovalArtifact = {
   taskId: string;
 };
 
+export type LocalizationArtifact = {
+  type: "localization";
+  planId: string;
+  taskId: string;
+  stepId?: string;
+  frozenSpecRevision: number;
+  /** Full text containing a feature-prompt-localization fence. */
+  text: string;
+};
+
 export type FeatureSprintLegalArtifact =
   | ClarificationAnswersArtifact
   | ImplementationProofArtifact
   | ReviewVerdictArtifact
+  | LocalizationArtifact
   | SpecDraftArtifact
   | SpecRevisionArtifact
   | RiskApprovalArtifact
@@ -668,6 +680,11 @@ export function applyFeatureSprintLegalAction(
                   : working.executionTarget,
                 automationPhase: "reviewing"
               };
+            } else if (expected.action === "launch_localization") {
+              working = {
+                ...working,
+                automationPhase: "localizing"
+              };
             }
           }
         }
@@ -812,6 +829,70 @@ export function applyFeatureSprintLegalAction(
         });
         Object.assign(updated, rememberAction(updated, input.actionId, audit));
         state = replacePlan(state, updated);
+        return { ok: true, state, stateRevision, next: nextAfter(state, plan.id, now), audit };
+      }
+
+      case "save_localization": {
+        if (artifact.type !== "localization") {
+          return { ok: false, error: "localization artifact required.", next: expected };
+        }
+        if (!plan.clarifiedSpec || artifact.frozenSpecRevision !== plan.clarifiedSpec.revision) {
+          return { ok: false, error: "Localization spec revision mismatch.", next: expected };
+        }
+        const taskId = artifact.taskId;
+        if (expected.executionContext?.taskId && taskId !== expected.executionContext.taskId) {
+          return {
+            ok: false,
+            error: `Localization taskId ${taskId} does not match legal action task ${expected.executionContext.taskId}.`,
+            next: expected
+          };
+        }
+        if (artifact.planId !== plan.id) {
+          return { ok: false, error: "Localization planId mismatch.", next: expected };
+        }
+        const found = plan.sprintMap
+          ? findTaskInFeatureSprintMap(plan.sprintMap, taskId)
+          : undefined;
+        if (!found) {
+          return { ok: false, error: `Task not found: ${taskId}`, next: expected };
+        }
+        let working = plan;
+        const linked = ensureLinkedStep(working, found.task, timestamp);
+        working = linked.plan;
+        const imported = importFeaturePromptLocalizationFromText(
+          replacePlan(data, working),
+          plan.id,
+          artifact.text,
+          linked.stepId,
+          now
+        );
+        if (!imported.ok) {
+          return {
+            ok: false,
+            error: imported.error ?? "Localization import failed.",
+            holdReason: "missing_evidence",
+            next: expected
+          };
+        }
+        let nextPlan = findPlan(imported.state, plan.id)!;
+        const stateRevision = bumpRevision(plan);
+        nextPlan = {
+          ...nextPlan,
+          stateRevision,
+          updatedAt: timestamp
+        };
+        const audit = buildAudit({
+          actionId: input.actionId,
+          action: expected.action,
+          before: currentRevision,
+          after: stateRevision,
+          result: "applied",
+          reason: "Saved localization through kernel.",
+          plan: nextPlan,
+          now: timestamp
+        });
+        Object.assign(nextPlan, rememberAction(nextPlan, input.actionId, audit));
+        const state = replacePlan(imported.state, nextPlan);
         return { ok: true, state, stateRevision, next: nextAfter(state, plan.id, now), audit };
       }
 

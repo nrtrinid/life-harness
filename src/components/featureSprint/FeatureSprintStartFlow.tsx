@@ -1,5 +1,6 @@
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { KERNEL_MANAGED_USE_PANEL_MESSAGE } from "../../core/featureSprintManualKernelBridge";
 import type { FeatureSprintRunnerAgent } from "../../core/featureSprintRunner";
 import { runnerAgentLabel } from "../../core/featureSprintRunner";
 import type { FeatureSprintRunnerHealthProbe } from "../../core/featureSprintRunnerHealth";
@@ -22,6 +23,7 @@ export type FeatureSprintStartFlowProps = {
   isFeatureSpecApproved: boolean;
   hasPersistedFeatureSpec: boolean;
   revisedSpecAwaitingApproval?: boolean;
+  kernelManagedPlan?: boolean;
   onSaveFeatureSpec: () => void;
   onApproveFeatureSpec: () => void;
 
@@ -143,6 +145,7 @@ export function FeatureSprintStartFlow({
   isFeatureSpecApproved,
   hasPersistedFeatureSpec,
   revisedSpecAwaitingApproval = false,
+  kernelManagedPlan = false,
   onSaveFeatureSpec,
   onApproveFeatureSpec,
   runnerAgent,
@@ -212,6 +215,11 @@ export function FeatureSprintStartFlow({
             Spec saved. Approve it before running implementation.
           </Text>
         ) : null}
+        {kernelManagedPlan ? (
+          <Text style={[styles.helpText, { marginTop: 4, color: colors.accentPrimary }]}>
+            {KERNEL_MANAGED_USE_PANEL_MESSAGE} Legacy feature-spec approval is disabled here.
+          </Text>
+        ) : null}
         <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
           <Pressable
             style={[
@@ -226,11 +234,19 @@ export function FeatureSprintStartFlow({
             testID="feature-sprint-approve-feature-spec"
             style={[
               styles.secondaryAction,
-              (!hasPersistedFeatureSpec || isFeatureSpecDirty || isFeatureSpecApproved) && {
+              (!hasPersistedFeatureSpec ||
+                isFeatureSpecDirty ||
+                isFeatureSpecApproved ||
+                kernelManagedPlan) && {
                 opacity: 0.5
               }
             ]}
-            disabled={!hasPersistedFeatureSpec || isFeatureSpecDirty || isFeatureSpecApproved}
+            disabled={
+              !hasPersistedFeatureSpec ||
+              isFeatureSpecDirty ||
+              isFeatureSpecApproved ||
+              kernelManagedPlan
+            }
             onPress={onApproveFeatureSpec}
           >
             <Text style={styles.secondaryActionText}>Approve feature spec</Text>

@@ -715,6 +715,16 @@ export function getNextFeatureSprintLegalAction(
   }
 
   if (target.phase === "localize" && !step?.promptLocalization) {
+    if (plan.automationPhase === "localizing") {
+      return actionOf(plan, {
+        action: "save_localization",
+        reason: "Localization launch recorded; import localization to continue.",
+        taskId: task.id,
+        phase: "localize",
+        frozenSpecRevision: frozen.revision,
+        now
+      });
+    }
     return actionOf(plan, {
       action: "launch_localization",
       reason: "Localization phase is selected and localization is missing.",
