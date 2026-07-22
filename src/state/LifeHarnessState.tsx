@@ -96,6 +96,14 @@ import {
   type HarnessAgentSessionUpdateInput
 } from "../core/agentSessionLog";
 import {
+  applyFeatureSprintLegalAction,
+  type ApplyFeatureSprintLegalActionInput
+} from "../core/featureSprintApplyLegalAction";
+import {
+  formatFeatureSprintLegalActionFailure,
+  mergeFeatureSprintActionAuditEntry
+} from "../core/featureSprintManualKernelBridge";
+import {
   applyAdvanceFeatureSprintStep,
   applyCompleteFeatureSprintPlan,
   applyCreateFeatureSprintPlanForCard,
@@ -120,6 +128,7 @@ import {
   type FeatureSprintStepUpdateInput,
   type FeatureSpecSaveInput
 } from "../core/featureSprintOrchestrator";
+import type { HarnessFeatureSprintNextLegalAction } from "../core/featureSprintTaskContract";
 import type { FeatureSprintRunnerResponse, FeatureSprintWorktreeCleanupResponse } from "../core/featureSprintRunner";
 import {
   completeFeatureSprintRunnerRun,
@@ -351,6 +360,16 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     planId: string,
     stepId?: string
   ) => { ok: boolean; message?: string };
+  applyFeatureSprintLegalActionForPlan: (
+    input: ApplyFeatureSprintLegalActionInput
+  ) => {
+    ok: boolean;
+    message?: string;
+    next?: HarnessFeatureSprintNextLegalAction;
+    idempotent?: boolean;
+    plan?: import("../core/types").HarnessFeatureSprintPlan;
+    data?: LifeHarnessData;
+  };
   createFeatureSprintRunnerRun: (
     input: FeatureSprintRunnerRunCreateInput
   ) => { ok: boolean; message?: string; runId?: string; safetyBlocked?: boolean };
@@ -1153,6 +1172,41 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const applyFeatureSprintLegalActionForPlanAction = useCallback(
+    (input: ApplyFeatureSprintLegalActionInput) => {
+      const result = applyFeatureSprintLegalAction(stateRef.current, input);
+      if (result.ok) {
+        stateRef.current = result.state;
+        dispatch({ type: "state_replaced", state: result.state });
+        const plan = result.state.featureSprintPlans.find((item) => item.id === input.planId);
+        return {
+          ok: true,
+          message: result.audit.reason,
+          next: result.next,
+          idempotent: result.idempotent,
+          plan,
+          data: result.state
+        };
+      }
+
+      let nextState = stateRef.current;
+      if (result.audit) {
+        nextState = mergeFeatureSprintActionAuditEntry(nextState, input.planId, result.audit);
+        if (nextState !== stateRef.current) {
+          stateRef.current = nextState;
+          dispatch({ type: "state_replaced", state: nextState });
+        }
+      }
+
+      return {
+        ok: false,
+        message: formatFeatureSprintLegalActionFailure(result.error, result.holdReason),
+        next: result.next
+      };
+    },
+    []
+  );
+
   const createFeatureSprintRunnerRunAction = useCallback(
     (input: FeatureSprintRunnerRunCreateInput) => {
       const result = createFeatureSprintRunnerRun(stateRef.current, input);
@@ -1523,6 +1577,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       importFeaturePromptAuditForPlan: importFeaturePromptAuditForPlanAction,
       importFeatureSpecUpdateForPlan: importFeatureSpecUpdateForPlanAction,
       normalizeImplementationProofForPlan: normalizeImplementationProofForPlanAction,
+      applyFeatureSprintLegalActionForPlan: applyFeatureSprintLegalActionForPlanAction,
       createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImported:
@@ -1599,6 +1654,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       importFeaturePromptLocalizationForPlanAction,
       importFeaturePromptAuditForPlanAction,
       normalizeImplementationProofForPlanAction,
+      applyFeatureSprintLegalActionForPlanAction,
       createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImportedAction,

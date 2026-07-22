@@ -8,6 +8,7 @@ import {
   resolveFeatureSprintExecutionModel,
   resolveSprintMapLifecycle
 } from "../../core/featureSprintMap";
+import { KERNEL_MANAGED_USE_PANEL_MESSAGE } from "../../core/featureSprintManualKernelBridge";
 import type {
   HarnessFeatureSprintExecutionTarget,
   HarnessFeatureSprintMap,
@@ -19,6 +20,7 @@ import { colors, styles } from "../styles";
 
 export type FeatureSprintMapPanelProps = {
   plan: HarnessFeatureSprintPlan;
+  kernelManagedReadOnly?: boolean;
   onSelectExecutionTarget: (target: HarnessFeatureSprintExecutionTarget) => void;
   onSeedFromSteps?: () => void;
   onAdoptSprintMap?: () => void;
@@ -81,6 +83,7 @@ function selectedTask(
 
 export function FeatureSprintMapPanel({
   plan,
+  kernelManagedReadOnly = false,
   onSelectExecutionTarget,
   onSeedFromSteps,
   onAdoptSprintMap,
@@ -106,7 +109,8 @@ export function FeatureSprintMapPanel({
         </Text>
         {onSeedFromSteps && plan.steps.length > 0 ? (
           <Pressable
-            style={[styles.secondaryAction, { marginTop: 12 }]}
+            style={[styles.secondaryAction, { marginTop: 12 }, kernelManagedReadOnly && { opacity: 0.5 }]}
+            disabled={kernelManagedReadOnly}
             onPress={onSeedFromSteps}
             testID="feature-sprint-map-seed"
           >
@@ -127,6 +131,11 @@ export function FeatureSprintMapPanel({
       <Text style={[styles.bodyText, { marginTop: 4 }]} testID="feature-sprint-map-lifecycle">
         {lifecycleLabel(lifecycle)}
       </Text>
+      {kernelManagedReadOnly ? (
+        <Text style={[styles.helpText, { marginTop: 8, color: colors.accentPrimary }]}>
+          {KERNEL_MANAGED_USE_PANEL_MESSAGE} Map selection and adoption are read-only here.
+        </Text>
+      ) : null}
 
       {notices.length > 0 ? (
         <View style={{ marginTop: 8, gap: 4 }} testID="feature-sprint-map-notices">
@@ -144,7 +153,8 @@ export function FeatureSprintMapPanel({
       <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
         {!authoritative && onAdoptSprintMap ? (
           <Pressable
-            style={styles.secondaryAction}
+            style={[styles.secondaryAction, kernelManagedReadOnly && { opacity: 0.5 }]}
+            disabled={kernelManagedReadOnly}
             onPress={onAdoptSprintMap}
             testID="feature-sprint-map-adopt"
           >
@@ -153,7 +163,8 @@ export function FeatureSprintMapPanel({
         ) : null}
         {authoritative && onRevertToLegacy ? (
           <Pressable
-            style={styles.secondaryAction}
+            style={[styles.secondaryAction, kernelManagedReadOnly && { opacity: 0.5 }]}
+            disabled={kernelManagedReadOnly}
             onPress={onRevertToLegacy}
             testID="feature-sprint-map-revert"
           >
@@ -241,9 +252,13 @@ export function FeatureSprintMapPanel({
                             {
                               marginTop: 2,
                               borderColor: isCurrent ? colors.accentPrimary : colors.borderStrong,
-                              opacity: status === "blocked" || status === "done" ? 0.85 : 1
+                              opacity:
+                                kernelManagedReadOnly || status === "blocked" || status === "done"
+                                  ? 0.85
+                                  : 1
                             }
                           ]}
+                          disabled={kernelManagedReadOnly}
                           onPress={() =>
                             onSelectExecutionTarget({
                               sprintId: sprint.id,
@@ -343,8 +358,10 @@ export function FeatureSprintMapPanel({
                   styles.secondaryAction,
                   plan.executionTarget?.phase === phase && {
                     borderColor: colors.accentPrimary
-                  }
+                  },
+                  kernelManagedReadOnly && { opacity: 0.5 }
                 ]}
+                disabled={kernelManagedReadOnly}
                 onPress={() =>
                   onSelectExecutionTarget({
                     sprintId: plan.executionTarget!.sprintId,
