@@ -128,3 +128,21 @@ Ask Harness / Chat Harness may send `conversation_history` and `thread_state` fo
 - Thread memory is session/in-memory only unless the user explicitly saves to Memory Bank.
 - Raw Lab to Ask Harness handoff requires explicit user action; digest is sanitized and starts a grounded thread.
 - Do not weaken S3 routing, board mutation guardrails, or Raw Lab containment when extending thread features.
+
+## Cursor Cloud specific instructions
+
+Environment is Node 22 / npm 10 / Python 3.12. A single root `npm install` covers both the Expo app and the Job Scout runner (they share the root `package.json` / `package-lock.json`). Standard commands live in `package.json`, `README.md`, and `docs/DEVELOPMENT.md` — use those rather than duplicating.
+
+Services and how to run them (all bind to localhost):
+
+- Expo web app — `npm run web` (Metro on `:8081`). This is the product.
+- Job Scout runner — `npm run scout:runner` (`127.0.0.1:8122`, health at `/health`). Required for the Career → Sources / Fit Finder flow; without it, `Sources → Run Source` only shows a start-runner message (no fetch fallback). Restart it after upgrading Workday-related code.
+- ai-gateway (optional, Python) — only for Ask Harness / Raw Lab; not a v0.1 app dependency and not installed by the update script. Set it up per `services/ai-gateway/README.md` (`pip install -e ".[dev]"`, then `SCOUT_PROVIDER=mock uvicorn app.main:app --host 127.0.0.1 --port 8111`) only when a ticket touches those surfaces.
+
+Verify/build commands: `npm run typecheck`, `npm run test` (vitest), `npm run scout:runner:test`, and web build smoke `npx expo export --platform web`.
+
+Non-obvious gotchas:
+
+- Web persistence is `localStorage` only; board changes persist across browser reload but native persistence is not implemented. Reset via Progress → Local Data → Reset to seed, or clear the origin's `localStorage`.
+- The seed state intentionally ships with 4 Active cards, so the `Active 4/3` over-limit banner shows on first load until you park/complete a card.
+- Known crash (verify whether still present before assuming): on `main` the web home (`/`, Today) and `/progress` screens hard-crash with an expo-router error — `passing an array of styles to a child of <Slot>` originating in `src/components/ProofShelf.tsx`. All other routes (Board, Career, etc.) render fine. The fix the framework suggests is to wrap the `Pressable` style with `StyleSheet.flatten(...)`; this is an app code change, out of scope for environment setup.
