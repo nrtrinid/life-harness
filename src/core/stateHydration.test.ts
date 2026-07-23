@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createSeedState } from "../data/createSeedState";
 import { seedJobSources, seedResumeModules } from "../data/seedJobScout";
 import { createCareerApplicationCard } from "./career";
+import type { LifeHarnessData } from "./lifeHarnessData";
 import {
   hydrateState,
   mergeSeedDefaults,
@@ -94,6 +95,32 @@ describe("normalizeData", () => {
     const { careerSourcePack: _removed, ...withoutPack } = state;
     const normalized = normalizeData(withoutPack);
     expect(normalized.careerSourcePack).toBeNull();
+  });
+
+  it("hydrates missing or invalid Memory Bank sensitivity as unclassified", () => {
+    const memoryBase = {
+      id: "memory-legacy",
+      kind: "pattern",
+      title: "Legacy memory",
+      summary: "Keep the original record.",
+      tags: ["legacy"],
+      isActive: true,
+      createdAt: "2026-06-09T12:00:00.000Z",
+      updatedAt: "2026-06-09T12:00:00.000Z"
+    };
+    const normalized = normalizeData({
+      memoryItems: [
+        memoryBase,
+        { ...memoryBase, id: "memory-invalid", sensitivity: "private" }
+      ]
+    } as unknown as Partial<LifeHarnessData>);
+
+    expect(normalized.memoryItems).toHaveLength(2);
+    expect(normalized.memoryItems.map((item) => item.sensitivity)).toEqual([
+      "unclassified",
+      "unclassified"
+    ]);
+    expect(normalized.memoryItems[0]).toMatchObject(memoryBase);
   });
 
   it("round-trips feature sprint plan featureSpec and automationPhase", () => {

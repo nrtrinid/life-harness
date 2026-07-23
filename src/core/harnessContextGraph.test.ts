@@ -234,6 +234,7 @@ describe("harnessContextGraph", () => {
         title: "Momentum Board",
         summary: "Loosely related title overlap only.",
         tags: ["build"],
+        sensitivity: "S1",
         isActive: true
       },
       FIXED_NOW.toISOString()
@@ -244,6 +245,7 @@ describe("harnessContextGraph", () => {
         title: "Scoped fact",
         summary: "Tagged to this card.",
         tags: [card.id],
+        sensitivity: "S1",
         isActive: true
       },
       FIXED_NOW.toISOString()
@@ -277,6 +279,7 @@ describe("harnessContextGraph", () => {
         title: "Private note",
         summary: "therapy session notes should stay out",
         tags: [card.id],
+        sensitivity: "S1",
         isActive: true
       },
       FIXED_NOW.toISOString()
@@ -287,12 +290,25 @@ describe("harnessContextGraph", () => {
         title: "Architecture decision",
         summary: "A".repeat(150),
         tags: [card.id],
+        sensitivity: "S1",
+        isActive: true
+      },
+      FIXED_NOW.toISOString()
+    );
+    const s3Memory = createMemoryItem(
+      {
+        kind: "project_fact",
+        title: "Classified architecture fact",
+        summary: "This otherwise normal fact is explicitly S3.",
+        tags: [card.id],
+        sensitivity: "S3",
         isActive: true
       },
       FIXED_NOW.toISOString()
     );
 
     expect(prepareMemoryForPacket(sensitiveMemory)).toEqual({ include: false });
+    expect(prepareMemoryForPacket(s3Memory)).toEqual({ include: false });
     expect(prepareMemoryForPacket(longBodyMemory)).toMatchObject({
       include: true,
       title: "Architecture decision",
@@ -301,7 +317,7 @@ describe("harnessContextGraph", () => {
 
     const data = baseData({
       cards: [card],
-      memoryItems: [sensitiveMemory, longBodyMemory]
+      memoryItems: [sensitiveMemory, longBodyMemory, s3Memory]
     });
     const result = buildCardContextPacket(data, card.id, { now: FIXED_NOW });
 

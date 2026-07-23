@@ -76,6 +76,7 @@ describe("lifeHarnessReducer domain delegation", () => {
           title: "Boundary test",
           summary: "Reducer parity",
           tags: ["test"],
+          sensitivity: "S1",
           createdAt: "2026-06-11T12:00:00.000Z",
           updatedAt: "2026-06-11T12:00:00.000Z",
           isActive: true

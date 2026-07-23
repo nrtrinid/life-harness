@@ -79,7 +79,8 @@ import { createId } from "../src/core/ids";
 import {
   createMemoryItem,
   memoryItemDedupeKey,
-  sortMemoryItemsNewestFirst
+  sortMemoryItemsNewestFirst,
+  type MemoryItemCandidate
 } from "../src/core/harnessMemoryBank";
 import type { HarnessChatSummary, HarnessMemoryItem, SensitivityLevel } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
@@ -573,7 +574,11 @@ export default function AskHarnessDevScreen() {
     setNotice({ kind: "success", message: "Chat memory saved." });
   }
 
-  function handleSaveMemoryBankCandidate(turnId: string, candidate: HarnessMemoryItem) {
+  function handleSaveMemoryBankCandidate(
+    turnId: string,
+    candidate: MemoryItemCandidate,
+    memorySensitivity: SensitivityLevel
+  ) {
     const key = memoryItemDedupeKey(candidate);
     const item = createMemoryItem({
       kind: candidate.kind,
@@ -582,6 +587,7 @@ export default function AskHarnessDevScreen() {
       tags: candidate.tags,
       evidence: candidate.evidence,
       sourceChatSummaryId: candidate.sourceChatSummaryId,
+      sensitivity: memorySensitivity,
       isActive: true
     });
     saveMemoryItem(item);

@@ -1,8 +1,16 @@
 import type { LifeHarnessData } from "./lifeHarnessData";
 import { createId, nowIso } from "./ids";
-import type { HarnessChatSummary, HarnessMemoryItem, HarnessMemoryKind } from "./types";
+import type {
+  HarnessChatSummary,
+  HarnessMemoryItem,
+  HarnessMemoryKind,
+  HarnessMemorySensitivity,
+  SensitivityLevel
+} from "./types";
 
 export const MEMORY_BANK_PREFIX = "Memory Bank ";
+export const MEMORY_UNCLASSIFIED_SENSITIVITY = "unclassified" as const;
+export const MEMORY_SENSITIVITY_LEVELS = ["S0", "S1", "S2", "S3"] as const satisfies readonly SensitivityLevel[];
 
 const ANALYSIS_KINDS: HarnessMemoryKind[] = [
   "pattern",
@@ -12,6 +20,15 @@ const ANALYSIS_KINDS: HarnessMemoryKind[] = [
   "project_fact"
 ];
 const DECISION_KINDS: HarnessMemoryKind[] = ["decision", "rule"];
+const MEMORY_KINDS = new Set<HarnessMemoryKind>([
+  "pattern",
+  "preference",
+  "trap",
+  "identity",
+  "project_fact",
+  "decision",
+  "rule"
+]);
 
 const EPHEMERAL_DECISION =
   /^(?:next step:|try |send |review |open |do |pick |write |apply |follow up)/i;
@@ -20,11 +37,126 @@ const TIME_BOUND =
 const DURABLE_DECISION =
   /\b(?:direction|prioritize|focus on|practical|career-first|decided to|commit to|recommendation:|current product|before tooling|before polish)\b/i;
 
-export type CreateMemoryItemInput = Omit<HarnessMemoryItem, "id" | "createdAt" | "updatedAt"> & {
+export type CreateMemoryItemInput = Omit<
+  HarnessMemoryItem,
+  "id" | "createdAt" | "updatedAt" | "sensitivity"
+> & {
+  sensitivity: SensitivityLevel;
   id?: string;
   createdAt?: string;
   updatedAt?: string;
 };
+
+export type MemoryItemCandidate = Omit<
+  CreateMemoryItemInput,
+  "sensitivity" | "id" | "createdAt" | "updatedAt"
+>;
+
+export type MemoryRetrievalEligibilityReason =
+  | "eligible"
+  | "inactive"
+  | "sensitivity_s3"
+  | "sensitivity_unclassified"
+  | "sensitivity_invalid"
+  | "malformed";
+
+export type MemoryRetrievalEligibility = {
+  eligible: boolean;
+  reason: MemoryRetrievalEligibilityReason;
+  sensitivity: HarnessMemorySensitivity | null;
+};
+
+export function isMemorySensitivityLevel(value: unknown): value is SensitivityLevel {
+  return MEMORY_SENSITIVITY_LEVELS.includes(value as SensitivityLevel);
+}
+
+export function normalizeMemorySensitivity(value: unknown): HarnessMemorySensitivity {
+  return isMemorySensitivityLevel(value) ? value : MEMORY_UNCLASSIFIED_SENSITIVITY;
+}
+
+export function normalizeMemoryItems(
+  items: HarnessMemoryItem[] | undefined
+): HarnessMemoryItem[] {
+  return (items ?? []).map((item) => ({
+    ...item,
+    sensitivity: normalizeMemorySensitivity(
+      (item as HarnessMemoryItem & { sensitivity?: unknown }).sensitivity
+    )
+  }));
+}
+
+function assertExplicitMemorySensitivity(
+  value: unknown
+): asserts value is SensitivityLevel {
+  if (!isMemorySensitivityLevel(value)) {
+    throw new Error("Memory sensitivity must be an explicit S0, S1, S2, or S3 classification.");
+  }
+}
+
+function hasCanonicalMemoryShape(value: unknown): value is HarnessMemoryItem {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.id === "string" &&
+    item.id.trim().length > 0 &&
+    typeof item.kind === "string" &&
+    MEMORY_KINDS.has(item.kind as HarnessMemoryKind) &&
+    typeof item.title === "string" &&
+    typeof item.summary === "string" &&
+    Array.isArray(item.tags) &&
+    item.tags.every((tag) => typeof tag === "string") &&
+    (item.evidence === undefined || typeof item.evidence === "string") &&
+    (item.sourceChatSummaryId === undefined || typeof item.sourceChatSummaryId === "string") &&
+    typeof item.isActive === "boolean" &&
+    typeof item.createdAt === "string" &&
+    typeof item.updatedAt === "string"
+  );
+}
+
+export function getMemoryRetrievalEligibility(
+  value: unknown
+): MemoryRetrievalEligibility {
+  if (!hasCanonicalMemoryShape(value)) {
+    return { eligible: false, reason: "malformed", sensitivity: null };
+  }
+
+  const rawSensitivity = (value as HarnessMemoryItem & { sensitivity?: unknown }).sensitivity;
+  if (
+    rawSensitivity === undefined ||
+    rawSensitivity === MEMORY_UNCLASSIFIED_SENSITIVITY
+  ) {
+    return {
+      eligible: false,
+      reason: "sensitivity_unclassified",
+      sensitivity: MEMORY_UNCLASSIFIED_SENSITIVITY
+    };
+  }
+  if (!isMemorySensitivityLevel(rawSensitivity)) {
+    return { eligible: false, reason: "sensitivity_invalid", sensitivity: null };
+  }
+  if (rawSensitivity === "S3") {
+    return { eligible: false, reason: "sensitivity_s3", sensitivity: rawSensitivity };
+  }
+  if (!value.isActive) {
+    return { eligible: false, reason: "inactive", sensitivity: rawSensitivity };
+  }
+
+  return { eligible: true, reason: "eligible", sensitivity: rawSensitivity };
+}
+
+export function isMemoryAllowedInExistingContext(value: HarnessMemoryItem): boolean {
+  const rawSensitivity = (value as HarnessMemoryItem & { sensitivity?: unknown }).sensitivity;
+  if (
+    rawSensitivity === undefined ||
+    rawSensitivity === MEMORY_UNCLASSIFIED_SENSITIVITY
+  ) {
+    return true;
+  }
+  return isMemorySensitivityLevel(rawSensitivity) && rawSensitivity !== "S3";
+}
 
 export function memoryItemDedupeKey(
   item: Pick<HarnessMemoryItem, "kind" | "title" | "sourceChatSummaryId">
@@ -92,7 +224,7 @@ function buildCandidateInput(
   title: string,
   summaryText: string,
   tags: string[] = []
-): CreateMemoryItemInput {
+): MemoryItemCandidate {
   return {
     kind,
     title,
@@ -104,6 +236,7 @@ function buildCandidateInput(
 }
 
 export function createMemoryItem(input: CreateMemoryItemInput, now = nowIso()): HarnessMemoryItem {
+  assertExplicitMemorySensitivity(input.sensitivity);
   return {
     ...input,
     id: input.id ?? createId("memory-item"),
@@ -117,20 +250,19 @@ export function createMemoryItem(input: CreateMemoryItemInput, now = nowIso()): 
 export function buildMemoryCandidatesFromChatSummary(
   summary: HarnessChatSummary,
   existingItems: HarnessMemoryItem[] = []
-): HarnessMemoryItem[] {
+): MemoryItemCandidate[] {
   const existingKeys = new Set(existingItems.map(memoryItemDedupeKey));
   const seenInCall = new Set<string>();
-  const candidates: HarnessMemoryItem[] = [];
-  const now = summary.createdAt;
+  const candidates: MemoryItemCandidate[] = [];
 
-  function addCandidate(input: CreateMemoryItemInput) {
+  function addCandidate(input: MemoryItemCandidate) {
     const key = memoryItemDedupeKey(input);
     if (seenInCall.has(key) || existingKeys.has(key)) {
       return;
     }
 
     seenInCall.add(key);
-    candidates.push(createMemoryItem(input, now));
+    candidates.push(input);
   }
 
   if (hasPatternLabel(summary, "career avoidance")) {
@@ -223,6 +355,7 @@ export function applySaveMemoryItem(
   state: LifeHarnessData,
   item: HarnessMemoryItem
 ): LifeHarnessData {
+  assertExplicitMemorySensitivity(item.sensitivity);
   return {
     ...state,
     memoryItems: [item, ...state.memoryItems]
@@ -240,6 +373,18 @@ export function applyUpdateMemoryItem(
   state: LifeHarnessData,
   item: HarnessMemoryItem
 ): LifeHarnessData {
+  const existing = state.memoryItems.find((candidate) => candidate.id === item.id);
+  if (!existing) {
+    return state;
+  }
+  if (item.sensitivity === MEMORY_UNCLASSIFIED_SENSITIVITY) {
+    if (existing.sensitivity !== MEMORY_UNCLASSIFIED_SENSITIVITY) {
+      throw new Error("A classified Memory Bank record cannot be changed back to unclassified.");
+    }
+  } else {
+    assertExplicitMemorySensitivity(item.sensitivity);
+  }
+
   return {
     ...state,
     memoryItems: state.memoryItems.map((existing) =>
@@ -298,6 +443,7 @@ export function buildMemoryBankAnalyses(
   limit: number
 ): Array<{ summary: string; patterns_detected: string[] }> {
   return sortMemoryItemsNewestFirst(getActiveMemoryItems(items))
+    .filter(isMemoryAllowedInExistingContext)
     .filter((item) => ANALYSIS_KINDS.includes(item.kind))
     .slice(0, limit)
     .map((item) => ({
@@ -311,6 +457,7 @@ export function buildMemoryBankDecisions(
   limit: number
 ): Array<{ summary: string; reason: string }> {
   return sortMemoryItemsNewestFirst(getActiveMemoryItems(items))
+    .filter(isMemoryAllowedInExistingContext)
     .filter((item) => DECISION_KINDS.includes(item.kind))
     .slice(0, limit)
     .map((item) => ({

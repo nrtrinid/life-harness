@@ -5,8 +5,10 @@ import { PageHeader } from "../src/components/PageHeader";
 import { Notice } from "../src/components/Notice";
 import { Screen } from "../src/components/Screen";
 import { Section } from "../src/components/Section";
+import { MemorySensitivityPicker } from "../src/components/memoryBank/MemorySensitivityPicker";
 import { styles } from "../src/components/styles";
 import { groupMemoryItemsByKind } from "../src/core/harnessMemoryBank";
+import { nowIso } from "../src/core/ids";
 import type { HarnessMemoryKind } from "../src/core/types";
 import { useLifeHarness } from "../src/state/LifeHarnessState";
 
@@ -31,7 +33,12 @@ const MEMORY_KIND_ORDER: HarnessMemoryKind[] = [
 ];
 
 export default function MemoryBankScreen() {
-  const { memoryItems, toggleMemoryItemActive, deleteMemoryItem } = useLifeHarness();
+  const {
+    memoryItems,
+    toggleMemoryItemActive,
+    deleteMemoryItem,
+    updateMemoryItem
+  } = useLifeHarness();
   const grouped = groupMemoryItemsByKind(memoryItems);
 
   return (
@@ -75,6 +82,17 @@ export default function MemoryBankScreen() {
                   {item.sourceChatSummaryId ? (
                     <Text style={styles.helpText}>Source chat: {item.sourceChatSummaryId}</Text>
                   ) : null}
+                  <MemorySensitivityPicker
+                    value={item.sensitivity === "unclassified" ? null : item.sensitivity}
+                    label={`Sensitivity: ${item.sensitivity}`}
+                    onChange={(sensitivity) =>
+                      updateMemoryItem({
+                        ...item,
+                        sensitivity,
+                        updatedAt: nowIso()
+                      })
+                    }
+                  />
                   <View style={[styles.splitRow, { marginTop: 8 }]}>
                     <Pressable style={styles.smallButton} onPress={() => toggleMemoryItemActive(item.id)}>
                       <Text style={styles.smallButtonText}>

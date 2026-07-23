@@ -10,7 +10,10 @@ import {
   buildHarnessContextCard,
   HARNESS_STATIC_DECISIONS,
 } from "./harnessContext";
-import { getActiveMemoryItems } from "./harnessMemoryBank";
+import {
+  getActiveMemoryItems,
+  isMemoryAllowedInExistingContext
+} from "./harnessMemoryBank";
 import { AREA_LABELS, CARD_STATE_LABELS } from "./labels";
 import { getAgentSessionsForCard } from "./agentSessionLog";
 import { buildProjectContextForCard, type CardProjectContextSummary } from "./projectRegistry";
@@ -246,6 +249,10 @@ export function isMemoryRelevantToCard(memory: HarnessMemoryItem, card: LifeCard
 export function prepareMemoryForPacket(
   memory: HarnessMemoryItem
 ): { include: false } | { include: true; title: string; kind: HarnessMemoryKind; summary?: string } {
+  if (!isMemoryAllowedInExistingContext(memory)) {
+    return { include: false };
+  }
+
   if (isSensitiveThreadLine(memory.title) || isSensitiveThreadLine(memory.summary)) {
     return { include: false };
   }
@@ -310,6 +317,7 @@ function gatherCardLogs(card: LifeCard, logs: LifeLogEntry[]): LifeLogEntry[] {
 
 function gatherCardMemories(card: LifeCard, memoryItems: HarnessMemoryItem[]): HarnessMemoryItem[] {
   return getActiveMemoryItems(memoryItems)
+    .filter(isMemoryAllowedInExistingContext)
     .filter((memory) => isMemoryRelevantToCard(memory, card))
     .slice(0, MAX_MEMORY_FACTS);
 }

@@ -399,6 +399,7 @@ function fixtureMemoryItem(overrides: Partial<HarnessMemoryItem> = {}): HarnessM
     summary: overrides.summary ?? "Career threads can stay cold while build work stays hot.",
     tags: overrides.tags ?? ["career"],
     sourceChatSummaryId: overrides.sourceChatSummaryId ?? "chat-memory-fixture",
+    sensitivity: overrides.sensitivity ?? "S1",
     isActive: overrides.isActive ?? true,
     createdAt: overrides.createdAt ?? "2026-06-09T13:00:00.000Z",
     updatedAt: overrides.updatedAt ?? "2026-06-09T13:00:00.000Z",
@@ -451,6 +452,31 @@ describe("memory bank export", () => {
     );
 
     expect(context.recent_analyses.every((item) => !item.summary.includes("Hidden pattern"))).toBe(true);
+  });
+
+  it("excludes S3 memory while preserving legacy unclassified non-retrieval behavior", () => {
+    const context = buildHarnessContext(
+      baseInput({
+        memoryItems: [
+          fixtureMemoryItem({
+            id: "memory-s3",
+            title: "Never export",
+            summary: "S3 body must remain local-only.",
+            sensitivity: "S3"
+          }),
+          fixtureMemoryItem({
+            id: "memory-legacy",
+            title: "Legacy visible",
+            summary: "Legacy memory remains usable.",
+            sensitivity: "unclassified"
+          })
+        ]
+      })
+    );
+    const serialized = JSON.stringify(context);
+
+    expect(serialized).not.toContain("S3 body must remain local-only");
+    expect(serialized).toContain("Legacy memory remains usable");
   });
 
   it("compact export retains at least three memory bank analyses when many are saved", () => {
