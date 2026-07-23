@@ -101,6 +101,7 @@ import {
 } from "../core/featureSprintApplyLegalAction";
 import {
   adoptSavedFeatureSpecAsClarifiedDraft,
+  applyClarificationAnswersForPlan,
   formatFeatureSprintLegalActionFailure,
   mergeFeatureSprintActionAuditEntry
 } from "../core/featureSprintManualKernelBridge";
@@ -372,6 +373,18 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     data?: LifeHarnessData;
   };
   adoptSavedFeatureSpecAsClarifiedDraftForPlan: (planId: string) => {
+    ok: boolean;
+    message?: string;
+    next?: HarnessFeatureSprintNextLegalAction;
+    plan?: import("../core/types").HarnessFeatureSprintPlan;
+    data?: LifeHarnessData;
+  };
+  applyClarificationAnswersForPlan: (input: {
+    planId: string;
+    actionId: string;
+    stateRevision: number;
+    answers: Array<{ questionId: string; answer: string }>;
+  }) => {
     ok: boolean;
     message?: string;
     next?: HarnessFeatureSprintNextLegalAction;
@@ -1231,6 +1244,30 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  const applyClarificationAnswersForPlanAction = useCallback(
+    (input: {
+      planId: string;
+      actionId: string;
+      stateRevision: number;
+      answers: Array<{ questionId: string; answer: string }>;
+    }) => {
+      const result = applyClarificationAnswersForPlan(stateRef.current, input);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      stateRef.current = result.state;
+      dispatch({ type: "state_replaced", state: result.state });
+      return {
+        ok: true,
+        message: result.message,
+        next: result.next,
+        plan: result.plan,
+        data: result.state
+      };
+    },
+    []
+  );
+
   const createFeatureSprintRunnerRunAction = useCallback(
     (input: FeatureSprintRunnerRunCreateInput) => {
       const result = createFeatureSprintRunnerRun(stateRef.current, input);
@@ -1604,6 +1641,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       applyFeatureSprintLegalActionForPlan: applyFeatureSprintLegalActionForPlanAction,
       adoptSavedFeatureSpecAsClarifiedDraftForPlan:
         adoptSavedFeatureSpecAsClarifiedDraftForPlanAction,
+      applyClarificationAnswersForPlan: applyClarificationAnswersForPlanAction,
       createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImported:
@@ -1682,6 +1720,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       normalizeImplementationProofForPlanAction,
       applyFeatureSprintLegalActionForPlanAction,
       adoptSavedFeatureSpecAsClarifiedDraftForPlanAction,
+      applyClarificationAnswersForPlanAction,
       createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImportedAction,

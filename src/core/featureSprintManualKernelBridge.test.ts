@@ -9,7 +9,9 @@ import {
 } from "./featureSprintKernelDogfood";
 import {
   adoptSavedFeatureSpecAsClarifiedDraft,
+  applyClarificationAnswersForPlan,
   buildApplyInputFromPresentation,
+  buildClarificationAnswersArtifactForPlan,
   buildClarifiedSpecDraftArtifactFromSavedFeatureSpec,
   buildImplementationProofArtifactForStep,
   buildLocalizationArtifactForStep,
@@ -21,10 +23,12 @@ import {
   isKernelDelegatedRunnerLaunchAllowed,
   isKernelManagedFeatureSprintPlan,
   isKernelManagedPromptAuditLaunchAllowed,
+  listOpenClarificationQuestionsForPresentation,
   presentFeatureSprintNextLegalAction,
   validateFeatureSprintLegalActionTrigger
 } from "./featureSprintManualKernelBridge";
 import { getNextFeatureSprintLegalAction } from "./featureSprintNextLegalAction";
+import { resolvePlanStateRevision } from "./featureSprintTaskContract";
 import type { LifeHarnessData } from "./lifeHarnessData";
 import {
   hasStepPromptLocalization,
@@ -593,7 +597,7 @@ describe("featureSprintManualKernelBridge unsupported artifact actions", () => {
     const presentation = presentFeatureSprintNextLegalAction(seed.state, seed.planId);
     expect(presentation.next?.action).toBe("request_clarification");
     expect(presentation.canTrigger).toBe(false);
-    expect(presentation.artifactInputHint).toContain("Clarification");
+    expect(presentation.artifactInputHint).toContain("clarification answers");
   });
 
   it("routes proof and verdict to dedicated controls", () => {
@@ -1199,5 +1203,154 @@ describe("adoptSavedFeatureSpecAsClarifiedDraft", () => {
     expect(adopted.next.action).toBe("approve_spec");
     expect(adopted.next.action).not.toBe("launch_implementation");
     expect(adopted.next.action).not.toBe("freeze_spec");
+  });
+});
+
+describe("applyClarificationAnswersForPlan", () => {
+  it("presents open required questions for request_clarification only", () => {
+    const openSeed = createMockKernelSprintSeed({ withOpenClarification: true });
+    const openPresentation = presentFeatureSprintNextLegalAction(openSeed.state, openSeed.planId);
+    expect(openPresentation.next?.action).toBe("request_clarification");
+    expect(openPresentation.canTrigger).toBe(false);
+    const questions = listOpenClarificationQuestionsForPresentation(openSeed.state.featureSprintPlans[0]);
+    expect(questions).toEqual([
+      expect.objectContaining({ id: "q1", required: true })
+    ]);
+
+    const closedSeed = createMockKernelSprintSeed({});
+    expect(presentFeatureSprintNextLegalAction(closedSeed.state, closedSeed.planId).next?.action).toBe(
+      "approve_spec"
+    );
+    expect(listOpenClarificationQuestionsForPresentation(closedSeed.state.featureSprintPlans[0])).toEqual(
+      []
+    );
+  });
+
+  it("rejects empty, whitespace, unknown, and duplicate answers without mutating", () => {
+    const seed = createMockKernelSprintSeed({ withOpenClarification: true });
+    const next = getNextFeatureSprintLegalAction(seed.state, seed.planId);
+    expect("action" in next && next.action).toBe("request_clarification");
+    if (!("action" in next)) {
+      return;
+    }
+    const beforeRevision = resolvePlanStateRevision(seed.state.featureSprintPlans[0]!);
+
+    const empty = applyClarificationAnswersForPlan(seed.state, {
+      planId: seed.planId,
+      actionId: next.actionId,
+      stateRevision: next.stateRevision,
+      answers: [{ questionId: "q1", answer: "" }]
+    });
+    expect(empty.ok).toBe(false);
+
+    const whitespace = applyClarificationAnswersForPlan(seed.state, {
+      planId: seed.planId,
+      actionId: next.actionId,
+      stateRevision: next.stateRevision,
+      answers: [{ questionId: "q1", answer: "   " }]
+    });
+    expect(whitespace.ok).toBe(false);
+
+    const unknown = applyClarificationAnswersForPlan(seed.state, {
+      planId: seed.planId,
+      actionId: next.actionId,
+      stateRevision: next.stateRevision,
+      answers: [
+        { questionId: "q1", answer: "Yes" },
+        { questionId: "unknown", answer: "Nope" }
+      ]
+    });
+    expect(unknown.ok).toBe(false);
+
+    const duplicate = applyClarificationAnswersForPlan(seed.state, {
+      planId: seed.planId,
+      actionId: next.actionId,
+      stateRevision: next.stateRevision,
+      answers: [
+        { questionId: "q1", answer: "Yes" },
+        { questionId: "q1", answer: "Also yes" }
+      ]
+    });
+    expect(duplicate.ok).toBe(false);
+
+    expect(resolvePlanStateRevision(seed.state.featureSprintPlans[0]!)).toBe(beforeRevision);
+    expect(seed.state.featureSprintPlans[0]?.clarifiedSpec?.clarificationQuestions[0]?.status).toBe(
+      "open"
+    );
+  });
+
+  it("applies valid answers and advances to approve_spec without approving or freezing", () => {
+    const seed = createMockKernelSprintSeed({ withOpenClarification: true });
+    const next = getNextFeatureSprintLegalAction(seed.state, seed.planId);
+    expect("action" in next && next.action).toBe("request_clarification");
+    if (!("action" in next)) {
+      return;
+    }
+    const applied = applyClarificationAnswersForPlan(seed.state, {
+      planId: seed.planId,
+      actionId: next.actionId,
+      stateRevision: next.stateRevision,
+      answers: [{ questionId: "q1", answer: "Yes, src/core only." }]
+    });
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) {
+      return;
+    }
+    expect(applied.plan.clarifiedSpec?.status).toBe("draft");
+    expect(applied.plan.clarifiedSpec?.approvedAt).toBeUndefined();
+    expect(applied.plan.clarifiedSpec?.frozenAt).toBeUndefined();
+    expect(applied.next.action).toBe("approve_spec");
+    expect(applied.stateRevision).toBeGreaterThan(next.stateRevision);
+    expect(
+      presentFeatureSprintNextLegalAction(applied.state, seed.planId).next?.action
+    ).toBe("approve_spec");
+  });
+
+  it("rejects stale envelopes after revision advances", () => {
+    const seed = createMockKernelSprintSeed({ withOpenClarification: true });
+    const stale = getNextFeatureSprintLegalAction(seed.state, seed.planId);
+    expect("action" in stale && stale.action).toBe("request_clarification");
+    if (!("action" in stale)) {
+      return;
+    }
+    const first = applyClarificationAnswersForPlan(seed.state, {
+      planId: seed.planId,
+      actionId: stale.actionId,
+      stateRevision: stale.stateRevision,
+      answers: [{ questionId: "q1", answer: "Answered once." }]
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      return;
+    }
+    const retry = applyClarificationAnswersForPlan(first.state, {
+      planId: seed.planId,
+      actionId: stale.actionId,
+      stateRevision: stale.stateRevision,
+      answers: [{ questionId: "q1", answer: "Stale retry." }]
+    });
+    expect(retry.ok).toBe(false);
+    expect(first.plan.clarifiedSpec?.clarificationQuestions[0]?.answer).toBe("Answered once.");
+  });
+
+  it("does not apply from presentation alone and keeps proof/verdict paths intact", () => {
+    const seed = createMockKernelSprintSeed({ withOpenClarification: true });
+    presentFeatureSprintNextLegalAction(seed.state, seed.planId);
+    expect(seed.state.featureSprintPlans[0]?.clarifiedSpec?.clarificationQuestions[0]?.status).toBe(
+      "open"
+    );
+
+    const built = buildClarificationAnswersArtifactForPlan(seed.state, {
+      planId: seed.planId,
+      actionId: "wrong",
+      stateRevision: 999,
+      answers: [{ questionId: "q1", answer: "Nope" }]
+    });
+    expect(built.ok).toBe(false);
+
+    const happy = createMockKernelSprintSeed({});
+    expect(classifyFeatureSprintLegalAction("save_implementation_proof")).toBe("artifact_required");
+    expect(classifyFeatureSprintLegalAction("import_review_verdict")).toBe("artifact_required");
+    expect(presentFeatureSprintNextLegalAction(happy.state, happy.planId).mode).toBe("kernel_managed");
   });
 });

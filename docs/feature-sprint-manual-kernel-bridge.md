@@ -36,6 +36,12 @@ Kernel-managed legacy controls disabled in the UI include:
   persisted `featureSpec.body` into a draft `clarifiedSpec` via `upsertDraftClarifiedSpec`
   (identity mapping into objective / userIntent / acceptanceCriteria). Explicit only;
   never auto-approves, freezes, or launches workers.
+- **Explicit clarification answers** — when the next legal action is
+  `request_clarification`, Backroom shows open questions and an explicit
+  **Apply clarification answers** control. Answers build the typed
+  `clarification_answers` artifact and apply through the kernel after envelope
+  re-validation. Incomplete or stale submissions do not mutate state and never
+  auto-approve, freeze, or launch workers.
 - **Explicit manual triggering** — panel triggers re-read state, validate
   `actionId` / `stateRevision`, then apply or delegate to existing runner handlers.
 - **Kernel-backed apply** — state-only actions and proof/verdict/localization
@@ -78,7 +84,7 @@ Exactly-once execution and restart reconciliation remain deferred.
 
 | Action | Panel trigger | Dedicated control |
 | --- | --- | --- |
-| `request_clarification` | Not triggerable (no input UI yet) | — |
+| `request_clarification` | Not triggerable | Apply clarification answers form |
 | `save_localization` | Not triggerable | Import localization (kernel-applied on kernel-managed plans) |
 | `save_implementation_proof` / `save_correction_proof` | Not triggerable | Normalize for review |
 | `import_review_verdict` | Not triggerable | Import review verdict |
@@ -114,6 +120,7 @@ Persisted-state exactly-once semantics are prerequisites for serial autopilot.
 | File | Role |
 | --- | --- |
 | `src/core/featureSprintManualKernelBridge.ts` | Adapter, gating, validation, artifacts, clarified-draft adopt |
+| `src/components/featureSprint/FeatureSprintClarificationAnswersForm.tsx` | Clarification answer form |
 | `src/components/featureSprint/FeatureSprintNextLegalActionPanel.tsx` | Panel UI |
 | `src/components/featureSprint/FeatureSprintStartFlow.tsx` | Adopt saved spec as clarified draft control |
 | `src/components/featureSprint/FeatureSprintMapPanel.tsx` | Read-only map when kernel-managed |

@@ -3,12 +3,14 @@ import {
   upsertDraftClarifiedSpec,
   type ApplyFeatureSprintLegalActionInput,
   type ApplyFeatureSprintLegalActionResult,
+  type ClarificationAnswersArtifact,
   type FeatureSprintLegalArtifact,
   type ImplementationProofArtifact,
   type LocalizationArtifact,
   type ReviewVerdictArtifact,
   type SpecDraftArtifact
 } from "./featureSprintApplyLegalAction";
+import { listOpenRequiredClarifications } from "./featureSprintClarifiedSpec";
 import { buildImplementationProofFromSources, resolveLatestImplementationRunForStep } from "./featureSprintImplementationProof";
 import { findTaskInFeatureSprintMap } from "./featureSprintMap";
 import { getNextFeatureSprintLegalAction } from "./featureSprintNextLegalAction";
@@ -167,7 +169,7 @@ export function hasDedicatedArtifactHandler(
 export function describeArtifactActionInput(action: HarnessFeatureSprintLegalAction): string {
   switch (action) {
     case "request_clarification":
-      return "Clarification answers are not wired yet. Resolve open questions before continuing.";
+      return "Use Apply clarification answers below.";
     case "save_localization":
       return "Use the localization import controls below.";
     case "save_implementation_proof":
@@ -855,5 +857,166 @@ export function adoptSavedFeatureSpecAsClarifiedDraft(
     next: result.next,
     message: result.audit.reason,
     plan: nextPlan
+  };
+}
+
+export type ClarificationQuestionPresentation = {
+  id: string;
+  question: string;
+  required: boolean;
+};
+
+/** Open clarification questions for UI (required flagged when required !== false). */
+export function listOpenClarificationQuestionsForPresentation(
+  plan: HarnessFeatureSprintPlan | undefined
+): ClarificationQuestionPresentation[] {
+  const questions = plan?.clarifiedSpec?.clarificationQuestions ?? [];
+  return questions
+    .filter((question) => question.status === "open")
+    .map((question) => ({
+      id: question.id,
+      question: question.question,
+      required: question.required !== false
+    }));
+}
+
+export type BuildClarificationAnswersInput = {
+  planId: string;
+  actionId: string;
+  stateRevision: number;
+  answers: Array<{ questionId: string; answer: string }>;
+};
+
+export type BuildClarificationAnswersResult =
+  | {
+      ok: true;
+      artifact: ClarificationAnswersArtifact;
+      next: HarnessFeatureSprintNextLegalAction;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Re-reads current state, validates envelope + answers against open questions,
+ * and builds the typed clarification_answers artifact. Does not mutate state.
+ */
+export function buildClarificationAnswersArtifactForPlan(
+  data: LifeHarnessData,
+  input: BuildClarificationAnswersInput,
+  now: Date = new Date()
+): BuildClarificationAnswersResult {
+  const plan = findPlan(data, input.planId);
+  if (!plan) {
+    return { ok: false, error: `Plan not found: ${input.planId}` };
+  }
+  if (!plan.clarifiedSpec) {
+    return { ok: false, error: "Plan has no clarified specification." };
+  }
+
+  const validation = validateFeatureSprintLegalActionTrigger(data, {
+    planId: input.planId,
+    actionId: input.actionId,
+    stateRevision: input.stateRevision,
+    expectedAction: "request_clarification"
+  }, now);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      error: formatFeatureSprintLegalActionFailure(validation.error, validation.holdReason)
+    };
+  }
+
+  const questionIds = input.answers.map((item) => item.questionId);
+  const uniqueIds = new Set(questionIds);
+  if (uniqueIds.size !== questionIds.length) {
+    return { ok: false, error: "Duplicate clarification question IDs are not allowed." };
+  }
+
+  const knownIds = new Set(plan.clarifiedSpec.clarificationQuestions.map((item) => item.id));
+  const unknown = questionIds.filter((id) => !knownIds.has(id));
+  if (unknown.length > 0) {
+    return {
+      ok: false,
+      error: `Unknown clarification question id(s): ${unknown.join(", ")}.`
+    };
+  }
+
+  const openRequired = listOpenRequiredClarifications(plan.clarifiedSpec);
+  const answerById = new Map(
+    input.answers.map((item) => [item.questionId, item.answer] as const)
+  );
+  for (const question of openRequired) {
+    const raw = answerById.get(question.id);
+    if (raw == null || !raw.trim()) {
+      return {
+        ok: false,
+        error: `Required clarification answer missing for ${question.id}.`
+      };
+    }
+  }
+
+  const artifact: ClarificationAnswersArtifact = {
+    type: "clarification_answers",
+    specRevision: plan.clarifiedSpec.revision,
+    answers: input.answers.map((item) => ({
+      questionId: item.questionId,
+      answer: item.answer.trim()
+    }))
+  };
+
+  return { ok: true, artifact, next: validation.next };
+}
+
+export type ApplyClarificationAnswersResult =
+  | {
+      ok: true;
+      state: LifeHarnessData;
+      stateRevision: number;
+      next: HarnessFeatureSprintNextLegalAction;
+      message: string;
+      plan: HarnessFeatureSprintPlan;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Explicit clarification submit: validate → build artifact → applyFeatureSprintLegalAction.
+ * Never auto-approves, freezes, or launches workers.
+ */
+export function applyClarificationAnswersForPlan(
+  data: LifeHarnessData,
+  input: BuildClarificationAnswersInput,
+  now: Date = new Date()
+): ApplyClarificationAnswersResult {
+  const built = buildClarificationAnswersArtifactForPlan(data, input, now);
+  if (!built.ok) {
+    return { ok: false, error: built.error };
+  }
+  const result = applyFeatureSprintLegalAction(
+    data,
+    {
+      planId: input.planId,
+      actionId: input.actionId,
+      stateRevision: input.stateRevision,
+      expectedAction: "request_clarification",
+      artifact: built.artifact
+    },
+    now
+  );
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: formatFeatureSprintLegalActionFailure(result.error, result.holdReason)
+    };
+  }
+  const plan = result.state.featureSprintPlans.find((item) => item.id === input.planId);
+  if (!plan) {
+    return { ok: false, error: `Plan missing after clarification apply: ${input.planId}` };
+  }
+  return {
+    ok: true,
+    state: result.state,
+    stateRevision: result.stateRevision,
+    next: result.next,
+    message: result.audit.reason,
+    plan
   };
 }
