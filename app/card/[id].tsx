@@ -8,6 +8,7 @@ import { FeatureRunnerOutputDetails } from "../../src/components/featureSprint/F
 import { FeatureSprintActionGuide } from "../../src/components/featureSprint/FeatureSprintActionGuide";
 import { FeatureSprintFlowGuide } from "../../src/components/featureSprint/FeatureSprintFlowGuide";
 import { FeatureSprintMapPanel } from "../../src/components/featureSprint/FeatureSprintMapPanel";
+import { FeatureSprintClarificationAnswersForm } from "../../src/components/featureSprint/FeatureSprintClarificationAnswersForm";
 import { FeatureSprintNextLegalActionPanel } from "../../src/components/featureSprint/FeatureSprintNextLegalActionPanel";
 import { FeatureSprintStartFlow } from "../../src/components/featureSprint/FeatureSprintStartFlow";
 import { CollapsibleSection } from "../../src/components/CollapsibleSection";
@@ -72,6 +73,7 @@ import {
   buildLocalizationArtifactForStep,
   isKernelManagedFeatureSprintPlan,
   KERNEL_LAUNCH_INTENT_APPLIED_MESSAGE,
+  listOpenClarificationQuestionsForPresentation,
   presentFeatureSprintNextLegalAction,
   resolveManualKernelBridgeTriggerKind,
   validateFeatureSprintLegalActionTrigger
@@ -359,6 +361,7 @@ export default function CardDetailScreen() {
     normalizeImplementationProofForPlan,
     applyFeatureSprintLegalActionForPlan,
     adoptSavedFeatureSpecAsClarifiedDraftForPlan,
+    applyClarificationAnswersForPlan,
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
     markMostRecentFeatureSprintRunnerRunImported,
@@ -421,6 +424,8 @@ export default function CardDetailScreen() {
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [isTriggeringKernelAction, setIsTriggeringKernelAction] = useState(false);
   const [isAdoptingClarifiedDraft, setIsAdoptingClarifiedDraft] = useState(false);
+  const [isApplyingClarificationAnswers, setIsApplyingClarificationAnswers] = useState(false);
+  const [clarificationFormError, setClarificationFormError] = useState<string | null>(null);
   const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
   const [forceCleanEligibleRunId, setForceCleanEligibleRunId] = useState<string | null>(null);
   const [cleaningRunId, setCleaningRunId] = useState<string | null>(null);
@@ -997,6 +1002,41 @@ export default function CardDetailScreen() {
       );
     } finally {
       setIsAdoptingClarifiedDraft(false);
+    }
+  }
+
+  function handleApplyClarificationAnswers(
+    answers: Array<{ questionId: string; answer: string }>
+  ) {
+    if (!activeFeatureSprintPlan || !kernelNextLegalActionPresentation?.next) {
+      return;
+    }
+    if (kernelNextLegalActionPresentation.next.action !== "request_clarification") {
+      setClarificationFormError("Clarification is not the current legal action.");
+      return;
+    }
+    if (isApplyingClarificationAnswers) {
+      return;
+    }
+    setIsApplyingClarificationAnswers(true);
+    setClarificationFormError(null);
+    try {
+      const envelope = kernelNextLegalActionPresentation.next;
+      const result = applyClarificationAnswersForPlan({
+        planId: activeFeatureSprintPlan.id,
+        actionId: envelope.actionId,
+        stateRevision: envelope.stateRevision,
+        answers
+      });
+      if (!result.ok) {
+        setClarificationFormError(result.message ?? "Could not apply clarification answers.");
+        showNotice("warning", result.message ?? "Could not apply clarification answers.");
+        return;
+      }
+      setClarificationFormError(null);
+      showNotice("success", result.message ?? "Clarification answers applied.");
+    } finally {
+      setIsApplyingClarificationAnswers(false);
     }
   }
 
@@ -2303,6 +2343,18 @@ export default function CardDetailScreen() {
             onTrigger={() => {
               void handleTriggerKernelLegalAction();
             }}
+          />
+        ) : null}
+
+        {kernelNextLegalActionPresentation?.next?.action === "request_clarification" &&
+        activeFeatureSprintPlan ? (
+          <FeatureSprintClarificationAnswersForm
+            questions={listOpenClarificationQuestionsForPresentation(activeFeatureSprintPlan)}
+            stateRevision={kernelNextLegalActionPresentation.next.stateRevision}
+            actionId={kernelNextLegalActionPresentation.next.actionId}
+            isSubmitting={isApplyingClarificationAnswers}
+            error={clarificationFormError ?? undefined}
+            onSubmit={handleApplyClarificationAnswers}
           />
         ) : null}
 
