@@ -8,12 +8,15 @@ import {
   runMockFeatureSprintKernelLoop
 } from "./featureSprintKernelDogfood";
 import {
+  adoptSavedFeatureSpecAsClarifiedDraft,
   buildApplyInputFromPresentation,
+  buildClarifiedSpecDraftArtifactFromSavedFeatureSpec,
   buildImplementationProofArtifactForStep,
   buildLocalizationArtifactForStep,
   buildReviewVerdictArtifactForStep,
   canTriggerFeatureSprintAction,
   classifyFeatureSprintLegalAction,
+  evaluateAdoptSavedFeatureSpecAsClarifiedDraft,
   guardKernelManagedLegacyControl,
   isKernelDelegatedRunnerLaunchAllowed,
   isKernelManagedFeatureSprintPlan,
@@ -958,5 +961,243 @@ describe("featureSprintManualKernelBridge prompt audit policy", () => {
       clarifiedSpec: undefined
     };
     expect(isKernelManagedPromptAuditLaunchAllowed(legacyPlan)).toBe(true);
+  });
+});
+
+const SAVED_SPEC_BODY =
+  "On an active Feature Sprint plan, add an explicit Backroom control that adopts the saved feature specification as a draft clarifiedSpec.";
+
+function legacyPlanWithSavedFeatureSpec(seed: ReturnType<typeof createMockKernelSprintSeed>) {
+  const plan = {
+    ...seed.state.featureSprintPlans[0]!,
+    clarifiedSpec: undefined,
+    clarifiedSpecHistory: undefined,
+    featureSpec: {
+      body: SAVED_SPEC_BODY,
+      source: "manual" as const,
+      updatedAt: "2026-07-22T12:00:00.000Z"
+    }
+  };
+  return {
+    plan,
+    state: {
+      ...seed.state,
+      featureSprintPlans: [plan]
+    } satisfies LifeHarnessData
+  };
+}
+
+describe("adoptSavedFeatureSpecAsClarifiedDraft", () => {
+  it("adopts a saved feature specification into a draft clarifiedSpec", () => {
+    const seed = createMockKernelSprintSeed({});
+    const { plan, state } = legacyPlanWithSavedFeatureSpec(seed);
+    expect(isKernelManagedFeatureSprintPlan(plan)).toBe(false);
+    expect(evaluateAdoptSavedFeatureSpecAsClarifiedDraft(plan).available).toBe(true);
+
+    const beforePresentation = presentFeatureSprintNextLegalAction(state, seed.planId);
+    expect(beforePresentation.mode).toBe("legacy_manual");
+
+    const adopted = adoptSavedFeatureSpecAsClarifiedDraft(state, seed.planId);
+    expect(adopted.ok).toBe(true);
+    if (!adopted.ok) {
+      return;
+    }
+    expect(isKernelManagedFeatureSprintPlan(adopted.plan)).toBe(true);
+    expect(adopted.plan.clarifiedSpec?.status).toBe("draft");
+    expect(adopted.plan.clarifiedSpec?.objective).toBe(SAVED_SPEC_BODY);
+    expect(adopted.plan.clarifiedSpec?.userIntent).toBe(SAVED_SPEC_BODY);
+    expect(adopted.plan.clarifiedSpec?.acceptanceCriteria).toEqual([SAVED_SPEC_BODY]);
+    expect(adopted.plan.clarifiedSpec?.status).not.toBe("approved");
+    expect(adopted.plan.clarifiedSpec?.status).not.toBe("frozen");
+    expect(adopted.plan.clarifiedSpec?.approvedAt).toBeUndefined();
+    expect(adopted.plan.clarifiedSpec?.frozenAt).toBeUndefined();
+
+    const presentation = presentFeatureSprintNextLegalAction(adopted.state, seed.planId);
+    expect(presentation.mode).toBe("kernel_managed");
+    expect(presentation.next?.action).toBe("approve_spec");
+    expect(guardKernelManagedLegacyControl(adopted.plan, "launch_implementation").mode).toBe(
+      "kernel_blocked"
+    );
+  });
+
+  it("does not adopt from presentation alone", () => {
+    const seed = createMockKernelSprintSeed({});
+    const { state } = legacyPlanWithSavedFeatureSpec(seed);
+    presentFeatureSprintNextLegalAction(state, seed.planId);
+    const plan = state.featureSprintPlans[0]!;
+    expect(plan.clarifiedSpec).toBeUndefined();
+    expect(isKernelManagedFeatureSprintPlan(plan)).toBe(false);
+  });
+
+  it("rejects missing or empty saved feature specification without mutating", () => {
+    const seed = createMockKernelSprintSeed({});
+    const bare = {
+      ...seed.state.featureSprintPlans[0]!,
+      clarifiedSpec: undefined,
+      clarifiedSpecHistory: undefined,
+      featureSpec: undefined
+    };
+    const empty = {
+      ...bare,
+      featureSpec: { body: "   ", source: "manual" as const, updatedAt: "2026-07-22T12:00:00.000Z" }
+    };
+    const bareState = { ...seed.state, featureSprintPlans: [bare] };
+    const emptyState = { ...seed.state, featureSprintPlans: [empty] };
+
+    expect(evaluateAdoptSavedFeatureSpecAsClarifiedDraft(bare).available).toBe(false);
+    expect(buildClarifiedSpecDraftArtifactFromSavedFeatureSpec(bare).ok).toBe(false);
+    expect(adoptSavedFeatureSpecAsClarifiedDraft(bareState, seed.planId).ok).toBe(false);
+    expect(bareState.featureSprintPlans[0]?.clarifiedSpec).toBeUndefined();
+
+    expect(adoptSavedFeatureSpecAsClarifiedDraft(emptyState, seed.planId).ok).toBe(false);
+    expect(emptyState.featureSprintPlans[0]?.clarifiedSpec).toBeUndefined();
+  });
+
+  it("rejects frozen and approved overwrite while allowing explicit draft replacement", () => {
+    const seed = createMockKernelSprintSeed({});
+    // Freeze the seed plan via legal actions, then attach a saved featureSpec for adopt attempt.
+    let state = seed.state;
+    for (const expected of ["approve_spec", "freeze_spec"] as const) {
+      const next = getNextFeatureSprintLegalAction(state, seed.planId);
+      expect("action" in next && next.action).toBe(expected);
+      if (!("action" in next)) {
+        return;
+      }
+      const applied = applyFeatureSprintLegalAction(state, buildApplyInputFromPresentation(next));
+      expect(applied.ok).toBe(true);
+      if (!applied.ok) {
+        return;
+      }
+      state = applied.state;
+    }
+    const frozenPlan = {
+      ...state.featureSprintPlans[0]!,
+      featureSpec: {
+        body: SAVED_SPEC_BODY,
+        source: "manual" as const,
+        updatedAt: "2026-07-22T12:00:00.000Z"
+      }
+    };
+    expect(evaluateAdoptSavedFeatureSpecAsClarifiedDraft(frozenPlan).available).toBe(false);
+    expect(
+      adoptSavedFeatureSpecAsClarifiedDraft(
+        { ...state, featureSprintPlans: [frozenPlan] },
+        seed.planId
+      ).ok
+    ).toBe(false);
+
+    const approvedState = {
+      ...seed.state,
+      featureSprintPlans: [
+        {
+          ...seed.state.featureSprintPlans[0]!,
+          clarifiedSpec: {
+            ...seed.state.featureSprintPlans[0]!.clarifiedSpec!,
+            status: "approved" as const,
+            approvedAt: "2026-07-22T12:00:00.000Z"
+          },
+          featureSpec: {
+            body: SAVED_SPEC_BODY,
+            source: "manual" as const,
+            updatedAt: "2026-07-22T12:00:00.000Z"
+          }
+        }
+      ]
+    };
+    expect(evaluateAdoptSavedFeatureSpecAsClarifiedDraft(approvedState.featureSprintPlans[0]).available).toBe(
+      false
+    );
+    expect(adoptSavedFeatureSpecAsClarifiedDraft(approvedState, seed.planId).ok).toBe(false);
+
+    const { state: legacyState } = legacyPlanWithSavedFeatureSpec(seed);
+    const first = adoptSavedFeatureSpecAsClarifiedDraft(legacyState, seed.planId);
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      return;
+    }
+    const replacedBody = `${SAVED_SPEC_BODY} (revised)`;
+    const withNewBody = {
+      ...first.state,
+      featureSprintPlans: [
+        {
+          ...first.plan,
+          featureSpec: {
+            body: replacedBody,
+            source: "manual" as const,
+            updatedAt: "2026-07-22T13:00:00.000Z"
+          }
+        }
+      ]
+    };
+    const second = adoptSavedFeatureSpecAsClarifiedDraft(withNewBody, seed.planId);
+    expect(second.ok).toBe(true);
+    if (!second.ok) {
+      return;
+    }
+    expect(second.plan.clarifiedSpec?.objective).toBe(replacedBody);
+    expect(second.plan.clarifiedSpec?.status).toBe("draft");
+  });
+
+  it("re-reads current state and leaves unrelated plans unchanged", () => {
+    const seed = createMockKernelSprintSeed({});
+    const { plan, state } = legacyPlanWithSavedFeatureSpec(seed);
+    const otherPlan = {
+      ...plan,
+      id: "plan-other",
+      clarifiedSpec: undefined,
+      featureSpec: {
+        body: "Other plan body",
+        source: "manual" as const,
+        updatedAt: "2026-07-22T12:00:00.000Z"
+      }
+    };
+    const multi = {
+      ...state,
+      featureSprintPlans: [plan, otherPlan]
+    };
+    const adopted = adoptSavedFeatureSpecAsClarifiedDraft(multi, seed.planId);
+    expect(adopted.ok).toBe(true);
+    if (!adopted.ok) {
+      return;
+    }
+    expect(adopted.state.featureSprintPlans.find((item) => item.id === "plan-other")?.clarifiedSpec).toBeUndefined();
+    expect(
+      isKernelManagedFeatureSprintPlan(
+        adopted.state.featureSprintPlans.find((item) => item.id === seed.planId)!
+      )
+    ).toBe(true);
+
+    const protectedState = {
+      ...multi,
+      featureSprintPlans: [
+        {
+          ...plan,
+          clarifiedSpec: {
+            ...seed.state.featureSprintPlans[0]!.clarifiedSpec!,
+            status: "frozen" as const,
+            frozenAt: "2026-07-22T12:00:00.000Z"
+          },
+          featureSpec: plan.featureSpec
+        },
+        otherPlan
+      ]
+    };
+    const blocked = adoptSavedFeatureSpecAsClarifiedDraft(protectedState, seed.planId);
+    expect(blocked.ok).toBe(false);
+    expect(protectedState.featureSprintPlans[0]?.clarifiedSpec?.status).toBe("frozen");
+  });
+
+  it("keeps legacy controls until adoption and does not launch workers", () => {
+    const seed = createMockKernelSprintSeed({});
+    const { plan, state } = legacyPlanWithSavedFeatureSpec(seed);
+    expect(guardKernelManagedLegacyControl(plan, "launch_implementation").mode).toBe("legacy_manual");
+    const adopted = adoptSavedFeatureSpecAsClarifiedDraft(state, seed.planId);
+    expect(adopted.ok).toBe(true);
+    if (!adopted.ok) {
+      return;
+    }
+    expect(adopted.next.action).toBe("approve_spec");
+    expect(adopted.next.action).not.toBe("launch_implementation");
+    expect(adopted.next.action).not.toBe("freeze_spec");
   });
 });

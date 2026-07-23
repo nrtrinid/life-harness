@@ -24,8 +24,12 @@ export type FeatureSprintStartFlowProps = {
   hasPersistedFeatureSpec: boolean;
   revisedSpecAwaitingApproval?: boolean;
   kernelManagedPlan?: boolean;
+  adoptClarifiedDraftAvailable?: boolean;
+  adoptClarifiedDraftReason?: string;
+  isAdoptingClarifiedDraft?: boolean;
   onSaveFeatureSpec: () => void;
   onApproveFeatureSpec: () => void;
+  onAdoptSavedSpecAsClarifiedDraft?: () => void;
 
   runnerAgent: FeatureSprintRunnerAgent;
   onSelectRunnerAgent: (agent: FeatureSprintRunnerAgent) => void;
@@ -146,8 +150,12 @@ export function FeatureSprintStartFlow({
   hasPersistedFeatureSpec,
   revisedSpecAwaitingApproval = false,
   kernelManagedPlan = false,
+  adoptClarifiedDraftAvailable = false,
+  adoptClarifiedDraftReason,
+  isAdoptingClarifiedDraft = false,
   onSaveFeatureSpec,
   onApproveFeatureSpec,
+  onAdoptSavedSpecAsClarifiedDraft,
   runnerAgent,
   onSelectRunnerAgent,
   runnerHealth,
@@ -220,6 +228,16 @@ export function FeatureSprintStartFlow({
             {KERNEL_MANAGED_USE_PANEL_MESSAGE} Legacy feature-spec approval is disabled here.
           </Text>
         ) : null}
+        {!adoptClarifiedDraftAvailable && adoptClarifiedDraftReason ? (
+          <Text style={[styles.helpText, { marginTop: 4 }]}>{adoptClarifiedDraftReason}</Text>
+        ) : null}
+        {adoptClarifiedDraftAvailable ? (
+          <Text style={[styles.helpText, { marginTop: 4 }]}>
+            {kernelManagedPlan
+              ? "Adopting replaces the current draft clarifiedSpec from the saved feature specification. It does not approve, freeze, or launch workers."
+              : "Adopting creates a draft clarifiedSpec and switches this plan to kernel-managed mode. It does not approve, freeze, or launch workers."}
+          </Text>
+        ) : null}
         <View style={[styles.cardActionsRow, { marginTop: 8, flexWrap: "wrap" }]}>
           <Pressable
             style={[
@@ -251,6 +269,21 @@ export function FeatureSprintStartFlow({
           >
             <Text style={styles.secondaryActionText}>Approve feature spec</Text>
           </Pressable>
+          {onAdoptSavedSpecAsClarifiedDraft ? (
+            <Pressable
+              testID="feature-sprint-adopt-clarified-draft"
+              style={[
+                styles.secondaryAction,
+                (!adoptClarifiedDraftAvailable || isAdoptingClarifiedDraft) && { opacity: 0.5 }
+              ]}
+              disabled={!adoptClarifiedDraftAvailable || isAdoptingClarifiedDraft}
+              onPress={onAdoptSavedSpecAsClarifiedDraft}
+            >
+              <Text style={styles.secondaryActionText}>
+                {isAdoptingClarifiedDraft ? "Adopting…" : "Adopt saved spec as clarified draft"}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.secondaryAction} onPress={onClearSpec}>
             <Text style={styles.secondaryActionText}>Clear spec</Text>
           </Pressable>

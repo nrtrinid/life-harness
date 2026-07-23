@@ -32,6 +32,10 @@ Kernel-managed legacy controls disabled in the UI include:
 - **Read-only recommendation** — `presentFeatureSprintNextLegalAction` calls
   `getNextFeatureSprintLegalAction` and surfaces a typed envelope in the Backroom
   card UI (`FeatureSprintNextLegalActionPanel`).
+- **Explicit clarified-draft adopt** — `Adopt saved spec as clarified draft` lifts the
+  persisted `featureSpec.body` into a draft `clarifiedSpec` via `upsertDraftClarifiedSpec`
+  (identity mapping into objective / userIntent / acceptanceCriteria). Explicit only;
+  never auto-approves, freezes, or launches workers.
 - **Explicit manual triggering** — panel triggers re-read state, validate
   `actionId` / `stateRevision`, then apply or delegate to existing runner handlers.
 - **Kernel-backed apply** — state-only actions and proof/verdict/localization
@@ -109,11 +113,12 @@ Persisted-state exactly-once semantics are prerequisites for serial autopilot.
 
 | File | Role |
 | --- | --- |
-| `src/core/featureSprintManualKernelBridge.ts` | Adapter, gating, validation, artifacts |
+| `src/core/featureSprintManualKernelBridge.ts` | Adapter, gating, validation, artifacts, clarified-draft adopt |
 | `src/components/featureSprint/FeatureSprintNextLegalActionPanel.tsx` | Panel UI |
+| `src/components/featureSprint/FeatureSprintStartFlow.tsx` | Adopt saved spec as clarified draft control |
 | `src/components/featureSprint/FeatureSprintMapPanel.tsx` | Read-only map when kernel-managed |
-| `src/state/LifeHarnessState.tsx` | `applyFeatureSprintLegalActionForPlan` |
-| `app/card/[id].tsx` | Guards, panel trigger, delegated runner launches |
+| `src/state/LifeHarnessState.tsx` | `applyFeatureSprintLegalActionForPlan`, `adoptSavedFeatureSpecAsClarifiedDraftForPlan` |
+| `app/card/[id].tsx` | Guards, panel trigger, delegated runner launches, adopt handler |
 
 ## Default autonomy
 
