@@ -100,6 +100,7 @@ import {
   type ApplyFeatureSprintLegalActionInput
 } from "../core/featureSprintApplyLegalAction";
 import {
+  adoptSavedFeatureSpecAsClarifiedDraft,
   formatFeatureSprintLegalActionFailure,
   mergeFeatureSprintActionAuditEntry
 } from "../core/featureSprintManualKernelBridge";
@@ -367,6 +368,13 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     message?: string;
     next?: HarnessFeatureSprintNextLegalAction;
     idempotent?: boolean;
+    plan?: import("../core/types").HarnessFeatureSprintPlan;
+    data?: LifeHarnessData;
+  };
+  adoptSavedFeatureSpecAsClarifiedDraftForPlan: (planId: string) => {
+    ok: boolean;
+    message?: string;
+    next?: HarnessFeatureSprintNextLegalAction;
     plan?: import("../core/types").HarnessFeatureSprintPlan;
     data?: LifeHarnessData;
   };
@@ -1207,6 +1215,22 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const adoptSavedFeatureSpecAsClarifiedDraftForPlanAction = useCallback((planId: string) => {
+    const result = adoptSavedFeatureSpecAsClarifiedDraft(stateRef.current, planId);
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+    stateRef.current = result.state;
+    dispatch({ type: "state_replaced", state: result.state });
+    return {
+      ok: true,
+      message: result.message,
+      next: result.next,
+      plan: result.plan,
+      data: result.state
+    };
+  }, []);
+
   const createFeatureSprintRunnerRunAction = useCallback(
     (input: FeatureSprintRunnerRunCreateInput) => {
       const result = createFeatureSprintRunnerRun(stateRef.current, input);
@@ -1578,6 +1602,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       importFeatureSpecUpdateForPlan: importFeatureSpecUpdateForPlanAction,
       normalizeImplementationProofForPlan: normalizeImplementationProofForPlanAction,
       applyFeatureSprintLegalActionForPlan: applyFeatureSprintLegalActionForPlanAction,
+      adoptSavedFeatureSpecAsClarifiedDraftForPlan:
+        adoptSavedFeatureSpecAsClarifiedDraftForPlanAction,
       createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImported:
@@ -1655,6 +1681,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       importFeaturePromptAuditForPlanAction,
       normalizeImplementationProofForPlanAction,
       applyFeatureSprintLegalActionForPlanAction,
+      adoptSavedFeatureSpecAsClarifiedDraftForPlanAction,
       createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImportedAction,

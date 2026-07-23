@@ -62,6 +62,7 @@ import {
   buildApplyInputFromPresentation,
   buildImplementationProofArtifactForStep,
   buildReviewVerdictArtifactForStep,
+  evaluateAdoptSavedFeatureSpecAsClarifiedDraft,
   formatFeatureSprintLegalActionFailure,
   guardKernelManagedLegacyControl,
   isKernelDelegatedRunnerLaunchAllowed,
@@ -357,6 +358,7 @@ export default function CardDetailScreen() {
     importFeatureSpecUpdateForPlan,
     normalizeImplementationProofForPlan,
     applyFeatureSprintLegalActionForPlan,
+    adoptSavedFeatureSpecAsClarifiedDraftForPlan,
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
     markMostRecentFeatureSprintRunnerRunImported,
@@ -418,6 +420,7 @@ export default function CardDetailScreen() {
   const [isNormalizingProof, setIsNormalizingProof] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [isTriggeringKernelAction, setIsTriggeringKernelAction] = useState(false);
+  const [isAdoptingClarifiedDraft, setIsAdoptingClarifiedDraft] = useState(false);
   const [selectedRunnerRunId, setSelectedRunnerRunId] = useState<string | null>(null);
   const [forceCleanEligibleRunId, setForceCleanEligibleRunId] = useState<string | null>(null);
   const [cleaningRunId, setCleaningRunId] = useState<string | null>(null);
@@ -702,6 +705,9 @@ export default function CardDetailScreen() {
   const kernelManagedPlan = Boolean(
     activeFeatureSprintPlan && isKernelManagedFeatureSprintPlan(activeFeatureSprintPlan)
   );
+  const adoptClarifiedDraftAvailability = evaluateAdoptSavedFeatureSpecAsClarifiedDraft(
+    activeFeatureSprintPlan
+  );
 
   const cardProject = getProjectForCard(lifeHarnessData, card.id);
   const currentFeatureStep = activeFeatureSprintPlan?.steps.find(
@@ -968,6 +974,30 @@ export default function CardDetailScreen() {
       source: featureSpecSource
     });
     showNotice(result.ok ? "success" : "warning", result.message ?? "Could not save feature spec.");
+  }
+
+  function handleAdoptSavedSpecAsClarifiedDraft() {
+    if (!activeFeatureSprintPlan || isAdoptingClarifiedDraft) {
+      return;
+    }
+    const availability = evaluateAdoptSavedFeatureSpecAsClarifiedDraft(activeFeatureSprintPlan);
+    if (!availability.available) {
+      showNotice("warning", availability.reason);
+      return;
+    }
+    setIsAdoptingClarifiedDraft(true);
+    try {
+      const result = adoptSavedFeatureSpecAsClarifiedDraftForPlan(activeFeatureSprintPlan.id);
+      showNotice(
+        result.ok ? "success" : "warning",
+        result.message ??
+          (result.ok
+            ? "Saved feature specification adopted as clarified draft."
+            : "Could not adopt clarified draft.")
+      );
+    } finally {
+      setIsAdoptingClarifiedDraft(false);
+    }
   }
 
   function showKernelLegacyBlockNotice(plan: typeof activeFeatureSprintPlan) {
@@ -2188,8 +2218,16 @@ export default function CardDetailScreen() {
             stepRequiresSpecUpdate && !currentStepSpecUpdateSatisfied && Boolean(latestSpecUpdateForCurrentStep)
           }
           kernelManagedPlan={kernelManagedPlan}
+          adoptClarifiedDraftAvailable={adoptClarifiedDraftAvailability.available}
+          adoptClarifiedDraftReason={
+            adoptClarifiedDraftAvailability.available
+              ? undefined
+              : adoptClarifiedDraftAvailability.reason
+          }
+          isAdoptingClarifiedDraft={isAdoptingClarifiedDraft}
           onSaveFeatureSpec={handleSaveFeatureSpec}
           onApproveFeatureSpec={handleApproveFeatureSpec}
+          onAdoptSavedSpecAsClarifiedDraft={handleAdoptSavedSpecAsClarifiedDraft}
           runnerAgent={runnerAgent}
           onSelectRunnerAgent={setRunnerAgent}
           runnerHealth={runnerHealth}

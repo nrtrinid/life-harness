@@ -1,16 +1,21 @@
 import {
   applyFeatureSprintLegalAction,
+  upsertDraftClarifiedSpec,
   type ApplyFeatureSprintLegalActionInput,
   type ApplyFeatureSprintLegalActionResult,
   type FeatureSprintLegalArtifact,
   type ImplementationProofArtifact,
   type LocalizationArtifact,
-  type ReviewVerdictArtifact
+  type ReviewVerdictArtifact,
+  type SpecDraftArtifact
 } from "./featureSprintApplyLegalAction";
 import { buildImplementationProofFromSources, resolveLatestImplementationRunForStep } from "./featureSprintImplementationProof";
 import { findTaskInFeatureSprintMap } from "./featureSprintMap";
 import { getNextFeatureSprintLegalAction } from "./featureSprintNextLegalAction";
-import { parseFeaturePromptLocalizationBlock } from "./featureSprintOrchestrator";
+import {
+  hasPersistedFeatureSpec,
+  parseFeaturePromptLocalizationBlock
+} from "./featureSprintOrchestrator";
 import { buildProjectContextForCard } from "./projectRegistry";
 import {
   resolvePlanStateRevision,
@@ -735,5 +740,120 @@ export function buildApplyInputFromPresentation(
     stateRevision: next.stateRevision,
     expectedAction: next.action,
     artifact
+  };
+}
+
+export type AdoptSavedFeatureSpecAvailability =
+  | { available: true }
+  | { available: false; reason: string };
+
+/**
+ * Read-only gate for adopting a saved featureSpec.body as a clarified draft.
+ * Does not invent structure — callers must use the identity draft artifact builder.
+ */
+export function evaluateAdoptSavedFeatureSpecAsClarifiedDraft(
+  plan: HarnessFeatureSprintPlan | undefined
+): AdoptSavedFeatureSpecAvailability {
+  if (!plan) {
+    return { available: false, reason: "No active Feature Sprint plan." };
+  }
+  if (!hasPersistedFeatureSpec(plan)) {
+    return {
+      available: false,
+      reason: "Save a feature specification before adopting it as a clarified draft."
+    };
+  }
+  if (plan.clarifiedSpec?.status === "frozen") {
+    return {
+      available: false,
+      reason: "Frozen clarified specs cannot be overwritten. Request a revision instead."
+    };
+  }
+  if (plan.clarifiedSpec?.status === "approved") {
+    return {
+      available: false,
+      reason: "Approved clarified specs cannot be overwritten via draft adopt."
+    };
+  }
+  return { available: true };
+}
+
+/**
+ * Canonical, non-interpretive mapping: lift persisted featureSpec.body into the
+ * required clarified-draft fields (objective, userIntent, and one acceptance criterion).
+ */
+export function buildClarifiedSpecDraftArtifactFromSavedFeatureSpec(
+  plan: HarnessFeatureSprintPlan
+): { ok: true; artifact: SpecDraftArtifact } | { ok: false; error: string } {
+  const body = plan.featureSpec?.body?.trim();
+  if (!body) {
+    return {
+      ok: false,
+      error: "A saved feature specification is required before adopting a clarified draft."
+    };
+  }
+  return {
+    ok: true,
+    artifact: {
+      type: "clarified_spec_draft",
+      objective: body,
+      userIntent: body,
+      acceptanceCriteria: [body],
+      assumptions: [],
+      constraints: [],
+      nonGoals: [],
+      clarificationQuestions: [],
+      sideEffectFlags: []
+    }
+  };
+}
+
+export type AdoptSavedFeatureSpecAsClarifiedDraftResult =
+  | {
+      ok: true;
+      state: LifeHarnessData;
+      stateRevision: number;
+      next: HarnessFeatureSprintNextLegalAction;
+      message: string;
+      plan: HarnessFeatureSprintPlan;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Explicit adopt path: re-read plan from `data`, validate, then call upsertDraftClarifiedSpec.
+ * Never auto-approve, freeze, or launch workers.
+ */
+export function adoptSavedFeatureSpecAsClarifiedDraft(
+  data: LifeHarnessData,
+  planId: string,
+  now: Date = new Date()
+): AdoptSavedFeatureSpecAsClarifiedDraftResult {
+  const plan = data.featureSprintPlans.find((item) => item.id === planId);
+  const availability = evaluateAdoptSavedFeatureSpecAsClarifiedDraft(plan);
+  if (!availability.available) {
+    return { ok: false, error: availability.reason };
+  }
+  if (!plan) {
+    return { ok: false, error: "Plan not found." };
+  }
+  const built = buildClarifiedSpecDraftArtifactFromSavedFeatureSpec(plan);
+  if (!built.ok) {
+    return { ok: false, error: built.error };
+  }
+  const result = upsertDraftClarifiedSpec(data, planId, built.artifact, now);
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+  const nextPlan = result.state.featureSprintPlans.find((item) => item.id === planId);
+  if (!nextPlan) {
+    return { ok: false, error: `Plan missing after adopt: ${planId}` };
+  }
+  return {
+    ok: true,
+    state: result.state,
+    stateRevision: result.stateRevision,
+    next: result.next,
+    message: result.audit.reason,
+    plan: nextPlan
   };
 }
