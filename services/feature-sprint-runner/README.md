@@ -15,10 +15,14 @@ Do **not** add `GET /feature-sprint/plans/:planId/next-legal-action` here withou
 When the app sends `attemptId` + `attemptBinding` on `POST /feature-sprint/run`, the runner:
 
 1. Persists a file-backed journal claim **before** provider spawn
-2. Spawns at most once per `attemptId`
+2. Spawns at most once per `attemptId` **within a single runner process that owns the journal directory**
 3. Replays completed/failed results for duplicate POSTs
-4. Rejects identity mismatches with `409` / `identity_conflict`
+4. Rejects identity mismatches with `409` / `identity_conflict` (including while an attempt is in-flight)
 5. On process restart, marks previously `running`+spawned records as `interrupted` (never respawns)
+
+Multi-process and multi-machine exclusivity are **out of scope**. Two runner processes sharing one journal directory are not coordinated.
+
+If the provider finishes but the completed journal file cannot be written after retries, the runner returns the successful structured result with `journalDurability: "degraded_in_process_only"`. Same-process GET/duplicate POST can still recover that result; **restart replay is not guaranteed** after total filesystem write failure.
 
 Journal directory: `FEATURE_SPRINT_ATTEMPT_JOURNAL_DIR` or
 `os.tmpdir()/life-harness-feature-sprint-attempt-journal`.

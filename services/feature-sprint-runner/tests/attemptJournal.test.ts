@@ -206,4 +206,124 @@ describe("attemptJournal", () => {
     expect(runOnce).toHaveBeenCalledTimes(1);
     expect(maxActive).toBe(1);
   });
+
+  it("rejects mismatched binding while first request is in flight", async () => {
+    const runOnce = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      return okResult("spawned-mismatch");
+    });
+
+    const firstPromise = runFeatureSprintPacketWithAttemptJournal(baseRequest("attempt-mismatch"), {
+      journalDir,
+      runOnce
+    });
+
+    // Ensure first request registered in-flight before second POST.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const second = await runFeatureSprintPacketWithAttemptJournal(
+      {
+        ...baseRequest("attempt-mismatch"),
+        attemptBinding: { ...binding, stateRevision: 99 }
+      },
+      { journalDir, runOnce }
+    );
+
+    expect("conflict" in second).toBe(true);
+    if (!("conflict" in second)) {
+      return;
+    }
+    expect(second.conflict.status).toBe("identity_conflict");
+    expect(second.conflict.identityConflict).toBe(true);
+
+    const first = await firstPromise;
+    expect("conflict" in first).toBe(false);
+    expect(runOnce).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns successful result when completed journal writes fail after retries", async () => {
+    const runOnce = vi.fn(async () => okResult("spawned-degraded"));
+    let completedWriteAttempts = 0;
+    const { writeAttemptJournalRecord } = await import("../src/attemptJournal");
+
+    const result = await runFeatureSprintPacketWithAttemptJournal(baseRequest("attempt-degraded"), {
+      journalDir,
+      runOnce,
+      journalWriteRetries: 3,
+      writeRecord: async (record, dir) => {
+        if (record.status === "completed" || record.status === "failed") {
+          completedWriteAttempts += 1;
+          throw new Error("simulated completed journal write failure");
+        }
+        await writeAttemptJournalRecord(record, dir);
+      }
+    });
+
+    expect("conflict" in result).toBe(false);
+    if ("conflict" in result) {
+      return;
+    }
+    expect(result.ok).toBe(true);
+    expect(result.journalDurability).toBe("degraded_in_process_only");
+    expect(result.outputText).toContain("spawned-degraded");
+    expect(completedWriteAttempts).toBe(3);
+    expect(runOnce).toHaveBeenCalledTimes(1);
+
+    const status = await getAttemptStatusFromJournal("attempt-degraded", journalDir);
+    expect(status.status).toBe("completed");
+    expect(status.result?.outputText).toContain("spawned-degraded");
+    expect(status.result?.journalDurability).toBe("degraded_in_process_only");
+
+    const duplicate = await runFeatureSprintPacketWithAttemptJournal(
+      baseRequest("attempt-degraded"),
+      {
+        journalDir,
+        runOnce,
+        writeRecord: async () => {
+          throw new Error("should not write again");
+        }
+      }
+    );
+    expect("conflict" in duplicate).toBe(false);
+    if ("conflict" in duplicate) {
+      return;
+    }
+    expect(duplicate.outputText).toContain("spawned-degraded");
+    expect(runOnce).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes a durable completed record when a transient journal failure recovers", async () => {
+    const runOnce = vi.fn(async () => okResult("spawned-retry-ok"));
+    let completedFailures = 0;
+    const { writeAttemptJournalRecord } = await import("../src/attemptJournal");
+
+    const result = await runFeatureSprintPacketWithAttemptJournal(baseRequest("attempt-retry-ok"), {
+      journalDir,
+      runOnce,
+      journalWriteRetries: 3,
+      writeRecord: async (record, dir) => {
+        if (
+          (record.status === "completed" || record.status === "failed") &&
+          completedFailures < 1
+        ) {
+          completedFailures += 1;
+          throw new Error("transient journal failure");
+        }
+        await writeAttemptJournalRecord(record, dir);
+      }
+    });
+
+    expect("conflict" in result).toBe(false);
+    if ("conflict" in result) {
+      return;
+    }
+    expect(result.ok).toBe(true);
+    expect(result.journalDurability).toBe("durable");
+    expect(completedFailures).toBe(1);
+
+    clearAttemptJournalInFlightForTests();
+    const status = await getAttemptStatusFromJournal("attempt-retry-ok", journalDir);
+    expect(status.status).toBe("completed");
+    expect(status.result?.outputText).toContain("spawned-retry-ok");
+  });
 });

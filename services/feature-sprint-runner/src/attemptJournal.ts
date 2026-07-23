@@ -41,8 +41,23 @@ export type FeatureSprintAttemptJournalRecord = {
 
 const inFlightByAttemptId = new Map<
   string,
-  Promise<FeatureSprintRunnerResponse | { conflict: FeatureSprintAttemptStatusResponse }>
+  {
+    binding: FeatureSprintRunnerAttemptBinding;
+    promise: Promise<FeatureSprintRunnerResponse | { conflict: FeatureSprintAttemptStatusResponse }>;
+  }
 >();
+
+/** Same-process recovery when the completed journal file write fails after a successful run. */
+const inProcessCompletedByAttemptId = new Map<
+  string,
+  {
+    binding: FeatureSprintRunnerAttemptBinding;
+    result: FeatureSprintRunnerResponse;
+    providerSpawned: boolean;
+  }
+>();
+
+export const FEATURE_SPRINT_ATTEMPT_JOURNAL_WRITE_RETRIES = 3;
 
 export function resolveAttemptJournalDir(
   env: NodeJS.ProcessEnv = process.env
@@ -207,6 +222,12 @@ function buildRequestSummary(request: FeatureSprintRunnerRequest) {
 export type RunWithAttemptJournalOptions = {
   journalDir?: string;
   runOnce: (request: FeatureSprintRunnerRequest) => Promise<FeatureSprintRunnerResponse>;
+  /** Test seam: override journal write (e.g. fail N times then succeed). */
+  writeRecord?: (
+    record: FeatureSprintAttemptJournalRecord,
+    journalDir: string
+  ) => Promise<void>;
+  journalWriteRetries?: number;
 };
 
 /**
@@ -215,6 +236,7 @@ export type RunWithAttemptJournalOptions = {
  *
  * Concurrent same-attemptId callers join one in-process promise registered
  * synchronously before any await (prevents cold-claim double-spawn).
+ * Mismatched bindings while in-flight fail closed with identity_conflict.
  */
 export async function runFeatureSprintPacketWithAttemptJournal(
   request: FeatureSprintRunnerRequest,
@@ -226,9 +248,42 @@ export async function runFeatureSprintPacketWithAttemptJournal(
 
   const attemptId = request.attemptId;
   const journalDir = options.journalDir ?? resolveAttemptJournalDir();
+  const writeRecord = options.writeRecord ?? writeAttemptJournalRecord;
+  const journalWriteRetries =
+    options.journalWriteRetries ?? FEATURE_SPRINT_ATTEMPT_JOURNAL_WRITE_RETRIES;
+
   const existingInFlight = inFlightByAttemptId.get(attemptId);
   if (existingInFlight) {
-    return existingInFlight;
+    if (!bindingsEqual(existingInFlight.binding, request.attemptBinding)) {
+      return {
+        conflict: {
+          ok: false,
+          attemptId,
+          status: "identity_conflict",
+          identityConflict: true,
+          error: "attemptId is already bound to a different request identity.",
+          providerSpawned: true
+        }
+      };
+    }
+    return existingInFlight.promise;
+  }
+
+  const inProcessCompleted = inProcessCompletedByAttemptId.get(attemptId);
+  if (inProcessCompleted) {
+    if (!bindingsEqual(inProcessCompleted.binding, request.attemptBinding)) {
+      return {
+        conflict: {
+          ok: false,
+          attemptId,
+          status: "identity_conflict",
+          identityConflict: true,
+          error: "attemptId is already bound to a different request identity.",
+          providerSpawned: inProcessCompleted.providerSpawned
+        }
+      };
+    }
+    return inProcessCompleted.result;
   }
 
   const work = (async (): Promise<
@@ -308,6 +363,8 @@ export async function runFeatureSprintPacketWithAttemptJournal(
       return spawnAndPersist(request, {
         journalDir,
         runOnce: options.runOnce,
+        writeRecord,
+        journalWriteRetries,
         runId: classified.runId,
         createdAt: classified.createdAt,
         baseRecord: {
@@ -331,11 +388,13 @@ export async function runFeatureSprintPacketWithAttemptJournal(
       requestSummary: buildRequestSummary(request)
     };
     // Persist claim BEFORE provider spawn.
-    await writeAttemptJournalRecord(claimed, journalDir);
+    await writeRecord(claimed, journalDir);
 
     return spawnAndPersist(request, {
       journalDir,
       runOnce: options.runOnce,
+      writeRecord,
+      journalWriteRetries,
       runId,
       createdAt,
       baseRecord: {
@@ -348,7 +407,10 @@ export async function runFeatureSprintPacketWithAttemptJournal(
   })();
 
   // Register before any await yields — concurrent callers join this promise.
-  inFlightByAttemptId.set(attemptId, work);
+  inFlightByAttemptId.set(attemptId, {
+    binding: request.attemptBinding,
+    promise: work
+  });
 
   try {
     return await work;
@@ -357,17 +419,46 @@ export async function runFeatureSprintPacketWithAttemptJournal(
   }
 }
 
+async function writeJournalWithRetries(
+  record: FeatureSprintAttemptJournalRecord,
+  journalDir: string,
+  writeRecord: (
+    record: FeatureSprintAttemptJournalRecord,
+    journalDir: string
+  ) => Promise<void>,
+  retries: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let lastError = "Journal write failed.";
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    try {
+      await writeRecord(record, journalDir);
+      return { ok: true };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Journal write failed.";
+      console.warn(
+        `[feature-sprint-runner] attempt journal write failed attemptId=${record.attemptId} try=${attempt}/${retries}: ${lastError}`
+      );
+    }
+  }
+  return { ok: false, error: lastError };
+}
+
 async function spawnAndPersist(
   request: FeatureSprintRunnerRequest,
   args: {
     journalDir: string;
     runOnce: (request: FeatureSprintRunnerRequest) => Promise<FeatureSprintRunnerResponse>;
+    writeRecord: (
+      record: FeatureSprintAttemptJournalRecord,
+      journalDir: string
+    ) => Promise<void>;
+    journalWriteRetries: number;
     runId: string;
     createdAt: string;
     baseRecord: FeatureSprintAttemptJournalRecord;
   }
 ): Promise<FeatureSprintRunnerResponse> {
-  await writeAttemptJournalRecord(args.baseRecord, args.journalDir);
+  await args.writeRecord(args.baseRecord, args.journalDir);
 
   let result: FeatureSprintRunnerResponse;
   try {
@@ -387,7 +478,11 @@ async function spawnAndPersist(
     };
   }
 
-  const capped = capJournalResult({ ...result, runId: result.runId ?? args.runId });
+  const capped = capJournalResult({
+    ...result,
+    runId: result.runId ?? args.runId,
+    journalDurability: "durable"
+  });
   const completed: FeatureSprintAttemptJournalRecord = {
     ...args.baseRecord,
     status: capped.ok ? "completed" : "failed",
@@ -396,7 +491,42 @@ async function spawnAndPersist(
     failureMessage: capped.ok ? undefined : capped.error ?? capped.diagnosticMessage,
     providerSpawned: true
   };
-  await writeAttemptJournalRecord(completed, args.journalDir);
+
+  const persisted = await writeJournalWithRetries(
+    completed,
+    args.journalDir,
+    args.writeRecord,
+    args.journalWriteRetries
+  );
+
+  if (!persisted.ok) {
+    const degraded: FeatureSprintRunnerResponse = {
+      ...capped,
+      journalDurability: "degraded_in_process_only",
+      parseWarnings: [
+        ...(capped.parseWarnings ?? []),
+        "Runner journal completed-record write failed after provider execution; result is preserved in-process only and may not survive runner restart."
+      ],
+      diagnosticMessage:
+        capped.diagnosticMessage ??
+        "Provider finished, but the durable attempt journal could not be updated."
+    };
+    inProcessCompletedByAttemptId.set(request.attemptId!, {
+      binding: request.attemptBinding!,
+      result: degraded,
+      providerSpawned: true
+    });
+    console.warn(
+      `[feature-sprint-runner] completed journal durability degraded attemptId=${request.attemptId} runId=${args.runId}`
+    );
+    return degraded;
+  }
+
+  inProcessCompletedByAttemptId.set(request.attemptId!, {
+    binding: request.attemptBinding!,
+    result: capped,
+    providerSpawned: true
+  });
   return capped;
 }
 
@@ -411,6 +541,22 @@ export async function getAttemptStatusFromJournal(
       attemptId,
       status: "unknown",
       error: "attemptId is required."
+    };
+  }
+
+  const inProcess = inProcessCompletedByAttemptId.get(trimmed);
+  if (inProcess) {
+    return {
+      ok: true,
+      attemptId: trimmed,
+      status: inProcess.result.ok ? "completed" : "failed",
+      runId: inProcess.result.runId,
+      result: inProcess.result,
+      providerSpawned: inProcess.providerSpawned,
+      error:
+        inProcess.result.journalDurability === "degraded_in_process_only"
+          ? "Result preserved in-process; journal file durability was degraded."
+          : undefined
     };
   }
 
@@ -431,4 +577,5 @@ export async function getAttemptStatusFromJournal(
 /** Test helper — clear in-process in-flight map. */
 export function clearAttemptJournalInFlightForTests(): void {
   inFlightByAttemptId.clear();
+  inProcessCompletedByAttemptId.clear();
 }

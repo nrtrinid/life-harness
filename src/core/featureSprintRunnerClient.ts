@@ -207,6 +207,10 @@ function mapStructuredRunnerResponse(
     parseWarnings: Array.isArray(body.parseWarnings)
       ? body.parseWarnings.filter((item): item is string => typeof item === "string")
       : undefined,
+    journalDurability:
+      body.journalDurability === "durable" || body.journalDurability === "degraded_in_process_only"
+        ? body.journalDurability
+        : undefined,
     diagnosticMessage:
       typeof body.diagnosticMessage === "string" ? body.diagnosticMessage : undefined,
     executionContext: parseFeatureSprintRunnerExecutionContext(body.executionContext),

@@ -120,6 +120,10 @@ import {
   getOpenFeatureSprintExecutionAttemptForPlan
 } from "../../src/core/featureSprintExecutionAttempt";
 import {
+  beginDurableLaunchGuard,
+  createDurableLaunchMutex
+} from "../../src/core/featureSprintDurableLaunchGuard";
+import {
   promptAuditFenceReadinessNotice,
   reviewFenceReadinessNotice,
   scopingFenceReadinessNotice
@@ -437,6 +441,7 @@ export default function CardDetailScreen() {
   const [isNormalizingProof, setIsNormalizingProof] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [isTriggeringKernelAction, setIsTriggeringKernelAction] = useState(false);
+  const durableLaunchMutexRef = useRef(createDurableLaunchMutex());
   const [isAdoptingClarifiedDraft, setIsAdoptingClarifiedDraft] = useState(false);
   const [isApplyingClarificationAnswers, setIsApplyingClarificationAnswers] = useState(false);
   const [clarificationFormError, setClarificationFormError] = useState<string | null>(null);
@@ -1307,57 +1312,90 @@ export default function CardDetailScreen() {
       if (triggerKind === "launch_worker") {
         // Durable path: claim-before-launch for implementation only.
         if (validation.next.action === "launch_implementation") {
-          const openAttempt = getOpenFeatureSprintExecutionAttemptForPlan(
-            lifeHarnessData,
-            activeFeatureSprintPlan.id
-          );
-          if (openAttempt) {
+          const planIdForLaunch = activeFeatureSprintPlan.id;
+          const guard = beginDurableLaunchGuard({
+            mutex: durableLaunchMutexRef.current,
+            hasOpenAttempt: () =>
+              getOpenFeatureSprintExecutionAttemptForPlan(
+                // Prefer live provider state (includes prior claims) over render snapshot.
+                {
+                  ...lifeHarnessData,
+                  featureSprintExecutionAttempts:
+                    // useLifeHarness spreads LifeHarnessData; re-read via open helper on latest list
+                    featureSprintExecutionAttempts
+                },
+                planIdForLaunch
+              )
+          });
+          // Re-check against the absolute latest attempts after acquiring the mutex by
+          // consulting the open-attempt helper again with current hook data (state updates
+          // from prior claims are reflected in featureSprintExecutionAttempts).
+          if (!guard.ok) {
+            if (guard.reason === "mutex_held") {
+              return;
+            }
             showNotice(
               "warning",
-              `Open execution attempt ${openAttempt.attemptId} (${openAttempt.status}) must be checked, abandoned, or reconciled before a new launch.`
+              `Open execution attempt ${guard.openAttemptId} must be checked, abandoned, or reconciled before a new launch.`
             );
             return;
           }
 
-          const profile = buildRunnerProfile(runnerAgent, "implementation");
-          const claim = claimFeatureSprintExecutionAttempt({
-            planId: activeFeatureSprintPlan.id,
-            actionId: validation.next.actionId,
-            stateRevision: validation.next.stateRevision,
-            profile,
-            cardId,
-            stepId: activeFeatureSprintPlan.currentStepId,
-            taskId: validation.next.executionContext?.taskId,
-            phase: validation.next.executionContext?.phase ?? "implement",
-            clarifiedSpecRevision: activeFeatureSprintPlan.clarifiedSpec?.revision
-          });
-          if (!claim.ok || !claim.attempt) {
-            showNotice("warning", claim.message ?? "Could not claim execution attempt.");
-            return;
-          }
-
-          const applyResult = applyFeatureSprintLegalActionForPlan(
-            buildApplyInputFromPresentation(validation.next)
-          );
-          if (!applyResult.ok || !applyResult.plan || !applyResult.data) {
-            markFeatureSprintExecutionAttemptAmbiguous(
-              claim.attempt.attemptId,
-              applyResult.message ?? "Kernel launch intent failed after claim."
+          try {
+            const openAttempt = getOpenFeatureSprintExecutionAttemptForPlan(
+              { ...lifeHarnessData, featureSprintExecutionAttempts },
+              planIdForLaunch
             );
-            showNotice("warning", applyResult.message ?? "Could not record kernel launch intent.");
-            return;
-          }
+            if (openAttempt) {
+              showNotice(
+                "warning",
+                `Open execution attempt ${openAttempt.attemptId} (${openAttempt.status}) must be checked, abandoned, or reconciled before a new launch.`
+              );
+              return;
+            }
 
-          const launching = markFeatureSprintExecutionAttemptLaunching(claim.attempt.attemptId);
-          if (!launching.ok) {
-            showNotice("warning", launching.message ?? "Could not persist launching attempt state.");
+            const profile = buildRunnerProfile(runnerAgent, "implementation");
+            const claim = claimFeatureSprintExecutionAttempt({
+              planId: planIdForLaunch,
+              actionId: validation.next.actionId,
+              stateRevision: validation.next.stateRevision,
+              profile,
+              cardId,
+              stepId: activeFeatureSprintPlan.currentStepId,
+              taskId: validation.next.executionContext?.taskId,
+              phase: validation.next.executionContext?.phase ?? "implement",
+              clarifiedSpecRevision: activeFeatureSprintPlan.clarifiedSpec?.revision
+            });
+            if (!claim.ok || !claim.attempt) {
+              showNotice("warning", claim.message ?? "Could not claim execution attempt.");
+              return;
+            }
+
+            const applyResult = applyFeatureSprintLegalActionForPlan(
+              buildApplyInputFromPresentation(validation.next)
+            );
+            if (!applyResult.ok || !applyResult.plan || !applyResult.data) {
+              markFeatureSprintExecutionAttemptAmbiguous(
+                claim.attempt.attemptId,
+                applyResult.message ?? "Kernel launch intent failed after claim."
+              );
+              showNotice("warning", applyResult.message ?? "Could not record kernel launch intent.");
+              return;
+            }
+
+            const launching = markFeatureSprintExecutionAttemptLaunching(claim.attempt.attemptId);
+            if (!launching.ok) {
+              showNotice("warning", launching.message ?? "Could not persist launching attempt state.");
+              return;
+            }
+            await handleRunImplementationInWorktree(applyResult.plan, applyResult.data, {
+              kernelDelegatedLaunch: true,
+              durableAttempt: claim.attempt
+            });
             return;
+          } finally {
+            guard.release();
           }
-          await handleRunImplementationInWorktree(applyResult.plan, applyResult.data, {
-            kernelDelegatedLaunch: true,
-            durableAttempt: claim.attempt
-          });
-          return;
         }
 
         const applyResult = applyFeatureSprintLegalActionForPlan(
@@ -2133,11 +2171,14 @@ export default function CardDetailScreen() {
         (row) =>
           row.status === "failed" || row.status === "timed_out" || row.status === "cancelled"
       );
+      const degradedJournal = result.journalDurability === "degraded_in_process_only";
       showNotice(
-        "success",
-        hasVerifyFailure
-          ? "Implementation finished. Inspect the expanded run, then Save agent output."
-          : "Implementation finished. Inspect the expanded run above, then Save agent output."
+        degradedJournal ? "warning" : "success",
+        degradedJournal
+          ? "Implementation finished and the result was saved in the app, but the runner journal file could not be updated. Restart replay may be unavailable; do not relaunch this attempt."
+          : hasVerifyFailure
+            ? "Implementation finished. Inspect the expanded run, then Save agent output."
+            : "Implementation finished. Inspect the expanded run above, then Save agent output."
       );
     } finally {
       setIsRunningImplementation(false);

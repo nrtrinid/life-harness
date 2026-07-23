@@ -255,6 +255,12 @@ export type FeatureSprintRunnerResponse = {
   stdoutText?: string;
   stderrText?: string;
   parseWarnings?: string[];
+  /**
+   * Journal durability for attemptId runs.
+   * `degraded_in_process_only` means the provider finished but the completed journal
+   * file could not be written; same-process replay may still work, restart replay may not.
+   */
+  journalDurability?: "durable" | "degraded_in_process_only";
   /** Safe user-facing failure detail (no secrets). */
   diagnosticMessage?: string;
   /**

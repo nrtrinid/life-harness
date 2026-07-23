@@ -167,6 +167,10 @@ import {
   savePersistedState,
   serializeEnvelope
 } from "../storage/persistence";
+import {
+  createLifeHarnessPersistenceCoordinator,
+  LIFE_HARNESS_AUTOSAVE_DEBOUNCE_MS
+} from "./lifeHarness/persistenceCoordinator";
 import type {
   CardState,
   DailyState,
@@ -623,6 +627,14 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   const stateRef = useRef(state);
   const skipInitialSaveRef = useRef(true);
   const persistenceAvailable = localStorageAdapter.isAvailable();
+  const persistenceCoordinatorRef = useRef(
+    createLifeHarnessPersistenceCoordinator({
+      getLatestState: () => stateRef.current,
+      setLatestState: (next) => {
+        stateRef.current = next;
+      }
+    })
+  );
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [batchRunProgress, setBatchRunProgress] = useState<BatchRunProgress | null>(null);
   const [runJobSource] = useRunJobSourceMutation();
@@ -636,8 +648,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       skipInitialSaveRef.current = false;
       return;
     }
-    const timer = setTimeout(() => savePersistedState(state), 300);
-    return () => clearTimeout(timer);
+    persistenceCoordinatorRef.current.scheduleAutosave(LIFE_HARNESS_AUTOSAVE_DEBOUNCE_MS);
+    return () => persistenceCoordinatorRef.current.cancelPendingAutosave();
   }, [state]);
 
   const pounce = useCallback(() => {
@@ -1326,7 +1338,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   );
 
   const flushPersistedState = useCallback((next: LifeHarnessData): boolean => {
-    return savePersistedState(next);
+    return persistenceCoordinatorRef.current.flushSync(next);
   }, []);
 
   const claimFeatureSprintExecutionAttemptAction = useCallback(
@@ -1438,7 +1450,9 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       if (!result.ok) {
         return { ok: false, message: result.error };
       }
-      flushPersistedState(result.state);
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist ambiguous attempt state." };
+      }
       stateRef.current = result.state;
       dispatch({ type: "state_replaced", state: result.state });
       return { ok: true, attempt: result.attempt, data: result.state };
@@ -1452,7 +1466,9 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       if (!result.ok) {
         return { ok: false, message: result.error };
       }
-      flushPersistedState(result.state);
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist abandoned attempt state." };
+      }
       stateRef.current = result.state;
       dispatch({ type: "state_replaced", state: result.state });
       return { ok: true, attempt: result.attempt, data: result.state };
@@ -1466,7 +1482,9 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       if (!result.ok) {
         return { ok: false, message: result.error };
       }
-      flushPersistedState(result.state);
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist reconciled attempt state." };
+      }
       stateRef.current = result.state;
       dispatch({ type: "state_replaced", state: result.state });
       return { ok: true, attempt: result.attempt, data: result.state };
