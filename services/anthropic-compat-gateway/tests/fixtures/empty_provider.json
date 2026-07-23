@@ -1,0 +1,6 @@
+{
+  "model": "acgw-mock-empty",
+  "max_tokens": 32,
+  "messages": [{ "role": "user", "content": "trigger empty provider" }],
+  "stream": false
+}

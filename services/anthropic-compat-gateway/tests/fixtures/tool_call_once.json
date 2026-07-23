@@ -1,0 +1,19 @@
+{
+  "model": "acgw-mock-tool",
+  "max_tokens": 128,
+  "stream": false,
+  "messages": [{ "role": "user", "content": "Read package.json" }],
+  "tools": [
+    {
+      "name": "Read",
+      "description": "Read a file",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": { "type": "string" }
+        },
+        "required": ["file_path"]
+      }
+    }
+  ]
+}

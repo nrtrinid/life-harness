@@ -1,0 +1,42 @@
+{
+  "model": "acgw-mock-coding",
+  "max_tokens": 128,
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "Read package.json" },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_test123",
+          "name": "Read",
+          "input": { "file_path": "package.json" }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_test123",
+          "content": "{\"name\":\"life-harness\"}"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "Read",
+      "description": "Read a file",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": { "type": "string" }
+        },
+        "required": ["file_path"]
+      }
+    }
+  ]
+}

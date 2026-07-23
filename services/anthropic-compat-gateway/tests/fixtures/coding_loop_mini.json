@@ -1,0 +1,30 @@
+{
+  "model": "acgw-mock-coding",
+  "max_tokens": 128,
+  "stream": true,
+  "messages": [{ "role": "user", "content": "Read package.json and report the package name" }],
+  "tools": [
+    {
+      "name": "Read",
+      "description": "Read a file from disk",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": { "type": "string", "description": "Path to read" }
+        },
+        "required": ["file_path"]
+      }
+    },
+    {
+      "name": "Bash",
+      "description": "Run a shell command",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" }
+        },
+        "required": ["command"]
+      }
+    }
+  ]
+}

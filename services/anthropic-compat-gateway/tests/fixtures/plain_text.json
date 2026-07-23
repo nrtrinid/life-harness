@@ -1,0 +1,6 @@
+{
+  "model": "acgw-mock-text",
+  "max_tokens": 64,
+  "messages": [{ "role": "user", "content": "Hello" }],
+  "stream": false
+}
