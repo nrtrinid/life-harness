@@ -207,6 +207,10 @@ function mapStructuredRunnerResponse(
     parseWarnings: Array.isArray(body.parseWarnings)
       ? body.parseWarnings.filter((item): item is string => typeof item === "string")
       : undefined,
+    journalDurability:
+      body.journalDurability === "durable" || body.journalDurability === "degraded_in_process_only"
+        ? body.journalDurability
+        : undefined,
     diagnosticMessage:
       typeof body.diagnosticMessage === "string" ? body.diagnosticMessage : undefined,
     executionContext: parseFeatureSprintRunnerExecutionContext(body.executionContext),
@@ -313,6 +317,23 @@ export async function runFeatureSprintPacket(
       );
     }
 
+    // Identity conflict is a structured status payload, not a runner result envelope.
+    if (
+      body &&
+      typeof body === "object" &&
+      (body as { status?: unknown }).status === "identity_conflict"
+    ) {
+      const record = body as Record<string, unknown>;
+      return buildFailureResponse(
+        validated.request.profile,
+        typeof record.error === "string"
+          ? record.error
+          : "attemptId is already bound to a different request identity.",
+        startedAt,
+        requestContext
+      );
+    }
+
     // Preserve structured ok:false envelopes even when HTTP status is 4xx/5xx.
     if (isStructuredRunnerResponseBody(body)) {
       return mapStructuredRunnerResponse(body);
@@ -341,6 +362,70 @@ export async function runFeatureSprintPacket(
       startedAt,
       requestContext
     );
+  }
+}
+
+export async function getFeatureSprintAttemptStatus(
+  attemptId: string,
+  options: { baseUrl?: string } = {}
+): Promise<import("./featureSprintRunner").FeatureSprintAttemptStatusResponse> {
+  const trimmed = attemptId.trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      attemptId,
+      status: "unknown",
+      error: "attemptId is required."
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `${resolveBaseUrl(options.baseUrl)}/feature-sprint/attempts/${encodeURIComponent(trimmed)}`,
+      {
+        method: "GET",
+        headers: {
+          ...buildAuthHeaders()
+        }
+      }
+    );
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      return {
+        ok: false,
+        attemptId: trimmed,
+        status: "unknown",
+        error: "Runner returned an unreadable attempt status body."
+      };
+    }
+    if (!body || typeof body !== "object") {
+      return {
+        ok: false,
+        attemptId: trimmed,
+        status: "unknown",
+        error: "Runner returned an invalid attempt status body."
+      };
+    }
+    const record = body as import("./featureSprintRunner").FeatureSprintAttemptStatusResponse;
+    return {
+      ok: Boolean(record.ok),
+      attemptId: typeof record.attemptId === "string" ? record.attemptId : trimmed,
+      status: record.status ?? "unknown",
+      runId: record.runId,
+      result: record.result,
+      error: record.error,
+      identityConflict: record.identityConflict,
+      providerSpawned: record.providerSpawned
+    };
+  } catch {
+    return {
+      ok: false,
+      attemptId: trimmed,
+      status: "unknown",
+      error: FEATURE_SPRINT_RUNNER_UNREACHABLE_MESSAGE
+    };
   }
 }
 

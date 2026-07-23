@@ -137,6 +137,48 @@ export type FeatureSprintRunnerRequest = {
    * The runner copies this into the response when present and must not interpret it.
    */
   executionContext?: FeatureSprintRunnerExecutionContext;
+  /**
+   * App-owned durable attempt identity. When present, the runner journals by this id
+   * and must not spawn a second provider process for the same attemptId.
+   */
+  attemptId?: string;
+  /**
+   * Immutable binding for attemptId conflict detection. Required when attemptId is set.
+   */
+  attemptBinding?: FeatureSprintRunnerAttemptBinding;
+};
+
+/** Immutable identity fields bound to an app-owned attemptId. */
+export type FeatureSprintRunnerAttemptBinding = {
+  planId: string;
+  actionId: string;
+  stateRevision: number;
+  profile: FeatureSprintRunnerProfile;
+  cardId?: string;
+  stepId?: string;
+  taskId?: string;
+  phase?: string;
+  clarifiedSpecRevision?: number;
+};
+
+export type FeatureSprintAttemptJournalStatus =
+  | "unknown"
+  | "claimed"
+  | "running"
+  | "completed"
+  | "failed"
+  | "interrupted"
+  | "identity_conflict";
+
+export type FeatureSprintAttemptStatusResponse = {
+  ok: boolean;
+  attemptId: string;
+  status: FeatureSprintAttemptJournalStatus;
+  runId?: string;
+  result?: FeatureSprintRunnerResponse;
+  error?: string;
+  identityConflict?: boolean;
+  providerSpawned?: boolean;
 };
 
 /** Runner-side termination classification (optional; older clients ignore). */
@@ -213,6 +255,12 @@ export type FeatureSprintRunnerResponse = {
   stdoutText?: string;
   stderrText?: string;
   parseWarnings?: string[];
+  /**
+   * Journal durability for attemptId runs.
+   * `degraded_in_process_only` means the provider finished but the completed journal
+   * file could not be written; same-process replay may still work, restart replay may not.
+   */
+  journalDurability?: "durable" | "degraded_in_process_only";
   /** Safe user-facing failure detail (no secrets). */
   diagnosticMessage?: string;
   /**
@@ -719,6 +767,27 @@ export function validateFeatureSprintRunnerRequest(
     }
   }
 
+  if (record.attemptId !== undefined) {
+    if (typeof record.attemptId !== "string" || !record.attemptId.trim()) {
+      return { ok: false, error: "attemptId must be a non-empty string when provided." };
+    }
+    if (record.attemptId.length > 200) {
+      return { ok: false, error: "attemptId exceeds max length (200)." };
+    }
+    if (!/^[A-Za-z0-9._:-]+$/.test(record.attemptId.trim())) {
+      return { ok: false, error: "attemptId contains invalid characters." };
+    }
+    request.attemptId = record.attemptId.trim();
+
+    const bindingParsed = parseAttemptBinding(record.attemptBinding, record.profile);
+    if (!bindingParsed.ok) {
+      return bindingParsed;
+    }
+    request.attemptBinding = bindingParsed.binding;
+  } else if (record.attemptBinding !== undefined) {
+    return { ok: false, error: "attemptBinding requires attemptId." };
+  }
+
   if (isImplementationProfile(record.profile)) {
     if (verificationParsed.commands.length > 0) {
       request.verificationCommands = verificationParsed.commands;
@@ -729,6 +798,65 @@ export function validateFeatureSprintRunnerRequest(
   }
 
   return { ok: true, request };
+}
+
+function parseAttemptBinding(
+  value: unknown,
+  requestProfile: FeatureSprintRunnerProfile
+):
+  | { ok: true; binding: FeatureSprintRunnerAttemptBinding }
+  | { ok: false; error: string } {
+  if (!value || typeof value !== "object") {
+    return { ok: false, error: "attemptBinding is required when attemptId is set." };
+  }
+  const record = value as Record<string, unknown>;
+  const planId = cleanOptional(typeof record.planId === "string" ? record.planId : undefined);
+  const actionId = cleanOptional(typeof record.actionId === "string" ? record.actionId : undefined);
+  if (!planId || !actionId) {
+    return { ok: false, error: "attemptBinding.planId and attemptBinding.actionId are required." };
+  }
+  if (typeof record.stateRevision !== "number" || !Number.isFinite(record.stateRevision) || record.stateRevision < 0) {
+    return { ok: false, error: "attemptBinding.stateRevision must be a non-negative number." };
+  }
+  const profile =
+    typeof record.profile === "string" && isFeatureSprintRunnerProfile(record.profile)
+      ? record.profile
+      : requestProfile;
+  if (profile !== requestProfile) {
+    return { ok: false, error: "attemptBinding.profile must match request.profile." };
+  }
+  const binding: FeatureSprintRunnerAttemptBinding = {
+    planId,
+    actionId,
+    stateRevision: Math.floor(record.stateRevision),
+    profile
+  };
+  const cardId = cleanOptional(typeof record.cardId === "string" ? record.cardId : undefined);
+  const stepId = cleanOptional(typeof record.stepId === "string" ? record.stepId : undefined);
+  const taskId = cleanOptional(typeof record.taskId === "string" ? record.taskId : undefined);
+  const phase = cleanOptional(typeof record.phase === "string" ? record.phase : undefined);
+  if (cardId) {
+    binding.cardId = cardId;
+  }
+  if (stepId) {
+    binding.stepId = stepId;
+  }
+  if (taskId) {
+    binding.taskId = taskId;
+  }
+  if (phase) {
+    binding.phase = phase;
+  }
+  if (record.clarifiedSpecRevision !== undefined) {
+    if (
+      typeof record.clarifiedSpecRevision !== "number" ||
+      !Number.isFinite(record.clarifiedSpecRevision)
+    ) {
+      return { ok: false, error: "attemptBinding.clarifiedSpecRevision must be a number." };
+    }
+    binding.clarifiedSpecRevision = Math.floor(record.clarifiedSpecRevision);
+  }
+  return { ok: true, binding };
 }
 
 function hasUnsafePathSegments(value: string): boolean {

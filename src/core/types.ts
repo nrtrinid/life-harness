@@ -3,6 +3,7 @@ import type {
   FeatureSprintRunnerFailureClass,
   FeatureSprintRunnerModelEvidenceSource,
   FeatureSprintRunnerProfile,
+  FeatureSprintRunnerResponse,
   FeatureSprintRunnerResultUsability,
   FeatureSprintRunnerTerminationReason,
   FeatureSprintVerificationResult,
@@ -680,6 +681,52 @@ export type HarnessFeatureSprintSpecUpdate = {
 };
 
 export type HarnessFeatureSprintRunnerRunStatus = "running" | "succeeded" | "failed";
+
+/**
+ * App-owned durable execution attempt for one explicitly triggered worker launch.
+ * Independent of runner history rows and kernel appliedActionIds.
+ */
+export type HarnessFeatureSprintExecutionAttemptStatus =
+  | "claimed"
+  | "launching"
+  | "running"
+  | "response_received"
+  | "reconciled"
+  | "failed"
+  | "ambiguous"
+  | "abandoned";
+
+export type HarnessFeatureSprintExecutionAttemptFailure = {
+  message: string;
+  failureClass?: FeatureSprintRunnerFailureClass;
+  terminationReason?: FeatureSprintRunnerTerminationReason;
+};
+
+export type HarnessFeatureSprintExecutionAttempt = {
+  attemptId: string;
+  planId: string;
+  actionId: string;
+  stateRevision: number;
+  profile: FeatureSprintRunnerProfile;
+  status: HarnessFeatureSprintExecutionAttemptStatus;
+  claimedAt: string;
+  updatedAt: string;
+  cardId?: string;
+  stepId?: string;
+  taskId?: string;
+  phase?: string;
+  clarifiedSpecRevision?: number;
+  launchedAt?: string;
+  responseReceivedAt?: string;
+  reconciledAt?: string;
+  abandonedAt?: string;
+  /** Runner envelope runId when known (may differ from app history id). */
+  runnerRunId?: string;
+  /** App featureSprintRunnerRuns id when linked. */
+  historyRunId?: string;
+  result?: FeatureSprintRunnerResponse;
+  failure?: HarnessFeatureSprintExecutionAttemptFailure;
+};
 
 export type HarnessFeatureSprintRunnerRun = {
   id: string;

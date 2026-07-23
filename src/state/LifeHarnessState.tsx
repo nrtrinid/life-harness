@@ -96,6 +96,16 @@ import {
   type HarnessAgentSessionUpdateInput
 } from "../core/agentSessionLog";
 import {
+  abandonFeatureSprintExecutionAttempt,
+  attachFeatureSprintExecutionAttemptResponse,
+  claimFeatureSprintExecutionAttempt,
+  type ClaimFeatureSprintExecutionAttemptInput,
+  markFeatureSprintExecutionAttemptAmbiguous,
+  markFeatureSprintExecutionAttemptLaunching,
+  markFeatureSprintExecutionAttemptRunning,
+  reconcileFeatureSprintExecutionAttempt
+} from "../core/featureSprintExecutionAttempt";
+import {
   applyFeatureSprintLegalAction,
   type ApplyFeatureSprintLegalActionInput
 } from "../core/featureSprintApplyLegalAction";
@@ -157,6 +167,10 @@ import {
   savePersistedState,
   serializeEnvelope
 } from "../storage/persistence";
+import {
+  createLifeHarnessPersistenceCoordinator,
+  LIFE_HARNESS_AUTOSAVE_DEBOUNCE_MS
+} from "./lifeHarness/persistenceCoordinator";
 import type {
   CardState,
   DailyState,
@@ -391,6 +405,53 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     plan?: import("../core/types").HarnessFeatureSprintPlan;
     data?: LifeHarnessData;
   };
+  claimFeatureSprintExecutionAttempt: (input: ClaimFeatureSprintExecutionAttemptInput) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+    existingAttempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+  };
+  markFeatureSprintExecutionAttemptLaunching: (attemptId: string) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+  };
+  markFeatureSprintExecutionAttemptRunning: (attemptId: string) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+  };
+  attachFeatureSprintExecutionAttemptResponse: (
+    attemptId: string,
+    response: FeatureSprintRunnerResponse,
+    options?: { runnerRunId?: string; historyRunId?: string }
+  ) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+  };
+  markFeatureSprintExecutionAttemptAmbiguous: (attemptId: string, reason: string) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+  };
+  abandonFeatureSprintExecutionAttempt: (attemptId: string) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+  };
+  reconcileFeatureSprintExecutionAttempt: (attemptId: string) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+  };
   createFeatureSprintRunnerRun: (
     input: FeatureSprintRunnerRunCreateInput
   ) => { ok: boolean; message?: string; runId?: string; safetyBlocked?: boolean };
@@ -566,6 +627,14 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
   const stateRef = useRef(state);
   const skipInitialSaveRef = useRef(true);
   const persistenceAvailable = localStorageAdapter.isAvailable();
+  const persistenceCoordinatorRef = useRef(
+    createLifeHarnessPersistenceCoordinator({
+      getLatestState: () => stateRef.current,
+      setLatestState: (next) => {
+        stateRef.current = next;
+      }
+    })
+  );
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [batchRunProgress, setBatchRunProgress] = useState<BatchRunProgress | null>(null);
   const [runJobSource] = useRunJobSourceMutation();
@@ -579,8 +648,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       skipInitialSaveRef.current = false;
       return;
     }
-    const timer = setTimeout(() => savePersistedState(state), 300);
-    return () => clearTimeout(timer);
+    persistenceCoordinatorRef.current.scheduleAutosave(LIFE_HARNESS_AUTOSAVE_DEBOUNCE_MS);
+    return () => persistenceCoordinatorRef.current.cancelPendingAutosave();
   }, [state]);
 
   const pounce = useCallback(() => {
@@ -1268,6 +1337,161 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
     []
   );
 
+  const flushPersistedState = useCallback((next: LifeHarnessData): boolean => {
+    return persistenceCoordinatorRef.current.flushSync(next);
+  }, []);
+
+  const claimFeatureSprintExecutionAttemptAction = useCallback(
+    (input: ClaimFeatureSprintExecutionAttemptInput) => {
+      const result = claimFeatureSprintExecutionAttempt(stateRef.current, input);
+      if (!result.ok) {
+        return {
+          ok: false,
+          message: result.error,
+          existingAttempt: result.existingAttempt
+        };
+      }
+      // Claim must hit durable storage before any runner call.
+      if (!flushPersistedState(result.state)) {
+        return {
+          ok: false,
+          message: localStorageAdapter.isAvailable()
+            ? "Could not persist execution attempt claim before launch."
+            : "Durable execution requires local snapshot persistence, which is unavailable on this platform. Launch blocked — this is not a durable claim."
+        };
+      }
+      stateRef.current = result.state;
+      dispatch({ type: "state_replaced", state: result.state });
+      return {
+        ok: true,
+        message: "Execution attempt claimed.",
+        attempt: result.attempt,
+        data: result.state
+      };
+    },
+    [flushPersistedState]
+  );
+
+  const markFeatureSprintExecutionAttemptLaunchingAction = useCallback(
+    (attemptId: string) => {
+      const result = markFeatureSprintExecutionAttemptLaunching(stateRef.current, attemptId);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist launching attempt state." };
+      }
+      stateRef.current = result.state;
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, attempt: result.attempt, data: result.state };
+    },
+    [flushPersistedState]
+  );
+
+  const markFeatureSprintExecutionAttemptRunningAction = useCallback(
+    (attemptId: string) => {
+      const result = markFeatureSprintExecutionAttemptRunning(stateRef.current, attemptId);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist running attempt state." };
+      }
+      stateRef.current = result.state;
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, attempt: result.attempt, data: result.state };
+    },
+    [flushPersistedState]
+  );
+
+  const attachFeatureSprintExecutionAttemptResponseAction = useCallback(
+    (
+      attemptId: string,
+      response: FeatureSprintRunnerResponse,
+      options?: { runnerRunId?: string; historyRunId?: string }
+    ) => {
+      const result = attachFeatureSprintExecutionAttemptResponse(
+        stateRef.current,
+        attemptId,
+        response,
+        { runnerRunId: options?.runnerRunId }
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      let nextAttempt = result.attempt;
+      let nextState = result.state;
+      if (options?.historyRunId) {
+        nextAttempt = { ...nextAttempt, historyRunId: options.historyRunId };
+        nextState = {
+          ...nextState,
+          featureSprintExecutionAttempts: (nextState.featureSprintExecutionAttempts ?? []).map(
+            (row) => (row.attemptId === attemptId ? nextAttempt : row)
+          )
+        };
+      }
+      if (!flushPersistedState(nextState)) {
+        return { ok: false, message: "Could not persist runner response on execution attempt." };
+      }
+      stateRef.current = nextState;
+      dispatch({ type: "state_replaced", state: nextState });
+      return { ok: true, attempt: nextAttempt, data: nextState };
+    },
+    [flushPersistedState]
+  );
+
+  const markFeatureSprintExecutionAttemptAmbiguousAction = useCallback(
+    (attemptId: string, reason: string) => {
+      const result = markFeatureSprintExecutionAttemptAmbiguous(
+        stateRef.current,
+        attemptId,
+        reason
+      );
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist ambiguous attempt state." };
+      }
+      stateRef.current = result.state;
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, attempt: result.attempt, data: result.state };
+    },
+    [flushPersistedState]
+  );
+
+  const abandonFeatureSprintExecutionAttemptAction = useCallback(
+    (attemptId: string) => {
+      const result = abandonFeatureSprintExecutionAttempt(stateRef.current, attemptId);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist abandoned attempt state." };
+      }
+      stateRef.current = result.state;
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, attempt: result.attempt, data: result.state };
+    },
+    [flushPersistedState]
+  );
+
+  const reconcileFeatureSprintExecutionAttemptAction = useCallback(
+    (attemptId: string) => {
+      const result = reconcileFeatureSprintExecutionAttempt(stateRef.current, attemptId);
+      if (!result.ok) {
+        return { ok: false, message: result.error };
+      }
+      if (!flushPersistedState(result.state)) {
+        return { ok: false, message: "Could not persist reconciled attempt state." };
+      }
+      stateRef.current = result.state;
+      dispatch({ type: "state_replaced", state: result.state });
+      return { ok: true, attempt: result.attempt, data: result.state };
+    },
+    [flushPersistedState]
+  );
+
   const createFeatureSprintRunnerRunAction = useCallback(
     (input: FeatureSprintRunnerRunCreateInput) => {
       const result = createFeatureSprintRunnerRun(stateRef.current, input);
@@ -1642,6 +1866,16 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       adoptSavedFeatureSpecAsClarifiedDraftForPlan:
         adoptSavedFeatureSpecAsClarifiedDraftForPlanAction,
       applyClarificationAnswersForPlan: applyClarificationAnswersForPlanAction,
+      claimFeatureSprintExecutionAttempt: claimFeatureSprintExecutionAttemptAction,
+      markFeatureSprintExecutionAttemptLaunching:
+        markFeatureSprintExecutionAttemptLaunchingAction,
+      markFeatureSprintExecutionAttemptRunning: markFeatureSprintExecutionAttemptRunningAction,
+      attachFeatureSprintExecutionAttemptResponse:
+        attachFeatureSprintExecutionAttemptResponseAction,
+      markFeatureSprintExecutionAttemptAmbiguous:
+        markFeatureSprintExecutionAttemptAmbiguousAction,
+      abandonFeatureSprintExecutionAttempt: abandonFeatureSprintExecutionAttemptAction,
+      reconcileFeatureSprintExecutionAttempt: reconcileFeatureSprintExecutionAttemptAction,
       createFeatureSprintRunnerRun: createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRun: completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImported:
@@ -1721,6 +1955,13 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       applyFeatureSprintLegalActionForPlanAction,
       adoptSavedFeatureSpecAsClarifiedDraftForPlanAction,
       applyClarificationAnswersForPlanAction,
+      claimFeatureSprintExecutionAttemptAction,
+      markFeatureSprintExecutionAttemptLaunchingAction,
+      markFeatureSprintExecutionAttemptRunningAction,
+      attachFeatureSprintExecutionAttemptResponseAction,
+      markFeatureSprintExecutionAttemptAmbiguousAction,
+      abandonFeatureSprintExecutionAttemptAction,
+      reconcileFeatureSprintExecutionAttemptAction,
       createFeatureSprintRunnerRunAction,
       completeFeatureSprintRunnerRunAction,
       markMostRecentFeatureSprintRunnerRunImportedAction,

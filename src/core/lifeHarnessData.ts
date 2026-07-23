@@ -5,6 +5,7 @@ import type {
   HarnessAgentSession,
   HarnessChatSummary,
   HarnessFeatureSprintPlan,
+  HarnessFeatureSprintExecutionAttempt,
   HarnessFeatureSprintRunnerRun,
   HarnessMemoryItem,
   HarnessProject,
@@ -32,6 +33,8 @@ export interface LifeHarnessData {
   agentSessions: HarnessAgentSession[];
   featureSprintPlans: HarnessFeatureSprintPlan[];
   featureSprintRunnerRuns: HarnessFeatureSprintRunnerRun[];
+  /** Durable single-action execution attempts (optional; hydrate defaults to []). */
+  featureSprintExecutionAttempts?: HarnessFeatureSprintExecutionAttempt[];
   careerSourcePack: StoredCareerSourcePack | null;
   jobSourcePackMode?: JobSourcePack;
 }

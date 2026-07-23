@@ -165,6 +165,7 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     agentSessions: partial.agentSessions ?? [],
     featureSprintPlans: normalizeFeatureSprintPlans(partial.featureSprintPlans),
     featureSprintRunnerRuns: partial.featureSprintRunnerRuns ?? [],
+    featureSprintExecutionAttempts: partial.featureSprintExecutionAttempts ?? [],
     careerSourcePack: partial.careerSourcePack ?? null,
     jobSourcePackMode: partial.jobSourcePackMode ?? "core"
   };

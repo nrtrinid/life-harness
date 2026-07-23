@@ -66,18 +66,24 @@ export function loadPersistedState(
   return result.data;
 }
 
+/**
+ * Persist snapshot immediately. Returns false when storage is unavailable or the write fails.
+ * Callers that claim-before-launch must treat false as a hard stop (do not call the runner).
+ */
 export function savePersistedState(
   data: LifeHarnessData,
   adapter: StorageAdapter = localStorageAdapter
-): void {
+): boolean {
   if (!adapter.isAvailable()) {
-    return;
+    return false;
   }
 
   try {
     adapter.saveRaw(serializeEnvelope(data));
+    return true;
   } catch (error) {
     console.warn("[life-harness] Failed to save snapshot:", error);
+    return false;
   }
 }
 

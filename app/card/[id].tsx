@@ -108,12 +108,21 @@ import {
   checkFeatureSprintRunnerHealth,
   cleanupFeatureSprintWorktree,
   composeImplementationRunnerOutputSummary,
+  getFeatureSprintAttemptStatus,
   guardRunnerAgentAvailability,
   resolveFeatureSprintRunnerToken,
   runFeatureSprintPacket,
   summarizeVerificationResults,
   type FeatureSprintRunnerHealthProbe
 } from "../../src/core/featureSprintRunnerClient";
+import {
+  buildAttemptBindingFromAttempt,
+  getOpenFeatureSprintExecutionAttemptForPlan
+} from "../../src/core/featureSprintExecutionAttempt";
+import {
+  beginDurableLaunchGuard,
+  createDurableLaunchMutex
+} from "../../src/core/featureSprintDurableLaunchGuard";
 import {
   promptAuditFenceReadinessNotice,
   reviewFenceReadinessNotice,
@@ -136,6 +145,7 @@ import type { ResumeModulePatch } from "../../src/core/actions";
 import type {
   HarnessAgentSession,
   HarnessFeatureSpecSource,
+  HarnessFeatureSprintExecutionAttempt,
   HarnessFeatureSprintExecutionTarget,
   HarnessFeatureSprintPlan,
   HarnessFeatureSprintRunnerRun,
@@ -338,6 +348,7 @@ export default function CardDetailScreen() {
     agentSessions,
     featureSprintPlans,
     featureSprintRunnerRuns,
+    featureSprintExecutionAttempts,
     careerSourcePack,
     saveProjectForCard,
     clearProjectForCard,
@@ -362,6 +373,13 @@ export default function CardDetailScreen() {
     applyFeatureSprintLegalActionForPlan,
     adoptSavedFeatureSpecAsClarifiedDraftForPlan,
     applyClarificationAnswersForPlan,
+    claimFeatureSprintExecutionAttempt,
+    markFeatureSprintExecutionAttemptLaunching,
+    markFeatureSprintExecutionAttemptRunning,
+    attachFeatureSprintExecutionAttemptResponse,
+    markFeatureSprintExecutionAttemptAmbiguous,
+    abandonFeatureSprintExecutionAttempt,
+    reconcileFeatureSprintExecutionAttempt,
     createFeatureSprintRunnerRun,
     completeFeatureSprintRunnerRun,
     markMostRecentFeatureSprintRunnerRunImported,
@@ -423,6 +441,7 @@ export default function CardDetailScreen() {
   const [isNormalizingProof, setIsNormalizingProof] = useState(false);
   const [isRunningImplementation, setIsRunningImplementation] = useState(false);
   const [isTriggeringKernelAction, setIsTriggeringKernelAction] = useState(false);
+  const durableLaunchMutexRef = useRef(createDurableLaunchMutex());
   const [isAdoptingClarifiedDraft, setIsAdoptingClarifiedDraft] = useState(false);
   const [isApplyingClarificationAnswers, setIsApplyingClarificationAnswers] = useState(false);
   const [clarificationFormError, setClarificationFormError] = useState<string | null>(null);
@@ -563,6 +582,7 @@ export default function CardDetailScreen() {
       agentSessions,
       featureSprintPlans,
       featureSprintRunnerRuns,
+      featureSprintExecutionAttempts,
       careerSourcePack
     };
   }
@@ -710,6 +730,15 @@ export default function CardDetailScreen() {
   const kernelManagedPlan = Boolean(
     activeFeatureSprintPlan && isKernelManagedFeatureSprintPlan(activeFeatureSprintPlan)
   );
+  const openExecutionAttempt = useMemo(() => {
+    if (!activeFeatureSprintPlan) {
+      return undefined;
+    }
+    return getOpenFeatureSprintExecutionAttemptForPlan(
+      { ...lifeHarnessData, featureSprintExecutionAttempts },
+      activeFeatureSprintPlan.id
+    );
+  }, [activeFeatureSprintPlan, lifeHarnessData, featureSprintExecutionAttempts]);
   const adoptClarifiedDraftAvailability = evaluateAdoptSavedFeatureSpecAsClarifiedDraft(
     activeFeatureSprintPlan
   );
@@ -1180,6 +1209,78 @@ export default function CardDetailScreen() {
     );
   }
 
+  async function handleCheckOpenExecutionAttempt() {
+    if (!openExecutionAttempt) {
+      return;
+    }
+    const status = await getFeatureSprintAttemptStatus(openExecutionAttempt.attemptId);
+    if (status.status === "unknown") {
+      markFeatureSprintExecutionAttemptAmbiguous(
+        openExecutionAttempt.attemptId,
+        status.error ?? "Runner does not know this attemptId."
+      );
+      showNotice(
+        "warning",
+        "Runner status unknown. Attempt held for human reconciliation — no relaunch."
+      );
+      return;
+    }
+    if (status.status === "interrupted") {
+      markFeatureSprintExecutionAttemptAmbiguous(
+        openExecutionAttempt.attemptId,
+        status.error ?? "Attempt interrupted on runner restart."
+      );
+      showNotice("warning", "Runner reports interrupted attempt. Held — provider was not respawned.");
+      return;
+    }
+    if ((status.status === "completed" || status.status === "failed") && status.result) {
+      const attached = attachFeatureSprintExecutionAttemptResponse(
+        openExecutionAttempt.attemptId,
+        status.result,
+        { runnerRunId: status.runId }
+      );
+      if (attached.ok && status.result.ok) {
+        setAgentOutputText(composeImplementationRunnerOutputSummary(status.result));
+      }
+      showNotice(
+        attached.ok ? "success" : "warning",
+        attached.ok
+          ? "Retrieved persisted runner result for this attempt. No provider relaunch."
+          : attached.message ?? "Could not attach retrieved result."
+      );
+      return;
+    }
+    showNotice(
+      "warning",
+      `Attempt status: ${status.status}. No automatic relaunch. Abandon or wait, then check again.`
+    );
+  }
+
+  function handleAbandonOpenExecutionAttempt() {
+    if (!openExecutionAttempt) {
+      return;
+    }
+    const result = abandonFeatureSprintExecutionAttempt(openExecutionAttempt.attemptId);
+    showNotice(
+      result.ok ? "success" : "warning",
+      result.ok
+        ? "Execution attempt abandoned locally. Runner journal evidence is retained."
+        : result.message ?? "Could not abandon attempt."
+    );
+  }
+
+  function handleResumeApplyOpenExecutionAttemptResult() {
+    if (!openExecutionAttempt?.result?.ok) {
+      showNotice("warning", "No usable persisted response on this attempt to resume.");
+      return;
+    }
+    setAgentOutputText(composeImplementationRunnerOutputSummary(openExecutionAttempt.result));
+    showNotice(
+      "success",
+      "Loaded persisted attempt result into the output field. Save, then Normalize proof. No provider relaunch."
+    );
+  }
+
   async function handleTriggerKernelLegalAction() {
     if (!activeFeatureSprintPlan || !kernelNextLegalActionPresentation?.next || isTriggeringKernelAction) {
       return;
@@ -1209,6 +1310,94 @@ export default function CardDetailScreen() {
     setIsTriggeringKernelAction(true);
     try {
       if (triggerKind === "launch_worker") {
+        // Durable path: claim-before-launch for implementation only.
+        if (validation.next.action === "launch_implementation") {
+          const planIdForLaunch = activeFeatureSprintPlan.id;
+          const guard = beginDurableLaunchGuard({
+            mutex: durableLaunchMutexRef.current,
+            hasOpenAttempt: () =>
+              getOpenFeatureSprintExecutionAttemptForPlan(
+                // Prefer live provider state (includes prior claims) over render snapshot.
+                {
+                  ...lifeHarnessData,
+                  featureSprintExecutionAttempts:
+                    // useLifeHarness spreads LifeHarnessData; re-read via open helper on latest list
+                    featureSprintExecutionAttempts
+                },
+                planIdForLaunch
+              )
+          });
+          // Re-check against the absolute latest attempts after acquiring the mutex by
+          // consulting the open-attempt helper again with current hook data (state updates
+          // from prior claims are reflected in featureSprintExecutionAttempts).
+          if (!guard.ok) {
+            if (guard.reason === "mutex_held") {
+              return;
+            }
+            showNotice(
+              "warning",
+              `Open execution attempt ${guard.openAttemptId} must be checked, abandoned, or reconciled before a new launch.`
+            );
+            return;
+          }
+
+          try {
+            const openAttempt = getOpenFeatureSprintExecutionAttemptForPlan(
+              { ...lifeHarnessData, featureSprintExecutionAttempts },
+              planIdForLaunch
+            );
+            if (openAttempt) {
+              showNotice(
+                "warning",
+                `Open execution attempt ${openAttempt.attemptId} (${openAttempt.status}) must be checked, abandoned, or reconciled before a new launch.`
+              );
+              return;
+            }
+
+            const profile = buildRunnerProfile(runnerAgent, "implementation");
+            const claim = claimFeatureSprintExecutionAttempt({
+              planId: planIdForLaunch,
+              actionId: validation.next.actionId,
+              stateRevision: validation.next.stateRevision,
+              profile,
+              cardId,
+              stepId: activeFeatureSprintPlan.currentStepId,
+              taskId: validation.next.executionContext?.taskId,
+              phase: validation.next.executionContext?.phase ?? "implement",
+              clarifiedSpecRevision: activeFeatureSprintPlan.clarifiedSpec?.revision
+            });
+            if (!claim.ok || !claim.attempt) {
+              showNotice("warning", claim.message ?? "Could not claim execution attempt.");
+              return;
+            }
+
+            const applyResult = applyFeatureSprintLegalActionForPlan(
+              buildApplyInputFromPresentation(validation.next)
+            );
+            if (!applyResult.ok || !applyResult.plan || !applyResult.data) {
+              markFeatureSprintExecutionAttemptAmbiguous(
+                claim.attempt.attemptId,
+                applyResult.message ?? "Kernel launch intent failed after claim."
+              );
+              showNotice("warning", applyResult.message ?? "Could not record kernel launch intent.");
+              return;
+            }
+
+            const launching = markFeatureSprintExecutionAttemptLaunching(claim.attempt.attemptId);
+            if (!launching.ok) {
+              showNotice("warning", launching.message ?? "Could not persist launching attempt state.");
+              return;
+            }
+            await handleRunImplementationInWorktree(applyResult.plan, applyResult.data, {
+              kernelDelegatedLaunch: true,
+              durableAttempt: claim.attempt
+            });
+            return;
+          } finally {
+            guard.release();
+          }
+        }
+
         const applyResult = applyFeatureSprintLegalActionForPlan(
           buildApplyInputFromPresentation(validation.next)
         );
@@ -1219,10 +1408,7 @@ export default function CardDetailScreen() {
 
         if (validation.next.action === "launch_review") {
           await handleRunReview(applyResult.plan, applyResult.data, { kernelDelegatedLaunch: true });
-        } else if (
-          validation.next.action === "launch_implementation" ||
-          validation.next.action === "launch_correction"
-        ) {
+        } else if (validation.next.action === "launch_correction") {
           await handleRunImplementationInWorktree(applyResult.plan, applyResult.data, {
             kernelDelegatedLaunch: true
           });
@@ -1329,6 +1515,15 @@ export default function CardDetailScreen() {
         const applyResult = applyFeatureSprintLegalActionForPlan(
           buildApplyInputFromPresentation(validation.next, artifactResult.artifact)
         );
+        if (applyResult.ok) {
+          const attempt = getOpenFeatureSprintExecutionAttemptForPlan(
+            applyResult.data ?? lifeHarnessData,
+            activeFeatureSprintPlan.id
+          );
+          if (attempt?.status === "response_received") {
+            reconcileFeatureSprintExecutionAttempt(attempt.attemptId);
+          }
+        }
         showNotice(
           applyResult.ok ? "success" : "warning",
           applyResult.message ?? "Could not apply implementation proof through kernel."
@@ -1845,7 +2040,10 @@ export default function CardDetailScreen() {
   async function handleRunImplementationInWorktree(
     planOverride?: HarnessFeatureSprintPlan,
     dataOverride?: LifeHarnessData,
-    options?: { kernelDelegatedLaunch?: boolean }
+    options?: {
+      kernelDelegatedLaunch?: boolean;
+      durableAttempt?: HarnessFeatureSprintExecutionAttempt;
+    }
   ) {
     const plan = planOverride ?? activeFeatureSprintPlan;
     const harnessData = dataOverride ?? lifeHarnessData;
@@ -1904,6 +2102,15 @@ export default function CardDetailScreen() {
       }
     }
 
+    const durableAttempt = options?.durableAttempt;
+    if (durableAttempt) {
+      const running = markFeatureSprintExecutionAttemptRunning(durableAttempt.attemptId);
+      if (!running.ok) {
+        showNotice("warning", running.message ?? "Could not persist running attempt state.");
+        return;
+      }
+    }
+
     setIsRunningImplementation(true);
     try {
       const result = await runFeatureSprintPacket({
@@ -1916,11 +2123,36 @@ export default function CardDetailScreen() {
         worktree: { enabled: true },
         verificationCommands: project.verificationCommands ?? [],
         runVerification: Boolean(project.verificationCommands?.length),
-        executionContext: executionContextResult.context
+        executionContext: executionContextResult.context,
+        ...(durableAttempt
+          ? {
+              attemptId: durableAttempt.attemptId,
+              attemptBinding: buildAttemptBindingFromAttempt(durableAttempt)
+            }
+          : {})
       });
 
       if (historyCreate.ok && historyCreate.runId) {
         completeFeatureSprintRunnerRun(historyCreate.runId, result);
+      }
+
+      if (durableAttempt) {
+        const attached = attachFeatureSprintExecutionAttemptResponse(
+          durableAttempt.attemptId,
+          result,
+          {
+            runnerRunId: result.runId,
+            historyRunId: historyCreate.ok ? historyCreate.runId : undefined
+          }
+        );
+        if (!attached.ok) {
+          showNotice(
+            "warning",
+            attached.message ??
+              "Runner finished but the response could not be persisted on the execution attempt."
+          );
+          return;
+        }
       }
 
       if (!result.ok) {
@@ -1939,11 +2171,14 @@ export default function CardDetailScreen() {
         (row) =>
           row.status === "failed" || row.status === "timed_out" || row.status === "cancelled"
       );
+      const degradedJournal = result.journalDurability === "degraded_in_process_only";
       showNotice(
-        "success",
-        hasVerifyFailure
-          ? "Implementation finished. Inspect the expanded run, then Save agent output."
-          : "Implementation finished. Inspect the expanded run above, then Save agent output."
+        degradedJournal ? "warning" : "success",
+        degradedJournal
+          ? "Implementation finished and the result was saved in the app, but the runner journal file could not be updated. Restart replay may be unavailable; do not relaunch this attempt."
+          : hasVerifyFailure
+            ? "Implementation finished. Inspect the expanded run, then Save agent output."
+            : "Implementation finished. Inspect the expanded run above, then Save agent output."
       );
     } finally {
       setIsRunningImplementation(false);
@@ -2344,6 +2579,40 @@ export default function CardDetailScreen() {
               void handleTriggerKernelLegalAction();
             }}
           />
+        ) : null}
+
+        {openExecutionAttempt ? (
+          <View
+            style={[
+              styles.cardTile,
+              {
+                marginTop: 12,
+                borderColor: colors.accentPrimary,
+                borderWidth: 1,
+                gap: 8
+              }
+            ]}
+          >
+            <Text style={styles.label}>Durable execution attempt</Text>
+            <Text style={styles.bodyText}>
+              {openExecutionAttempt.attemptId} · {openExecutionAttempt.status}
+            </Text>
+            <Text style={styles.helpText}>
+              Refresh does not relaunch. Check status, resume apply, or abandon explicitly. Starting a
+              new attempt requires abandon first and a new legal envelope.
+            </Text>
+            <View style={[styles.cardActionsRow, { flexWrap: "wrap", gap: 8 }]}>
+              <Pressable style={styles.smallButton} onPress={() => void handleCheckOpenExecutionAttempt()}>
+                <Text style={styles.smallButtonText}>Check runner status</Text>
+              </Pressable>
+              <Pressable style={styles.smallButton} onPress={handleResumeApplyOpenExecutionAttemptResult}>
+                <Text style={styles.smallButtonText}>Resume apply result</Text>
+              </Pressable>
+              <Pressable style={styles.smallButton} onPress={handleAbandonOpenExecutionAttempt}>
+                <Text style={styles.smallButtonText}>Abandon attempt</Text>
+              </Pressable>
+            </View>
+          </View>
         ) : null}
 
         {kernelNextLegalActionPresentation?.next?.action === "request_clarification" &&

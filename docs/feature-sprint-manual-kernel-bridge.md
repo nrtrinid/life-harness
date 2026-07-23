@@ -56,7 +56,7 @@ Kernel-managed legacy controls disabled in the UI include:
 - No background execution loop or serial autopilot.
 - No automatic provider launches on render or state change.
 - No automatic proof save, verdict import, task advance, or sprint completion.
-- No durable claim-before-launch or exactly-once side effects.
+- **Durable claim-before-launch** applies to `launch_implementation` only (app attempt + runner journal). Review/correction/localization remain non-durable in this slice.
 - Runner duration is not inferred when the runner cannot measure it accurately.
 
 ## Telemetry

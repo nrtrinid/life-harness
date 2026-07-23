@@ -44,6 +44,7 @@ export function createCleanBootstrapState(sessionNow = nowIso()): LifeHarnessDat
     agentSessions: [],
     featureSprintPlans: [],
     featureSprintRunnerRuns: [],
+    featureSprintExecutionAttempts: [],
     careerSourcePack: null
   };
 }
@@ -65,6 +66,7 @@ export function createSeedState(sessionNow = nowIso()): LifeHarnessData {
     agentSessions: [],
     featureSprintPlans: [],
     featureSprintRunnerRuns: [],
+    featureSprintExecutionAttempts: [],
     careerSourcePack: null
   };
 }
