@@ -8,9 +8,14 @@ import {
   FEATURE_SPRINT_RUNNER_DEFAULT_PORT,
   validateFeatureSprintRunnerRequest,
   validateFeatureSprintWorktreeCleanupRequest,
+  type FeatureSprintAttemptStatusResponse,
   type FeatureSprintRunnerResponse
 } from "../../../src/core/featureSprintRunner";
 import { isAuthorizedRequest } from "./auth";
+import {
+  getAttemptStatusFromJournal,
+  runFeatureSprintPacketWithAttemptJournal
+} from "./attemptJournal";
 import {
   assertRealRunAllowed,
   resolveProviderAvailability,
@@ -132,6 +137,14 @@ export function createServer() {
       return;
     }
 
+    const attemptMatch = request.url?.match(/^\/feature-sprint\/attempts\/([^/?#]+)$/);
+    if (request.method === "GET" && attemptMatch) {
+      const attemptId = decodeURIComponent(attemptMatch[1] ?? "");
+      const status: FeatureSprintAttemptStatusResponse = await getAttemptStatusFromJournal(attemptId);
+      sendJson(response, status.status === "unknown" ? 404 : status.identityConflict ? 409 : 200, status);
+      return;
+    }
+
     if (request.method === "POST" && request.url === "/feature-sprint/run") {
       try {
         const parsed = await readJsonBody(request);
@@ -147,9 +160,13 @@ export function createServer() {
           return;
         }
 
-        const result: FeatureSprintRunnerResponse = await runFeatureSprintPacketOnRunner(
-          validated.request
-        );
+        const result = await runFeatureSprintPacketWithAttemptJournal(validated.request, {
+          runOnce: runFeatureSprintPacketOnRunner
+        });
+        if ("conflict" in result) {
+          sendJson(response, 409, result.conflict);
+          return;
+        }
         sendJson(response, result.ok ? 200 : 500, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Invalid request.";
