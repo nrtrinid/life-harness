@@ -17,9 +17,13 @@ class MemoryDocumentSource(str, Enum):
 class MemoryDocument(StrictModel):
     doc_id: str
     source: MemoryDocumentSource
+    source_record_id: str | None = None
+    source_kind: str | None = None
     title: str
     body: str
     created_at: str | None = None
+    updated_at: str | None = None
+    source_chat_summary_id: str | None = None
     sensitivity: SensitivityLevel | None = None
     tags: list[str] = []
 
@@ -28,6 +32,12 @@ class MemoryChunk(StrictModel):
     chunk_id: str
     doc_id: str
     source: MemoryDocumentSource
+    source_record_id: str | None = None
+    source_kind: str | None = None
+    sensitivity: SensitivityLevel | None = None
+    source_chat_summary_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
     text: str
     char_start: int
     char_end: int
@@ -45,6 +55,13 @@ class RetrievedEvidence(StrictModel):
     chunk_id: str
     doc_id: str
     source: MemoryDocumentSource
+    source_record_id: str | None = None
+    source_kind: str | None = None
+    sensitivity: SensitivityLevel | None = None
+    source_chat_summary_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    chunk_index: int
     text: str
     score: float
     rank: int
@@ -65,8 +82,23 @@ class RetrievalResult(StrictModel):
     degraded_notes: list[str] = []
 
 
+class RetrievalEvidencePacketItem(StrictModel):
+    chunk_id: str
+    doc_id: str
+    source_record_id: str | None = None
+    source: MemoryDocumentSource
+    source_kind: str | None = None
+    sensitivity: SensitivityLevel | None = None
+    source_chat_summary_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    chunk_index: int
+    excerpt: str
+
+
 class RetrievalEvidencePacket(StrictModel):
     rendered_bundle: str
     char_count: int
     max_chars: int
     source_chunk_ids: list[str] = []
+    items: list[RetrievalEvidencePacketItem] = []

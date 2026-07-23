@@ -1,0 +1,188 @@
+[
+  {
+    "id": "memory-s0",
+    "kind": "project_fact",
+    "title": "Synthetic project focus",
+    "summary": "Shared focus means choosing the smallest useful project move.",
+    "tags": ["synthetic", "focus"],
+    "sourceChatSummaryId": "chat-summary-synthetic-1",
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-02T00:00:00.000Z"
+  },
+  {
+    "id": "memory-s1",
+    "kind": "rule",
+    "title": "Synthetic shipping rule",
+    "summary": "Ship the smallest useful slice before polishing tooling.",
+    "evidence": "Synthetic evidence must not become retrieval body text.",
+    "tags": ["synthetic", "shipping"],
+    "sensitivity": "S1",
+    "isActive": true,
+    "createdAt": "2026-01-03T00:00:00.000Z",
+    "updatedAt": "2026-01-04T00:00:00.000Z"
+  },
+  {
+    "id": "memory-s2",
+    "kind": "preference",
+    "title": "Synthetic focus preference",
+    "summary": "Shared focus keeps the next action narrow and recoverable.",
+    "tags": ["synthetic", "focus"],
+    "sensitivity": "S2",
+    "isActive": true,
+    "createdAt": "2026-01-05T00:00:00.000Z",
+    "updatedAt": "2026-01-06T00:00:00.000Z"
+  },
+  {
+    "id": "memory-s3",
+    "kind": "trap",
+    "title": "Synthetic excluded S3",
+    "summary": "S3_PRIVATE_NEVER_INDEX_7F31",
+    "tags": ["synthetic"],
+    "sensitivity": "S3",
+    "isActive": true,
+    "createdAt": "2026-01-07T00:00:00.000Z",
+    "updatedAt": "2026-01-08T00:00:00.000Z"
+  },
+  {
+    "id": "memory-unclassified",
+    "kind": "pattern",
+    "title": "Synthetic excluded unclassified",
+    "summary": "UNCLASSIFIED_NEVER_INDEX_1A92",
+    "tags": ["synthetic"],
+    "sensitivity": "unclassified",
+    "isActive": true,
+    "createdAt": "2026-01-09T00:00:00.000Z",
+    "updatedAt": "2026-01-10T00:00:00.000Z"
+  },
+  {
+    "id": "memory-inactive",
+    "kind": "decision",
+    "title": "Synthetic excluded inactive",
+    "summary": "INACTIVE_NEVER_INDEX_93D4",
+    "tags": ["synthetic"],
+    "sensitivity": "S1",
+    "isActive": false,
+    "createdAt": "2026-01-11T00:00:00.000Z",
+    "updatedAt": "2026-01-12T00:00:00.000Z"
+  },
+  {
+    "id": "memory-missing-sensitivity",
+    "kind": "identity",
+    "title": "Synthetic excluded missing sensitivity",
+    "summary": "MISSING_SENSITIVITY_NEVER_INDEX_6C05",
+    "tags": ["synthetic"],
+    "isActive": true,
+    "createdAt": "2026-01-13T00:00:00.000Z",
+    "updatedAt": "2026-01-14T00:00:00.000Z"
+  },
+  {
+    "id": "memory-invalid-sensitivity",
+    "kind": "rule",
+    "title": "Synthetic excluded invalid sensitivity",
+    "summary": "INVALID_SENSITIVITY_NEVER_INDEX_B842",
+    "tags": ["synthetic"],
+    "sensitivity": "private",
+    "isActive": true,
+    "createdAt": "2026-01-15T00:00:00.000Z",
+    "updatedAt": "2026-01-16T00:00:00.000Z"
+  },
+  {
+    "id": "memory-empty-summary",
+    "kind": "project_fact",
+    "title": "Synthetic excluded empty summary",
+    "summary": "   ",
+    "tags": ["synthetic"],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-17T00:00:00.000Z",
+    "updatedAt": "2026-01-18T00:00:00.000Z"
+  },
+  {
+    "kind": "rule",
+    "title": "Synthetic missing id",
+    "summary": "MISSING_ID_NEVER_INDEX_04E7",
+    "tags": ["synthetic"],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-19T00:00:00.000Z",
+    "updatedAt": "2026-01-20T00:00:00.000Z"
+  },
+  {
+    "id": "   ",
+    "kind": "rule",
+    "title": "Synthetic blank id",
+    "summary": "BLANK_ID_NEVER_INDEX_D916",
+    "tags": ["synthetic"],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-21T00:00:00.000Z",
+    "updatedAt": "2026-01-22T00:00:00.000Z"
+  },
+  {
+    "id": "memory-duplicate",
+    "kind": "rule",
+    "title": "Synthetic duplicate one",
+    "summary": "DUPLICATE_ONE_NEVER_INDEX_421B",
+    "tags": ["synthetic"],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-23T00:00:00.000Z",
+    "updatedAt": "2026-01-24T00:00:00.000Z"
+  },
+  {
+    "id": "memory-duplicate",
+    "kind": "rule",
+    "title": "Synthetic duplicate two",
+    "summary": "DUPLICATE_TWO_NEVER_INDEX_5E60",
+    "tags": ["synthetic"],
+    "sensitivity": "S1",
+    "isActive": true,
+    "createdAt": "2026-01-25T00:00:00.000Z",
+    "updatedAt": "2026-01-26T00:00:00.000Z"
+  },
+  {
+    "id": "memory-missing-title",
+    "kind": "rule",
+    "summary": "MISSING_TITLE_NEVER_INDEX_781C",
+    "tags": ["synthetic"],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-27T00:00:00.000Z",
+    "updatedAt": "2026-01-28T00:00:00.000Z"
+  },
+  {
+    "id": "memory-invalid-title",
+    "kind": "rule",
+    "title": 42,
+    "summary": "INVALID_TITLE_NEVER_INDEX_2F43",
+    "tags": ["synthetic"],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-29T00:00:00.000Z",
+    "updatedAt": "2026-01-30T00:00:00.000Z"
+  },
+  {
+    "id": "memory-invalid-tags",
+    "kind": "rule",
+    "title": "Synthetic invalid tags",
+    "summary": "INVALID_TAGS_NEVER_INDEX_C073",
+    "tags": ["synthetic", 9],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-01-31T00:00:00.000Z",
+    "updatedAt": "2026-02-01T00:00:00.000Z"
+  },
+  {
+    "id": "memory-malformed",
+    "kind": "not-a-kind",
+    "title": "Synthetic malformed record",
+    "summary": "MALFORMED_NEVER_INDEX_A508",
+    "tags": ["synthetic"],
+    "sensitivity": "S0",
+    "isActive": true,
+    "createdAt": "2026-02-02T00:00:00.000Z",
+    "updatedAt": "2026-02-03T00:00:00.000Z"
+  }
+]

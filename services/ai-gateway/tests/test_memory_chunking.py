@@ -53,3 +53,30 @@ def test_index_chunks_flattens_documents():
     ]
     indexed = index_chunks(docs)
     assert [chunk.doc_id for chunk in indexed] == ["one", "two"]
+
+
+def test_chunk_document_preserves_memory_bank_provenance():
+    document = MemoryDocument(
+        doc_id="memory_bank:memory-s2",
+        source=MemoryDocumentSource.memory_bank,
+        source_record_id="memory-s2",
+        source_kind="preference",
+        title="Synthetic preference",
+        body="First paragraph.\n\nSecond paragraph.",
+        created_at="2026-01-01T00:00:00.000Z",
+        updated_at="2026-01-02T00:00:00.000Z",
+        source_chat_summary_id="chat-summary-synthetic",
+        sensitivity="S2",
+        tags=["synthetic"],
+    )
+    chunks = chunk_document(document, max_chunk_chars=20)
+    assert len(chunks) == 2
+    for index, chunk in enumerate(chunks):
+        assert chunk.chunk_id == f"memory_bank:memory-s2#chunk-{index}"
+        assert chunk.doc_id == document.doc_id
+        assert chunk.source_record_id == "memory-s2"
+        assert chunk.source_kind == "preference"
+        assert chunk.sensitivity == "S2"
+        assert chunk.source_chat_summary_id == "chat-summary-synthetic"
+        assert chunk.created_at == "2026-01-01T00:00:00.000Z"
+        assert chunk.updated_at == "2026-01-02T00:00:00.000Z"

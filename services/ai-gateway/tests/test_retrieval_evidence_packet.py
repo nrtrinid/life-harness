@@ -62,6 +62,13 @@ def test_evidence_packet_includes_source_ids_and_header():
                 chunk_id="mem-1#chunk-0",
                 doc_id="mem-1",
                 source=MemoryDocumentSource.memory_bank,
+                source_record_id="memory-1",
+                source_kind="rule",
+                sensitivity="S1",
+                source_chat_summary_id="chat-summary-synthetic",
+                created_at="2026-01-01T00:00:00.000Z",
+                updated_at="2026-01-02T00:00:00.000Z",
+                chunk_index=0,
                 text="Career-first direction.",
                 score=2.0,
                 rank=1,
@@ -73,6 +80,11 @@ def test_evidence_packet_includes_source_ids_and_header():
     assert "### Retrieved memory evidence" in packet.rendered_bundle
     assert "[mem-1/mem-1#chunk-0]" in packet.rendered_bundle
     assert packet.source_chunk_ids == ["mem-1#chunk-0"]
+    assert packet.items[0].source_record_id == "memory-1"
+    assert packet.items[0].source_kind == "rule"
+    assert packet.items[0].sensitivity == "S1"
+    assert packet.items[0].source_chat_summary_id == "chat-summary-synthetic"
+    assert packet.items[0].chunk_index == 0
 
 
 def test_evidence_packet_respects_char_budget():
@@ -84,6 +96,7 @@ def test_evidence_packet_respects_char_budget():
                 chunk_id="doc#chunk-0",
                 doc_id="doc",
                 source=MemoryDocumentSource.manual_fixture,
+                chunk_index=0,
                 text=long_text,
                 score=1.0,
                 rank=1,
@@ -93,6 +106,8 @@ def test_evidence_packet_respects_char_budget():
     )
     packet = build_retrieval_evidence_packet(result, max_chars=120)
     assert packet.char_count <= 120
+    assert packet.items[0].excerpt
+    assert packet.items[0].excerpt in packet.rendered_bundle
 
 
 def test_evidence_packet_empty_result_is_safe():
@@ -104,6 +119,7 @@ def test_evidence_packet_empty_result_is_safe():
     packet = build_retrieval_evidence_packet(result)
     assert packet.rendered_bundle == ""
     assert packet.source_chunk_ids == []
+    assert packet.items == []
 
 
 def test_end_to_end_retrieval_to_evidence_packet():
