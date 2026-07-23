@@ -7,7 +7,7 @@ Durable, **user-approved** memory ledger on top of chat summaries — not RAG, n
 Chat summaries give short-term continuity. Memory Bank holds approved learnings that persist across sessions and can be toggled active/inactive.
 
 ```text
-Companion → save chat summary → review suggested durable memories → save selected items → export includes Memory Bank signals
+Companion → save chat summary → review suggested durable memories → classify and save selected items → export includes Memory Bank signals
 ```
 
 ## Chat summary vs Memory Bank
@@ -39,6 +39,16 @@ No manual blank memory editor in v0.1.
 
 Summaries are **1–2 sentences max** at creation to protect context budget.
 
+## Sensitivity classification
+
+Saved Memory Bank records carry an explicit `S0`, `S1`, `S2`, or `S3` classification. Saving a new record requires a deliberate selection; classification is not inferred from the title, tags, kind, content, source chat, or Companion request setting.
+
+Legacy records without a persisted classification, and records with malformed historical values, hydrate as `unclassified`. They remain visible, editable, toggleable, and deletable in the app, but are retrieval-ineligible. The app does not silently migrate them to `S1` or any other eligible value.
+
+The current context-packet compatibility label for an unclassified legacy memory remains `S1`; that label is not canonical record classification and must never be used by retrieval. Explicit `S3` Memory Bank records are excluded from existing context exports.
+
+The future Memory Bank retrieval adapter must use the canonical record classification and fail closed for `S3`, `unclassified`, invalid, inactive, or malformed records. The adapter itself is not implemented in this slice.
+
 ## Conservative decision / rule policy
 
 **Good:** durable direction — e.g. "Career-first Momentum Board is current practical direction."
@@ -49,7 +59,7 @@ Candidate builder does not promote every "you should…" or `suggestedNextAction
 
 ## Export mapping
 
-Active memory items only (`isActive: true`).
+Active memory items only (`isActive: true`); explicit `S3` items are excluded from context export.
 
 - **`recent_analyses`:** `pattern`, `preference`, `trap`, `identity`, `project_fact`  
   Prefix: `Memory Bank {kind}: {summary}`
@@ -60,18 +70,18 @@ Full export caps memory-derived entries at 10 per field type. Compact keeps ≥3
 
 ## Persistence
 
-Uses existing local JSON snapshot (`LifeHarnessData.memoryItems`). No new storage.
+Uses existing local JSON snapshot (`LifeHarnessData.memoryItems`). Sensitivity round-trips in the same envelope; no schema-version migration or new storage is required.
 
 ## UI
 
-- **Companion (`/ask-harness`):** after saving a chat summary, shows suggested durable memories + recent Memory Bank list (toggle/delete).
-- **Tape Archive (`/memory-bank`):** grouped ledger view; toggle active / delete.
+- **Companion (`/ask-harness`):** after saving a chat summary, shows suggested durable memories and requires sensitivity selection before save.
+- **Tape Archive (`/memory-bank`):** grouped ledger view; inspect/reclassify sensitivity, toggle active, or delete.
 
 ## Dogfood
 
 1. Open **Companion** from Backroom with seed board loaded.
 2. Ask a career/avoidance question; save the chat summary.
-3. Review **Suggested durable memories**; save one pattern or rule.
+3. Review **Suggested durable memories**; classify and save one pattern or rule.
 4. Open **Tape Archive** in Backroom; confirm item appears and is active.
 5. Check export debug — quality summary shows memory counts and "Memory items in export: yes".
 6. Ask a follow-up question; response should cite Memory Bank / career signals when relevant.

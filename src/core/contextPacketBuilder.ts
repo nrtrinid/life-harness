@@ -38,7 +38,11 @@ import {
   type ChatHarnessMode,
   type HarnessExportInput
 } from "./harnessContext";
-import { getActiveMemoryItems } from "./harnessMemoryBank";
+import {
+  getActiveMemoryItems,
+  isMemoryAllowedInExistingContext,
+  MEMORY_UNCLASSIFIED_SENSITIVITY
+} from "./harnessMemoryBank";
 import { computePrimaryAction } from "./primaryAction";
 import { computeRecoveryVisibility } from "./recovery";
 import type { SensitivityLevel } from "./types";
@@ -60,14 +64,22 @@ export type ContextPacketBuildInput = {
 
 function buildMemorySlices(data: HarnessExportInput): RankedSlice<RetrievedMemory>[] {
   const slices: RankedSlice<RetrievedMemory>[] = [];
-  const activeMemory = getActiveMemoryItems(data.memoryItems ?? []);
+  const activeMemory = getActiveMemoryItems(data.memoryItems ?? []).filter(
+    isMemoryAllowedInExistingContext
+  );
 
   for (const [index, item] of activeMemory.slice(0, 10).entries()) {
     slices.push({
       source: "memory_bank",
       tier: "high",
       rank: 75 - index,
-      sensitivity: "S1",
+      // Legacy unclassified memories keep the pre-existing S1 packet label for
+      // compatibility only. This is not canonical record classification and
+      // must not be used by retrieval eligibility.
+      sensitivity:
+        item.sensitivity === MEMORY_UNCLASSIFIED_SENSITIVITY
+          ? "S1"
+          : item.sensitivity,
       payload: {
         memoryId: item.id,
         kind: item.kind,

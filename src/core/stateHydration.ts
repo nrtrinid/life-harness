@@ -1,4 +1,5 @@
 import { syncApplicationStatus } from "./career";
+import { normalizeMemoryItems } from "./harnessMemoryBank";
 import { normalizeClarifiedSpec } from "./featureSprintClarifiedSpec";
 import { resolveFeatureSprintAutonomyPolicy } from "./featureSprintAutonomyPolicy";
 import { normalizePlanSprintMapFields } from "./featureSprintMap";
@@ -159,7 +160,7 @@ export function normalizeData(partial: Partial<LifeHarnessData>): LifeHarnessDat
     jobSources: partial.jobSources ?? [],
     jobSourceRuns: partial.jobSourceRuns ?? [],
     chatSummaries: partial.chatSummaries ?? [],
-    memoryItems: partial.memoryItems ?? [],
+    memoryItems: normalizeMemoryItems(partial.memoryItems),
     projects: partial.projects ?? [],
     agentSessions: partial.agentSessions ?? [],
     featureSprintPlans: normalizeFeatureSprintPlans(partial.featureSprintPlans),

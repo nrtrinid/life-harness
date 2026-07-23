@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  createMemoryItem,
+  getMemoryRetrievalEligibility,
+  MEMORY_SENSITIVITY_LEVELS
+} from "../../core/harnessMemoryBank";
 import type { LifeHarnessData } from "../../core/lifeHarnessData";
 import { createSeedState } from "../../data/createSeedState";
 import type { StorageAdapter } from "../../storage/types";
@@ -137,5 +142,101 @@ describe("lifeHarness persistence boundary", () => {
     expect(parsed.ok).toBe(true);
     expect(createLifeHarnessEnvelope(state).schemaVersion).toBe(1);
     expect(parsed.data?.jobSourceRuns).toEqual(state.jobSourceRuns);
+  });
+
+  it("round-trips every explicit Memory Bank sensitivity without rewriting it", () => {
+    const adapter = createMockAdapter();
+    const state = createStateWithRun();
+    state.memoryItems = MEMORY_SENSITIVITY_LEVELS.map((sensitivity) =>
+      createMemoryItem(
+        {
+          id: `memory-${sensitivity}`,
+          kind: "pattern",
+          title: `Memory ${sensitivity}`,
+          summary: `Persist ${sensitivity} exactly.`,
+          tags: ["persistence"],
+          sensitivity,
+          isActive: true
+        },
+        "2026-06-09T12:00:00.000Z"
+      )
+    );
+
+    persistLifeHarnessState(state, adapter);
+    const hydrated = hydrateLifeHarnessState(adapter, fixedNow);
+    const serialized = JSON.parse(adapter.stored!) as {
+      data: { memoryItems: Array<{ sensitivity: string }> };
+    };
+
+    expect(hydrated.memoryItems.map((item) => item.sensitivity)).toEqual([
+      "S0",
+      "S1",
+      "S2",
+      "S3"
+    ]);
+    expect(serialized.data.memoryItems.map((item) => item.sensitivity)).toEqual([
+      "S0",
+      "S1",
+      "S2",
+      "S3"
+    ]);
+  });
+
+  it("hydrates missing and invalid legacy sensitivity as unclassified without data loss", () => {
+    const base = createMemoryItem(
+      {
+        id: "memory-legacy",
+        kind: "rule",
+        title: "Legacy rule",
+        summary: "Keep this record available.",
+        tags: ["legacy"],
+        sourceChatSummaryId: "chat-legacy",
+        sensitivity: "S2",
+        isActive: true
+      },
+      "2026-06-09T12:00:00.000Z"
+    );
+    const { sensitivity: _missing, ...legacy } = base;
+    const invalid = {
+      ...base,
+      id: "memory-invalid",
+      title: "Invalid classification",
+      sensitivity: "private"
+    };
+    const adapter = createMockAdapter(
+      JSON.stringify({
+        schemaVersion: 1,
+        savedAt: "2026-06-09T12:00:00.000Z",
+        data: {
+          ...createStateWithRun(),
+          memoryItems: [legacy, invalid]
+        }
+      })
+    );
+
+    const hydrated = hydrateLifeHarnessState(adapter, fixedNow);
+
+    expect(hydrated.memoryItems).toHaveLength(2);
+    expect(hydrated.memoryItems[0]).toMatchObject({
+      id: "memory-legacy",
+      title: "Legacy rule",
+      summary: "Keep this record available.",
+      tags: ["legacy"],
+      sourceChatSummaryId: "chat-legacy",
+      sensitivity: "unclassified"
+    });
+    expect(hydrated.memoryItems[1]).toMatchObject({
+      id: "memory-invalid",
+      title: "Invalid classification",
+      sensitivity: "unclassified"
+    });
+    expect(
+      hydrated.memoryItems.map((item) => getMemoryRetrievalEligibility(item).reason)
+    ).toEqual(["sensitivity_unclassified", "sensitivity_unclassified"]);
+    const stored = JSON.parse(adapter.stored!) as {
+      data: { memoryItems: Array<{ sensitivity?: string }> };
+    };
+    expect(stored.data.memoryItems[0]?.sensitivity).toBeUndefined();
+    expect(stored.data.memoryItems[1]?.sensitivity).toBe("private");
   });
 });

@@ -1,5 +1,5 @@
 import { compactText } from "./chatThreadState";
-import { capMemorySummary, type CreateMemoryItemInput } from "./harnessMemoryBank";
+import { capMemorySummary, type MemoryItemCandidate } from "./harnessMemoryBank";
 
 export const RAW_LAB_IDEA_PAYLOAD_MAX = 240;
 export const RAW_LAB_COMPANION_HANDOFF_MAX = 800;
@@ -31,7 +31,7 @@ function titleFromRawLabOutput(output: string): string {
     : title;
 }
 
-export function buildRawLabMemoryInput(output: string): CreateMemoryItemInput | null {
+export function buildRawLabMemoryInput(output: string): MemoryItemCandidate | null {
   if (!isAttachableRawLabOutput(output)) {
     return null;
   }

@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChatReasoningPanel } from "../chat/ChatReasoningPanel";
 import { MessageActionMenu } from "../chat/MessageActionMenu";
 import { ReasoningDepthPill } from "../chat/ReasoningDepthPill";
+import { MemorySensitivityPicker } from "../memoryBank/MemorySensitivityPicker";
 import type { QuickQuestion } from "../askHarness/ChatComposer";
 import { scrollChatThreadToEnd } from "../chatSurfaceLayout";
 import { styles } from "../styles";
@@ -11,6 +12,7 @@ import type { ReasoningDepth } from "../../core/chatHarnessClient";
 import type { RawLabReasoningDepth, RawLabResponse } from "../../core/rawLabClient";
 import { isAttachableRawLabOutput } from "../../core/rawLabOutputAttachment";
 import type { RawLabTurn } from "../../core/rawLabThreadState";
+import type { SensitivityLevel } from "../../core/types";
 import { RawLabEmptyState } from "./RawLabEmptyState";
 
 export interface RawLabThreadError {
@@ -41,7 +43,7 @@ interface RawLabThreadProps {
   onAddUserDislike?: (content: string) => void;
   onSetCurrentStance?: (content: string) => void;
   onCaptureAsIdea?: (content: string) => void;
-  onSaveAsMemory?: (content: string) => void;
+  onSaveAsMemory?: (content: string, sensitivity: SensitivityLevel) => void;
   onCopyForCompanion?: (content: string) => void;
 }
 
@@ -157,9 +159,11 @@ function SpineAttachmentActions({
 }: {
   content: string;
   onCaptureAsIdea?: (content: string) => void;
-  onSaveAsMemory?: (content: string) => void;
+  onSaveAsMemory?: (content: string, sensitivity: SensitivityLevel) => void;
   onCopyForCompanion?: (content: string) => void;
 }) {
+  const [selectedSensitivity, setSelectedSensitivity] = useState<SensitivityLevel | null>(null);
+
   if (!onCaptureAsIdea && !onSaveAsMemory && !onCopyForCompanion) {
     return null;
   }
@@ -182,17 +186,28 @@ function SpineAttachmentActions({
         </Pressable>
       ) : null}
       {onSaveAsMemory ? (
-        <Pressable
-          style={styles.smallButton}
-          disabled={!attachable}
-          onPress={() => {
-            if (attachable) {
-              onSaveAsMemory(content);
-            }
-          }}
-        >
-          <Text style={styles.smallButtonText}>Save as memory</Text>
-        </Pressable>
+        <View style={{ gap: 4 }}>
+          <MemorySensitivityPicker
+            value={selectedSensitivity}
+            onChange={setSelectedSensitivity}
+            label="Memory sensitivity (required)"
+          />
+          <Pressable
+            style={[
+              styles.smallButton,
+              !attachable || !selectedSensitivity ? { opacity: 0.45 } : null
+            ]}
+            disabled={!attachable || !selectedSensitivity}
+            onPress={() => {
+              if (attachable && selectedSensitivity) {
+                onSaveAsMemory(content, selectedSensitivity);
+                setSelectedSensitivity(null);
+              }
+            }}
+          >
+            <Text style={styles.smallButtonText}>Save as memory</Text>
+          </Pressable>
+        </View>
       ) : null}
       {onCopyForCompanion ? (
         <Pressable
@@ -224,7 +239,7 @@ function AssistantTurn({
   reasoningDepth?: RawLabReasoningDepth;
   response?: RawLabResponse;
   onCaptureAsIdea?: (content: string) => void;
-  onSaveAsMemory?: (content: string) => void;
+  onSaveAsMemory?: (content: string, sensitivity: SensitivityLevel) => void;
   onCopyForCompanion?: (content: string) => void;
   onPin?: (content: string) => void;
   onDoNotRepeat?: (content: string) => void;

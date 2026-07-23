@@ -21,13 +21,15 @@ import { routeCapabilities } from "../../core/capabilityRouter";
 import { buildChatSummary } from "../../core/harnessMemory";
 import {
   buildMemoryCandidatesFromChatSummary,
-  memoryItemDedupeKey
+  memoryItemDedupeKey,
+  type MemoryItemCandidate
 } from "../../core/harnessMemoryBank";
 import {
   RESPONSE_VARIANTS,
   RESPONSE_VARIANTS_PRIMARY_COUNT
 } from "../../core/chatThreadState";
 import type { HarnessChatSummary, HarnessMemoryItem, SensitivityLevel } from "../../core/types";
+import { MemorySensitivityPicker } from "../memoryBank/MemorySensitivityPicker";
 import { ChatEmptyState } from "./ChatEmptyState";
 import type { QuickQuestion } from "./ChatComposer";
 import type { ChatThreadItem } from "./types";
@@ -47,7 +49,11 @@ interface ChatThreadProps {
   onToggleMemoryTools: (turnId: string) => void;
   onToggleMemoryPreview: (turnId: string) => void;
   onSaveChatSummary: (turnId: string, summary: HarnessChatSummary) => void;
-  onSaveMemoryBankCandidate: (turnId: string, candidate: HarnessMemoryItem) => void;
+  onSaveMemoryBankCandidate: (
+    turnId: string,
+    candidate: MemoryItemCandidate,
+    sensitivity: SensitivityLevel
+  ) => void;
   onVariantPrompt?: (prompt: string) => void;
 }
 
@@ -81,6 +87,47 @@ function getMemoryCandidates(
   );
 }
 
+function MemoryCandidateCard({
+  turnId,
+  candidate,
+  onSave
+}: {
+  turnId: string;
+  candidate: MemoryItemCandidate;
+  onSave: (
+    turnId: string,
+    candidate: MemoryItemCandidate,
+    sensitivity: SensitivityLevel
+  ) => void;
+}) {
+  const [selectedSensitivity, setSelectedSensitivity] = useState<SensitivityLevel | null>(null);
+
+  return (
+    <View style={styles.checklist}>
+      <Text style={styles.helpText}>
+        {candidate.kind} · {candidate.title}
+      </Text>
+      <Text style={styles.helpText}>{candidate.summary}</Text>
+      <MemorySensitivityPicker
+        value={selectedSensitivity}
+        onChange={setSelectedSensitivity}
+        label="Classify before saving"
+      />
+      <Pressable
+        style={[styles.smallButton, !selectedSensitivity ? { opacity: 0.45 } : null]}
+        disabled={!selectedSensitivity}
+        onPress={() => {
+          if (selectedSensitivity) {
+            onSave(turnId, candidate, selectedSensitivity);
+          }
+        }}
+      >
+        <Text style={styles.smallButtonText}>Save to Memory Bank</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function AssistantTurn({
   turn,
   memoryItems,
@@ -107,7 +154,11 @@ function AssistantTurn({
   onToggleMemoryTools: (turnId: string) => void;
   onToggleMemoryPreview: (turnId: string) => void;
   onSaveChatSummary: (turnId: string, summary: HarnessChatSummary) => void;
-  onSaveMemoryBankCandidate: (turnId: string, candidate: HarnessMemoryItem) => void;
+  onSaveMemoryBankCandidate: (
+    turnId: string,
+    candidate: MemoryItemCandidate,
+    sensitivity: SensitivityLevel
+  ) => void;
   onVariantPrompt?: (prompt: string) => void;
 }) {
   const [showSafety, setShowSafety] = useState(false);
@@ -286,18 +337,12 @@ function AssistantTurn({
                 {candidates.map((candidate) => {
                   const key = memoryItemDedupeKey(candidate);
                   return (
-                    <View key={key} style={styles.checklist}>
-                      <Text style={styles.helpText}>
-                        {candidate.kind} · {candidate.title}
-                      </Text>
-                      <Text style={styles.helpText}>{candidate.summary}</Text>
-                      <Pressable
-                        style={styles.smallButton}
-                        onPress={() => onSaveMemoryBankCandidate(turn.id, candidate)}
-                      >
-                        <Text style={styles.smallButtonText}>Save to Memory Bank</Text>
-                      </Pressable>
-                    </View>
+                    <MemoryCandidateCard
+                      key={key}
+                      turnId={turn.id}
+                      candidate={candidate}
+                      onSave={onSaveMemoryBankCandidate}
+                    />
                   );
                 })}
               </View>

@@ -19,6 +19,8 @@ export type LogType = "win" | "leak" | "idea" | "pounce" | "salvage" | "mvd" | "
 
 export type SensitivityLevel = "S0" | "S1" | "S2" | "S3";
 
+export type HarnessMemorySensitivity = SensitivityLevel | "unclassified";
+
 export type RoleType =
   | "software"
   | "cybersecurity"
@@ -332,6 +334,7 @@ export interface HarnessMemoryItem {
   tags: string[];
   evidence?: string;
   sourceChatSummaryId?: string;
+  sensitivity: HarnessMemorySensitivity;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

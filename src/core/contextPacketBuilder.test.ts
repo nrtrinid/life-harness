@@ -9,7 +9,12 @@ import { ContextPacketBuildError } from "./contextPacket";
 import { formatPacketSliceSummary, packetToHarnessContext } from "./contextPacketShim";
 import { UNTRUSTED_TRUSTED_MESSAGE_STUB } from "./untrustedContextBlock";
 import type { HarnessExportInput } from "./harnessContext";
-import type { LifeCard, LifeLogEntry } from "./types";
+import type {
+  HarnessMemoryItem,
+  HarnessMemorySensitivity,
+  LifeCard,
+  LifeLogEntry
+} from "./types";
 
 const FIXED_NOW = new Date("2026-06-09T12:00:00.000Z");
 
@@ -39,6 +44,23 @@ function buildPacket(
     userIntent: { message, mode, sensitivity: "S1" },
     now: FIXED_NOW
   });
+}
+
+function fixtureMemoryItem(
+  id: string,
+  sensitivity: HarnessMemorySensitivity
+): HarnessMemoryItem {
+  return {
+    id,
+    kind: "pattern",
+    title: `Memory ${id}`,
+    summary: `Summary ${id}.`,
+    tags: ["memory"],
+    sensitivity,
+    isActive: true,
+    createdAt: FIXED_NOW.toISOString(),
+    updatedAt: FIXED_NOW.toISOString()
+  };
 }
 
 describe("buildAiContextPacket", () => {
@@ -131,6 +153,28 @@ describe("buildAiContextPacket", () => {
         now: FIXED_NOW
       })
     ).toThrow(ContextPacketBuildError);
+  });
+
+  it("uses canonical Memory Bank sensitivity, excludes S3, and keeps legacy S1 compatibility separate", () => {
+    const packet = buildPacket({
+      memoryItems: [
+        fixtureMemoryItem("s2", "S2"),
+        fixtureMemoryItem("s3", "S3"),
+        fixtureMemoryItem("legacy", "unclassified")
+      ]
+    });
+
+    expect(packet.memories.map((slice) => slice.payload.memoryId)).toEqual([
+      "s2",
+      "legacy"
+    ]);
+    expect(packet.memories.find((slice) => slice.payload.memoryId === "s2")?.sensitivity).toBe(
+      "S2"
+    );
+    expect(
+      packet.memories.find((slice) => slice.payload.memoryId === "legacy")?.sensitivity
+    ).toBe("S1");
+    expect(JSON.stringify(packet)).not.toContain("Memory s3");
   });
 
   it("redacts S2 vice log rawText from summaries", () => {

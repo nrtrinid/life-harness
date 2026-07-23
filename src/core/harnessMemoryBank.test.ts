@@ -13,10 +13,13 @@ import {
   countSentences,
   createMemoryItem,
   getActiveMemoryItems,
+  getMemoryRetrievalEligibility,
   groupMemoryItemsByKind,
   isDurableMemoryDecision,
   memoryItemDedupeKey,
-  MEMORY_BANK_PREFIX
+  MEMORY_BANK_PREFIX,
+  MEMORY_SENSITIVITY_LEVELS,
+  normalizeMemoryItems
 } from "./harnessMemoryBank";
 
 const FIXED_NOW = "2026-06-09T12:00:00.000Z";
@@ -37,18 +40,21 @@ function fixtureChatSummary(overrides: Partial<HarnessChatSummary> = {}): Harnes
 }
 
 function fixtureMemoryItem(overrides: Partial<HarnessMemoryItem> = {}): HarnessMemoryItem {
-  return createMemoryItem(
+  const { sensitivity = "S1", ...rest } = overrides;
+  const item = createMemoryItem(
     {
       kind: "pattern",
       title: "Career avoidance pattern",
       summary: "Career threads can stay cold while build work stays hot.",
       tags: ["career"],
       sourceChatSummaryId: "chat-memory-fixture",
+      sensitivity: sensitivity === "unclassified" ? "S1" : sensitivity,
       isActive: true,
-      ...overrides
+      ...rest
     },
     FIXED_NOW
   );
+  return sensitivity === "unclassified" ? { ...item, sensitivity } : item;
 }
 
 describe("isDurableMemoryDecision", () => {
@@ -109,11 +115,47 @@ describe("buildMemoryCandidatesFromChatSummary", () => {
 
     for (const candidate of candidates) {
       expect(countSentences(candidate.summary)).toBeLessThanOrEqual(2);
+      expect(candidate).not.toHaveProperty("sensitivity");
     }
   });
 });
 
 describe("createMemoryItem", () => {
+  it("requires and preserves an explicit valid sensitivity", () => {
+    for (const sensitivity of MEMORY_SENSITIVITY_LEVELS) {
+      const item = createMemoryItem(
+        {
+          kind: "pattern",
+          title: `Sensitivity ${sensitivity}`,
+          summary: "Explicitly classified.",
+          tags: [],
+          sensitivity,
+          isActive: true
+        },
+        FIXED_NOW
+      );
+
+      expect(item.sensitivity).toBe(sensitivity);
+    }
+  });
+
+  it("rejects unclassified or invalid sensitivity on creation", () => {
+    const input = {
+      kind: "pattern" as const,
+      title: "Invalid sensitivity",
+      summary: "Must fail closed.",
+      tags: [],
+      isActive: true
+    };
+
+    expect(() =>
+      createMemoryItem({ ...input, sensitivity: "unclassified" as never }, FIXED_NOW)
+    ).toThrow(/explicit S0, S1, S2, or S3/);
+    expect(() =>
+      createMemoryItem({ ...input, sensitivity: "private" as never }, FIXED_NOW)
+    ).toThrow(/explicit S0, S1, S2, or S3/);
+  });
+
   it("uses fixed now and optional timestamp overrides", () => {
     const item = createMemoryItem(
       {
@@ -121,6 +163,7 @@ describe("createMemoryItem", () => {
         title: "Test",
         summary: "One sentence.",
         tags: [],
+        sensitivity: "S1",
         isActive: true,
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-02T00:00:00.000Z"
@@ -140,6 +183,7 @@ describe("createMemoryItem", () => {
         title: "Rule",
         summary: "Durable rule.",
         tags: [],
+        sensitivity: "S1",
         isActive: true
       },
       FIXED_NOW
@@ -178,6 +222,31 @@ describe("memory item state mutators", () => {
     });
 
     expect(updated.memoryItems[0]?.summary).toBe("Updated summary.");
+    expect(updated.memoryItems[0]?.sensitivity).toBe(item.sensitivity);
+  });
+
+  it("validates intentional sensitivity changes and prevents clearing classification", () => {
+    const item = fixtureMemoryItem({ sensitivity: "S1" });
+    const state = applySaveMemoryItem(createSeedState(FIXED_NOW), item);
+    const updated = applyUpdateMemoryItem(state, {
+      ...item,
+      sensitivity: "S2",
+      updatedAt: "2026-06-10T12:00:00.000Z"
+    });
+
+    expect(updated.memoryItems[0]?.sensitivity).toBe("S2");
+    expect(() =>
+      applyUpdateMemoryItem(updated, {
+        ...updated.memoryItems[0]!,
+        sensitivity: "unclassified"
+      })
+    ).toThrow(/cannot be changed back to unclassified/);
+    expect(() =>
+      applyUpdateMemoryItem(updated, {
+        ...updated.memoryItems[0]!,
+        sensitivity: "private" as never
+      })
+    ).toThrow(/explicit S0, S1, S2, or S3/);
   });
 
   it("applyToggleMemoryItemActive flips isActive", () => {
@@ -191,6 +260,60 @@ describe("memory item state mutators", () => {
 });
 
 describe("memory bank helpers", () => {
+  it("normalizes legacy and invalid persisted sensitivity to unclassified", () => {
+    const classified = fixtureMemoryItem({ sensitivity: "S2" });
+    const { sensitivity: _missing, ...legacy } = classified;
+    const invalid = { ...classified, id: "memory-invalid", sensitivity: "private" };
+
+    const normalized = normalizeMemoryItems([
+      legacy as HarnessMemoryItem,
+      invalid as unknown as HarnessMemoryItem
+    ]);
+
+    expect(normalized.map((item) => item.sensitivity)).toEqual([
+      "unclassified",
+      "unclassified"
+    ]);
+    expect(normalized[0]).toMatchObject({
+      id: classified.id,
+      title: classified.title,
+      summary: classified.summary
+    });
+  });
+
+  it("returns deterministic retrieval eligibility reasons", () => {
+    for (const sensitivity of ["S0", "S1", "S2"] as const) {
+      expect(
+        getMemoryRetrievalEligibility(fixtureMemoryItem({ sensitivity }))
+      ).toEqual({
+        eligible: true,
+        reason: "eligible",
+        sensitivity
+      });
+    }
+
+    expect(
+      getMemoryRetrievalEligibility(fixtureMemoryItem({ sensitivity: "S3" }))
+    ).toMatchObject({ eligible: false, reason: "sensitivity_s3" });
+    expect(
+      getMemoryRetrievalEligibility(fixtureMemoryItem({ sensitivity: "unclassified" }))
+    ).toMatchObject({ eligible: false, reason: "sensitivity_unclassified" });
+    expect(
+      getMemoryRetrievalEligibility(fixtureMemoryItem({ isActive: false }))
+    ).toMatchObject({ eligible: false, reason: "inactive" });
+    expect(
+      getMemoryRetrievalEligibility({
+        ...fixtureMemoryItem(),
+        sensitivity: "private"
+      })
+    ).toMatchObject({ eligible: false, reason: "sensitivity_invalid" });
+    expect(getMemoryRetrievalEligibility({ id: "missing-fields" })).toEqual({
+      eligible: false,
+      reason: "malformed",
+      sensitivity: null
+    });
+  });
+
   it("getActiveMemoryItems filters inactive entries", () => {
     const active = fixtureMemoryItem({ isActive: true });
     const inactive = fixtureMemoryItem({

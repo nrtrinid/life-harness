@@ -42,6 +42,7 @@ import {
   buildRawLabIdeaCaptureText,
   buildRawLabMemoryInput
 } from "../src/core/rawLabOutputAttachment";
+import type { SensitivityLevel } from "../src/core/types";
 import {
   buildRawLabStateChips,
   countRawLabPersonalityItems,
@@ -268,14 +269,14 @@ export default function RawLabScreen() {
     setNotice({ kind: "info", message: result.message ?? "No rule matched." });
   }
 
-  function handleSaveAsMemory(content: string) {
+  function handleSaveAsMemory(content: string, memorySensitivity: SensitivityLevel) {
     const input = buildRawLabMemoryInput(content);
     if (!input) {
       setNotice({ kind: "warning", message: "Nothing to save." });
       return;
     }
 
-    saveMemoryItem(createMemoryItem(input));
+    saveMemoryItem(createMemoryItem({ ...input, sensitivity: memorySensitivity }));
     setNotice({ kind: "success", message: "Saved to Memory Bank." });
   }
 
