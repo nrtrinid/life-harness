@@ -12,7 +12,7 @@ export default defineConfig({
   },
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: [["list"]],
   use: {
     baseURL: WEB_URL,
@@ -34,7 +34,11 @@ export default defineConfig({
     env: {
       ...process.env,
       CI: "1",
-      EXPO_NO_TELEMETRY: "1"
+      EXPO_NO_TELEMETRY: "1",
+      EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN:
+        process.env.EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_TOKEN?.trim() || "life-harness-dev",
+      EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_BASE_URL:
+        process.env.EXPO_PUBLIC_FEATURE_SPRINT_RUNNER_BASE_URL?.trim() || "http://127.0.0.1:8127"
     }
   }
 });

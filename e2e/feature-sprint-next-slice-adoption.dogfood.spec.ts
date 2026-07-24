@@ -51,7 +51,7 @@ test.describe("Feature Sprint next slice adoption dogfood", () => {
     const specUpdateImport = page.getByTestId("feature-sprint-spec-update-import");
     await specUpdateImport.scrollIntoViewIfNeeded();
     await specUpdateImport.click();
-    await expect(page.getByText("Spec update imported.")).toBeVisible();
+    await expect(page.getByText("Spec update imported.", { exact: true })).toBeVisible();
 
     await page.getByTestId("feature-sprint-approve-feature-spec").scrollIntoViewIfNeeded();
     const approveSpecButton = page.getByTestId("feature-sprint-approve-feature-spec");
@@ -68,8 +68,9 @@ test.describe("Feature Sprint next slice adoption dogfood", () => {
     await adoptButton.scrollIntoViewIfNeeded();
     await expect(adoptButton).toBeVisible();
     await adoptButton.click();
-    await expect(page.getByText("Next slice adopted as the current slice.")).toBeVisible();
-    await expect(page.getByText(`▸ ${FEATURE_SPRINT_NEXT_SLICE_ADOPTION_NEXT_SLICE_TITLE} · ready`)).toBeVisible();
+    await expect(
+      page.getByText(`▸ ${FEATURE_SPRINT_NEXT_SLICE_ADOPTION_NEXT_SLICE_TITLE} · ready`)
+    ).toBeVisible({ timeout: 30_000 });
   });
 });
 

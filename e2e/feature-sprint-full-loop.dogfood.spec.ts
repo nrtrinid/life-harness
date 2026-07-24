@@ -19,7 +19,7 @@ test.describe("Feature Sprint full mock loop dogfood", () => {
     await seedWebDogfoodState(page, createFeatureSprintFullLoopDogfoodState());
     await openFeatureSprintBackroom(page, FEATURE_SPRINT_FULL_LOOP_DOGFOOD_CARD_ID);
 
-    await expect(page.getByText("Copy for ChatGPT/Codex scoping", { exact: true })).toBeVisible();
+    await expect(page.getByText("Copy for Codex scoping", { exact: true })).toBeVisible();
 
     await fillAndBlurByTestId(
       page,
@@ -57,8 +57,11 @@ test.describe("Feature Sprint full mock loop dogfood", () => {
     const specUpdateImport = page.getByTestId("feature-sprint-spec-update-import");
     await specUpdateImport.scrollIntoViewIfNeeded();
     await specUpdateImport.click();
-    await expect(page.getByText("Spec update imported.")).toBeVisible();
-    await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible();
+    // Prefer durable gate/state signals; the toast can be ephemeral under slow suites.
+    await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible({
+      timeout: 30_000
+    });
+    await expect(page.getByText("Spec update imported.", { exact: true })).toBeVisible();
 
     await page.getByTestId("feature-sprint-spec-update-summary").click();
     await expect(page.getByTestId("feature-sprint-spec-update-completed-summary")).toHaveText(
@@ -74,9 +77,12 @@ test.describe("Feature Sprint full mock loop dogfood", () => {
     ).toBeVisible();
 
     await page.getByTestId("feature-sprint-advance-step").click();
+    // Advance remains blocked until revised spec is approved (toast is ephemeral).
+    await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible();
     await expect(
       page.getByText(
-        "Import a spec update for this reviewed step and approve the revised feature spec before advancing."
+        "Review accepted. Approve the revised feature spec, then use Advance step.",
+        { exact: true }
       )
     ).toBeVisible();
 
