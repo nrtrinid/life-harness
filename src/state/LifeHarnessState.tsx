@@ -1498,6 +1498,9 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       if (!result.ok) {
         return { ok: false, message: result.error, safetyBlocked: result.safetyBlocked };
       }
+      // Sync before dispatch so same-tick durable attempt transitions (mark-running)
+      // cannot read a stale stateRef and erase the new history row.
+      stateRef.current = result.state;
       dispatch({ type: "state_replaced", state: result.state });
       return { ok: true, message: "Runner history started.", runId: result.runId };
     },
@@ -1510,6 +1513,8 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       if (!result.ok) {
         return { ok: false, message: result.error };
       }
+      // Sync before dispatch so same-tick attach/reconcile cannot wipe completed evidence.
+      stateRef.current = result.state;
       dispatch({ type: "state_replaced", state: result.state });
       return { ok: true, message: "Runner history updated." };
     },

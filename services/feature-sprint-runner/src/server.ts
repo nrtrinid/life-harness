@@ -23,7 +23,17 @@ import {
   runFeatureSprintPacketOnRunner
 } from "./runPacket";
 import { buildSetupDiagnostics } from "./setupDiagnostics";
+import {
+  getFeatureSprintRunnerTestMetrics,
+  isMockRunnerTestInstrumentationEnabled,
+  recordFeatureSprintRunnerTestPost,
+  recordFeatureSprintRunnerTestSpawn,
+  resetFeatureSprintRunnerTestMetrics
+} from "./testMetrics";
 import { cleanupFeatureSprintWorktree } from "./worktreeCleanup";
+
+/** When true, the next successful /run journals then never writes the HTTP response. */
+let hangNextRunHttpResponse = false;
 
 export const RUNNER_HOST = "127.0.0.1";
 export const RUNNER_PORT = Number.parseInt(
@@ -137,6 +147,36 @@ export function createServer() {
       return;
     }
 
+    if (
+      isMockRunnerTestInstrumentationEnabled() &&
+      request.method === "GET" &&
+      request.url === "/feature-sprint/test/metrics"
+    ) {
+      sendJson(response, 200, getFeatureSprintRunnerTestMetrics());
+      return;
+    }
+
+    if (
+      isMockRunnerTestInstrumentationEnabled() &&
+      request.method === "POST" &&
+      request.url === "/feature-sprint/test/reset-metrics"
+    ) {
+      resetFeatureSprintRunnerTestMetrics();
+      hangNextRunHttpResponse = false;
+      sendJson(response, 200, getFeatureSprintRunnerTestMetrics());
+      return;
+    }
+
+    if (
+      isMockRunnerTestInstrumentationEnabled() &&
+      request.method === "POST" &&
+      request.url === "/feature-sprint/test/hang-next-run-response"
+    ) {
+      hangNextRunHttpResponse = true;
+      sendJson(response, 200, { ok: true, hangNextRunHttpResponse: true });
+      return;
+    }
+
     const attemptMatch = request.url?.match(/^\/feature-sprint\/attempts\/([^/?#]+)$/);
     if (request.method === "GET" && attemptMatch) {
       const attemptId = decodeURIComponent(attemptMatch[1] ?? "");
@@ -160,11 +200,22 @@ export function createServer() {
           return;
         }
 
+        recordFeatureSprintRunnerTestPost(validated.request.attemptId);
         const result = await runFeatureSprintPacketWithAttemptJournal(validated.request, {
-          runOnce: runFeatureSprintPacketOnRunner
+          runOnce: async (requestBody) => {
+            const once = await runFeatureSprintPacketOnRunner(requestBody);
+            recordFeatureSprintRunnerTestSpawn();
+            return once;
+          }
         });
         if ("conflict" in result) {
           sendJson(response, 409, result.conflict);
+          return;
+        }
+        if (hangNextRunHttpResponse && result.ok) {
+          hangNextRunHttpResponse = false;
+          // Journal + in-process completed map are already durable; destroy only the HTTP body.
+          response.destroy();
           return;
         }
         sendJson(response, result.ok ? 200 : 500, result);

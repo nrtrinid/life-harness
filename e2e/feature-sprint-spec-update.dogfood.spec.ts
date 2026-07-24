@@ -25,7 +25,7 @@ test.describe("Feature Sprint spec-update dogfood", () => {
     );
 
     await page.getByTestId("feature-sprint-spec-update-import").click();
-    await expect(page.getByText("Spec update imported.")).toBeVisible();
+    await expect(page.getByText("Spec update imported.", { exact: true })).toBeVisible();
     await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible();
 
     await page.getByTestId("feature-sprint-spec-update-summary").click();
@@ -38,7 +38,9 @@ test.describe("Feature Sprint spec-update dogfood", () => {
     ).toBeVisible();
 
     await expect(page.getByTestId("feature-sprint-spec-update-gate-warning")).toBeVisible();
-    await expect(page.getByText("Approve the persisted feature spec before running implementation")).toBeVisible();
+    await expect(page.getByTestId("feature-sprint-implementation-block-reason")).toHaveText(
+      "Approve the feature spec before running implementation."
+    );
 
     await page.getByTestId("feature-sprint-advance-step").click();
     await expect(
