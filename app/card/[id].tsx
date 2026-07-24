@@ -377,6 +377,7 @@ export default function CardDetailScreen() {
     markFeatureSprintExecutionAttemptLaunching,
     markFeatureSprintExecutionAttemptRunning,
     attachFeatureSprintExecutionAttemptResponse,
+    applyRecoveredFeatureSprintRunnerStatus,
     markFeatureSprintExecutionAttemptAmbiguous,
     abandonFeatureSprintExecutionAttempt,
     reconcileFeatureSprintExecutionAttempt,
@@ -1214,6 +1215,14 @@ export default function CardDetailScreen() {
       return;
     }
     const status = await getFeatureSprintAttemptStatus(openExecutionAttempt.attemptId);
+    if (status.status === "identity_conflict" || status.identityConflict) {
+      showNotice(
+        "warning",
+        status.error ??
+          "Runner identity conflict for this attemptId. Held closed — history was not mutated."
+      );
+      return;
+    }
     if (status.status === "unknown") {
       markFeatureSprintExecutionAttemptAmbiguous(
         openExecutionAttempt.attemptId,
@@ -1234,20 +1243,35 @@ export default function CardDetailScreen() {
       return;
     }
     if ((status.status === "completed" || status.status === "failed") && status.result) {
-      const attached = attachFeatureSprintExecutionAttemptResponse(
+      const recovered = applyRecoveredFeatureSprintRunnerStatus(
         openExecutionAttempt.attemptId,
+        status.attemptId,
         status.result,
         { runnerRunId: status.runId }
       );
-      if (attached.ok && status.result.ok) {
+      if (!recovered.ok) {
+        showNotice(
+          "warning",
+          recovered.message ??
+            (recovered.identityConflict
+              ? "Recovered status identity mismatch. History was not mutated."
+              : "Could not attach retrieved result.")
+        );
+        return;
+      }
+      if (status.result.ok) {
         setAgentOutputText(composeImplementationRunnerOutputSummary(status.result));
       }
-      showNotice(
-        attached.ok ? "success" : "warning",
-        attached.ok
-          ? "Retrieved persisted runner result for this attempt. No provider relaunch."
-          : attached.message ?? "Could not attach retrieved result."
-      );
+      // A hung original POST keeps kernel "Working…" / running flags set; clear them once
+      // journaled recovery is attached so later legal actions (e.g. launch_review) can trigger.
+      setIsTriggeringKernelAction(false);
+      setIsRunningImplementation(false);
+      const noticeText = recovered.transportLossRepaired
+        ? "Recovered journaled implementation success after transport loss. Local runner history repaired. No provider relaunch."
+        : recovered.historyRepairSkipped
+          ? `Retrieved persisted runner result for this attempt. ${recovered.historyRepairSkipped} No provider relaunch.`
+          : "Retrieved persisted runner result for this attempt. No provider relaunch.";
+      showNotice("success", noticeText);
       return;
     }
     showNotice(
@@ -2132,11 +2156,9 @@ export default function CardDetailScreen() {
           : {})
       });
 
-      if (historyCreate.ok && historyCreate.runId) {
-        completeFeatureSprintRunnerRun(historyCreate.runId, result);
-      }
-
       if (durableAttempt) {
+        // Attach first so stateRef-backed preserve can block clobbering a Check-status recovery
+        // before a late transport-loss failure rewrites history.
         const attached = attachFeatureSprintExecutionAttemptResponse(
           durableAttempt.attemptId,
           result,
@@ -2145,11 +2167,32 @@ export default function CardDetailScreen() {
             historyRunId: historyCreate.ok ? historyCreate.runId : undefined
           }
         );
+        if (attached.preservedRecoveredSuccess) {
+          if (historyCreate.ok && historyCreate.runId) {
+            completeFeatureSprintRunnerRun(historyCreate.runId, result);
+          }
+          showNotice(
+            "warning",
+            "Original launch HTTP response was lost, but a recovered journaled result is already attached. No relaunch."
+          );
+          return;
+        }
         if (!attached.ok) {
           showNotice(
             "warning",
             attached.message ??
               "Runner finished but the response could not be persisted on the execution attempt."
+          );
+          return;
+        }
+      }
+
+      if (historyCreate.ok && historyCreate.runId) {
+        const historyUpdate = completeFeatureSprintRunnerRun(historyCreate.runId, result);
+        if (historyUpdate.preservedRecoveredSuccess) {
+          showNotice(
+            "warning",
+            "Original launch HTTP response was lost, but recovered journaled history was preserved. No relaunch."
           );
           return;
         }

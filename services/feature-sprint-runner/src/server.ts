@@ -214,8 +214,9 @@ export function createServer() {
         }
         if (hangNextRunHttpResponse && result.ok) {
           hangNextRunHttpResponse = false;
-          // Journal + in-process completed map are already durable; destroy only the HTTP body.
-          response.destroy();
+          // Journal + in-process completed map are already durable.
+          // Leave the HTTP response open with no body so the browser keeps a single
+          // in-flight POST (destroy() can provoke a client retry and inflate postCount).
           return;
         }
         sendJson(response, result.ok ? 200 : 500, result);

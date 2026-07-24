@@ -9,6 +9,7 @@ import {
 } from "../src/dogfood/featureSprintDurableLaunchSeed";
 import { openFeatureSprintBackroom } from "./helpers/featureSprintBackroom";
 import {
+  armHangNextRunResponse,
   captureRunPostBodies,
   getAttemptStatusFromRunner,
   getRunnerTestMetrics,
@@ -25,9 +26,8 @@ test.describe("Feature Sprint durable kernel launch dogfood", () => {
     const seed = createDurableLaunchReadyDogfoodState({ repoPath });
     expect(seed.nextAction).toBe("launch_implementation");
 
-    // Refresh-after-success recovery (not hang-next): lost HTTP response currently completes
-    // local runner history as failed before Check status can attach the journaled success,
-    // which blocks Normalize/proof. Hang control remains available for a product follow-up.
+    // Refresh-after-success recovery: response arrives, then reload before Check status.
+    // Hang-next transport-loss repair is covered by a sibling test in this file.
     await resetRunnerTestMetrics();
     const interception = captureRunPostBodies(page);
 
@@ -95,25 +95,22 @@ test.describe("Feature Sprint durable kernel launch dogfood", () => {
     const metricsBeforeRecover = await getRunnerTestMetrics();
     expect(metricsBeforeRecover.spawnCount).toBe(1);
 
-    const statusGets: string[] = [];
-    page.on("request", (request) => {
-      if (request.method() === "GET" && request.url().includes("/feature-sprint/attempts/")) {
-        statusGets.push(request.url());
-      }
-    });
+    const statusResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        response.url().includes(`/feature-sprint/attempts/${attemptId}`)
+    );
 
     const checkButton = page.getByText("Check runner status", { exact: true });
     await checkButton.scrollIntoViewIfNeeded();
     await checkButton.click({ force: true });
-    await expect
-      .poll(async () => statusGets.some((url) => url.includes(attemptId!)), { timeout: 30_000 })
-      .toBe(true);
+    await statusResponsePromise;
 
     await expect(
       page.getByText("Retrieved persisted runner result for this attempt. No provider relaunch.", {
         exact: true
       })
-    ).toBeVisible({ timeout: 30_000 });
+    ).toBeVisible({ timeout: 10_000 });
 
     const runPostsDuringRecover: string[] = [];
     page.on("request", (request) => {
@@ -161,5 +158,152 @@ test.describe("Feature Sprint durable kernel launch dogfood", () => {
     const finalMetrics = await getRunnerTestMetrics();
     expect(finalMetrics.spawnCount).toBe(1);
     expect(finalMetrics.lastAttemptId).toBe(attemptId);
+  });
+
+  test("hang-next transport loss: Check status repairs history then normalizes to launch_review", async ({
+    page
+  }) => {
+    test.setTimeout(420_000);
+    const repoPath = path.resolve(__dirname, "..");
+    const seed = createDurableLaunchReadyDogfoodState({ repoPath });
+    expect(seed.nextAction).toBe("launch_implementation");
+
+    await resetRunnerTestMetrics();
+    const interception = captureRunPostBodies(page);
+
+    await seedWebDogfoodStatePreserveAcrossReload(page, seed.state);
+    await openFeatureSprintBackroom(page, FEATURE_SPRINT_DURABLE_LAUNCH_DOGFOOD_CARD_ID);
+
+    await expect(page.getByText("Action: launch_implementation", { exact: true })).toBeVisible();
+
+    // Arm immediately before the UI launch so nothing else can consume the one-shot flag.
+    await armHangNextRunResponse();
+
+    const launchButton = page.getByRole("button", { name: "Launch Launch implementation" });
+    await launchButton.scrollIntoViewIfNeeded();
+    await launchButton.click({ force: true });
+
+    await expect(page.getByText("Durable execution attempt", { exact: true })).toBeVisible({
+      timeout: 120_000
+    });
+    await expect.poll(async () => interception.capturedAttemptIds.length, { timeout: 120_000 }).toBe(1);
+    const attemptId = interception.capturedAttemptIds[0];
+    expect(attemptId).toBeTruthy();
+    expect(interception.runPostRequests).toHaveLength(1);
+
+    await expect.poll(async () => (await getRunnerTestMetrics()).spawnCount, { timeout: 120_000 }).toBe(1);
+    await expect
+      .poll(async () => (await getAttemptStatusFromRunner(attemptId!)).status, { timeout: 120_000 })
+      .toBe("completed");
+    await expect
+      .poll(async () => (await getAttemptStatusFromRunner(attemptId!)).resultOk, { timeout: 30_000 })
+      .toBe(true);
+
+    // Browser response was destroyed; attempt remains open for Check status (may still be
+    // running while the hung POST awaits, or already ambiguous/failed after transport loss).
+    await expect(page.getByText("Durable execution attempt", { exact: true })).toBeVisible();
+    await expect(page.getByText(attemptId!, { exact: false })).toBeVisible();
+    // Must not look like a normal successful launch response was applied yet.
+    await expect(
+      page.getByText("Implementation finished. Inspect the expanded run above, then Save agent output.", {
+        exact: true
+      })
+    ).toHaveCount(0);
+
+    const metricsBeforeRecover = await getRunnerTestMetrics();
+    expect(metricsBeforeRecover.spawnCount).toBe(1);
+    expect(metricsBeforeRecover.postCount).toBe(1);
+
+    const statusGets: string[] = [];
+    const runPostsAfterLaunch: string[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "GET" && request.url().includes("/feature-sprint/attempts/")) {
+        statusGets.push(request.url());
+      }
+      if (request.method() === "POST" && request.url().includes("/feature-sprint/run")) {
+        runPostsAfterLaunch.push(request.url());
+      }
+    });
+
+    const checkButton = page.getByText("Check runner status", { exact: true });
+    await checkButton.scrollIntoViewIfNeeded();
+    await checkButton.click({ force: true });
+    await expect
+      .poll(async () => statusGets.some((url) => url.includes(attemptId!)), { timeout: 30_000 })
+      .toBe(true);
+    await expect(
+      page.getByText(
+        "Recovered journaled implementation success after transport loss. Local runner history repaired. No provider relaunch.",
+        { exact: true }
+      )
+    ).toBeVisible({ timeout: 30_000 });
+
+    await expect(page.getByText(`${attemptId} · response_received`, { exact: false })).toBeVisible();
+    await expect(page.getByText(/Codex implementation · succeeded ·/, { exact: false })).toBeVisible();
+    await expect(page.getByText("Changed files: 1", { exact: true })).toBeVisible();
+    const viewDetails = page.getByText("View details", { exact: true }).first();
+    if (await viewDetails.count()) {
+      await viewDetails.click({ force: true });
+    }
+    await expect(page.getByText(".life-harness/mock-implementation-result.md", { exact: false }).first()).toBeVisible({
+      timeout: 30_000
+    });
+    await expect(page.getByText(/status: passed|Verification: 1 passed/, { exact: false }).first()).toBeVisible();
+
+    // Repeated Check status must be idempotent (GET only; no duplicate history/evidence).
+    const getsBeforeRepeat = statusGets.length;
+    await checkButton.click({ force: true });
+    await expect.poll(async () => statusGets.length, { timeout: 30_000 }).toBeGreaterThan(getsBeforeRepeat);
+    await expect(
+      page.getByText("Retrieved persisted runner result for this attempt. No provider relaunch.", {
+        exact: true
+      })
+    ).toBeVisible({ timeout: 30_000 });
+    // Details pane may duplicate the summary line; history row count stays one.
+    await expect(page.getByText("Changed files: 1", { exact: true })).toHaveCount(1);
+    await expect(page.getByText("Recent runner runs", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Codex implementation · succeeded ·/, { exact: false }).first()).toBeVisible();
+
+    expect(runPostsAfterLaunch).toEqual([]);
+    expect((await getRunnerTestMetrics()).spawnCount).toBe(1);
+    expect((await getRunnerTestMetrics()).postCount).toBe(1);
+
+    await page.getByText("Resume apply result", { exact: true }).click();
+    await expect(
+      page.getByText(
+        "Loaded persisted attempt result into the output field. Save, then Normalize proof. No provider relaunch.",
+        { exact: true }
+      )
+    ).toBeVisible();
+    expect(runPostsAfterLaunch).toEqual([]);
+
+    const output = page.getByTestId("feature-sprint-agent-output-input");
+    await expect(output).not.toHaveValue("");
+
+    await page.getByTestId("feature-sprint-save-agent-output").click();
+    await expect(page.getByText("Feature sprint step updated.", { exact: true })).toBeVisible();
+
+    await expect(page.getByText("Action: save_implementation_proof", { exact: true })).toBeVisible();
+    const normalizeButton = page.getByText("Normalize for review", { exact: true });
+    await normalizeButton.scrollIntoViewIfNeeded();
+    await normalizeButton.click({ force: true });
+
+    await expect(
+      page.getByText("Saved validated implementation proof.", { exact: true })
+    ).toBeVisible({ timeout: 30_000 });
+
+    await expect(page.getByText("Action: launch_review", { exact: true })).toBeVisible({
+      timeout: 30_000
+    });
+    await expect(page.getByText("Launch Launch review", { exact: true })).toBeVisible({
+      timeout: 30_000
+    });
+
+    const finalMetrics = await getRunnerTestMetrics();
+    expect(finalMetrics.spawnCount).toBe(1);
+    expect(finalMetrics.postCount).toBe(1);
+    expect(finalMetrics.lastAttemptId).toBe(attemptId);
+    expect(interception.runPostRequests).toHaveLength(1);
+    expect(runPostsAfterLaunch).toEqual([]);
   });
 });

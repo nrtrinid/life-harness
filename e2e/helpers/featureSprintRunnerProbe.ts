@@ -41,7 +41,7 @@ export async function getRunnerTestMetrics(): Promise<RunnerTestMetrics> {
   return (await response.json()) as RunnerTestMetrics;
 }
 
-/** Ask the mock runner to journal the next successful run without writing the HTTP response. */
+/** Ask the mock runner to journal the next successful run without finishing the HTTP response. */
 export async function armHangNextRunResponse(): Promise<void> {
   const response = await fetch(`${RUNNER_BASE}/feature-sprint/test/hang-next-run-response`, {
     method: "POST",

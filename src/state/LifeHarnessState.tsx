@@ -100,11 +100,17 @@ import {
   attachFeatureSprintExecutionAttemptResponse,
   claimFeatureSprintExecutionAttempt,
   type ClaimFeatureSprintExecutionAttemptInput,
+  getFeatureSprintExecutionAttempt,
   markFeatureSprintExecutionAttemptAmbiguous,
   markFeatureSprintExecutionAttemptLaunching,
   markFeatureSprintExecutionAttemptRunning,
   reconcileFeatureSprintExecutionAttempt
 } from "../core/featureSprintExecutionAttempt";
+import {
+  applyRecoveredFeatureSprintRunnerStatus,
+  shouldPreserveRecoveredRunnerSuccess,
+  shouldPreserveSucceededRunnerHistory
+} from "../core/featureSprintRecoveredRunnerStatus";
 import {
   applyFeatureSprintLegalAction,
   type ApplyFeatureSprintLegalActionInput
@@ -433,6 +439,24 @@ interface LifeHarnessContextValue extends LifeHarnessData {
     message?: string;
     attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
     data?: LifeHarnessData;
+    preservedRecoveredSuccess?: boolean;
+  };
+  applyRecoveredFeatureSprintRunnerStatus: (
+    attemptId: string,
+    statusAttemptId: string,
+    response: FeatureSprintRunnerResponse,
+    options?: { runnerRunId?: string }
+  ) => {
+    ok: boolean;
+    message?: string;
+    attempt?: import("../core/types").HarnessFeatureSprintExecutionAttempt;
+    data?: LifeHarnessData;
+    historyRunId?: string;
+    historyRepaired?: boolean;
+    historyCreated?: boolean;
+    transportLossRepaired?: boolean;
+    historyRepairSkipped?: string;
+    identityConflict?: boolean;
   };
   markFeatureSprintExecutionAttemptAmbiguous: (attemptId: string, reason: string) => {
     ok: boolean;
@@ -458,7 +482,7 @@ interface LifeHarnessContextValue extends LifeHarnessData {
   completeFeatureSprintRunnerRun: (
     runId: string,
     response: FeatureSprintRunnerResponse
-  ) => { ok: boolean; message?: string };
+  ) => { ok: boolean; message?: string; preservedRecoveredSuccess?: boolean };
   markMostRecentFeatureSprintRunnerRunImported: (
     filter: FeatureSprintRunnerRunImportMarkFilter
   ) => { ok: boolean; message?: string; runId?: string };
@@ -1410,6 +1434,16 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       response: FeatureSprintRunnerResponse,
       options?: { runnerRunId?: string; historyRunId?: string }
     ) => {
+      const existingAttempt = getFeatureSprintExecutionAttempt(stateRef.current, attemptId);
+      if (shouldPreserveRecoveredRunnerSuccess(existingAttempt, response)) {
+        return {
+          ok: true,
+          attempt: existingAttempt,
+          data: stateRef.current,
+          preservedRecoveredSuccess: true,
+          message: "Preserved recovered journaled success over late transport failure."
+        };
+      }
       const result = attachFeatureSprintExecutionAttemptResponse(
         stateRef.current,
         attemptId,
@@ -1436,6 +1470,50 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       stateRef.current = nextState;
       dispatch({ type: "state_replaced", state: nextState });
       return { ok: true, attempt: nextAttempt, data: nextState };
+    },
+    [flushPersistedState]
+  );
+
+  const applyRecoveredFeatureSprintRunnerStatusAction = useCallback(
+    (
+      attemptId: string,
+      statusAttemptId: string,
+      response: FeatureSprintRunnerResponse,
+      options?: { runnerRunId?: string }
+    ) => {
+      const result = applyRecoveredFeatureSprintRunnerStatus(stateRef.current, {
+        attemptId,
+        statusAttemptId,
+        result: response,
+        runnerRunId: options?.runnerRunId
+      });
+      if (!result.ok) {
+        return {
+          ok: false,
+          message: result.error,
+          identityConflict: result.identityConflict
+        };
+      }
+      // Sync before flush/dispatch so same-tick resume/normalize reads reconciled history.
+      stateRef.current = result.state;
+      if (!flushPersistedState(result.state)) {
+        return {
+          ok: false,
+          message: "Could not persist recovered runner status and history repair."
+        };
+      }
+      dispatch({ type: "state_replaced", state: result.state });
+      return {
+        ok: true,
+        attempt: result.attempt,
+        data: result.state,
+        historyRunId: result.historyRunId,
+        historyRepaired: result.historyRepaired,
+        historyCreated: result.historyCreated,
+        transportLossRepaired: result.transportLossRepaired,
+        historyRepairSkipped: result.historyRepairSkipped,
+        message: result.historyRepairSkipped
+      };
     },
     [flushPersistedState]
   );
@@ -1509,6 +1587,14 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
 
   const completeFeatureSprintRunnerRunAction = useCallback(
     (runId: string, response: FeatureSprintRunnerResponse) => {
+      const existing = stateRef.current.featureSprintRunnerRuns.find((run) => run.id === runId);
+      if (shouldPreserveSucceededRunnerHistory(existing, response)) {
+        return {
+          ok: true,
+          message: "Preserved recovered runner history over late transport failure.",
+          preservedRecoveredSuccess: true
+        };
+      }
       const result = completeFeatureSprintRunnerRun(stateRef.current, runId, response);
       if (!result.ok) {
         return { ok: false, message: result.error };
@@ -1877,6 +1963,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       markFeatureSprintExecutionAttemptRunning: markFeatureSprintExecutionAttemptRunningAction,
       attachFeatureSprintExecutionAttemptResponse:
         attachFeatureSprintExecutionAttemptResponseAction,
+      applyRecoveredFeatureSprintRunnerStatus: applyRecoveredFeatureSprintRunnerStatusAction,
       markFeatureSprintExecutionAttemptAmbiguous:
         markFeatureSprintExecutionAttemptAmbiguousAction,
       abandonFeatureSprintExecutionAttempt: abandonFeatureSprintExecutionAttemptAction,
@@ -1964,6 +2051,7 @@ export function LifeHarnessProvider({ children }: PropsWithChildren) {
       markFeatureSprintExecutionAttemptLaunchingAction,
       markFeatureSprintExecutionAttemptRunningAction,
       attachFeatureSprintExecutionAttemptResponseAction,
+      applyRecoveredFeatureSprintRunnerStatusAction,
       markFeatureSprintExecutionAttemptAmbiguousAction,
       abandonFeatureSprintExecutionAttemptAction,
       reconcileFeatureSprintExecutionAttemptAction,
